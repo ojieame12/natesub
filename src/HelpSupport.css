@@ -1,0 +1,244 @@
+/* ===========================================
+   HELP & SUPPORT PAGE
+   Using Liquid Glass Design System
+   =========================================== */
+
+.help-page {
+    min-height: 100vh;
+    min-height: 100dvh;
+    max-width: 430px;
+    margin: 0 auto;
+    background: var(--bg-base);
+    display: flex;
+    flex-direction: column;
+}
+
+/* === HEADER === */
+.help-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-md) var(--space-lg);
+    padding-top: calc(env(safe-area-inset-top, 12px) + var(--space-md));
+    background: var(--bg-elevated);
+    border-bottom: 1px solid var(--border-default);
+    position: sticky;
+    top: 0;
+    z-index: 50;
+}
+
+.back-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-primary);
+}
+
+.back-btn.pressed {
+    background: var(--neutral-100);
+}
+
+.help-title {
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.header-spacer {
+    width: 40px;
+}
+
+/* === CONTENT === */
+.help-content {
+    flex: 1;
+    padding: var(--space-lg);
+    padding-bottom: calc(var(--space-3xl) + env(safe-area-inset-bottom));
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xl);
+}
+
+/* === SEARCH === */
+.help-search {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    background: var(--bg-card);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-lg);
+    padding: var(--space-md) var(--space-lg);
+}
+
+.help-search .search-icon {
+    color: var(--text-tertiary);
+    flex-shrink: 0;
+}
+
+.help-search .search-input {
+    flex: 1;
+    font-size: 16px;
+    color: var(--text-primary);
+    background: transparent;
+    border: none;
+    outline: none;
+}
+
+.help-search .search-input::placeholder {
+    color: var(--text-tertiary);
+}
+
+/* === SECTIONS === */
+.help-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.section-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding-left: var(--space-sm);
+}
+
+/* === CONTACT CARD === */
+.contact-card {
+    background: var(--bg-card);
+    border-radius: var(--radius-xl);
+    border: 1px solid var(--border-subtle);
+    overflow: hidden;
+}
+
+.contact-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-lg);
+    border-bottom: 1px solid var(--border-default);
+}
+
+.contact-row:last-child {
+    border-bottom: none;
+}
+
+.contact-row.pressed {
+    background: var(--neutral-50);
+}
+
+.contact-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: var(--radius-lg);
+    background: var(--neutral-100);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-primary);
+}
+
+.contact-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.contact-title {
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.contact-desc {
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+/* === FAQ LIST === */
+.faq-list {
+    background: var(--bg-card);
+    border-radius: var(--radius-xl);
+    border: 1px solid var(--border-subtle);
+    overflow: hidden;
+}
+
+.faq-item {
+    border-bottom: 1px solid var(--border-default);
+}
+
+.faq-item:last-child {
+    border-bottom: none;
+}
+
+.faq-question {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-lg);
+    gap: var(--space-md);
+}
+
+.faq-question.pressed {
+    background: var(--neutral-50);
+}
+
+.faq-question-text {
+    flex: 1;
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.faq-chevron {
+    color: var(--text-tertiary);
+    flex-shrink: 0;
+}
+
+.faq-answer {
+    padding: 0 var(--space-lg) var(--space-lg);
+}
+
+.faq-answer p {
+    font-size: 14px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+
+/* === LEGAL CARD === */
+.legal-card {
+    background: var(--bg-card);
+    border-radius: var(--radius-xl);
+    border: 1px solid var(--border-subtle);
+    overflow: hidden;
+}
+
+.legal-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-lg);
+    border-bottom: 1px solid var(--border-default);
+}
+
+.legal-row:last-child {
+    border-bottom: none;
+}
+
+.legal-row.pressed {
+    background: var(--neutral-50);
+}
+
+.legal-icon {
+    color: var(--text-secondary);
+}
+
+.legal-title {
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--text-primary);
+}

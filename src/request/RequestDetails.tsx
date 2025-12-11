@@ -1,0 +1,166 @@
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { ChevronLeft, RefreshCw, Zap } from 'lucide-react'
+import { useRequestStore, getSuggestedAmounts, getRelationshipLabel } from './store'
+import { Pressable } from '../components'
+import './request.css'
+
+export default function RequestDetails() {
+    const navigate = useNavigate()
+    const {
+        recipient,
+        relationship,
+        amount,
+        isRecurring,
+        purpose,
+        setAmount,
+        setIsRecurring,
+        setPurpose,
+    } = useRequestStore()
+
+    const [customAmount, setCustomAmount] = useState(amount.toString())
+
+    if (!recipient) {
+        navigate('/request/new')
+        return null
+    }
+
+    const suggestedAmounts = getSuggestedAmounts(relationship)
+    const relationshipLabel = getRelationshipLabel(relationship)
+    const firstName = recipient.name.split(' ')[0]
+
+    const handleAmountSelect = (value: number) => {
+        setAmount(value)
+        setCustomAmount(value.toString())
+    }
+
+    const handleCustomAmountChange = (value: string) => {
+        const cleaned = value.replace(/[^0-9]/g, '')
+        setCustomAmount(cleaned)
+        const num = parseInt(cleaned) || 0
+        setAmount(num)
+    }
+
+    const handleContinue = () => {
+        if (amount > 0) {
+            navigate('/request/personalize')
+        }
+    }
+
+    // Purpose suggestions based on relationship
+    const purposeSuggestions = relationship?.startsWith('family_')
+        ? ['Help with bills', 'Allowance', 'Support my goals', 'Just because']
+        : relationship === 'client'
+        ? ['Retainer', 'Project fee', 'Consultation', 'Services']
+        : ['Support my work', 'Monthly support', 'Tip jar', 'General support']
+
+    return (
+        <div className="request-page">
+            {/* Header */}
+            <header className="request-header">
+                <Pressable className="request-back-btn" onClick={() => navigate(-1)}>
+                    <ChevronLeft size={20} />
+                </Pressable>
+                <span className="request-title">Request Details</span>
+                <div className="request-header-spacer" />
+            </header>
+
+            <div className="request-content">
+                {/* Recipient Badge */}
+                <div className="request-recipient-badge">
+                    <div className="request-recipient-avatar-small">
+                        {recipient.name.charAt(0).toUpperCase()}
+                    </div>
+                    <span className="request-recipient-badge-name">{firstName}</span>
+                    {relationshipLabel && (
+                        <span className="request-recipient-badge-relationship">{relationshipLabel}</span>
+                    )}
+                </div>
+
+                {/* Amount Section */}
+                <div className="request-amount-section">
+                    <label className="request-label">How much?</label>
+                    <div className="request-amount-display">
+                        <span className="request-currency">$</span>
+                        <input
+                            type="text"
+                            inputMode="numeric"
+                            value={customAmount}
+                            onChange={(e) => handleCustomAmountChange(e.target.value)}
+                            className="request-amount-input"
+                            placeholder="0"
+                        />
+                    </div>
+
+                    {/* Quick Amounts */}
+                    <div className="request-quick-amounts">
+                        {suggestedAmounts.map((value) => (
+                            <Pressable
+                                key={value}
+                                className={`request-quick-amount ${amount === value ? 'active' : ''}`}
+                                onClick={() => handleAmountSelect(value)}
+                            >
+                                ${value}
+                            </Pressable>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Payment Type Toggle */}
+                <div className="request-option-section">
+                    <label className="request-label">Payment type</label>
+                    <div className="request-type-toggle">
+                        <Pressable
+                            className={`request-type-option ${!isRecurring ? 'active' : ''}`}
+                            onClick={() => setIsRecurring(false)}
+                        >
+                            <Zap size={16} />
+                            <span>One-time</span>
+                        </Pressable>
+                        <Pressable
+                            className={`request-type-option ${isRecurring ? 'active' : ''}`}
+                            onClick={() => setIsRecurring(true)}
+                        >
+                            <RefreshCw size={16} />
+                            <span>Monthly</span>
+                        </Pressable>
+                    </div>
+                </div>
+
+                {/* Purpose Section */}
+                <div className="request-option-section">
+                    <label className="request-label">What's this for? (optional)</label>
+                    <input
+                        type="text"
+                        value={purpose}
+                        onChange={(e) => setPurpose(e.target.value)}
+                        placeholder="Add a purpose..."
+                        className="request-text-input"
+                    />
+                    <div className="request-purpose-suggestions">
+                        {purposeSuggestions.map((suggestion) => (
+                            <Pressable
+                                key={suggestion}
+                                className={`request-purpose-chip ${purpose === suggestion ? 'active' : ''}`}
+                                onClick={() => setPurpose(suggestion)}
+                            >
+                                {suggestion}
+                            </Pressable>
+                        ))}
+                    </div>
+                </div>
+            </div>
+
+            {/* Continue Button */}
+            <div className="request-footer">
+                <Pressable
+                    className="request-continue-btn"
+                    onClick={handleContinue}
+                    disabled={amount <= 0}
+                >
+                    Continue
+                </Pressable>
+            </div>
+        </div>
+    )
+}

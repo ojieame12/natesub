@@ -1,0 +1,215 @@
+/* Updates History - Liquid Glass Design System */
+
+.updates-history-page {
+    min-height: 100vh;
+    background: var(--bg-primary);
+    padding-bottom: env(safe-area-inset-bottom, 20px);
+}
+
+/* Header */
+.updates-history-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-md) var(--space-lg);
+    padding-top: calc(env(safe-area-inset-top, 20px) + var(--space-md));
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--border-default);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.updates-history-title {
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.updates-history-page .back-btn,
+.updates-history-page .new-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-full);
+    background: var(--neutral-100);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+    transition: transform 0.1s ease, background 0.15s ease;
+}
+
+.updates-history-page .back-btn.pressed,
+.updates-history-page .new-btn.pressed {
+    transform: scale(0.92);
+    background: var(--neutral-200);
+}
+
+.updates-history-page .new-btn {
+    background: var(--neutral-900);
+    color: white;
+}
+
+.updates-history-page .new-btn.pressed {
+    background: var(--neutral-800);
+}
+
+/* Content */
+.updates-history-content {
+    padding: var(--space-lg);
+}
+
+/* Empty State */
+.updates-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-4xl) var(--space-lg);
+    text-align: center;
+    min-height: 400px;
+}
+
+.updates-empty-icon {
+    width: 64px;
+    height: 64px;
+    background: var(--neutral-100);
+    border-radius: var(--radius-full);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-tertiary);
+    margin-bottom: var(--space-lg);
+}
+
+.updates-empty-title {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0 0 var(--space-sm);
+}
+
+.updates-empty-desc {
+    font-size: 15px;
+    color: var(--text-secondary);
+    margin: 0 0 var(--space-xl);
+    max-width: 280px;
+    line-height: 1.5;
+}
+
+.updates-empty-btn {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-md) var(--space-xl);
+    background: var(--neutral-900);
+    color: white;
+    border-radius: var(--radius-lg);
+    font-size: 16px;
+    font-weight: 600;
+    box-shadow: 0 4px 0 var(--neutral-700);
+    transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.updates-empty-btn.pressed {
+    transform: translateY(2px);
+    box-shadow: 0 2px 0 var(--neutral-700);
+}
+
+/* Updates List */
+.updates-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+/* Update Card */
+.update-card {
+    background: white;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-xl);
+    overflow: hidden;
+    transition: transform 0.1s ease;
+}
+
+.update-card.pressed {
+    transform: scale(0.98);
+}
+
+.update-card-main {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-md);
+    padding: var(--space-md) var(--space-lg);
+}
+
+.update-thumbnail {
+    width: 48px;
+    height: 48px;
+    background: var(--neutral-100);
+    border-radius: var(--radius-lg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+    flex-shrink: 0;
+}
+
+.update-thumbnail.text-only {
+    background: var(--accent-primary);
+    color: white;
+}
+
+.update-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.update-caption {
+    font-size: 15px;
+    color: var(--text-primary);
+    margin: 0 0 var(--space-xs);
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.update-meta {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    font-size: 13px;
+    color: var(--text-tertiary);
+}
+
+.update-chevron {
+    color: var(--text-tertiary);
+    flex-shrink: 0;
+    margin-top: var(--space-sm);
+}
+
+.update-card-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-sm) var(--space-lg);
+    background: var(--neutral-50);
+    border-top: 1px solid var(--border-subtle);
+}
+
+.update-audience,
+.update-views {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.update-views {
+    color: var(--text-tertiary);
+}

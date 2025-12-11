@@ -1,0 +1,152 @@
+/* === ERROR STATE === */
+
+.error-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-3xl) var(--space-lg);
+    text-align: center;
+    animation: errorFadeIn 0.4s var(--ease-out) both;
+}
+
+@keyframes errorFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes errorIconBounce {
+    0% {
+        opacity: 0;
+        transform: scale(0.5);
+    }
+    50% {
+        transform: scale(1.1);
+    }
+    70% {
+        transform: scale(0.95);
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@keyframes errorShake {
+    0%, 100% { transform: translateX(0); }
+    10%, 30%, 50%, 70%, 90% { transform: translateX(-3px); }
+    20%, 40%, 60%, 80% { transform: translateX(3px); }
+}
+
+.error-icon {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: var(--status-error-soft);
+    color: var(--status-error);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: var(--space-lg);
+    animation: errorIconBounce 0.5s var(--ease-spring) both;
+}
+
+.error-icon.shake {
+    animation: errorIconBounce 0.5s var(--ease-spring) both,
+               errorShake 0.5s var(--ease-out) 0.5s;
+}
+
+.error-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0 0 var(--space-sm) 0;
+    animation: errorFadeIn 0.4s var(--ease-out) 0.1s both;
+}
+
+.error-message {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin: 0 0 var(--space-xl) 0;
+    max-width: 280px;
+    animation: errorFadeIn 0.4s var(--ease-out) 0.15s both;
+}
+
+.error-retry-btn {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-md) var(--space-xl);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-lg);
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    animation: errorFadeIn 0.4s var(--ease-out) 0.2s both;
+}
+
+.error-retry-btn:hover {
+    background: var(--neutral-50);
+}
+
+.error-retry-btn:active {
+    transform: scale(0.98);
+}
+
+.error-retry-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.error-retry-btn .spinning {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+/* Compact variant */
+.error-state-compact {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-md);
+    background: var(--status-error-soft);
+    border-radius: var(--radius-md);
+    color: var(--status-error);
+    font-size: 14px;
+}
+
+.error-retry-inline {
+    margin-left: auto;
+    padding: var(--space-xs) var(--space-md);
+    background: transparent;
+    border: 1px solid var(--status-error);
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--status-error);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.error-retry-inline:hover {
+    background: var(--status-error);
+    color: white;
+}
+
+.error-retry-inline:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}

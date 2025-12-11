@@ -1,0 +1,260 @@
+import { useState, useRef, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { ChevronLeft, Mic, Square, Play, Pause, Trash2, Sparkles } from 'lucide-react'
+import { useRequestStore, getDefaultMessage } from './store'
+import { Pressable } from '../components'
+import './request.css'
+
+export default function PersonalizeRequest() {
+    const navigate = useNavigate()
+    const {
+        recipient,
+        relationship,
+        amount,
+        isRecurring,
+        message,
+        voiceNoteUrl,
+        voiceNoteDuration,
+        setMessage,
+        setVoiceNote,
+    } = useRequestStore()
+
+    const [isRecording, setIsRecording] = useState(false)
+    const [recordingTime, setRecordingTime] = useState(0)
+    const [isPlaying, setIsPlaying] = useState(false)
+    const [playbackTime, setPlaybackTime] = useState(0)
+    const [micError, setMicError] = useState<string | null>(null)
+
+    const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+    const audioChunksRef = useRef<Blob[]>([])
+    const audioRef = useRef<HTMLAudioElement | null>(null)
+    const timerRef = useRef<number | null>(null)
+
+    // Initialize message with smart default
+    useEffect(() => {
+        if (!message && recipient) {
+            const defaultMsg = getDefaultMessage(recipient.name, relationship, amount, isRecurring)
+            setMessage(defaultMsg)
+        }
+    }, [recipient, relationship, amount, isRecurring, message, setMessage])
+
+    if (!recipient) {
+        navigate('/request/new')
+        return null
+    }
+
+    const firstName = recipient.name.split(' ')[0]
+
+    const startRecording = async () => {
+        setMicError(null)
+
+        // Check if mediaDevices is supported
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            setMicError('Voice recording is not supported on this device')
+            return
+        }
+
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+            mediaRecorderRef.current = new MediaRecorder(stream)
+            audioChunksRef.current = []
+
+            mediaRecorderRef.current.ondataavailable = (event) => {
+                audioChunksRef.current.push(event.data)
+            }
+
+            mediaRecorderRef.current.onstop = () => {
+                const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' })
+                const audioUrl = URL.createObjectURL(audioBlob)
+                setVoiceNote(audioUrl, recordingTime)
+                stream.getTracks().forEach(track => track.stop())
+            }
+
+            mediaRecorderRef.current.start()
+            setIsRecording(true)
+            setRecordingTime(0)
+
+            timerRef.current = window.setInterval(() => {
+                setRecordingTime(prev => {
+                    if (prev >= 60) {
+                        stopRecording()
+                        return prev
+                    }
+                    return prev + 1
+                })
+            }, 1000)
+        } catch (err: unknown) {
+            console.error('Failed to start recording:', err)
+            const error = err as { name?: string }
+            if (error.name === 'NotAllowedError') {
+                setMicError('Microphone access denied. Check your settings.')
+            } else if (error.name === 'NotFoundError') {
+                setMicError('No microphone found on this device')
+            } else {
+                setMicError('Could not access microphone')
+            }
+        }
+    }
+
+    const stopRecording = () => {
+        if (mediaRecorderRef.current && isRecording) {
+            mediaRecorderRef.current.stop()
+            setIsRecording(false)
+            if (timerRef.current) {
+                clearInterval(timerRef.current)
+            }
+        }
+    }
+
+    const deleteRecording = () => {
+        if (voiceNoteUrl) {
+            URL.revokeObjectURL(voiceNoteUrl)
+        }
+        setVoiceNote(null, 0)
+        setPlaybackTime(0)
+        setIsPlaying(false)
+    }
+
+    const togglePlayback = () => {
+        if (!voiceNoteUrl) return
+
+        if (!audioRef.current) {
+            audioRef.current = new Audio(voiceNoteUrl)
+            audioRef.current.onended = () => {
+                setIsPlaying(false)
+                setPlaybackTime(0)
+            }
+            audioRef.current.ontimeupdate = () => {
+                setPlaybackTime(Math.floor(audioRef.current?.currentTime || 0))
+            }
+        }
+
+        if (isPlaying) {
+            audioRef.current.pause()
+            setIsPlaying(false)
+        } else {
+            audioRef.current.play()
+            setIsPlaying(true)
+        }
+    }
+
+    const formatTime = (seconds: number) => {
+        const mins = Math.floor(seconds / 60)
+        const secs = seconds % 60
+        return `${mins}:${secs.toString().padStart(2, '0')}`
+    }
+
+    const handleContinue = () => {
+        navigate('/request/preview')
+    }
+
+    const regenerateMessage = () => {
+        const newMsg = getDefaultMessage(recipient.name, relationship, amount, isRecurring)
+        setMessage(newMsg)
+    }
+
+    return (
+        <div className="request-page">
+            {/* Header */}
+            <header className="request-header">
+                <Pressable className="request-back-btn" onClick={() => navigate(-1)}>
+                    <ChevronLeft size={20} />
+                </Pressable>
+                <span className="request-title">Personalize</span>
+                <div className="request-header-spacer" />
+            </header>
+
+            <div className="request-content">
+                {/* Recipient Badge */}
+                <div className="request-recipient-badge">
+                    <div className="request-recipient-avatar-small">
+                        {recipient.name.charAt(0).toUpperCase()}
+                    </div>
+                    <span className="request-recipient-badge-name">{firstName}</span>
+                    <span className="request-amount-badge">${amount}{isRecurring ? '/mo' : ''}</span>
+                </div>
+
+                {/* Message Section */}
+                <div className="request-message-section">
+                    <div className="request-label-row">
+                        <label className="request-label">Your message</label>
+                        <Pressable className="request-regenerate-btn" onClick={regenerateMessage}>
+                            <Sparkles size={14} />
+                            <span>Regenerate</span>
+                        </Pressable>
+                    </div>
+                    <textarea
+                        value={message}
+                        onChange={(e) => setMessage(e.target.value)}
+                        placeholder="Write a personal message..."
+                        className="request-message-textarea"
+                        rows={4}
+                    />
+                    <span className="request-char-count">{message.length}/500</span>
+                </div>
+
+                {/* Voice Note Section */}
+                <div className="request-voice-section">
+                    <label className="request-label">Add a voice note (optional)</label>
+                    <p className="request-voice-hint">A personal voice message makes your request more meaningful</p>
+
+                    {voiceNoteUrl ? (
+                        /* Playback UI */
+                        <div className="request-voice-playback">
+                            <Pressable className="request-voice-play-btn" onClick={togglePlayback}>
+                                {isPlaying ? <Pause size={20} /> : <Play size={20} />}
+                            </Pressable>
+                            <div className="request-voice-progress">
+                                <div className="request-voice-waveform">
+                                    {Array.from({ length: 30 }).map((_, i) => (
+                                        <div
+                                            key={i}
+                                            className={`request-waveform-bar ${i < (playbackTime / voiceNoteDuration) * 30 ? 'played' : ''}`}
+                                            style={{ height: `${Math.random() * 60 + 20}%` }}
+                                        />
+                                    ))}
+                                </div>
+                                <span className="request-voice-time">
+                                    {formatTime(playbackTime)} / {formatTime(voiceNoteDuration)}
+                                </span>
+                            </div>
+                            <Pressable className="request-voice-delete-btn" onClick={deleteRecording}>
+                                <Trash2 size={18} />
+                            </Pressable>
+                        </div>
+                    ) : isRecording ? (
+                        /* Recording UI */
+                        <div className="request-voice-recording">
+                            <div className="request-recording-indicator">
+                                <span className="request-recording-dot" />
+                                <span className="request-recording-time">{formatTime(recordingTime)}</span>
+                            </div>
+                            <Pressable className="request-voice-stop-btn" onClick={stopRecording}>
+                                <Square size={20} />
+                                <span>Stop</span>
+                            </Pressable>
+                        </div>
+                    ) : (
+                        /* Start Recording Button */
+                        <>
+                            <Pressable className="request-voice-record-btn" onClick={startRecording}>
+                                <Mic size={20} />
+                                <span>Record Voice Note</span>
+                            </Pressable>
+                            {micError && (
+                                <p className="request-mic-error">{micError}</p>
+                            )}
+                        </>
+                    )}
+                </div>
+            </div>
+
+            {/* Continue Button */}
+            <div className="request-footer">
+                <Pressable className="request-continue-btn" onClick={handleContinue}>
+                    Preview Request
+                </Pressable>
+            </div>
+        </div>
+    )
+}

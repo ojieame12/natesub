@@ -1,0 +1,297 @@
+/* ===========================================
+   PAYMENT SETTINGS PAGE
+   Using Liquid Glass Design System
+   =========================================== */
+
+.payment-settings-page {
+    min-height: 100vh;
+    min-height: 100dvh;
+    max-width: 430px;
+    margin: 0 auto;
+    background: var(--bg-base);
+    display: flex;
+    flex-direction: column;
+}
+
+/* === HEADER === */
+.payment-settings-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-md) var(--space-lg);
+    padding-top: calc(env(safe-area-inset-top, 12px) + var(--space-md));
+    background: var(--bg-elevated);
+    border-bottom: 1px solid var(--border-default);
+    position: sticky;
+    top: 0;
+    z-index: 50;
+}
+
+.back-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-primary);
+}
+
+.back-btn.pressed {
+    background: var(--neutral-100);
+}
+
+.payment-settings-title {
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.header-spacer {
+    width: 40px;
+}
+
+/* === CONTENT === */
+.payment-settings-content {
+    flex: 1;
+    padding: var(--space-lg);
+    padding-bottom: calc(var(--space-3xl) + env(safe-area-inset-bottom));
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xl);
+}
+
+/* === BALANCE CARD === */
+.balance-card {
+    background: var(--neutral-900);
+    border-radius: var(--radius-xl);
+    padding: var(--space-xl);
+    color: white;
+}
+
+.balance-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: var(--space-lg);
+}
+
+.balance-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.balance-label {
+    font-size: 13px;
+    opacity: 0.7;
+}
+
+.balance-value {
+    font-size: 24px;
+    font-weight: 600;
+}
+
+.balance-value.pending {
+    opacity: 0.6;
+}
+
+.cashout-btn {
+    width: 100%;
+    padding: var(--space-md);
+    border-radius: var(--radius-lg);
+    background: white;
+    color: var(--neutral-900);
+    font-size: 15px;
+    font-weight: 600;
+    text-align: center;
+}
+
+.cashout-btn.pressed {
+    opacity: 0.9;
+}
+
+/* === SECTIONS === */
+.settings-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.section-title {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+/* === METHOD CARD === */
+.method-card {
+    background: var(--bg-card);
+    border-radius: var(--radius-xl);
+    border: 1px solid var(--border-subtle);
+    overflow: hidden;
+}
+
+.method-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-lg);
+}
+
+.method-row.pressed {
+    background: var(--neutral-50);
+}
+
+.method-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: var(--radius-lg);
+    background: var(--neutral-100);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-primary);
+}
+
+.method-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.method-name {
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.method-detail {
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+.method-default {
+    width: 24px;
+    height: 24px;
+    border-radius: var(--radius-full);
+    background: var(--accent-green);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.add-method-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-sm);
+    padding: var(--space-md);
+    border-radius: var(--radius-lg);
+    border: 1px dashed var(--border-default);
+    color: var(--text-secondary);
+    font-size: 15px;
+    font-weight: 500;
+}
+
+.add-method-btn.pressed {
+    background: var(--neutral-50);
+}
+
+/* === SCHEDULE CARD === */
+.schedule-card {
+    background: var(--bg-card);
+    border-radius: var(--radius-xl);
+    border: 1px solid var(--border-subtle);
+    overflow: hidden;
+}
+
+.schedule-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-lg);
+    border-bottom: 1px solid var(--border-default);
+}
+
+.schedule-row:last-child {
+    border-bottom: none;
+}
+
+.schedule-row.pressed {
+    background: var(--neutral-50);
+}
+
+.schedule-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.schedule-label {
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.schedule-desc {
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+.schedule-check {
+    width: 24px;
+    height: 24px;
+    border-radius: var(--radius-full);
+    background: var(--neutral-900);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* === HISTORY CARD === */
+.history-card {
+    background: var(--bg-card);
+    border-radius: var(--radius-xl);
+    border: 1px solid var(--border-subtle);
+    overflow: hidden;
+}
+
+.history-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-lg);
+    border-bottom: 1px solid var(--border-default);
+}
+
+.history-row:last-child {
+    border-bottom: none;
+}
+
+.history-row.pressed {
+    background: var(--neutral-50);
+}
+
+.history-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.history-amount {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.history-date {
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+.history-chevron {
+    color: var(--text-tertiary);
+}

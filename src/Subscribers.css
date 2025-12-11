@@ -1,0 +1,304 @@
+/* ===========================================
+   SUBSCRIBERS PAGE
+   Using Liquid Glass Design System
+   =========================================== */
+
+.subscribers-page {
+    min-height: 100vh;
+    min-height: 100dvh;
+    max-width: 430px;
+    margin: 0 auto;
+    background: var(--bg-base);
+    display: flex;
+    flex-direction: column;
+}
+
+/* === HEADER === */
+.subscribers-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-md) var(--space-lg);
+    padding-top: calc(env(safe-area-inset-top, 12px) + var(--space-md));
+    background: var(--bg-elevated);
+    border-bottom: 1px solid var(--border-default);
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    min-height: 56px;
+}
+
+.back-btn,
+.search-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-primary);
+}
+
+.back-btn.pressed,
+.search-btn.pressed {
+    background: var(--neutral-100);
+}
+
+.subscribers-title {
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+/* Search Bar */
+.search-bar {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    background: var(--neutral-100);
+    border-radius: var(--radius-lg);
+    padding: 0 var(--space-md);
+    height: 40px;
+}
+
+.search-icon {
+    color: var(--text-tertiary);
+    flex-shrink: 0;
+}
+
+.search-input {
+    flex: 1;
+    font-size: 16px;
+    color: var(--text-primary);
+    background: transparent;
+    border: none;
+    outline: none;
+}
+
+.search-input::placeholder {
+    color: var(--text-tertiary);
+}
+
+.search-close {
+    width: 28px;
+    height: 28px;
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-tertiary);
+}
+
+.search-close.pressed {
+    background: var(--neutral-200);
+}
+
+/* === STATS ROW === */
+.stats-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    padding: var(--space-lg);
+    background: var(--bg-elevated);
+    border-bottom: 1px solid var(--border-default);
+}
+
+.stat-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+}
+
+.stat-value {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.stat-value.text-green {
+    color: var(--accent-green);
+}
+
+.stat-value.text-muted {
+    color: var(--text-tertiary);
+}
+
+.stat-label {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.stat-divider {
+    width: 1px;
+    height: 32px;
+    background: var(--border-default);
+}
+
+/* === FILTER TABS === */
+.filter-tabs {
+    display: flex;
+    gap: var(--space-sm);
+    padding: var(--space-md) var(--space-lg);
+    background: var(--bg-base);
+}
+
+.filter-tab {
+    padding: var(--space-sm) var(--space-lg);
+    border-radius: var(--radius-full);
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    background: var(--bg-card);
+    border: 1px solid var(--border-default);
+}
+
+.filter-tab.active {
+    background: var(--neutral-900);
+    color: white;
+    border-color: var(--neutral-900);
+}
+
+.filter-tab.pressed {
+    opacity: 0.8;
+}
+
+/* === CONTENT === */
+.subscribers-content {
+    flex: 1;
+    padding: 0 var(--space-lg);
+    padding-bottom: calc(80px + env(safe-area-inset-bottom));
+}
+
+/* === SUBSCRIBER LIST === */
+.subscribers-list {
+    background: var(--bg-card);
+    border-radius: var(--radius-xl);
+    border: 1px solid var(--border-subtle);
+    box-shadow: var(--shadow-card);
+    overflow: hidden;
+}
+
+.subscriber-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-lg);
+    border-bottom: 1px solid var(--border-default);
+    animation: subscriberFadeIn 0.4s ease-out both;
+}
+
+/* Staggered animation delays */
+.subscriber-row:nth-child(1) { animation-delay: 0.05s; }
+.subscriber-row:nth-child(2) { animation-delay: 0.1s; }
+.subscriber-row:nth-child(3) { animation-delay: 0.15s; }
+.subscriber-row:nth-child(4) { animation-delay: 0.2s; }
+.subscriber-row:nth-child(5) { animation-delay: 0.25s; }
+.subscriber-row:nth-child(6) { animation-delay: 0.3s; }
+.subscriber-row:nth-child(7) { animation-delay: 0.35s; }
+.subscriber-row:nth-child(8) { animation-delay: 0.4s; }
+
+@keyframes subscriberFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.subscriber-row:last-child {
+    border-bottom: none;
+}
+
+.subscriber-row.pressed {
+    background: var(--neutral-50);
+}
+
+.subscriber-avatar {
+    width: 44px;
+    height: 44px;
+    border-radius: var(--radius-full);
+    background: var(--neutral-200);
+    color: var(--neutral-600);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+.subscriber-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.subscriber-name {
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.subscriber-username {
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+.subscriber-meta {
+    text-align: right;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.subscriber-tier {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.subscriber-amount {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+/* === EMPTY STATE === */
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-5xl) var(--space-xl);
+    text-align: center;
+}
+
+.empty-icon {
+    width: 64px;
+    height: 64px;
+    border-radius: var(--radius-full);
+    background: var(--neutral-100);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-tertiary);
+    margin-bottom: var(--space-lg);
+}
+
+.empty-title {
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: var(--space-sm);
+}
+
+.empty-desc {
+    font-size: 15px;
+    color: var(--text-secondary);
+}

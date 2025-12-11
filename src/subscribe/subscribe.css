@@ -1,0 +1,489 @@
+/* =============================================
+   SUBSCRIBE PAGE - Single Card Design
+   Boundary Avatar + Swipeable Content
+   ============================================= */
+
+.sub-page {
+    min-height: 100vh;
+    min-height: 100dvh;
+    max-width: 430px;
+    margin: 0 auto;
+    background: var(--neutral-100);
+    display: flex;
+    flex-direction: column;
+    padding: 0 var(--space-lg);
+    padding-bottom: calc(env(safe-area-inset-bottom, 20px) + var(--space-lg));
+}
+
+/* === HEADER === */
+.sub-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-md) 0;
+    padding-top: calc(env(safe-area-inset-top, 12px) + var(--space-md));
+    flex-shrink: 0;
+}
+
+.sub-back {
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-full);
+    color: var(--text-primary);
+    background: transparent;
+    border: none;
+}
+
+.sub-back:active,
+.sub-back.pressed {
+    background: var(--neutral-200);
+}
+
+.sub-header-badge {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: var(--space-xs) var(--space-md);
+    background: var(--accent-orange-soft);
+    border-radius: var(--radius-full);
+    color: var(--accent-primary);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+/* === SINGLE UNIFIED CARD === */
+.sub-card {
+    flex: 1;
+    background: white;
+    border-radius: 28px;
+    box-shadow: 0 2px 20px rgba(0, 0, 0, 0.06);
+    display: flex;
+    flex-direction: column;
+    padding: var(--space-sm);
+}
+
+/* Cover Image - Inset with own rounded corners */
+.sub-cover {
+    height: 160px;
+    position: relative;
+    overflow: hidden;
+    flex-shrink: 0;
+    border-radius: 22px;
+    background: var(--neutral-100);
+}
+
+.sub-cover-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+/* Avatar - Left-aligned at boundary */
+.sub-avatar-wrapper {
+    display: flex;
+    justify-content: flex-start;
+    margin-top: -44px;
+    margin-left: var(--space-xl);
+    position: relative;
+    z-index: 10;
+    flex-shrink: 0;
+}
+
+.sub-avatar {
+    width: 88px;
+    height: 88px;
+    border-radius: 50%;
+    background: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    border: 4px solid white;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+}
+
+.sub-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 50%;
+}
+
+/* === CONTENT AREA === */
+.sub-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: var(--space-sm) var(--space-lg) 0;
+    overflow-y: auto;
+}
+
+.sub-view {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    text-align: left;
+}
+
+/* Main View */
+.sub-name {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0 0 var(--space-xs);
+    letter-spacing: -0.3px;
+}
+
+.sub-subtext {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin: 0 0 var(--space-lg);
+    line-height: 1.4;
+}
+
+/* Stats Row - Gray container like reference */
+.sub-stats-container {
+    width: 100%;
+    background: var(--neutral-100);
+    border-radius: 14px;
+    padding: var(--space-md) var(--space-lg);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: auto;
+}
+
+.sub-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 1;
+}
+
+.sub-stat-value {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: -0.5px;
+}
+
+.sub-stat-label {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-top: 2px;
+}
+
+.sub-stat-divider {
+    width: 1px;
+    height: 32px;
+    background: var(--neutral-200);
+}
+
+/* Legacy price display - hidden in new design */
+.sub-price-display {
+    display: none;
+}
+
+.sub-price {
+    font-size: 40px;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: -1px;
+}
+
+.sub-price-period {
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--text-tertiary);
+}
+
+/* View Title (for impact, tiers, payment) */
+.sub-view-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0 0 var(--space-lg);
+}
+
+/* === IMPACT LIST === */
+.sub-impact-list {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.sub-impact-item {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-md);
+    padding: var(--space-md);
+    background: var(--neutral-50);
+    border-radius: 12px;
+    text-align: left;
+}
+
+.sub-impact-num {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--accent-orange-soft);
+    color: var(--accent-primary);
+    font-size: 13px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.sub-impact-text {
+    flex: 1;
+    padding-top: 2px;
+}
+
+.sub-impact-title {
+    display: block;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.sub-impact-subtitle {
+    display: block;
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-top: 2px;
+}
+
+/* === TIER LIST === */
+.sub-tier-list {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.sub-tier-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-md) var(--space-lg);
+    background: var(--neutral-50);
+    border: 2px solid transparent;
+    border-radius: 12px;
+    text-align: left;
+    position: relative;
+    transition: all 0.15s ease;
+}
+
+.sub-tier-item.selected {
+    border-color: var(--accent-primary);
+    background: rgba(255, 148, 26, 0.05);
+}
+
+.sub-tier-item.pressed {
+    transform: scale(0.98);
+}
+
+.sub-tier-left {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.sub-tier-name {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.sub-tier-badge {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 6px;
+    background: var(--accent-primary);
+    color: white;
+    border-radius: var(--radius-full);
+}
+
+.sub-tier-price {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.sub-tier-check {
+    position: absolute;
+    top: 50%;
+    right: var(--space-md);
+    transform: translateY(-50%);
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--accent-primary);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* === PAYMENT SUMMARY === */
+.sub-payment-summary {
+    width: 100%;
+    background: var(--neutral-50);
+    border-radius: 12px;
+    padding: var(--space-lg);
+}
+
+.sub-payment-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 15px;
+    color: var(--text-secondary);
+}
+
+.sub-payment-row + .sub-payment-row {
+    margin-top: var(--space-sm);
+    padding-top: var(--space-sm);
+    border-top: 1px solid var(--neutral-200);
+}
+
+.sub-payment-amount {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.sub-payment-tier {
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+/* === PAGINATION DOTS === */
+.sub-dots {
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+    padding: var(--space-sm) 0;
+    flex-shrink: 0;
+}
+
+.sub-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--neutral-200);
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.sub-dot.active {
+    width: 20px;
+    border-radius: 3px;
+    background: var(--neutral-400);
+}
+
+/* === SUBSCRIBE BUTTON === */
+.sub-button-wrapper {
+    padding: var(--space-xs) var(--space-md) var(--space-md);
+    flex-shrink: 0;
+}
+
+.sub-subscribe-btn {
+    width: 100%;
+    height: 50px;
+    border-radius: 14px;
+    font-size: 15px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: var(--neutral-100);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.sub-subscribe-btn.ready {
+    background: var(--neutral-900);
+    color: white;
+}
+
+.sub-subscribe-btn.pressed {
+    transform: scale(0.98);
+    opacity: 0.9;
+}
+
+/* === SUCCESS === */
+.sub-success {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: var(--space-xl);
+    gap: var(--space-md);
+}
+
+.sub-success-icon {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: rgba(34, 197, 94, 0.1);
+    color: var(--status-success);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: var(--space-md);
+}
+
+.sub-success-title {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.sub-success-text {
+    font-size: 16px;
+    color: var(--text-secondary);
+    max-width: 280px;
+    line-height: 1.4;
+    margin: 0 0 var(--space-xl);
+}
+
+/* === BUTTONS (for success page) === */
+.sub-btn {
+    width: 100%;
+    max-width: 200px;
+    height: 52px;
+    border-radius: 14px;
+    font-size: 16px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.sub-btn-secondary {
+    background: var(--neutral-100);
+    color: var(--text-primary);
+}
+
+.sub-btn-secondary.pressed {
+    transform: scale(0.98);
+    background: var(--neutral-200);
+}

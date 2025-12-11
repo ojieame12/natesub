@@ -1,0 +1,294 @@
+/* ===========================================
+   ACTIVITY DETAIL PAGE STYLES
+   Using Liquid Glass Design System
+   =========================================== */
+
+/* === LAYOUT === */
+.detail-page {
+    min-height: 100vh;
+    min-height: 100dvh;
+    max-width: 430px;
+    margin: 0 auto;
+    background: var(--neutral-100);
+    padding-bottom: calc(var(--space-3xl) + env(safe-area-inset-bottom));
+}
+
+/* === HEADER === */
+.detail-header {
+    padding: var(--space-md) var(--space-lg);
+    padding-top: calc(env(safe-area-inset-top, 12px) + var(--space-md));
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+    position: sticky;
+    top: 0;
+    z-index: 50;
+}
+
+.back-btn {
+    width: 44px;
+    height: 44px;
+    border-radius: var(--radius-lg);
+    background: var(--bg-card);
+    border: 1px solid var(--border-default);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--neutral-900);
+    box-shadow: var(--shadow-sm);
+}
+
+.back-btn.pressed {
+    background: var(--neutral-100);
+    transform: scale(0.96);
+}
+
+/* === HERO SECTION === */
+.detail-hero {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-3xl) var(--space-xl);
+    padding-bottom: var(--space-2xl);
+}
+
+.detail-icon {
+    width: 72px;
+    height: 72px;
+    border-radius: var(--radius-xl);
+    background: var(--bg-card);
+    border: 1px solid var(--border-default);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--neutral-900);
+    box-shadow: var(--shadow-card);
+}
+
+.detail-icon.negative {
+    background: var(--bg-card);
+    color: var(--neutral-900);
+}
+
+.detail-amount {
+    font-family: var(--font-primary);
+    font-size: 48px;
+    font-weight: 600;
+    color: var(--neutral-900);
+    letter-spacing: -0.02em;
+}
+
+.detail-amount .cents {
+    font-size: 28px;
+    color: var(--neutral-400);
+}
+
+.detail-badge {
+    display: inline-block;
+    padding: var(--space-xs) var(--space-md);
+    background: var(--neutral-200);
+    border-radius: var(--radius-full);
+    font-family: var(--font-primary);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--neutral-600);
+}
+
+/* === CONTENT === */
+.detail-content {
+    padding: 0 var(--space-lg);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-lg);
+}
+
+/* === DETAIL CARD === */
+.detail-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-xl);
+    padding: var(--space-lg);
+    box-shadow: var(--shadow-card);
+}
+
+.detail-card-title {
+    font-family: var(--font-primary);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--neutral-400);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: var(--space-md);
+}
+
+/* === CUSTOMER ROW === */
+.customer-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+}
+
+.customer-avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: var(--radius-lg);
+    background: var(--neutral-900);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-primary);
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.customer-info {
+    flex: 1;
+}
+
+.customer-name {
+    font-family: var(--font-primary);
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--neutral-900);
+}
+
+.customer-email {
+    font-family: var(--font-primary);
+    font-size: 14px;
+    color: var(--neutral-500);
+    margin-top: 2px;
+}
+
+/* === DETAIL ROWS === */
+.detail-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--space-md) 0;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.detail-row:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.detail-row:first-child {
+    padding-top: 0;
+}
+
+.detail-label {
+    font-family: var(--font-primary);
+    font-size: 14px;
+    color: var(--neutral-500);
+}
+
+.detail-value {
+    font-family: var(--font-primary);
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--neutral-900);
+}
+
+.detail-value.mono {
+    font-family: 'SF Mono', 'Menlo', monospace;
+    font-size: 12px;
+    color: var(--neutral-600);
+}
+
+/* === STATUS BADGE === */
+.detail-status {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: var(--radius-sm);
+    font-family: var(--font-primary);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.detail-status.active {
+    background: var(--accent-green-soft);
+    color: var(--accent-green);
+}
+
+.detail-status.cancelled {
+    background: var(--neutral-200);
+    color: var(--neutral-600);
+}
+
+/* === ACTIONS === */
+.detail-actions {
+    padding: var(--space-xl) var(--space-lg);
+    padding-bottom: calc(var(--space-xl) + env(safe-area-inset-bottom));
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.detail-actions-row {
+    display: flex;
+    gap: var(--space-sm);
+}
+
+.detail-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-sm);
+    padding: var(--space-lg);
+    border-radius: var(--radius-lg);
+    font-family: var(--font-primary);
+    font-size: 15px;
+    font-weight: 600;
+    border: 1px solid var(--border-default);
+    transition: all var(--duration-fast) var(--ease-out);
+}
+
+.detail-btn.primary {
+    background: var(--neutral-900);
+    color: white;
+    border: none;
+    flex: 1;
+}
+
+.detail-btn.primary.pressed {
+    background: var(--neutral-800);
+    transform: scale(0.98);
+}
+
+.detail-btn.secondary {
+    background: var(--bg-card);
+    color: var(--neutral-900);
+    flex: 1;
+}
+
+.detail-btn.secondary.pressed {
+    background: var(--neutral-100);
+    transform: scale(0.98);
+}
+
+.detail-btn.danger {
+    background: var(--bg-card);
+    color: var(--neutral-900);
+    width: 56px;
+    flex-shrink: 0;
+}
+
+.detail-btn.danger.pressed {
+    background: var(--accent-red-soft);
+    transform: scale(0.98);
+}
+
+/* === EMPTY STATE === */
+.detail-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 60vh;
+    font-family: var(--font-primary);
+    color: var(--neutral-500);
+    font-size: 16px;
+}

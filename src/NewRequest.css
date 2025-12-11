@@ -1,0 +1,222 @@
+/* ===========================================
+   NEW REQUEST PAGE
+   Using Liquid Glass Design System
+   =========================================== */
+
+.new-request-page {
+    min-height: 100vh;
+    min-height: 100dvh;
+    max-width: 430px;
+    margin: 0 auto;
+    background: var(--bg-base);
+    display: flex;
+    flex-direction: column;
+}
+
+/* === HEADER === */
+.new-request-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-md) var(--space-lg);
+    padding-top: calc(env(safe-area-inset-top, 12px) + var(--space-md));
+    background: var(--bg-elevated);
+    border-bottom: 1px solid var(--border-default);
+}
+
+.close-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-primary);
+}
+
+.close-btn.pressed {
+    background: var(--neutral-100);
+}
+
+.new-request-title {
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.header-spacer {
+    width: 40px;
+}
+
+/* === AMOUNT SECTION === */
+.amount-section {
+    padding: var(--space-3xl) var(--space-xl);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-xl);
+}
+
+.amount-display {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+}
+
+.currency {
+    font-size: 32px;
+    font-weight: 600;
+    color: var(--text-tertiary);
+    margin-top: 8px;
+    margin-right: 4px;
+}
+
+.amount-input {
+    font-size: 64px;
+    font-weight: 600;
+    color: var(--text-primary);
+    background: transparent;
+    border: none;
+    outline: none;
+    width: 200px;
+    text-align: center;
+    font-family: var(--font-primary);
+}
+
+.amount-input::placeholder {
+    color: var(--text-tertiary);
+}
+
+/* Quick Amounts */
+.quick-amounts {
+    display: flex;
+    gap: var(--space-sm);
+}
+
+.quick-amount-btn {
+    padding: var(--space-sm) var(--space-lg);
+    border-radius: var(--radius-full);
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    background: var(--bg-card);
+    border: 1px solid var(--border-default);
+}
+
+.quick-amount-btn.active {
+    background: var(--neutral-900);
+    color: white;
+    border-color: var(--neutral-900);
+}
+
+.quick-amount-btn.pressed {
+    opacity: 0.8;
+}
+
+/* === OPTIONS SECTION === */
+.options-section {
+    flex: 1;
+    padding: 0 var(--space-lg);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.option-card {
+    background: var(--bg-card);
+    border-radius: var(--radius-xl);
+    padding: var(--space-lg);
+    border: 1px solid var(--border-subtle);
+}
+
+.option-label {
+    display: block;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: var(--space-sm);
+}
+
+.option-input {
+    width: 100%;
+    font-size: 16px;
+    color: var(--text-primary);
+    background: transparent;
+    border: none;
+    outline: none;
+    font-family: var(--font-primary);
+}
+
+.option-input::placeholder {
+    color: var(--text-tertiary);
+}
+
+/* Payment Type Toggle */
+.payment-type-toggle {
+    display: flex;
+    gap: var(--space-sm);
+}
+
+.toggle-option {
+    flex: 1;
+    padding: var(--space-md);
+    border-radius: var(--radius-lg);
+    font-size: 15px;
+    font-weight: 500;
+    text-align: center;
+    color: var(--text-secondary);
+    background: var(--neutral-100);
+}
+
+.toggle-option.active {
+    background: var(--neutral-900);
+    color: white;
+}
+
+.toggle-option.pressed {
+    opacity: 0.8;
+}
+
+/* === ACTION SECTION === */
+.action-section {
+    padding: var(--space-xl) var(--space-lg);
+    padding-bottom: calc(env(safe-area-inset-bottom, 20px) + var(--space-xl));
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.action-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-sm);
+    padding: var(--space-lg);
+    border-radius: var(--radius-lg);
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.action-btn.primary {
+    background: var(--neutral-900);
+    color: white;
+}
+
+.action-btn.primary.pressed {
+    background: var(--neutral-800);
+}
+
+.action-btn.secondary {
+    background: var(--bg-card);
+    color: var(--text-primary);
+    border: 1px solid var(--border-default);
+}
+
+.action-btn.secondary.pressed {
+    background: var(--neutral-100);
+}
+
+.action-btn.disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}

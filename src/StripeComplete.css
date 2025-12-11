@@ -1,0 +1,109 @@
+.stripe-complete-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: var(--bg-primary, #f8f9fa);
+}
+
+.stripe-complete-card {
+  background: white;
+  border-radius: 20px;
+  padding: 48px 32px;
+  text-align: center;
+  max-width: 400px;
+  width: 100%;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+}
+
+.stripe-complete-card h2 {
+  font-size: 24px;
+  font-weight: 600;
+  margin: 24px 0 12px;
+  color: #1a1a1a;
+}
+
+.stripe-complete-card p {
+  font-size: 15px;
+  color: #666;
+  margin-bottom: 32px;
+  line-height: 1.5;
+}
+
+.success-icon {
+  color: #22c55e;
+}
+
+.pending-icon {
+  color: #f59e0b;
+}
+
+.error-icon {
+  color: #ef4444;
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+  color: #666;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.primary-btn {
+  width: 100%;
+  padding: 16px 24px;
+  font-size: 16px;
+  font-weight: 600;
+  color: white;
+  background: #FF941A;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.primary-btn:hover {
+  opacity: 0.9;
+}
+
+.secondary-btn {
+  width: 100%;
+  padding: 16px 24px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1a1a1a;
+  background: #f0f0f0;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background 0.2s;
+  margin-bottom: 12px;
+}
+
+.secondary-btn:hover {
+  background: #e5e5e5;
+}
+
+.text-btn {
+  width: 100%;
+  padding: 12px 24px;
+  font-size: 15px;
+  font-weight: 500;
+  color: #666;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.text-btn:hover {
+  color: #333;
+}

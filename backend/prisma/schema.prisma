@@ -1,0 +1,363 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// ENUMS
+// ============================================
+
+enum SubscriptionStatus {
+  active
+  canceled
+  past_due
+  paused
+}
+
+enum SubscriptionInterval {
+  month
+  one_time
+}
+
+enum PaymentStatus {
+  pending
+  succeeded
+  failed
+  refunded
+  disputed      // Dispute opened, funds held
+  dispute_won   // Dispute resolved in our favor
+  dispute_lost  // Dispute lost, funds gone
+}
+
+enum PaymentType {
+  recurring
+  one_time
+  refund        // Refund transaction (negative amount)
+  dispute       // Dispute-related transaction
+}
+
+enum RequestStatus {
+  draft
+  sent
+  pending_payment  // User clicked accept, awaiting payment completion
+  accepted         // Payment succeeded
+  declined
+  expired          // Checkout session expired without payment
+}
+
+enum RequestSendMethod {
+  email
+  sms
+  link
+}
+
+enum Relationship {
+  family
+  friend
+  client
+  fan
+  colleague
+  partner
+  other
+}
+
+enum UpdateStatus {
+  draft
+  sent
+}
+
+enum PayoutStatus {
+  pending
+  active
+  restricted
+}
+
+enum Purpose {
+  tips
+  support
+  allowance
+  fan_club
+  exclusive_content
+  other
+}
+
+enum PricingModel {
+  single
+  tiers
+}
+
+enum PaymentProvider {
+  stripe
+  flutterwave
+}
+
+// ============================================
+// USER & PROFILE
+// ============================================
+
+model User {
+  id          String    @id @default(uuid())
+  email       String    @unique
+  createdAt   DateTime  @default(now())
+  lastLoginAt DateTime?
+
+  profile       Profile?
+  subscriptions Subscription[] @relation("Creator")
+  subscribedTo  Subscription[] @relation("Subscriber")
+  requests      Request[]
+  updates       Update[]
+  activities    Activity[]
+  sessions      Session[]
+
+  @@map("users")
+}
+
+model Profile {
+  id     String @id @default(uuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Identity
+  username      String  @unique
+  displayName   String
+  bio           String?
+  avatarUrl     String?
+  voiceIntroUrl String?
+
+  // Location
+  country     String
+  countryCode String
+  currency    String @default("USD")
+
+  // Purpose
+  purpose Purpose
+
+  // Pricing
+  pricingModel PricingModel
+  singleAmount Int? // in cents
+  tiers        Json? // array of tier objects
+
+  // Perks & Impact
+  perks       Json? // array of perk objects
+  impactItems Json? // array of impact items
+
+  // Payments
+  paymentProvider PaymentProvider?
+  stripeAccountId String?          @unique
+  payoutStatus    PayoutStatus     @default(pending)
+
+  // Public URL
+  shareUrl String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("profiles")
+}
+
+// ============================================
+// AUTH
+// ============================================
+
+model Session {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([token])
+  @@map("sessions")
+}
+
+model MagicLinkToken {
+  id        String    @id @default(uuid())
+  email     String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([tokenHash])
+  @@map("magic_link_tokens")
+}
+
+// ============================================
+// SUBSCRIPTIONS & PAYMENTS
+// ============================================
+
+model Subscription {
+  id String @id @default(uuid())
+
+  // Who is subscribing to whom
+  subscriberId String
+  subscriber   User   @relation("Subscriber", fields: [subscriberId], references: [id])
+  creatorId    String
+  creator      User   @relation("Creator", fields: [creatorId], references: [id])
+
+  // Subscription details
+  tierId   String?
+  tierName String?
+  amount   Int // cents
+  currency String
+  interval SubscriptionInterval
+
+  // Status
+  status            SubscriptionStatus @default(active)
+  currentPeriodEnd  DateTime?
+  cancelAtPeriodEnd Boolean            @default(false)
+
+  // Stripe
+  stripeSubscriptionId String? @unique
+  stripeCustomerId     String?
+
+  // Metrics
+  ltvCents Int @default(0)
+
+  // Timestamps
+  startedAt  DateTime  @default(now())
+  canceledAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  payments Payment[]
+
+  @@index([creatorId])
+  @@index([subscriberId])
+  @@map("subscriptions")
+}
+
+model Payment {
+  id String @id @default(uuid())
+
+  subscriptionId String?
+  subscription   Subscription? @relation(fields: [subscriptionId], references: [id])
+  creatorId      String
+  subscriberId   String?
+
+  // Amount
+  amountCents Int
+  currency    String
+  feeCents    Int @default(0)
+  netCents    Int
+
+  // Type & Status
+  type   PaymentType
+  status PaymentStatus
+
+  // Stripe (stripe_event_id for webhook idempotency)
+  stripePaymentIntentId String? @unique
+  stripeChargeId        String?
+  stripeEventId         String? @unique
+
+  // Timestamps
+  occurredAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  @@index([creatorId])
+  @@index([stripeEventId])
+  @@map("payments")
+}
+
+// ============================================
+// REQUESTS
+// ============================================
+
+model Request {
+  id        String @id @default(uuid())
+  creatorId String
+  creator   User   @relation(fields: [creatorId], references: [id])
+
+  // Recipient (may not be a user)
+  recipientName  String
+  recipientEmail String?
+  recipientPhone String?
+  relationship   Relationship
+
+  // Request details
+  amountCents Int
+  currency    String
+  isRecurring Boolean @default(false)
+  message     String?
+  voiceUrl    String?
+  customPerks Json?
+
+  // Delivery
+  sendMethod RequestSendMethod?
+  status     RequestStatus      @default(draft)
+
+  // Public token for recipient link (hashed)
+  publicTokenHash String? @unique
+  tokenExpiresAt  DateTime?
+
+  // Payment tracking
+  stripeCheckoutSessionId String? @unique  // Links to Stripe checkout session
+
+  // Timestamps
+  sentAt      DateTime?
+  respondedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([creatorId])
+  @@index([publicTokenHash])
+  @@index([stripeCheckoutSessionId])
+  @@map("requests")
+}
+
+// ============================================
+// UPDATES
+// ============================================
+
+model Update {
+  id        String @id @default(uuid())
+  creatorId String
+  creator   User   @relation(fields: [creatorId], references: [id])
+
+  // Content
+  title    String?
+  body     String
+  photoUrl String?
+
+  // Targeting: all, supporters, vip, or specific tier ID
+  audience String
+
+  // Status
+  status UpdateStatus @default(draft)
+
+  // Stats
+  recipientCount Int @default(0)
+  viewCount      Int @default(0)
+
+  // Timestamps
+  sentAt    DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([creatorId])
+  @@map("updates")
+}
+
+// ============================================
+// ACTIVITY
+// ============================================
+
+model Activity {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  // Type: subscription_created, payment_received, request_sent, request_accepted, update_sent
+  type    String
+  payload Json
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("activities")
+}

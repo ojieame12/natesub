@@ -1,0 +1,655 @@
+/* ===========================================
+   LIQUID GLASS DESIGN SYSTEM v2
+   Distinctive, Soft, Modern
+   =========================================== */
+
+/* === FONT FACE === */
+@font-face {
+  font-family: 'SF Compact Rounded';
+  src: url('./SF-Compact-Rounded-Regular.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'SF Compact Rounded';
+  src: url('./SF-Compact-Rounded-Semibold.otf') format('opentype');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* === DESIGN TOKENS === */
+:root {
+  /* Typography */
+  --font-primary: 'SF Compact Rounded', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+
+  /* Spacing - generous breathing room */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 20px;
+  --space-2xl: 24px;
+  --space-3xl: 32px;
+  --space-4xl: 40px;
+  --space-5xl: 48px;
+  --space-6xl: 64px;
+
+  /* Border radius - soft and rounded */
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 18px;
+  --radius-xl: 22px;
+  --radius-2xl: 28px;
+  --radius-full: 9999px;
+
+  /* ========================================
+     WARM NEUTRAL PALETTE (from brand logo)
+     ======================================== */
+
+  /* Neutral scale - warm stone tint */
+  --neutral-50: #FAFAF9;
+  --neutral-100: #F5F5F4;
+  --neutral-200: #E7E5E4;
+  --neutral-300: #D6D3D1;
+  --neutral-400: #A8A29E;
+  --neutral-500: #78716C;
+  --neutral-600: #57534E;
+  --neutral-700: #44403C;
+  --neutral-800: #292524;
+  --neutral-900: #1C1917;
+  --neutral-950: #0C0A09;
+
+  /* Light mode backgrounds */
+  --bg-base: var(--neutral-100);
+  --bg-elevated: #FFFFFF;
+  --bg-card: #FFFFFF;
+  --bg-pressed: var(--neutral-200);
+
+  /* Light mode text */
+  --text-primary: var(--neutral-900);
+  --text-secondary: var(--neutral-500);
+  --text-tertiary: var(--neutral-400);
+
+  /* Borders */
+  --border-subtle: rgba(28, 25, 23, 0.04);
+  --border-default: rgba(28, 25, 23, 0.08);
+
+  /* Brand accent - Orange (from logo gradient) */
+  --accent-primary: #FF941A;
+  --accent-primary-hover: #E8850F;
+  --accent-primary-soft: rgba(255, 148, 26, 0.12);
+  --accent-primary-dark: #1D4ED8;
+  /* For 3D button shadows */
+
+  /* Brand gradient (for special moments only) */
+  --brand-gradient: linear-gradient(180deg, #FFD208 0%, #FF941A 100%);
+
+  /* Semantic colors */
+  --accent-green: #34C759;
+  --accent-green-soft: rgba(52, 199, 89, 0.12);
+  --accent-red: #FF3B30;
+  --accent-red-soft: rgba(255, 59, 48, 0.12);
+  --accent-orange: #FF9500;
+  --accent-orange-soft: rgba(255, 149, 0, 0.12);
+  --accent-blue: #007AFF;
+  --accent-blue-soft: rgba(0, 122, 255, 0.12);
+
+  /* Status colors (for UI feedback) */
+  --status-success: #10b981;
+  --status-success-soft: rgba(16, 185, 129, 0.12);
+  --status-error: #ef4444;
+  --status-error-soft: rgba(239, 68, 68, 0.12);
+  --status-warning: #f59e0b;
+  --status-warning-soft: rgba(245, 158, 11, 0.12);
+
+  /* Button shadow (for 3D effect) */
+  --accent-primary-shadow: #cc7615;
+
+  /* Shadows - soft and diffused */
+  --shadow-sm: 0 2px 8px rgba(28, 25, 23, 0.03), 0 1px 2px rgba(28, 25, 23, 0.02);
+  --shadow-md: 0 4px 16px rgba(28, 25, 23, 0.04), 0 2px 4px rgba(28, 25, 23, 0.02);
+  --shadow-lg: 0 8px 32px rgba(28, 25, 23, 0.06), 0 4px 8px rgba(28, 25, 23, 0.02);
+  --shadow-card: 0 1px 3px rgba(28, 25, 23, 0.02), 0 4px 12px rgba(28, 25, 23, 0.03);
+
+  /* Animations */
+  --ease-out: cubic-bezier(0.25, 0.1, 0.25, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --duration-fast: 120ms;
+  --duration-normal: 200ms;
+}
+
+/* Dark mode removed - using light mode only */
+
+/* === BASE RESET === */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  font-family: var(--font-primary);
+  background: #FFFFFF;
+  color: var(--text-primary);
+  line-height: 1.4;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+button {
+  font-family: inherit;
+  border: none;
+  background: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+input {
+  font-family: inherit;
+  border: none;
+  outline: none;
+  background: none;
+}
+
+/* === PRESSABLE === */
+.pressable {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform var(--duration-fast) var(--ease-spring),
+    background var(--duration-fast) ease,
+    opacity var(--duration-fast) ease;
+  user-select: none;
+  will-change: transform;
+}
+
+.pressable.pressed {
+  transform: scale(0.97);
+}
+
+/* Spring back effect on release */
+.pressable:not(.pressed) {
+  transition: transform 0.25s var(--ease-spring),
+    background var(--duration-fast) ease;
+}
+
+/* Cards and larger pressables get subtle lift effect */
+.pressable-card {
+  transition: transform var(--duration-fast) var(--ease-spring),
+    box-shadow var(--duration-normal) ease;
+}
+
+.pressable-card.pressed {
+  transform: scale(0.98);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+/* Icon buttons - more responsive */
+.pressable-icon {
+  transition: transform 80ms var(--ease-out),
+    opacity var(--duration-fast) ease;
+}
+
+.pressable-icon.pressed {
+  transform: scale(0.9);
+  opacity: 0.7;
+}
+
+/* === TYPOGRAPHY === */
+.text-xs {
+  font-size: 11px;
+}
+
+.text-sm {
+  font-size: 13px;
+}
+
+.text-base {
+  font-size: 15px;
+}
+
+.text-lg {
+  font-size: 17px;
+}
+
+.text-xl {
+  font-size: 20px;
+}
+
+.text-2xl {
+  font-size: 24px;
+}
+
+.text-3xl {
+  font-size: 28px;
+}
+
+.text-4xl {
+  font-size: 34px;
+}
+
+.font-normal {
+  font-weight: 400;
+}
+
+.font-semibold {
+  font-weight: 600;
+}
+
+.text-primary {
+  color: var(--text-primary);
+}
+
+.text-secondary {
+  color: var(--text-secondary);
+}
+
+.text-tertiary {
+  color: var(--text-tertiary);
+}
+
+/* ===========================================
+   ANIMATION UTILITIES
+   Global keyframes and animation classes
+   =========================================== */
+
+/* === KEYFRAMES === */
+
+/* Fade animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeInScale {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Bounce/Spring animations */
+@keyframes bounceIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  70% {
+    transform: scale(0.95);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-4px); }
+  20%, 40%, 60%, 80% { transform: translateX(4px); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* === UTILITY CLASSES === */
+
+.animate-fade-in {
+  animation: fadeIn 0.3s var(--ease-out) both;
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.4s var(--ease-out) both;
+}
+
+.animate-fade-in-down {
+  animation: fadeInDown 0.4s var(--ease-out) both;
+}
+
+.animate-fade-in-scale {
+  animation: fadeInScale 0.3s var(--ease-spring) both;
+}
+
+.animate-bounce-in {
+  animation: bounceIn 0.5s var(--ease-spring) both;
+}
+
+.animate-shake {
+  animation: shake 0.5s var(--ease-out);
+}
+
+.animate-pulse {
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.animate-slide-in-right {
+  animation: slideInRight 0.3s var(--ease-out) both;
+}
+
+.animate-slide-in-left {
+  animation: slideInLeft 0.3s var(--ease-out) both;
+}
+
+/* Stagger delay utilities */
+.stagger-1 { animation-delay: 0.05s; }
+.stagger-2 { animation-delay: 0.1s; }
+.stagger-3 { animation-delay: 0.15s; }
+.stagger-4 { animation-delay: 0.2s; }
+.stagger-5 { animation-delay: 0.25s; }
+.stagger-6 { animation-delay: 0.3s; }
+.stagger-7 { animation-delay: 0.35s; }
+.stagger-8 { animation-delay: 0.4s; }
+
+/* View transition (for page-level animations) */
+.view-enter {
+  animation: fadeInUp 0.35s var(--ease-out) both;
+}
+
+.view-exit {
+  animation: fadeIn 0.2s var(--ease-out) both reverse;
+}
+
+/* ===========================================
+   VIEW TRANSITIONS API
+   Native page transitions with CSS
+   =========================================== */
+
+/* Enable view transitions */
+@view-transition {
+  navigation: auto;
+}
+
+/* === DEFAULT TRANSITION (Fade) === */
+::view-transition-old(root) {
+  animation: vt-fade-out 0.2s ease-out both;
+}
+
+::view-transition-new(root) {
+  animation: vt-fade-in 0.25s ease-out both;
+}
+
+@keyframes vt-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes vt-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* === SLIDE LEFT (Forward navigation) === */
+[data-transition="slide-left"]::view-transition-old(root) {
+  animation: vt-slide-out-left 0.3s var(--ease-out) both;
+}
+
+[data-transition="slide-left"]::view-transition-new(root) {
+  animation: vt-slide-in-right 0.3s var(--ease-out) both;
+}
+
+@keyframes vt-slide-out-left {
+  to {
+    opacity: 0;
+    transform: translateX(-30%);
+  }
+}
+
+@keyframes vt-slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(30%);
+  }
+}
+
+/* === SLIDE RIGHT (Back navigation) === */
+[data-transition="slide-right"]::view-transition-old(root) {
+  animation: vt-slide-out-right 0.3s var(--ease-out) both;
+}
+
+[data-transition="slide-right"]::view-transition-new(root) {
+  animation: vt-slide-in-left 0.3s var(--ease-out) both;
+}
+
+@keyframes vt-slide-out-right {
+  to {
+    opacity: 0;
+    transform: translateX(30%);
+  }
+}
+
+@keyframes vt-slide-in-left {
+  from {
+    opacity: 0;
+    transform: translateX(-30%);
+  }
+}
+
+/* === ZOOM IN (List → Detail) === */
+[data-transition="zoom-in"]::view-transition-old(root) {
+  animation: vt-zoom-out 0.35s var(--ease-out) both;
+}
+
+[data-transition="zoom-in"]::view-transition-new(root) {
+  animation: vt-zoom-in 0.35s var(--ease-spring) both;
+}
+
+@keyframes vt-zoom-out {
+  to {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+}
+
+@keyframes vt-zoom-in {
+  from {
+    opacity: 0;
+    transform: scale(1.05);
+  }
+}
+
+/* === ZOOM OUT (Detail → List) === */
+[data-transition="zoom-out"]::view-transition-old(root) {
+  animation: vt-zoom-in-reverse 0.3s var(--ease-out) both;
+}
+
+[data-transition="zoom-out"]::view-transition-new(root) {
+  animation: vt-zoom-out-reverse 0.3s var(--ease-out) both;
+}
+
+@keyframes vt-zoom-in-reverse {
+  to {
+    opacity: 0;
+    transform: scale(1.05);
+  }
+}
+
+@keyframes vt-zoom-out-reverse {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+}
+
+/* === SLIDE UP (Modal-like) === */
+[data-transition="slide-up"]::view-transition-old(root) {
+  animation: vt-fade-out 0.2s ease-out both;
+}
+
+[data-transition="slide-up"]::view-transition-new(root) {
+  animation: vt-slide-up 0.35s var(--ease-spring) both;
+}
+
+@keyframes vt-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(40px);
+  }
+}
+
+/* === SLIDE DOWN (Dismiss modal) === */
+[data-transition="slide-down"]::view-transition-old(root) {
+  animation: vt-slide-down 0.25s ease-in both;
+}
+
+[data-transition="slide-down"]::view-transition-new(root) {
+  animation: vt-fade-in 0.2s ease-out both;
+}
+
+@keyframes vt-slide-down {
+  to {
+    opacity: 0;
+    transform: translateY(40px);
+  }
+}
+
+/* === SHARED ELEMENTS === */
+
+/* Avatar that morphs between views */
+.vt-avatar {
+  view-transition-name: avatar-hero;
+}
+
+::view-transition-group(avatar-hero) {
+  animation-duration: 0.35s;
+  animation-timing-function: var(--ease-spring);
+}
+
+/* Card that expands into detail view */
+.vt-card {
+  view-transition-name: card-expand;
+}
+
+::view-transition-group(card-expand) {
+  animation-duration: 0.35s;
+  animation-timing-function: var(--ease-spring);
+}
+
+/* Amount that travels between views */
+.vt-amount {
+  view-transition-name: amount-hero;
+}
+
+::view-transition-group(amount-hero) {
+  animation-duration: 0.3s;
+  animation-timing-function: var(--ease-out);
+}
+
+/* Header that persists */
+.vt-header {
+  view-transition-name: header-persist;
+}
+
+::view-transition-group(header-persist) {
+  animation-duration: 0.25s;
+}
+
+/* === TRANSITION GROUP STYLING === */
+::view-transition-image-pair(root) {
+  isolation: auto;
+}
+
+/* Prevent flash of unstyled content */
+::view-transition-old(root),
+::view-transition-new(root) {
+  mix-blend-mode: normal;
+}
+
+/* ===========================================
+   REDUCED MOTION
+   Respect user preferences for less motion
+   =========================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  /* Disable all view transitions */
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+
+  /* Disable all custom animations */
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  /* Keep essential feedback (instant, no motion) */
+  .pressable.pressed {
+    transform: none;
+    opacity: 0.7;
+  }
+
+  /* Skeleton still shows but no shimmer */
+  .skeleton {
+    animation: none;
+    background: var(--neutral-100);
+  }
+}

@@ -1,0 +1,22 @@
+# Environment
+.env
+.env.local
+
+# Dependencies
+node_modules
+
+# Build
+dist
+
+# Prisma
+prisma/migrations/**/migration_lock.toml
+
+# IDE
+.idea
+.vscode
+
+# OS
+.DS_Store
+
+# Logs
+*.log

@@ -1,0 +1,345 @@
+/* ===========================================
+   EDIT MY PAGE
+   Using Liquid Glass Design System
+   =========================================== */
+
+.edit-page {
+    min-height: 100vh;
+    min-height: 100dvh;
+    max-width: 430px;
+    margin: 0 auto;
+    background: var(--bg-base);
+    display: flex;
+    flex-direction: column;
+}
+
+/* === HEADER === */
+.edit-page-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-md) var(--space-lg);
+    padding-top: calc(env(safe-area-inset-top, 20px) + var(--space-md));
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--border-default);
+    position: sticky;
+    top: 0;
+    z-index: 50;
+}
+
+.edit-page .back-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-full);
+    background: var(--neutral-100);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+    transition: transform 0.1s ease, background 0.15s ease;
+}
+
+.edit-page .back-btn.pressed {
+    transform: scale(0.92);
+    background: var(--neutral-200);
+}
+
+.edit-page .preview-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-full);
+    background: var(--neutral-900);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    transition: transform 0.1s ease, background 0.15s ease;
+}
+
+.edit-page .preview-btn.pressed {
+    transform: scale(0.92);
+    background: var(--neutral-800);
+}
+
+.edit-page-title {
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+/* === CONTENT === */
+.edit-page-content {
+    flex: 1;
+    padding: var(--space-lg);
+    padding-bottom: 100px;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xl);
+}
+
+/* === SECTIONS === */
+.edit-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.section-title {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.tier-count {
+    font-size: 13px;
+    color: var(--text-tertiary);
+}
+
+/* === PROFILE CARD === */
+.profile-card {
+    background: var(--bg-card);
+    border-radius: var(--radius-xl);
+    padding: var(--space-lg);
+    border: 1px solid var(--border-subtle);
+    display: flex;
+    gap: var(--space-lg);
+}
+
+.avatar-edit {
+    position: relative;
+    flex-shrink: 0;
+}
+
+.avatar-placeholder {
+    width: 64px;
+    height: 64px;
+    border-radius: var(--radius-full);
+    background: var(--neutral-900);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    font-weight: 600;
+}
+
+.avatar-overlay {
+    position: absolute;
+    bottom: -4px;
+    right: -4px;
+    width: 28px;
+    height: 28px;
+    border-radius: var(--radius-full);
+    background: var(--bg-elevated);
+    border: 2px solid var(--bg-base);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+}
+
+.profile-fields {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.field-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.field-input,
+.field-textarea {
+    font-size: 16px;
+    color: var(--text-primary);
+    background: transparent;
+    border: none;
+    outline: none;
+    font-family: var(--font-primary);
+    resize: none;
+}
+
+.field-input::placeholder,
+.field-textarea::placeholder {
+    color: var(--text-tertiary);
+}
+
+/* === TIERS LIST === */
+.tiers-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.tier-card {
+    background: var(--bg-card);
+    border-radius: var(--radius-xl);
+    padding: var(--space-md);
+    border: 1px solid var(--border-subtle);
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-sm);
+}
+
+.tier-drag {
+    color: var(--text-tertiary);
+    padding: var(--space-sm) 0;
+    cursor: grab;
+}
+
+.tier-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.tier-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-md);
+}
+
+.tier-name-input {
+    flex: 1;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+    background: transparent;
+    border: none;
+    outline: none;
+    font-family: var(--font-primary);
+}
+
+.tier-price-wrap {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    background: var(--neutral-100);
+    padding: var(--space-xs) var(--space-sm);
+    border-radius: var(--radius-md);
+}
+
+.tier-currency {
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+.tier-price-input {
+    width: 40px;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+    background: transparent;
+    border: none;
+    outline: none;
+    text-align: center;
+    font-family: var(--font-primary);
+}
+
+/* Hide number input spinners */
+.tier-price-input::-webkit-outer-spin-button,
+.tier-price-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.tier-period {
+    font-size: 13px;
+    color: var(--text-tertiary);
+}
+
+.tier-desc-input {
+    font-size: 14px;
+    color: var(--text-secondary);
+    background: transparent;
+    border: none;
+    outline: none;
+    font-family: var(--font-primary);
+}
+
+.tier-desc-input::placeholder {
+    color: var(--text-tertiary);
+}
+
+.tier-delete {
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-tertiary);
+}
+
+.tier-delete.pressed {
+    background: var(--accent-red-soft);
+    color: var(--accent-red);
+}
+
+/* Add Tier Button */
+.add-tier-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-sm);
+    padding: var(--space-md);
+    border-radius: var(--radius-lg);
+    border: 1px dashed var(--border-default);
+    color: var(--text-secondary);
+    font-size: 15px;
+    font-weight: 500;
+}
+
+.add-tier-btn.pressed {
+    background: var(--neutral-50);
+}
+
+/* === FOOTER === */
+.edit-page-footer {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    max-width: 430px;
+    margin: 0 auto;
+    padding: var(--space-lg);
+    padding-bottom: calc(env(safe-area-inset-bottom, 20px) + var(--space-lg));
+    background: var(--bg-elevated);
+    border-top: 1px solid var(--border-default);
+}
+
+.save-btn {
+    width: 100%;
+    padding: var(--space-lg);
+    border-radius: var(--radius-lg);
+    background: var(--neutral-900);
+    color: white;
+    font-size: 16px;
+    font-weight: 600;
+    text-align: center;
+}
+
+.save-btn.pressed {
+    background: var(--neutral-800);
+}

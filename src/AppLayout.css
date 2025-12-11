@@ -1,0 +1,84 @@
+/* ===========================================
+   APP LAYOUT - Tab Bar
+   =========================================== */
+
+.app-layout {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    max-width: 430px;
+    margin: 0 auto;
+    background: var(--bg-base);
+}
+
+.app-content {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+/* === TAB BAR === */
+.tab-bar {
+    flex-shrink: 0;
+    background: var(--bg-elevated);
+    border-top: 1px solid var(--border-default);
+    padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+.tab-bar-inner {
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    height: 56px;
+}
+
+.tab-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    min-height: 48px;
+    padding: var(--space-sm);
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-lg);
+    color: var(--text-tertiary);
+    transition: transform 0.1s ease, color 0.15s ease;
+    cursor: pointer;
+}
+
+.tab-item:active,
+.tab-item.pressed {
+    transform: scale(0.92);
+}
+
+.tab-item.active {
+    color: var(--text-primary);
+}
+
+.tab-icon {
+    stroke-width: 1.5px;
+}
+
+/* Center Action Button */
+.tab-center-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    background: var(--neutral-900);
+    border: none;
+    border-radius: var(--radius-full);
+    color: white;
+    transition: transform 0.1s ease;
+    cursor: pointer;
+    margin: 0 var(--space-md);
+}
+
+.tab-center-btn:active,
+.tab-center-btn.pressed {
+    transform: scale(0.92);
+}

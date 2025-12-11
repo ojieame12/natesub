@@ -1,0 +1,106 @@
+/* Toast Notifications - Liquid Glass Design System */
+
+.toast-container {
+    position: fixed;
+    top: calc(env(safe-area-inset-top, 20px) + var(--space-md));
+    left: var(--space-lg);
+    right: var(--space-lg);
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    pointer-events: none;
+}
+
+.toast-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-md) var(--space-lg);
+    background: var(--neutral-900);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    color: white;
+    font-size: 15px;
+    font-weight: 500;
+    pointer-events: auto;
+    cursor: pointer;
+    animation: toastEnter 0.3s ease-out;
+}
+
+.toast-item.toast-exit {
+    animation: toastExit 0.2s ease-in forwards;
+}
+
+@keyframes toastEnter {
+    0% {
+        opacity: 0;
+        transform: translateY(-20px) scale(0.9);
+    }
+    60% {
+        opacity: 1;
+        transform: translateY(4px) scale(1.02);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+@keyframes toastExit {
+    from {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+    to {
+        opacity: 0;
+        transform: translateY(-10px) scale(0.95);
+    }
+}
+
+.toast-icon {
+    width: 24px;
+    height: 24px;
+    border-radius: var(--radius-full);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.toast-message {
+    flex: 1;
+}
+
+/* Toast Types */
+.toast-success {
+    background: var(--status-success);
+}
+
+.toast-success .toast-icon {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.toast-error {
+    background: var(--status-error);
+}
+
+.toast-error .toast-icon {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.toast-warning {
+    background: var(--status-warning);
+}
+
+.toast-warning .toast-icon {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.toast-info {
+    background: var(--neutral-900);
+}
+
+.toast-info .toast-icon {
+    background: rgba(255, 255, 255, 0.15);
+}
