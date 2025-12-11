@@ -248,6 +248,14 @@ export function useMetrics() {
   })
 }
 
+export function useActivityDetail(id: string) {
+  return useQuery({
+    queryKey: ['activity', id],
+    queryFn: () => api.activity.get(id),
+    enabled: !!id,
+  })
+}
+
 // ============================================
 // REQUEST HOOKS
 // ============================================

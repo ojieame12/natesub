@@ -1,31 +1,48 @@
 import { useState, useRef } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
-import { useOnboardingStore } from '../onboarding/store'
-import { Check, Play, Banknote, X, ChevronLeft } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Check, Play, Banknote, Briefcase, X, ChevronLeft } from 'lucide-react'
 import Lottie from 'lottie-react'
 import swipeAnimation from './animations/swipe-left.json'
 import moneyAnimation from './animations/money-send.json'
 import { Pressable } from '../components'
+import { useCreateCheckout } from '../api/hooks'
+import type { Profile } from '../api/client'
+import { getCurrencySymbol } from '../utils/currency'
 import './template-one.css'
 
 type ViewType = 'welcome' | 'impact' | 'perks' | 'payment'
 
-export default function SubscribeBoundary() {
-    const navigate = useNavigate()
-    const { username: urlUsername } = useParams<{ username: string }>()
+interface SubscribeBoundaryProps {
+    profile: Profile
+}
 
+export default function SubscribeBoundary({ profile }: SubscribeBoundaryProps) {
+    const navigate = useNavigate()
+    const { mutateAsync: createCheckout, isPending: isCheckoutLoading } = useCreateCheckout()
+
+    // Extract profile data
     const {
-        name,
+        username,
+        displayName,
+        bio,
         avatarUrl,
+        voiceIntroUrl,
+        purpose,
         pricingModel,
         singleAmount,
         tiers,
-        impactItems,
-    } = useOnboardingStore()
+        perks: profilePerks,
+        impactItems: profileImpactItems,
+        currency,
+    } = profile
+
+    // Determine if this is a service page vs personal
+    const isService = purpose === 'service'
+    const currencySymbol = getCurrencySymbol(currency)
 
     // State
     const [currentView, setCurrentView] = useState<ViewType>('welcome')
-    const [isSubscribed, setIsSubscribed] = useState(false)
+    const [isSubscribed] = useState(false) // Success handled by Stripe redirect
     const [isPlaying, setIsPlaying] = useState(false)
     const [showTerms, setShowTerms] = useState(false)
 
@@ -33,9 +50,10 @@ export default function SubscribeBoundary() {
     const touchStartX = useRef<number>(0)
     const touchEndX = useRef<number>(0)
 
-    const displayName = name || urlUsername || 'Someone'
-    const currentAmount = pricingModel === 'single' ? singleAmount : tiers[0]?.amount || 10
-    const validImpactItems = impactItems.filter(item => item.title.trim() !== '')
+    const name = displayName || username || 'Someone'
+    const currentAmount = pricingModel === 'single' ? (singleAmount || 10) : (tiers?.[0]?.amount || 10)
+    const validImpactItems = (profileImpactItems || []).filter(item => item.title.trim() !== '')
+    const enabledPerks = (profilePerks || []).filter(perk => perk.enabled)
 
     // Fallback avatar
     const fallbackAvatar = 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&q=80'
@@ -44,17 +62,25 @@ export default function SubscribeBoundary() {
     const viewSequence: ViewType[] = ['welcome', 'impact', 'perks', 'payment']
     const currentIndex = viewSequence.indexOf(currentView)
 
-    // Mock perks data
-    const perks = [
-        { title: 'Weekly Updates', subtitle: 'Get notified about what I\'m working on' },
-        { title: 'Ask Me Anything', subtitle: 'Direct access to ask questions' },
-        { title: 'Subscription to my thoughts', subtitle: 'Personal insights and reflections' },
-        { title: 'My Eternal Gratitude', subtitle: 'You\'ll have my sincere thanks' },
-    ]
+    const [checkoutError, setCheckoutError] = useState<string | null>(null)
 
-    const handleSubscribe = () => {
-        console.log('Subscribing at $' + currentAmount + '/month')
-        setIsSubscribed(true)
+    const handleSubscribe = async () => {
+        setCheckoutError(null)
+        try {
+            const result = await createCheckout({
+                creatorUsername: username,
+                amount: currentAmount,
+                interval: 'month',
+            })
+            // Redirect to Stripe Checkout
+            if (result.url) {
+                window.location.href = result.url
+            }
+        } catch (error: any) {
+            console.error('Checkout failed:', error)
+            setCheckoutError(error?.error || 'Payment failed. Please try again.')
+            // DO NOT grant access on failure
+        }
     }
 
     const handleDotClick = (index: number) => {
@@ -107,7 +133,10 @@ export default function SubscribeBoundary() {
                     </div>
                     <h1 className="sub-success-title">You're in!</h1>
                     <p className="sub-success-text">
-                        You're now supporting {displayName} at ${currentAmount}/month
+                        {isService
+                            ? `You're now subscribed to ${name}'s services at ${currencySymbol}${currentAmount}/month`
+                            : `You're now supporting ${name} at ${currencySymbol}${currentAmount}/month`
+                        }
                     </p>
                     <Pressable className="sub-btn sub-btn-secondary" onClick={() => navigate('/dashboard')}>
                         Done
@@ -137,20 +166,20 @@ export default function SubscribeBoundary() {
                     <div className="sub-hero-content">
                         <div className="sub-hero-left">
                             <div className="sub-hero-badge">
-                                <Banknote size={14} />
-                                <span>Tips</span>
+                                {isService ? <Briefcase size={14} /> : <Banknote size={14} />}
+                                <span>{isService ? 'Service' : 'Tips'}</span>
                             </div>
                             <div className="sub-hero-price">
-                                <span className="sub-hero-currency">$</span>
+                                <span className="sub-hero-currency">{currencySymbol}</span>
                                 <span className="sub-hero-amount">{currentAmount}</span>
                             </div>
-                            <div className="sub-hero-name">{displayName}</div>
+                            <div className="sub-hero-name">{name}</div>
                         </div>
 
                         <div className="sub-hero-avatar">
                             <img
                                 src={avatarUrl || fallbackAvatar}
-                                alt={displayName}
+                                alt={name}
                                 onError={(e) => {
                                     e.currentTarget.src = fallbackAvatar
                                 }}
@@ -171,26 +200,34 @@ export default function SubscribeBoundary() {
                         <div className="sub-view sub-view-welcome">
                             <div className="sub-welcome-content">
                                 <h1 className="sub-welcome-title">
-                                    Hello, <span className="sub-welcome-highlight">Loved one</span>
+                                    {isService ? (
+                                        <>Work with <span className="sub-welcome-highlight">{name.split(' ')[0]}</span></>
+                                    ) : (
+                                        <>Hello, <span className="sub-welcome-highlight">Loved one</span></>
+                                    )}
                                 </h1>
                                 <p className="sub-welcome-text">
-                                    Would love and Appreciate your support with a simple subscription,
-                                    That would mean the world to me!
+                                    {bio || (isService
+                                        ? `Subscribe to get ongoing access to ${name}'s services and expertise.`
+                                        : `Would love and appreciate your support with a simple subscription. That would mean the world to me!`
+                                    )}
                                 </p>
 
-                                {/* Voice Message */}
-                                <div className="sub-voice-card-mini">
-                                    <Pressable
-                                        className="sub-voice-play"
-                                        onClick={() => setIsPlaying(!isPlaying)}
-                                    >
-                                        <Play size={16} fill={isPlaying ? 'transparent' : 'white'} />
-                                    </Pressable>
-                                    <div className="sub-voice-info">
-                                        <span className="sub-voice-label-mini">Hear From {displayName.split(' ')[0]}</span>
-                                        <span className="sub-voice-time">0:12 / 0:50</span>
+                                {/* Voice Message - only show if voiceIntroUrl exists */}
+                                {voiceIntroUrl && (
+                                    <div className="sub-voice-card-mini">
+                                        <Pressable
+                                            className="sub-voice-play"
+                                            onClick={() => setIsPlaying(!isPlaying)}
+                                        >
+                                            <Play size={16} fill={isPlaying ? 'transparent' : 'white'} />
+                                        </Pressable>
+                                        <div className="sub-voice-info">
+                                            <span className="sub-voice-label-mini">Hear From {name.split(' ')[0]}</span>
+                                            <span className="sub-voice-time">0:12 / 0:50</span>
+                                        </div>
                                     </div>
-                                </div>
+                                )}
                             </div>
 
                         </div>
@@ -199,7 +236,9 @@ export default function SubscribeBoundary() {
                     {/* Impact View */}
                     {currentView === 'impact' && (
                         <div className="sub-view sub-view-impact">
-                            <h2 className="sub-section-title">How it would Help Me</h2>
+                            <h2 className="sub-section-title">
+                                {isService ? 'Why Work With Me' : 'How it would Help Me'}
+                            </h2>
 
                             <div className="sub-items-free">
                                 {validImpactItems.map((item, index) => (
@@ -218,18 +257,28 @@ export default function SubscribeBoundary() {
                     {/* Perks View */}
                     {currentView === 'perks' && (
                         <div className="sub-view sub-view-perks">
-                            <h2 className="sub-section-title">What You would Get</h2>
+                            <h2 className="sub-section-title">
+                                {isService ? "What's Included" : 'What You would Get'}
+                            </h2>
 
                             <div className="sub-items-free">
-                                {perks.map((perk, index) => (
-                                    <div key={index} className="sub-item sub-item-checked">
+                                {enabledPerks.length > 0 ? (
+                                    enabledPerks.map((perk) => (
+                                        <div key={perk.id} className="sub-item sub-item-checked">
+                                            <img src="/check-badge.svg" alt="" className="sub-item-badge" />
+                                            <div className="sub-item-content">
+                                                <span className="sub-item-title">{perk.title}</span>
+                                            </div>
+                                        </div>
+                                    ))
+                                ) : (
+                                    <div className="sub-item sub-item-checked">
                                         <img src="/check-badge.svg" alt="" className="sub-item-badge" />
                                         <div className="sub-item-content">
-                                            <span className="sub-item-title">{perk.title}</span>
-                                            <span className="sub-item-subtitle">{perk.subtitle}</span>
+                                            <span className="sub-item-title">Support {name}</span>
                                         </div>
                                     </div>
-                                ))}
+                                )}
                             </div>
                         </div>
                     )}
@@ -242,21 +291,35 @@ export default function SubscribeBoundary() {
                             <div className="sub-payment-summary">
                                 <div className="sub-payment-row">
                                     <span>Monthly subscription</span>
-                                    <span className="sub-payment-amount">${currentAmount}/mo</span>
+                                    <span className="sub-payment-amount">{currencySymbol}{currentAmount}/mo</span>
                                 </div>
                                 <div className="sub-payment-row">
                                     <span>To</span>
-                                    <span className="sub-payment-to">{displayName}</span>
+                                    <span className="sub-payment-to">{name}</span>
                                 </div>
                             </div>
 
+                            {checkoutError && (
+                                <div className="sub-payment-error">
+                                    {checkoutError}
+                                </div>
+                            )}
+
                             <div className="sub-payment-methods">
-                                <Pressable className="sub-payment-btn sub-payment-stripe" onClick={handleSubscribe}>
+                                <Pressable
+                                    className="sub-payment-btn sub-payment-stripe"
+                                    onClick={handleSubscribe}
+                                    disabled={isCheckoutLoading}
+                                >
                                     <img src="/stripe-logo.svg" alt="Stripe" className="sub-payment-logo" />
-                                    <span>Pay with Stripe</span>
+                                    <span>{isCheckoutLoading ? 'Loading...' : 'Pay with Stripe'}</span>
                                 </Pressable>
 
-                                <Pressable className="sub-payment-btn sub-payment-apple" onClick={handleSubscribe}>
+                                <Pressable
+                                    className="sub-payment-btn sub-payment-apple"
+                                    onClick={handleSubscribe}
+                                    disabled={isCheckoutLoading}
+                                >
                                     <img src="/apple-logo.svg" alt="Apple" className="sub-payment-logo-apple" />
                                     <span>Pay</span>
                                 </Pressable>
@@ -282,8 +345,8 @@ export default function SubscribeBoundary() {
                                 className="sub-swipe-lottie"
                             />
                             <span className="sub-swipe-text">
-                                {currentView === 'welcome' && 'How it would help Me'}
-                                {currentView === 'impact' && 'What You would Get'}
+                                {currentView === 'welcome' && (isService ? 'Why Work With Me' : 'How it would help Me')}
+                                {currentView === 'impact' && (isService ? "What's Included" : 'What You would Get')}
                                 {currentView === 'perks' && 'Make Payment'}
                             </span>
                         </div>

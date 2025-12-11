@@ -1,13 +1,35 @@
-import { ChevronLeft } from 'lucide-react'
+import { useState } from 'react'
+import { ChevronLeft, Loader2 } from 'lucide-react'
 import { useOnboardingStore } from './store'
 import { Button, Pressable } from './components'
+import { useRequestMagicLink } from '../api/hooks'
 import '../Dashboard.css'
 import './onboarding.css'
 
 export default function EmailStep() {
     const { email, setEmail, nextStep, prevStep } = useOnboardingStore()
+    const [isSending, setIsSending] = useState(false)
+    const [error, setError] = useState<string | null>(null)
+
+    const { mutateAsync: sendMagicLink } = useRequestMagicLink()
 
     const isValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+
+    const handleContinue = async () => {
+        if (!isValidEmail || isSending) return
+
+        setIsSending(true)
+        setError(null)
+
+        try {
+            await sendMagicLink(email)
+            nextStep()
+        } catch (err: any) {
+            setError(err?.error || 'Failed to send code. Please try again.')
+        } finally {
+            setIsSending(false)
+        }
+    }
 
     return (
         <div className="onboarding">
@@ -28,13 +50,21 @@ export default function EmailStep() {
 
                 <div className="step-body">
                     <input
-                        className="input"
+                        className={`input ${error ? 'input-error' : ''}`}
                         type="email"
                         value={email}
-                        onChange={(e) => setEmail(e.target.value)}
+                        onChange={(e) => {
+                            setEmail(e.target.value)
+                            setError(null)
+                        }}
                         placeholder="email@example.com"
                         autoFocus
+                        disabled={isSending}
+                        onKeyDown={(e) => e.key === 'Enter' && handleContinue()}
                     />
+                    {error && (
+                        <p className="input-error-text">{error}</p>
+                    )}
                 </div>
 
                 <div className="step-footer">
@@ -42,10 +72,17 @@ export default function EmailStep() {
                         variant="primary"
                         size="lg"
                         fullWidth
-                        onClick={nextStep}
-                        disabled={!isValidEmail}
+                        onClick={handleContinue}
+                        disabled={!isValidEmail || isSending}
                     >
-                        Continue
+                        {isSending ? (
+                            <>
+                                <Loader2 size={18} className="spin" style={{ marginRight: 8 }} />
+                                Sending code...
+                            </>
+                        ) : (
+                            'Continue'
+                        )}
                     </Button>
                 </div>
             </div>

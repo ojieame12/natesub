@@ -82,6 +82,7 @@ enum Purpose {
   allowance
   fan_club
   exclusive_content
+  service
   other
 }
 
@@ -93,6 +94,7 @@ enum PricingModel {
 enum PaymentProvider {
   stripe
   flutterwave
+  bank
 }
 
 // ============================================

@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronLeft, MessageSquare, Mail, Link2, Check, Mic, Plus } from 'lucide-react'
 import { useRequestStore, getRelationshipLabel } from './store'
+import { useCreateRequest, useSendRequest, useCurrentUser } from '../api/hooks'
+import { getCurrencySymbol } from '../utils/currency'
 import { Pressable } from '../components'
 import './request.css'
 
@@ -9,6 +11,7 @@ type SendMethod = 'sms' | 'email' | 'link'
 
 export default function RequestPreview() {
     const navigate = useNavigate()
+    const { data: userData } = useCurrentUser()
     const {
         recipient,
         relationship,
@@ -21,9 +24,19 @@ export default function RequestPreview() {
         reset,
     } = useRequestStore()
 
+    // Currency from user profile
+    const currency = userData?.profile?.currency || 'USD'
+    const currencySymbol = getCurrencySymbol(currency)
+
+    // API hooks
+    const { mutateAsync: createRequest } = useCreateRequest()
+    const { mutateAsync: sendRequest } = useSendRequest()
+
     const [sendMethod, setSendMethod] = useState<SendMethod>('link')
     const [isSending, setIsSending] = useState(false)
     const [isSent, setIsSent] = useState(false)
+    const [requestLink, setRequestLink] = useState<string | null>(null)
+    const [error, setError] = useState<string | null>(null)
 
     // Editable contact info
     const [phoneNumber, setPhoneNumber] = useState(recipient?.phone || '')
@@ -75,22 +88,54 @@ export default function RequestPreview() {
         }
 
         setIsSending(true)
+        setError(null)
 
-        // Simulate sending
-        await new Promise(resolve => setTimeout(resolve, 1500))
+        try {
+            // Step 1: Create the request in the backend
+            const { request } = await createRequest({
+                recipientName: recipient.name,
+                recipientEmail: sendMethod === 'email' ? emailAddress : undefined,
+                recipientPhone: sendMethod === 'sms' ? phoneNumber : undefined,
+                relationship: relationship || 'other',
+                amountCents: Math.round(amount * 100),
+                isRecurring,
+                message: message || undefined,
+                voiceUrl: voiceNoteUrl || undefined,
+            })
 
-        setIsSending(false)
-        setIsSent(true)
+            // Step 2: Send via chosen method
+            const apiMethod = sendMethod === 'sms' ? 'link' : sendMethod // SMS uses link for now
+            const { requestLink: link } = await sendRequest({
+                id: request.id,
+                method: apiMethod as 'email' | 'link',
+            })
 
-        // In real implementation:
-        // - SMS: Use Twilio or native SMS API
-        // - Email: Use SendGrid or similar
-        // - Link: Copy to clipboard
+            setRequestLink(link)
+
+            // For link method, copy to clipboard
+            if (sendMethod === 'link' && link) {
+                await navigator.clipboard.writeText(link)
+            }
+
+            setIsSent(true)
+        } catch (err: any) {
+            console.error('Request failed:', err)
+            setError(err?.error || 'Failed to send request. Please try again.')
+        } finally {
+            setIsSending(false)
+        }
     }
 
     const handleDone = () => {
         reset()
         navigate('/dashboard')
+    }
+
+    // Copy link handler
+    const handleCopyLink = async () => {
+        if (requestLink) {
+            await navigator.clipboard.writeText(requestLink)
+        }
     }
 
     // Success State
@@ -111,7 +156,7 @@ export default function RequestPreview() {
                     <div className="request-success-summary">
                         <div className="request-summary-row">
                             <span>Amount</span>
-                            <span className="request-summary-value">${amount}{isRecurring ? '/mo' : ''}</span>
+                            <span className="request-summary-value">{currencySymbol}{amount}{isRecurring ? '/mo' : ''}</span>
                         </div>
                         <div className="request-summary-row">
                             <span>To</span>
@@ -124,6 +169,12 @@ export default function RequestPreview() {
                             </div>
                         )}
                     </div>
+                    {requestLink && (
+                        <Pressable className="request-copy-link-btn" onClick={handleCopyLink}>
+                            <Link2 size={16} />
+                            <span>Copy Link Again</span>
+                        </Pressable>
+                    )}
                     <Pressable className="request-done-btn" onClick={handleDone}>
                         Done
                     </Pressable>
@@ -154,7 +205,7 @@ export default function RequestPreview() {
                         {/* Mini Subscribe Preview */}
                         <div className="request-preview-mini">
                             <div className="request-preview-amount">
-                                <span className="request-preview-currency">$</span>
+                                <span className="request-preview-currency">{currencySymbol}</span>
                                 <span className="request-preview-value">{amount}</span>
                                 {isRecurring && <span className="request-preview-freq">/mo</span>}
                             </div>
@@ -268,10 +319,17 @@ export default function RequestPreview() {
                     )}
                     <div className="request-summary-item">
                         <span className="request-summary-label">Amount</span>
-                        <span className="request-summary-value">${amount}{isRecurring ? '/month' : ' one-time'}</span>
+                        <span className="request-summary-value">{currencySymbol}{amount}{isRecurring ? '/month' : ' one-time'}</span>
                     </div>
                 </div>
             </div>
+
+            {/* Error Display */}
+            {error && (
+                <div className="request-error">
+                    {error}
+                </div>
+            )}
 
             {/* Send Button */}
             <div className="request-footer">

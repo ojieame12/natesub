@@ -6,15 +6,17 @@ import '../Dashboard.css'
 import './onboarding.css'
 
 export default function AvatarUploadStep() {
-    const { nextStep, prevStep } = useOnboardingStore()
-    const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
+    const { avatarUrl, setAvatarUrl, nextStep, prevStep } = useOnboardingStore()
+    const [avatarPreview, setAvatarPreview] = useState<string | null>(avatarUrl)
 
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0]
         if (file) {
             const reader = new FileReader()
             reader.onload = (e) => {
-                setAvatarPreview(e.target?.result as string)
+                const dataUrl = e.target?.result as string
+                setAvatarPreview(dataUrl)
+                setAvatarUrl(dataUrl) // Save to store
             }
             reader.readAsDataURL(file)
         }

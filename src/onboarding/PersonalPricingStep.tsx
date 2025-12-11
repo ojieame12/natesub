@@ -3,6 +3,7 @@ import { ChevronLeft, Plus, Trash2 } from 'lucide-react'
 import { useOnboardingStore } from './store'
 import type { SubscriptionTier } from './store'
 import { Button, Pressable } from './components'
+import { getCurrencySymbol } from '../utils/currency'
 import './onboarding.css'
 
 const QUICK_AMOUNTS = [5, 10, 15, 25]
@@ -16,9 +17,12 @@ export default function PersonalPricingStep() {
         updateTier,
         addTier,
         removeTier,
+        currency,
         nextStep,
         prevStep
     } = useOnboardingStore()
+
+    const currencySymbol = getCurrencySymbol(currency)
 
     const [inputValue, setInputValue] = useState(singleAmount?.toString() || '')
 
@@ -85,7 +89,7 @@ export default function PersonalPricingStep() {
                             <div className="single-amount-wrapper">
                                 <span className="single-amount-label">Monthly subscription</span>
                                 <div className="single-amount-input-group">
-                                    <span className="single-amount-currency">$</span>
+                                    <span className="single-amount-currency">{currencySymbol}</span>
                                     <input
                                         type="number"
                                         className="single-amount-input"
@@ -104,7 +108,7 @@ export default function PersonalPricingStep() {
                                         className={`quick-amount-btn ${singleAmount === amount ? 'selected' : ''}`}
                                         onClick={() => handleQuickAmount(amount)}
                                     >
-                                        ${amount}
+                                        {currencySymbol}{amount}
                                     </Pressable>
                                 ))}
                             </div>
@@ -128,7 +132,7 @@ export default function PersonalPricingStep() {
                                         </div>
                                     </div>
                                     <div className="tier-price-group">
-                                        <span className="tier-currency">$</span>
+                                        <span className="tier-currency">{currencySymbol}</span>
                                         <input
                                             type="number"
                                             className="tier-input"

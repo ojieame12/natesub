@@ -1,13 +1,32 @@
-import { ChevronLeft } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { ChevronLeft, Loader2 } from 'lucide-react'
 import { useOnboardingStore } from './store'
 import { Button, Pressable } from './components'
+import { useCheckUsername } from '../api/hooks'
 import '../Dashboard.css'
 import './onboarding.css'
 
 export default function PersonalUsernameStep() {
     const { username, setUsername, nextStep, prevStep } = useOnboardingStore()
+    const [debouncedUsername, setDebouncedUsername] = useState(username)
 
-    const isValid = username.length >= 3 && /^[a-z0-9_]+$/.test(username)
+    // Debounce username for API check
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setDebouncedUsername(username)
+        }, 500)
+        return () => clearTimeout(timer)
+    }, [username])
+
+    // Check availability via API (only when 3+ chars)
+    const { data: availabilityData, isLoading: isChecking } = useCheckUsername(debouncedUsername)
+
+    const isFormatValid = username.length >= 3 && /^[a-z0-9_]+$/.test(username)
+    const isAvailable = availabilityData?.available === true
+    const isTaken = availabilityData?.available === false
+
+    // Can continue only if format valid AND API confirms available
+    const canContinue = isFormatValid && isAvailable && !isChecking
 
     return (
         <div className="onboarding">
@@ -37,14 +56,25 @@ export default function PersonalUsernameStep() {
                             autoFocus
                         />
                     </div>
-                    {username && !isValid && (
-                        <p style={{ fontSize: 14, color: 'var(--accent-red)', marginTop: 8 }}>
+                    {username && !isFormatValid && (
+                        <p style={{ fontSize: 14, color: 'var(--status-error)', marginTop: 8 }}>
                             At least 3 characters, letters, numbers, or underscores only
                         </p>
                     )}
-                    {isValid && (
-                        <p style={{ fontSize: 14, color: 'var(--accent-green)', marginTop: 8 }}>
-                            ✓ nate.to/{username} is available!
+                    {isFormatValid && isChecking && (
+                        <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginTop: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <Loader2 size={14} className="spin" />
+                            Checking availability...
+                        </p>
+                    )}
+                    {isFormatValid && !isChecking && isAvailable && (
+                        <p style={{ fontSize: 14, color: 'var(--status-success)', marginTop: 8 }}>
+                            nate.to/{username} is available
+                        </p>
+                    )}
+                    {isFormatValid && !isChecking && isTaken && (
+                        <p style={{ fontSize: 14, color: 'var(--status-error)', marginTop: 8 }}>
+                            nate.to/{username} is already taken
                         </p>
                     )}
                 </div>
@@ -55,7 +85,7 @@ export default function PersonalUsernameStep() {
                         size="lg"
                         fullWidth
                         onClick={nextStep}
-                        disabled={!isValid}
+                        disabled={!canContinue}
                     >
                         Continue
                     </Button>

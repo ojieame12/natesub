@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { X, Camera, Image, Sparkles } from 'lucide-react'
-import { useOnboardingStore } from '../onboarding/store'
+import { useMetrics } from '../api/hooks'
 import { Pressable } from '../components'
 import './NewUpdate.css'
 
@@ -11,15 +11,15 @@ export default function NewUpdate() {
   const navigate = useNavigate()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const { tiers } = useOnboardingStore()
+  const { data: metricsData } = useMetrics()
 
   const [photoUrl, setPhotoUrl] = useState<string | null>(null)
   const [caption, setCaption] = useState('')
   const [audience, setAudience] = useState<'all' | string>('all')
 
   const isValid = caption.trim().length > 0
-  const subscriberCount = 47 // Mock data
-  const vipCount = tiers.find(t => t.name === 'VIP')?.id ? 12 : 0 // Mock
+  const subscriberCount = metricsData?.metrics?.subscriberCount ?? 0
+  const vipCount = 0 // VIP tier count would need a separate API call
 
   const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]

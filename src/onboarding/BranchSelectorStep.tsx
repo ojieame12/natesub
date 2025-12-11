@@ -28,12 +28,28 @@ const BRANCH_OPTIONS: BranchOption[] = [
 ]
 
 export default function BranchSelectorStep() {
-    const { branch, setBranch, nextStep, prevStep } = useOnboardingStore()
+    const { branch, setBranch, setPricingModel, setPurpose, nextStep, prevStep, goToStep } = useOnboardingStore()
     const [selected, setSelected] = useState<BranchType>(branch)
 
     const handleSelect = (type: Exclude<BranchType, null>) => {
         setSelected(type)
+
+        // If switching branches after already having selected one, reset to step 5
+        // to avoid step misalignment between personal (4 steps) and service (7 steps)
+        if (branch && branch !== type) {
+            goToStep(4) // Stay on this step, will advance to 5 on continue
+        }
+
         setBranch(type)
+
+        // Set appropriate defaults based on branch
+        if (type === 'personal') {
+            setPricingModel('single')
+            setPurpose('support') // Default purpose for personal
+        } else {
+            setPricingModel('single') // Service also defaults to single pricing
+            // Purpose will be 'service' - set in PaymentMethodStep
+        }
     }
 
     return (

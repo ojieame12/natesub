@@ -1,3 +1,4 @@
+import { useRef, useEffect, useState } from 'react'
 import { useOnboardingStore } from './store'
 import StartStep from './StartStep'
 import EmailStep from './EmailStep'
@@ -5,47 +6,55 @@ import OtpStep from './OtpStep'
 import IdentityStep from './IdentityStep'
 import BranchSelectorStep from './BranchSelectorStep'
 import PersonalPricingStep from './PersonalPricingStep'
-// Skipped for streamlined flow:
-// - PurposeStep (implied by branch choice)
-// - PricingModelStep (default to single tier)
-// - ImpactItemsStep, PerksStep, PersonalAboutStep (AI handles for service, skip for personal)
-// - PersonalReviewStep (user can edit from dashboard)
 import PersonalUsernameStep from './PersonalUsernameStep'
 import AvatarUploadStep from './AvatarUploadStep'
 import PaymentMethodStep from './PaymentMethodStep'
 import ServiceDescriptionStep from './ServiceDescriptionStep'
 import AIGeneratingStep from './AIGeneratingStep'
 import AIReviewStep from './AIReviewStep'
+import './onboarding.css'
+
+// Step configuration for progress tracking
+const COMMON_STEP_COUNT = 5  // Start, Email, OTP, Identity, Branch
+const PERSONAL_STEP_COUNT = 4  // Pricing, Username, Avatar, Payment
+const SERVICE_STEP_COUNT = 7  // Description, AI Gen, AI Review, Pricing, Username, Avatar, Payment
 
 export default function OnboardingFlow() {
     const { currentStep, branch } = useOnboardingStore()
+    const [direction, setDirection] = useState<'forward' | 'back'>('forward')
+    const [isAnimating, setIsAnimating] = useState(false)
+    const prevStepRef = useRef(currentStep)
 
-    // Step mapping depends on branch selection
-    //
-    // PERSONAL BRANCH (optimized - 9 steps total):
-    // 0: StartStep
-    // 1: EmailStep
-    // 2: OtpStep
-    // 3: IdentityStep
-    // 4: BranchSelectorStep - choose personal vs service
-    // 5: PersonalPricingStep - direct to price (skip purpose, default single tier)
-    // 6: PersonalUsernameStep
-    // 7: AvatarUploadStep
-    // 8: PaymentMethodStep
-    //
-    // SERVICE BRANCH (11 steps total):
-    // 0: StartStep
-    // 1: EmailStep
-    // 2: OtpStep
-    // 3: IdentityStep
-    // 4: BranchSelectorStep - choose personal vs service
-    // 5: ServiceDescriptionStep - describe your service (text/voice)
-    // 6: AIGeneratingStep - AI creates page
-    // 7: AIReviewStep - review/edit AI output
-    // 8: PersonalPricingStep - set price
-    // 9: PersonalUsernameStep
-    // 10: AvatarUploadStep
-    // 11: PaymentMethodStep
+    // Track direction of navigation
+    useEffect(() => {
+        if (currentStep > prevStepRef.current) {
+            setDirection('forward')
+        } else if (currentStep < prevStepRef.current) {
+            setDirection('back')
+        }
+        setIsAnimating(true)
+        const timer = setTimeout(() => setIsAnimating(false), 300)
+        prevStepRef.current = currentStep
+        return () => clearTimeout(timer)
+    }, [currentStep])
+
+    // Calculate total steps based on branch
+    const getTotalSteps = () => {
+        if (currentStep < COMMON_STEP_COUNT) {
+            // Before branch selection, assume personal (shorter)
+            return COMMON_STEP_COUNT + PERSONAL_STEP_COUNT
+        }
+        return branch === 'service'
+            ? COMMON_STEP_COUNT + SERVICE_STEP_COUNT
+            : COMMON_STEP_COUNT + PERSONAL_STEP_COUNT
+    }
+
+    // Calculate progress percentage
+    const totalSteps = getTotalSteps()
+    const progress = Math.min(((currentStep + 1) / totalSteps) * 100, 100)
+
+    // Don't show progress on start screen
+    const showProgress = currentStep > 0
 
     // Common steps (0-4)
     const commonSteps = [
@@ -56,10 +65,7 @@ export default function OnboardingFlow() {
         <BranchSelectorStep key="branch" />,
     ]
 
-    // Personal branch - streamlined (no purpose, no pricing model, no review)
-    // Purpose is implied by "Subscribe to Me" choice
-    // Default to single price tier
-    // User can edit everything from dashboard after launch
+    // Personal branch steps
     const personalSteps = [
         <PersonalPricingStep key="pricing" />,
         <PersonalUsernameStep key="username" />,
@@ -67,7 +73,7 @@ export default function OnboardingFlow() {
         <PaymentMethodStep key="payment" />,
     ]
 
-    // Service branch - AI-assisted setup
+    // Service branch steps
     const serviceSteps = [
         <ServiceDescriptionStep key="service-desc" />,
         <AIGeneratingStep key="ai-generating" />,
@@ -78,22 +84,39 @@ export default function OnboardingFlow() {
         <PaymentMethodStep key="payment" />,
     ]
 
-    // Build the appropriate steps array based on branch
+    // Build steps array
     const getSteps = () => {
-        if (currentStep < 5) {
-            // Haven't reached branch selection yet
+        if (currentStep < COMMON_STEP_COUNT) {
             return commonSteps
         }
-
         if (branch === 'service') {
             return [...commonSteps, ...serviceSteps]
         }
-
-        // Default to personal (or if branch not selected yet)
         return [...commonSteps, ...personalSteps]
     }
 
     const steps = getSteps()
+    const currentStepComponent = steps[currentStep] || <StartStep />
 
-    return steps[currentStep] || <StartStep />
+    return (
+        <div className="onboarding-wrapper">
+            {/* Progress Bar */}
+            {showProgress && (
+                <div className="onboarding-progress">
+                    <div
+                        className="onboarding-progress-bar"
+                        style={{ width: `${progress}%` }}
+                    />
+                </div>
+            )}
+
+            {/* Step Content with Animation */}
+            <div
+                className={`onboarding-step-container ${isAnimating ? `slide-${direction}` : ''}`}
+                key={currentStep}
+            >
+                {currentStepComponent}
+            </div>
+        </div>
+    )
 }

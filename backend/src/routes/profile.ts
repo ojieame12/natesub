@@ -42,13 +42,13 @@ const profileSchema = z.object({
   country: z.string(),
   countryCode: z.string().length(2),
   currency: z.string().length(3).default('USD'),
-  purpose: z.enum(['tips', 'support', 'allowance', 'fan_club', 'exclusive_content', 'other']),
+  purpose: z.enum(['tips', 'support', 'allowance', 'fan_club', 'exclusive_content', 'service', 'other']),
   pricingModel: z.enum(['single', 'tiers']),
   singleAmount: z.number().positive().optional().nullable(),
   tiers: z.array(tierSchema).optional().nullable(),
   perks: z.array(perkSchema).optional().nullable(),
   impactItems: z.array(impactItemSchema).optional().nullable(),
-  paymentProvider: z.enum(['stripe', 'flutterwave']).optional().nullable(),
+  paymentProvider: z.enum(['stripe', 'flutterwave', 'bank']).optional().nullable(),
 })
 
 // Get own profile

@@ -1185,3 +1185,37 @@
     transform: translateY(2px);
     box-shadow: 0 2px 0 var(--neutral-700);
 }
+
+/* Copy Link Button */
+.request-copy-link-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-sm);
+    width: 100%;
+    padding: var(--space-md);
+    background: var(--neutral-100);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: var(--space-md);
+    transition: background 0.15s ease;
+}
+
+.request-copy-link-btn.pressed {
+    background: var(--neutral-200);
+}
+
+/* Error Display */
+.request-error {
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: var(--status-error);
+    padding: var(--space-md);
+    margin: 0 var(--space-lg) var(--space-md);
+    border-radius: var(--radius-md);
+    font-size: 14px;
+    text-align: center;
+}

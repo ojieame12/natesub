@@ -625,6 +625,17 @@
     height: 20px;
 }
 
+.template-boundary .sub-payment-error {
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: var(--status-error);
+    padding: var(--space-md);
+    border-radius: var(--radius-md);
+    font-size: 14px;
+    text-align: center;
+    margin-bottom: var(--space-md);
+}
+
 .template-boundary .sub-payment-note {
     font-size: 13px;
     color: var(--text-tertiary);

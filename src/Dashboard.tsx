@@ -40,11 +40,8 @@ const menuFooterItems = [
   { id: 'help', title: 'Help and Support', icon: HelpCircle, path: '/settings/help' },
 ]
 
-const notifications = [
-  { id: 1, type: 'subscriber', title: 'New Subscriber', desc: 'Sarah just subscribed at $10/month', time: '2m ago', read: false },
-  { id: 2, type: 'payment', title: 'Payment Received', desc: 'Monthly payment from James - $25', time: '1h ago', read: false },
-  { id: 3, type: 'subscriber', title: 'New Subscriber', desc: 'Mike subscribed at $5/month', time: '3h ago', read: true },
-]
+// Notifications are not implemented yet - will come from a real notifications API
+const notifications: { id: number; type: string; title: string; desc: string; time: string; read: boolean }[] = []
 
 // Activity icon helper
 const getActivityIcon = (type: string) => {
@@ -240,20 +237,29 @@ export default function Dashboard() {
               </Pressable>
             </div>
             <div className="notifications-list">
-              {notifications.map((notif) => (
-                <div key={notif.id} className={`notification-item ${notif.read ? 'read' : ''}`}>
-                  <div className="notification-content">
-                    <div className="notification-title">{notif.title}</div>
-                    <div className="notification-desc">{notif.desc}</div>
-                    <div className="notification-time">{notif.time}</div>
-                  </div>
-                  {!notif.read && <div className="notification-unread-dot" />}
+              {notifications.length === 0 ? (
+                <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-tertiary)' }}>
+                  <Bell size={32} style={{ opacity: 0.3, marginBottom: 8 }} />
+                  <p style={{ fontSize: 14 }}>No notifications yet</p>
                 </div>
-              ))}
+              ) : (
+                notifications.map((notif) => (
+                  <div key={notif.id} className={`notification-item ${notif.read ? 'read' : ''}`}>
+                    <div className="notification-content">
+                      <div className="notification-title">{notif.title}</div>
+                      <div className="notification-desc">{notif.desc}</div>
+                      <div className="notification-time">{notif.time}</div>
+                    </div>
+                    {!notif.read && <div className="notification-unread-dot" />}
+                  </div>
+                ))
+              )}
             </div>
-            <Pressable className="notifications-footer">
-              <span>Mark all as read</span>
-            </Pressable>
+            {notifications.length > 0 && (
+              <Pressable className="notifications-footer">
+                <span>Mark all as read</span>
+              </Pressable>
+            )}
           </div>
         </>
       )}
@@ -327,6 +333,47 @@ export default function Dashboard() {
             </div>
           </div>
         </section>
+
+        {/* Payment Status Banner */}
+        {profile?.paymentProvider === 'bank' && (
+          <Pressable
+            className="payment-status-banner manual"
+            onClick={() => navigate('/settings/payments')}
+          >
+            <CreditCard size={18} />
+            <div className="payment-status-content">
+              <span className="payment-status-title">Manual Payouts</span>
+              <span className="payment-status-desc">Funds are held until you request withdrawal</span>
+            </div>
+            <ChevronRight size={18} />
+          </Pressable>
+        )}
+        {profile?.payoutStatus === 'pending' && profile?.paymentProvider !== 'bank' && (
+          <Pressable
+            className="payment-status-banner pending"
+            onClick={() => navigate('/settings/payments')}
+          >
+            <CreditCard size={18} />
+            <div className="payment-status-content">
+              <span className="payment-status-title">Complete Payment Setup</span>
+              <span className="payment-status-desc">Finish connecting your payment account</span>
+            </div>
+            <ChevronRight size={18} />
+          </Pressable>
+        )}
+        {profile?.payoutStatus === 'restricted' && (
+          <Pressable
+            className="payment-status-banner restricted"
+            onClick={() => navigate('/settings/payments')}
+          >
+            <CreditCard size={18} />
+            <div className="payment-status-content">
+              <span className="payment-status-title">Action Required</span>
+              <span className="payment-status-desc">Your payment account needs attention</span>
+            </div>
+            <ChevronRight size={18} />
+          </Pressable>
+        )}
 
         {/* Shareable Link Card */}
         <Pressable className="link-card" onClick={() => navigate('/subscribe')}>

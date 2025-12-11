@@ -1,4 +1,5 @@
-import { useNavigate, useParams } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
+import { useSafeBack } from './hooks'
 import {
     ChevronLeft,
     UserPlus,
@@ -8,105 +9,88 @@ import {
     Download,
     MessageCircle,
     XCircle,
+    Send,
+    Check,
 } from 'lucide-react'
-import { Pressable, useToast } from './components'
+import { Pressable, useToast, Skeleton, ErrorState } from './components'
+import { useActivityDetail } from './api/hooks'
 import './ActivityDetail.css'
 
-// Enhanced mock activity data with customer info
-const activityData = [
-    {
-        id: 1,
-        type: 'new_subscriber',
-        name: 'Sarah K.',
-        email: 'sarah.k@email.com',
-        amount: 10,
-        time: '10:45 AM',
-        tier: 'Supporter',
-        date: 'Dec 10, 2025',
-        transactionId: 'TXN_8X29D4K9',
-        paymentMethod: { type: 'card', brand: 'Visa', last4: '4242' },
-        subscription: { status: 'active', nextBilling: 'Jan 10, 2026', lifetimeValue: 10, monthsSubscribed: 1 }
-    },
-    {
-        id: 2,
-        type: 'payment',
-        name: 'James T.',
-        email: 'james.t@email.com',
-        amount: 25,
-        time: '9:30 AM',
-        tier: 'VIP',
-        date: 'Dec 10, 2025',
-        transactionId: 'TXN_7Y38C3J8',
-        paymentMethod: { type: 'card', brand: 'Mastercard', last4: '8888' },
-        subscription: { status: 'active', nextBilling: 'Jan 10, 2026', lifetimeValue: 175, monthsSubscribed: 7 }
-    },
-    {
-        id: 3,
-        type: 'new_subscriber',
-        name: 'Mike R.',
-        email: 'mike.r@email.com',
-        amount: 5,
-        time: '8:15 AM',
-        tier: 'Fan',
-        date: 'Dec 10, 2025',
-        transactionId: 'TXN_6Z47B2H7',
-        paymentMethod: { type: 'card', brand: 'Visa', last4: '1234' },
-        subscription: { status: 'active', nextBilling: 'Jan 10, 2026', lifetimeValue: 5, monthsSubscribed: 1 }
-    },
-    {
-        id: 4,
-        type: 'renewal',
-        name: 'Lisa M.',
-        email: 'lisa.m@email.com',
-        amount: 10,
-        time: '5:30 PM',
-        tier: 'Supporter',
-        date: 'Dec 9, 2025',
-        transactionId: 'TXN_5A56A1G6',
-        paymentMethod: { type: 'card', brand: 'Amex', last4: '9999' },
-        subscription: { status: 'active', nextBilling: 'Jan 9, 2026', lifetimeValue: 120, monthsSubscribed: 12 }
-    },
-    {
-        id: 5,
-        type: 'cancelled',
-        name: 'Tom H.',
-        email: 'tom.h@email.com',
-        amount: 5,
-        time: '2:15 PM',
-        tier: 'Fan',
-        date: 'Dec 9, 2025',
-        transactionId: 'TXN_4B65Z0F5',
-        paymentMethod: { type: 'card', brand: 'Visa', last4: '5555' },
-        subscription: { status: 'cancelled', lifetimeValue: 15, monthsSubscribed: 3 }
-    },
-]
+// Format date
+const formatDate = (date: string | null) => {
+    if (!date) return '-'
+    return new Date(date).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+    })
+}
+
+// Format time
+const formatTime = (date: string | null) => {
+    if (!date) return '-'
+    return new Date(date).toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+    })
+}
 
 const getActivityIcon = (type: string) => {
     switch (type) {
+        case 'subscription_created':
         case 'new_subscriber': return <UserPlus size={36} />
+        case 'payment_received':
         case 'payment': return <DollarSign size={36} />
         case 'renewal': return <RefreshCw size={36} />
+        case 'subscription_canceled':
         case 'cancelled': return <UserX size={36} />
+        case 'request_sent': return <Send size={36} />
+        case 'request_accepted': return <Check size={36} />
         default: return <DollarSign size={36} />
     }
 }
 
 const getActivityTitle = (type: string) => {
     switch (type) {
+        case 'subscription_created':
         case 'new_subscriber': return 'New Subscriber'
+        case 'payment_received':
         case 'payment': return 'Payment Received'
         case 'renewal': return 'Renewed'
+        case 'subscription_canceled':
         case 'cancelled': return 'Cancelled'
+        case 'request_sent': return 'Request Sent'
+        case 'request_accepted': return 'Request Accepted'
         default: return 'Activity'
     }
 }
 
 export default function ActivityDetail() {
-    const navigate = useNavigate()
+    const goBack = useSafeBack('/activity')
     const toast = useToast()
     const { id } = useParams()
 
-    const activity = activityData.find(a => a.id === Number(id))
+    // Fetch activity from API
+    const { data, isLoading, isError, refetch } = useActivityDetail(id || '')
+
+    const activityData = data?.activity
+    const payload = activityData?.payload || {}
+
+    // Map API data to UI format
+    const activity = activityData ? {
+        id: activityData.id,
+        type: activityData.type,
+        name: payload.subscriberName || payload.recipientName || 'Unknown',
+        email: payload.subscriberEmail || payload.recipientEmail || '',
+        amount: (payload.amount || 0) / 100,
+        time: formatTime(activityData.createdAt),
+        tier: payload.tierName || 'Supporter',
+        date: formatDate(activityData.createdAt),
+        transactionId: payload.transactionId || payload.paymentId || activityData.id,
+        paymentMethod: payload.paymentMethod || null,
+        subscription: payload.subscription || null,
+    } : null
 
     const handleDownloadReceipt = () => {
         toast.info('Receipt download coming soon')
@@ -120,11 +104,48 @@ export default function ActivityDetail() {
         toast.info('Cancel subscription coming soon')
     }
 
+    // Loading state
+    if (isLoading) {
+        return (
+            <div className="detail-page">
+                <header className="detail-header">
+                    <Pressable className="back-btn" onClick={() => goBack()}>
+                        <ChevronLeft size={24} />
+                    </Pressable>
+                </header>
+                <div className="detail-hero">
+                    <Skeleton width={72} height={72} borderRadius="50%" />
+                    <Skeleton width={100} height={40} style={{ marginTop: 16 }} />
+                    <Skeleton width={80} height={24} style={{ marginTop: 8 }} />
+                </div>
+            </div>
+        )
+    }
+
+    // Error state
+    if (isError) {
+        return (
+            <div className="detail-page">
+                <header className="detail-header">
+                    <Pressable className="back-btn" onClick={() => goBack()}>
+                        <ChevronLeft size={24} />
+                    </Pressable>
+                </header>
+                <ErrorState
+                    title="Couldn't load activity"
+                    message="We had trouble loading this activity."
+                    onRetry={() => refetch()}
+                />
+            </div>
+        )
+    }
+
+    // Not found
     if (!activity) {
         return (
             <div className="detail-page">
                 <header className="detail-header">
-                    <Pressable className="back-btn" onClick={() => navigate(-1)}>
+                    <Pressable className="back-btn" onClick={() => goBack()}>
                         <ChevronLeft size={24} />
                     </Pressable>
                 </header>
@@ -135,14 +156,14 @@ export default function ActivityDetail() {
         )
     }
 
-    const isNegative = activity.type === 'cancelled'
-    const isCancelled = activity.type === 'cancelled'
+    const isNegative = activity.type === 'cancelled' || activity.type === 'subscription_canceled'
+    const isCancelled = activity.type === 'cancelled' || activity.type === 'subscription_canceled'
 
     return (
         <div className="detail-page">
             {/* Header */}
             <header className="detail-header">
-                <Pressable className="back-btn" onClick={() => navigate(-1)}>
+                <Pressable className="back-btn" onClick={() => goBack()}>
                     <ChevronLeft size={24} />
                 </Pressable>
             </header>

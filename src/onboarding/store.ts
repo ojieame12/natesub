@@ -13,6 +13,7 @@ export type SubscriptionPurpose =
     | 'allowance'         // Allowance - regular support from loved ones
     | 'fan_club'          // Fan Club - exclusive community membership
     | 'exclusive_content' // Exclusive Content - behind-the-scenes, early access
+    | 'service'           // Service Provider - coaching, consulting, retainers
     | 'other'             // Something Else - unique use case
 
 // Pricing model - single amount or tiered

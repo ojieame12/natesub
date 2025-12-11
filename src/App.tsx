@@ -19,8 +19,6 @@ import Billing from './Billing'
 import Settings from './Settings'
 import HelpSupport from './HelpSupport'
 import Profile from './Profile'
-import SubscribeBoundary from './subscribe/SubscribeBoundary'
-import SubscribeEditorial from './subscribe/SubscribeEditorial'
 import UserPage from './subscribe/UserPage'
 import NewUpdate from './updates/NewUpdate'
 import UpdatePreview from './updates/UpdatePreview'
@@ -86,11 +84,6 @@ function App() {
         <Route path="/updates/new" element={<NewUpdate />} />
         <Route path="/updates/preview" element={<UpdatePreview />} />
         <Route path="/updates/:id" element={<UpdateDetail />} />
-
-        {/* Subscribe page templates (for testing/preview) */}
-        <Route path="/subscribe/boundary" element={<SubscribeBoundary />} />
-        <Route path="/subscribe/editorial" element={<SubscribeEditorial />} />
-        <Route path="/subscribe" element={<SubscribeBoundary />} />
 
         {/* Vanity URLs - natepay.co/username */}
         {/* This must be LAST before the catch-all */}

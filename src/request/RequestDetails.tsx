@@ -2,11 +2,14 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronLeft, RefreshCw, Zap } from 'lucide-react'
 import { useRequestStore, getSuggestedAmounts, getRelationshipLabel } from './store'
+import { useCurrentUser } from '../api/hooks'
+import { getCurrencySymbol } from '../utils/currency'
 import { Pressable } from '../components'
 import './request.css'
 
 export default function RequestDetails() {
     const navigate = useNavigate()
+    const { data: userData } = useCurrentUser()
     const {
         recipient,
         relationship,
@@ -18,6 +21,8 @@ export default function RequestDetails() {
         setPurpose,
     } = useRequestStore()
 
+    const currency = userData?.profile?.currency || 'USD'
+    const currencySymbol = getCurrencySymbol(currency)
     const [customAmount, setCustomAmount] = useState(amount.toString())
 
     if (!recipient) {
@@ -81,7 +86,7 @@ export default function RequestDetails() {
                 <div className="request-amount-section">
                     <label className="request-label">How much?</label>
                     <div className="request-amount-display">
-                        <span className="request-currency">$</span>
+                        <span className="request-currency">{currencySymbol}</span>
                         <input
                             type="text"
                             inputMode="numeric"
@@ -100,7 +105,7 @@ export default function RequestDetails() {
                                 className={`request-quick-amount ${amount === value ? 'active' : ''}`}
                                 onClick={() => handleAmountSelect(value)}
                             >
-                                ${value}
+                                {currencySymbol}{value}
                             </Pressable>
                         ))}
                     </div>

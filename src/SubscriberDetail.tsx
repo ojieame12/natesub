@@ -14,135 +14,20 @@ import {
     Gift,
     ChevronRight,
 } from 'lucide-react'
-import { Pressable } from './components'
+import { Pressable, Skeleton, ErrorState } from './components'
 import { useViewTransition } from './hooks'
+import { useSubscription } from './api/hooks'
 import './SubscriberDetail.css'
 
-// Mock subscriber data (would come from API)
-const subscribersData: Record<string, {
-    id: number
-    name: string
-    username: string
-    email: string
-    tier: string
-    amount: number
-    status: 'active' | 'cancelled'
-    since: string
-    nextBilling: string
-    lifetimeValue: number
-    totalPayments: number
-    avatar: string | null
-    payments: { id: number; date: string; amount: number; status: string }[]
-}> = {
-    '1': {
-        id: 1,
-        name: 'Sarah K.',
-        username: 'sarahk',
-        email: 'sarah.k@email.com',
-        tier: 'Supporter',
-        amount: 10,
-        status: 'active',
-        since: 'Jan 15, 2025',
-        nextBilling: 'Feb 15, 2025',
-        lifetimeValue: 30,
-        totalPayments: 3,
-        avatar: null,
-        payments: [
-            { id: 1, date: 'Jan 15, 2025', amount: 10, status: 'paid' },
-            { id: 2, date: 'Dec 15, 2024', amount: 10, status: 'paid' },
-            { id: 3, date: 'Nov 15, 2024', amount: 10, status: 'paid' },
-        ],
-    },
-    '2': {
-        id: 2,
-        name: 'James T.',
-        username: 'jamest',
-        email: 'james.t@gmail.com',
-        tier: 'VIP',
-        amount: 25,
-        status: 'active',
-        since: 'Dec 1, 2024',
-        nextBilling: 'Feb 1, 2025',
-        lifetimeValue: 75,
-        totalPayments: 3,
-        avatar: null,
-        payments: [
-            { id: 1, date: 'Jan 1, 2025', amount: 25, status: 'paid' },
-            { id: 2, date: 'Dec 1, 2024', amount: 25, status: 'paid' },
-            { id: 3, date: 'Nov 1, 2024', amount: 25, status: 'paid' },
-        ],
-    },
-    '3': {
-        id: 3,
-        name: 'Mike R.',
-        username: 'miker',
-        email: 'mike.r@work.com',
-        tier: 'Fan',
-        amount: 5,
-        status: 'active',
-        since: 'Feb 1, 2025',
-        nextBilling: 'Mar 1, 2025',
-        lifetimeValue: 5,
-        totalPayments: 1,
-        avatar: null,
-        payments: [
-            { id: 1, date: 'Feb 1, 2025', amount: 5, status: 'paid' },
-        ],
-    },
-    '4': {
-        id: 4,
-        name: 'Lisa M.',
-        username: 'lisam',
-        email: 'lisa.m@email.com',
-        tier: 'Supporter',
-        amount: 10,
-        status: 'cancelled',
-        since: 'Nov 1, 2024',
-        nextBilling: '-',
-        lifetimeValue: 20,
-        totalPayments: 2,
-        avatar: null,
-        payments: [
-            { id: 1, date: 'Dec 1, 2024', amount: 10, status: 'paid' },
-            { id: 2, date: 'Nov 1, 2024', amount: 10, status: 'paid' },
-        ],
-    },
-    '5': {
-        id: 5,
-        name: 'Alex P.',
-        username: 'alexp',
-        email: 'alex.p@company.com',
-        tier: 'VIP',
-        amount: 25,
-        status: 'active',
-        since: 'Jan 10, 2025',
-        nextBilling: 'Feb 10, 2025',
-        lifetimeValue: 25,
-        totalPayments: 1,
-        avatar: null,
-        payments: [
-            { id: 1, date: 'Jan 10, 2025', amount: 25, status: 'paid' },
-        ],
-    },
-    '6': {
-        id: 6,
-        name: 'Emma W.',
-        username: 'emmaw',
-        email: 'emma.w@email.com',
-        tier: 'Fan',
-        amount: 5,
-        status: 'active',
-        since: 'Mar 1, 2025',
-        nextBilling: 'Apr 1, 2025',
-        lifetimeValue: 5,
-        totalPayments: 1,
-        avatar: null,
-        payments: [
-            { id: 1, date: 'Mar 1, 2025', amount: 5, status: 'paid' },
-        ],
-    },
+// Format date
+const formatDate = (date: string | null) => {
+    if (!date) return '-'
+    return new Date(date).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+    })
 }
-
 
 export default function SubscriberDetail() {
     const { navigate, goBack } = useViewTransition()
@@ -150,8 +35,71 @@ export default function SubscriberDetail() {
     const [showActions, setShowActions] = useState(false)
     const [showCancelConfirm, setShowCancelConfirm] = useState(false)
 
-    const subscriber = id ? subscribersData[id] : null
+    // Fetch subscription from API
+    const { data, isLoading, isError, refetch } = useSubscription(id || '')
 
+    const subscription = data?.subscription
+    const payments = subscription?.payments || []
+
+    // Map API data to UI format
+    const subscriber = subscription ? {
+        id: subscription.id,
+        name: subscription.subscriber?.displayName || subscription.subscriber?.email || 'Unknown',
+        username: subscription.subscriber?.email?.split('@')[0] || '',
+        email: subscription.subscriber?.email || '',
+        tier: subscription.tierName || 'Supporter',
+        amount: (subscription.amount || 0) / 100,
+        status: subscription.status as 'active' | 'cancelled',
+        since: formatDate(subscription.startedAt),
+        nextBilling: formatDate(subscription.currentPeriodEnd),
+        lifetimeValue: (subscription.ltvCents || 0) / 100,
+        totalPayments: payments.length,
+        avatar: subscription.subscriber?.avatarUrl || null,
+    } : null
+
+    // Loading state
+    if (isLoading) {
+        return (
+            <div className="subscriber-detail-page">
+                <header className="subscriber-detail-header">
+                    <Pressable className="back-btn" onClick={() => goBack({ type: 'zoom-out' })}>
+                        <ArrowLeft size={20} />
+                    </Pressable>
+                    <span className="subscriber-detail-title">Subscriber</span>
+                    <div className="header-spacer" />
+                </header>
+                <div className="subscriber-detail-content">
+                    <section className="subscriber-profile-card">
+                        <Skeleton width={80} height={80} borderRadius="50%" />
+                        <Skeleton width={120} height={24} style={{ marginTop: 16 }} />
+                        <Skeleton width={80} height={16} style={{ marginTop: 8 }} />
+                    </section>
+                </div>
+            </div>
+        )
+    }
+
+    // Error state
+    if (isError) {
+        return (
+            <div className="subscriber-detail-page">
+                <header className="subscriber-detail-header">
+                    <Pressable className="back-btn" onClick={() => goBack({ type: 'zoom-out' })}>
+                        <ArrowLeft size={20} />
+                    </Pressable>
+                    <span className="subscriber-detail-title">Subscriber</span>
+                    <div className="header-spacer" />
+                </header>
+                <ErrorState
+                    title="Couldn't load subscriber"
+                    message="We had trouble loading this subscriber's details."
+                    onRetry={() => refetch()}
+                />
+            </div>
+        )
+    }
+
+    // Not found
     if (!subscriber) {
         return (
             <div className="subscriber-detail-page">
@@ -293,19 +241,27 @@ export default function SubscriberDetail() {
                 <section className="subscriber-section">
                     <h3 className="section-title">Payment History</h3>
                     <div className="info-card">
-                        {subscriber.payments.map((payment, index) => (
-                            <div key={payment.id} className={`payment-row ${index < subscriber.payments.length - 1 ? 'has-border' : ''}`}>
-                                <div className="payment-info">
-                                    <span className="payment-date">{payment.date}</span>
-                                    <span className="payment-status">{payment.status}</span>
-                                </div>
-                                <span className="payment-amount">${payment.amount}</span>
+                        {payments.length === 0 ? (
+                            <div className="payment-row">
+                                <span className="payment-info">No payments yet</span>
                             </div>
-                        ))}
+                        ) : (
+                            payments.slice(0, 5).map((payment: any, index: number) => (
+                                <div key={payment.id} className={`payment-row ${index < Math.min(payments.length, 5) - 1 ? 'has-border' : ''}`}>
+                                    <div className="payment-info">
+                                        <span className="payment-date">{formatDate(payment.createdAt)}</span>
+                                        <span className="payment-status">{payment.status}</span>
+                                    </div>
+                                    <span className="payment-amount">${(payment.amount || 0) / 100}</span>
+                                </div>
+                            ))
+                        )}
                     </div>
-                    <Pressable className="view-all-link">
-                        View all {subscriber.totalPayments} payments
-                    </Pressable>
+                    {payments.length > 5 && (
+                        <Pressable className="view-all-link">
+                            View all {payments.length} payments
+                        </Pressable>
+                    )}
                 </section>
 
                 {/* Danger Zone */}
