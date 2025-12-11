@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi, afterAll } from 'vitest'
+import { createHash } from 'crypto'
 import app from '../../src/app.js'
 import { db } from '../../src/db/client.js'
 import { dbStorage } from '../setup.js'
@@ -27,6 +28,11 @@ vi.mock('../../src/services/stripe.js', () => ({
   createCheckoutSession: vi.fn(async () => mockCheckoutSession),
 }))
 
+// Hash function matching auth service
+function hashToken(token: string): string {
+  return createHash('sha256').update(token).digest('hex')
+}
+
 // Helper to create a test user with session
 async function createTestUserWithSession() {
   const user = await db.user.create({
@@ -49,25 +55,32 @@ async function createTestUserWithSession() {
     },
   })
 
+  // Hash the session token the same way auth service does
+  const rawToken = 'test-session-token'
+  const hashedToken = hashToken(rawToken)
+
   const session = await db.session.create({
     data: {
       userId: user.id,
-      token: 'test-session-token',
+      token: hashedToken, // Store hashed version
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     },
   })
 
-  return { user, profile, session }
+  // Store the relation reference for mock lookups
+  dbStorage.sessions.set(session.id, { ...session, user })
+
+  return { user, profile, session, rawToken }
 }
 
 // Helper to make authenticated request
-function authRequest(path: string, options: RequestInit = {}) {
+function authRequest(path: string, options: RequestInit = {}, rawToken = 'test-session-token') {
   return app.fetch(
     new Request(`http://localhost${path}`, {
       ...options,
       headers: {
         'Content-Type': 'application/json',
-        Cookie: 'session=test-session-token',
+        Cookie: `session=${rawToken}`,
         ...options.headers,
       },
     })

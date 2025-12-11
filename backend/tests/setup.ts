@@ -82,28 +82,80 @@ const dbStorage = {
 let idCounter = 0
 const generateId = () => `test-${Date.now()}-${++idCounter}`
 
+// Helper to resolve includes from storage
+function resolveIncludes(item: any, include: any) {
+  if (!include || !item) return item
+  const result = { ...item }
+
+  for (const [relation, config] of Object.entries(include)) {
+    if (!config) continue
+
+    // Handle user relation on session
+    if (relation === 'user' && item.userId) {
+      const user = dbStorage.users.get(item.userId)
+      if (user) {
+        result.user = config === true ? user : user
+      }
+    }
+    // Handle profile relation on user
+    if (relation === 'profile' && item.id) {
+      for (const profile of dbStorage.profiles.values()) {
+        if (profile.userId === item.id) {
+          result.profile = profile
+          break
+        }
+      }
+    }
+    // Handle subscriber relation
+    if (relation === 'subscriber' && item.subscriberId) {
+      const subscriber = dbStorage.users.get(item.subscriberId)
+      if (subscriber) {
+        result.subscriber = subscriber
+        // Resolve nested profile if needed
+        if (typeof config === 'object' && config.select?.profile) {
+          for (const profile of dbStorage.profiles.values()) {
+            if (profile.userId === subscriber.id) {
+              result.subscriber.profile = profile
+              break
+            }
+          }
+        }
+      }
+    }
+  }
+  return result
+}
+
 function createMockModel(store: Map<string, any>) {
   return {
-    findUnique: vi.fn(async ({ where }: any) => {
-      if (where.id) return store.get(where.id) || null
+    findUnique: vi.fn(async ({ where, include }: any) => {
+      // Try by id first
+      if (where.id) {
+        const item = store.get(where.id)
+        return item ? resolveIncludes(item, include) : null
+      }
+      // Search by other unique fields
       for (const item of store.values()) {
         const match = Object.entries(where).every(([k, v]) => item[k] === v)
-        if (match) return item
+        if (match) return resolveIncludes(item, include)
       }
       return null
     }),
-    findFirst: vi.fn(async ({ where }: any = {}) => {
-      if (!where) return store.values().next().value || null
+    findFirst: vi.fn(async ({ where, include, orderBy }: any = {}) => {
+      if (!where) {
+        const first = store.values().next().value
+        return first ? resolveIncludes(first, include) : null
+      }
       for (const item of store.values()) {
         const match = Object.entries(where).every(([k, v]) => {
           if (typeof v === 'object' && v !== null) return true
           return item[k] === v
         })
-        if (match) return item
+        if (match) return resolveIncludes(item, include)
       }
       return null
     }),
-    findMany: vi.fn(async ({ where }: any = {}) => {
+    findMany: vi.fn(async ({ where, include, orderBy, take, skip }: any = {}) => {
       let items = Array.from(store.values())
       if (where) {
         items = items.filter(item =>
@@ -113,15 +165,17 @@ function createMockModel(store: Map<string, any>) {
           })
         )
       }
-      return items
+      if (skip) items = items.slice(skip)
+      if (take) items = items.slice(0, take)
+      return items.map(item => resolveIncludes(item, include))
     }),
-    create: vi.fn(async ({ data }: any) => {
+    create: vi.fn(async ({ data, include }: any) => {
       const id = data.id || generateId()
       const item = { id, ...data, createdAt: new Date(), updatedAt: new Date() }
       store.set(id, item)
-      return item
+      return resolveIncludes(item, include)
     }),
-    update: vi.fn(async ({ where, data }: any) => {
+    update: vi.fn(async ({ where, data, include }: any) => {
       let item = store.get(where.id)
       if (!item) {
         for (const [key, val] of store.entries()) {
@@ -132,9 +186,9 @@ function createMockModel(store: Map<string, any>) {
       if (!item) return null
       const updated = { ...item, ...data, updatedAt: new Date() }
       store.set(item.id, updated)
-      return updated
+      return resolveIncludes(updated, include)
     }),
-    upsert: vi.fn(async ({ where, create, update }: any) => {
+    upsert: vi.fn(async ({ where, create, update, include }: any) => {
       let existing = null
       for (const item of store.values()) {
         const match = Object.entries(where).every(([k, v]) => item[k] === v)
@@ -143,12 +197,12 @@ function createMockModel(store: Map<string, any>) {
       if (existing) {
         const updated = { ...existing, ...update, updatedAt: new Date() }
         store.set(existing.id, updated)
-        return updated
+        return resolveIncludes(updated, include)
       }
       const id = generateId()
       const item = { id, ...create, createdAt: new Date(), updatedAt: new Date() }
       store.set(id, item)
-      return item
+      return resolveIncludes(item, include)
     }),
     delete: vi.fn(async ({ where }: any) => {
       const item = store.get(where.id)
