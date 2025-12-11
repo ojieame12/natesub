@@ -8,58 +8,36 @@ import {
     Eye,
     ChevronRight,
 } from 'lucide-react'
-import { Pressable } from '../components'
+import { Pressable, SkeletonList, ErrorState } from '../components'
+import { useUpdates } from '../api/hooks'
 import './UpdatesHistory.css'
 
-// Mock updates data
-interface Update {
-    id: string
-    caption: string
-    imageUrl?: string
-    sentAt: string
-    audience: 'all' | 'supporters' | 'vips'
-    stats: {
-        views: number
-        recipients: number
-    }
+// Format date for display
+const formatDate = (date: string | Date) => {
+    return new Date(date).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+    })
 }
 
-const mockUpdates: Update[] = [
-    {
-        id: '1',
-        caption: 'Just finished editing the new video! Coming to you all tomorrow 🎬',
-        imageUrl: '/dither-2.png',
-        sentAt: 'Dec 10, 2024 at 3:45 PM',
-        audience: 'all',
-        stats: { views: 42, recipients: 56 },
-    },
-    {
-        id: '2',
-        caption: 'Thank you all for the amazing support this month! You make this possible 💛',
-        sentAt: 'Dec 5, 2024 at 11:20 AM',
-        audience: 'all',
-        stats: { views: 51, recipients: 56 },
-    },
-    {
-        id: '3',
-        caption: 'Exclusive behind-the-scenes look at what I\'m working on...',
-        imageUrl: '/dither.png',
-        sentAt: 'Nov 28, 2024 at 6:00 PM',
-        audience: 'vips',
-        stats: { views: 8, recipients: 12 },
-    },
-]
-
-const getAudienceLabel = (audience: Update['audience']) => {
+const getAudienceLabel = (audience: string) => {
     switch (audience) {
         case 'all': return 'All Subscribers'
         case 'supporters': return 'Supporters+'
-        case 'vips': return 'VIPs Only'
+        case 'vip': return 'VIPs Only'
+        default: return 'Selected Tier'
     }
 }
 
 export default function UpdatesHistory() {
     const navigate = useNavigate()
+
+    // Real API hook
+    const { data, isLoading, isError, refetch } = useUpdates()
+    const updates = data?.updates || []
 
     return (
         <div className="updates-history-page">
@@ -76,7 +54,15 @@ export default function UpdatesHistory() {
 
             {/* Content */}
             <div className="updates-history-content">
-                {mockUpdates.length === 0 ? (
+                {isError ? (
+                    <ErrorState
+                        title="Couldn't load updates"
+                        message="We had trouble loading your updates. Please try again."
+                        onRetry={refetch}
+                    />
+                ) : isLoading ? (
+                    <SkeletonList count={4} />
+                ) : updates.length === 0 ? (
                     <div className="updates-empty">
                         <div className="updates-empty-icon">
                             <Send size={32} />
@@ -95,39 +81,45 @@ export default function UpdatesHistory() {
                     </div>
                 ) : (
                     <div className="updates-list">
-                        {mockUpdates.map((update) => (
-                            <Pressable key={update.id} className="update-card" onClick={() => navigate(`/updates/${update.id}`)}>
-                                <div className="update-card-main">
-                                    {update.imageUrl ? (
-                                        <div className="update-thumbnail">
-                                            <Image size={20} />
+                        {updates.map((update: any) => {
+                            const displayDate = update.sentAt
+                                ? formatDate(update.sentAt)
+                                : formatDate(update.createdAt)
+
+                            return (
+                                <Pressable key={update.id} className="update-card" onClick={() => navigate(`/updates/${update.id}`)}>
+                                    <div className="update-card-main">
+                                        {update.photoUrl ? (
+                                            <div className="update-thumbnail">
+                                                <Image size={20} />
+                                            </div>
+                                        ) : (
+                                            <div className="update-thumbnail text-only">
+                                                <Send size={20} />
+                                            </div>
+                                        )}
+                                        <div className="update-content">
+                                            <p className="update-caption">{update.body}</p>
+                                            <div className="update-meta">
+                                                <Clock size={12} />
+                                                <span>{displayDate}</span>
+                                            </div>
                                         </div>
-                                    ) : (
-                                        <div className="update-thumbnail text-only">
-                                            <Send size={20} />
-                                        </div>
-                                    )}
-                                    <div className="update-content">
-                                        <p className="update-caption">{update.caption}</p>
-                                        <div className="update-meta">
-                                            <Clock size={12} />
-                                            <span>{update.sentAt}</span>
-                                        </div>
+                                        <ChevronRight size={18} className="update-chevron" />
                                     </div>
-                                    <ChevronRight size={18} className="update-chevron" />
-                                </div>
-                                <div className="update-card-footer">
-                                    <span className="update-audience">
-                                        <Users size={14} />
-                                        {getAudienceLabel(update.audience)}
-                                    </span>
-                                    <span className="update-views">
-                                        <Eye size={14} />
-                                        {update.stats.views}/{update.stats.recipients}
-                                    </span>
-                                </div>
-                            </Pressable>
-                        ))}
+                                    <div className="update-card-footer">
+                                        <span className="update-audience">
+                                            <Users size={14} />
+                                            {getAudienceLabel(update.audience)}
+                                        </span>
+                                        <span className="update-views">
+                                            <Eye size={14} />
+                                            {update.viewCount || 0}/{update.recipientCount || 0}
+                                        </span>
+                                    </div>
+                                </Pressable>
+                            )
+                        })}
                     </div>
                 )}
             </div>

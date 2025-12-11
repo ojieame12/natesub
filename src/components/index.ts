@@ -11,3 +11,5 @@ export {
   SkeletonListItem,
 } from './Skeleton'
 export { default as ErrorState } from './ErrorState'
+export { VoiceRecorder } from './VoiceRecorder'
+export { EditableList } from './EditableList'

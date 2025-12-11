@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
     ArrowLeft,
@@ -11,91 +11,35 @@ import {
     RefreshCw,
     Filter,
 } from 'lucide-react'
-import { Pressable, useToast, SkeletonList } from './components'
+import { Pressable, useToast, SkeletonList, ErrorState } from './components'
+import { useRequests } from './api/hooks'
 import './SentRequests.css'
 
-// Mock sent requests data
-type RequestStatus = 'pending' | 'viewed' | 'accepted' | 'declined' | 'expired'
+// Display status type (UI-facing)
+type DisplayStatus = 'pending' | 'viewed' | 'accepted' | 'declined' | 'expired'
 
-interface SentRequest {
-    id: string
-    recipientName: string
-    recipientEmail?: string
-    recipientPhone?: string
-    amount: number
-    isRecurring: boolean
-    purpose: string
-    status: RequestStatus
-    sentAt: string
-    sentVia: 'sms' | 'email' | 'link'
-    viewedAt?: string
-    respondedAt?: string
+// Map API status to display status
+const mapApiStatusToDisplay = (apiStatus: string): DisplayStatus => {
+    switch (apiStatus) {
+        case 'sent': return 'pending'
+        case 'pending_payment': return 'viewed'
+        case 'accepted': return 'accepted'
+        case 'declined': return 'declined'
+        case 'expired': return 'expired'
+        default: return 'pending'
+    }
 }
 
-const mockRequests: SentRequest[] = [
-    {
-        id: '1',
-        recipientName: 'Mom',
-        recipientPhone: '+1 (555) 123-4567',
-        amount: 50,
-        isRecurring: true,
-        purpose: 'Monthly allowance',
-        status: 'accepted',
-        sentAt: 'Dec 10, 2024',
-        sentVia: 'sms',
-        viewedAt: 'Dec 10, 2024',
-        respondedAt: 'Dec 11, 2024',
-    },
-    {
-        id: '2',
-        recipientName: 'Sarah Johnson',
-        recipientEmail: 'sarah@email.com',
-        amount: 25,
-        isRecurring: true,
-        purpose: 'Support my work',
-        status: 'viewed',
-        sentAt: 'Dec 12, 2024',
-        sentVia: 'email',
-        viewedAt: 'Dec 12, 2024',
-    },
-    {
-        id: '3',
-        recipientName: 'Mike Chen',
-        recipientEmail: 'mike@gmail.com',
-        amount: 10,
-        isRecurring: false,
-        purpose: 'Coffee tip',
-        status: 'pending',
-        sentAt: 'Dec 14, 2024',
-        sentVia: 'email',
-    },
-    {
-        id: '4',
-        recipientName: 'Dad',
-        recipientPhone: '+1 (555) 234-5678',
-        amount: 100,
-        isRecurring: true,
-        purpose: 'Help with bills',
-        status: 'declined',
-        sentAt: 'Dec 8, 2024',
-        sentVia: 'sms',
-        viewedAt: 'Dec 8, 2024',
-        respondedAt: 'Dec 9, 2024',
-    },
-    {
-        id: '5',
-        recipientName: 'Jessica Williams',
-        recipientPhone: '+1 (555) 345-6789',
-        amount: 15,
-        isRecurring: true,
-        purpose: 'Fan subscription',
-        status: 'expired',
-        sentAt: 'Nov 20, 2024',
-        sentVia: 'link',
-    },
-]
+// Format date for display
+const formatDate = (date: string | Date) => {
+    return new Date(date).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+    })
+}
 
-const getStatusIcon = (status: RequestStatus) => {
+const getStatusIcon = (status: DisplayStatus) => {
     switch (status) {
         case 'pending': return <Clock size={16} />
         case 'viewed': return <Eye size={16} />
@@ -105,7 +49,7 @@ const getStatusIcon = (status: RequestStatus) => {
     }
 }
 
-const getStatusLabel = (status: RequestStatus) => {
+const getStatusLabel = (status: DisplayStatus) => {
     switch (status) {
         case 'pending': return 'Pending'
         case 'viewed': return 'Viewed'
@@ -115,38 +59,61 @@ const getStatusLabel = (status: RequestStatus) => {
     }
 }
 
+// Map UI filter to API status
 type FilterType = 'all' | 'pending' | 'viewed' | 'accepted' | 'declined'
+type ApiStatus = 'all' | 'sent' | 'pending_payment' | 'accepted' | 'declined' | 'expired'
+
+const mapFilterToApiStatus = (filter: FilterType): ApiStatus => {
+    switch (filter) {
+        case 'pending': return 'sent'
+        case 'viewed': return 'pending_payment'
+        case 'accepted': return 'accepted'
+        case 'declined': return 'declined'
+        default: return 'all'
+    }
+}
 
 export default function SentRequests() {
     const navigate = useNavigate()
     const toast = useToast()
     const [filter, setFilter] = useState<FilterType>('all')
     const [showFilters, setShowFilters] = useState(false)
-    const [isLoading, setIsLoading] = useState(true)
 
-    // Simulate initial data load
-    useEffect(() => {
-        const timer = setTimeout(() => setIsLoading(false), 600)
-        return () => clearTimeout(timer)
-    }, [])
+    // Real API hook - fetch requests based on filter
+    const {
+        data,
+        isLoading,
+        isError,
+        refetch,
+        fetchNextPage,
+        hasNextPage,
+        isFetchingNextPage,
+    } = useRequests(mapFilterToApiStatus(filter))
 
-    const filteredRequests = mockRequests.filter(req => {
-        if (filter === 'all') return true
-        return req.status === filter
-    })
+    // Flatten paginated data
+    const allRequests = useMemo(() => {
+        return data?.pages.flatMap(page => page.requests) || []
+    }, [data])
 
-    // Stats
-    const stats = {
-        total: mockRequests.length,
-        pending: mockRequests.filter(r => r.status === 'pending').length,
-        accepted: mockRequests.filter(r => r.status === 'accepted').length,
-        declined: mockRequests.filter(r => r.status === 'declined').length,
-    }
+    // Stats (from all requests, not filtered)
+    const stats = useMemo(() => {
+        const all = allRequests
+        return {
+            total: all.length,
+            pending: all.filter((r: any) => r.status === 'sent').length,
+            accepted: all.filter((r: any) => r.status === 'accepted').length,
+            declined: all.filter((r: any) => r.status === 'declined').length,
+        }
+    }, [allRequests])
 
     const handleResend = (id: string) => {
-        // Would resend via API
+        // TODO: Implement resend via API - would need to create new draft and send
         toast.success('Request resent')
         console.log('Resend request:', id)
+    }
+
+    const loadData = () => {
+        refetch()
     }
 
     return (
@@ -202,9 +169,15 @@ export default function SentRequests() {
 
             {/* Requests List */}
             <div className="sent-requests-content">
-                {isLoading ? (
+                {isError ? (
+                    <ErrorState
+                        title="Couldn't load requests"
+                        message="We had trouble loading your sent requests. Please try again."
+                        onRetry={loadData}
+                    />
+                ) : isLoading ? (
                     <SkeletonList count={5} />
-                ) : filteredRequests.length === 0 ? (
+                ) : allRequests.length === 0 ? (
                     <div className="requests-empty">
                         <div className="requests-empty-icon">
                             <Send size={32} />
@@ -217,7 +190,7 @@ export default function SentRequests() {
                         </p>
                         <Pressable
                             className="requests-empty-btn"
-                            onClick={() => navigate('/request/new')}
+                            onClick={() => navigate('/new-request')}
                         >
                             <Send size={18} />
                             <span>New Request</span>
@@ -225,56 +198,73 @@ export default function SentRequests() {
                     </div>
                 ) : (
                     <div className="requests-list">
-                        {filteredRequests.map((request) => (
-                            <div key={request.id} className="request-card">
-                                <Pressable className="request-card-main">
-                                    <div className="request-avatar">
-                                        {request.recipientName.charAt(0).toUpperCase()}
-                                    </div>
-                                    <div className="request-info">
-                                        <div className="request-top-row">
-                                            <span className="request-recipient">{request.recipientName}</span>
-                                            <span className="request-amount">
-                                                ${request.amount}{request.isRecurring ? '/mo' : ''}
-                                            </span>
-                                        </div>
-                                        <div className="request-bottom-row">
-                                            <span className="request-purpose">{request.purpose}</span>
-                                            <span className="request-date">{request.sentAt}</span>
-                                        </div>
-                                    </div>
-                                    <ChevronRight size={18} className="request-chevron" />
-                                </Pressable>
+                        {allRequests.map((request: any) => {
+                            const displayStatus = mapApiStatusToDisplay(request.status)
+                            const sentDate = request.sentAt ? formatDate(request.sentAt) : formatDate(request.createdAt)
+                            const sentVia = request.sendMethod || 'link'
 
-                                <div className="request-card-footer">
-                                    <div className={`request-status ${request.status}`}>
-                                        {getStatusIcon(request.status)}
-                                        <span>{getStatusLabel(request.status)}</span>
-                                    </div>
+                            return (
+                                <div key={request.id} className="request-card">
+                                    <Pressable className="request-card-main">
+                                        <div className="request-avatar">
+                                            {request.recipientName.charAt(0).toUpperCase()}
+                                        </div>
+                                        <div className="request-info">
+                                            <div className="request-top-row">
+                                                <span className="request-recipient">{request.recipientName}</span>
+                                                <span className="request-amount">
+                                                    ${request.amount}{request.isRecurring ? '/mo' : ''}
+                                                </span>
+                                            </div>
+                                            <div className="request-bottom-row">
+                                                <span className="request-purpose">{request.relationship}</span>
+                                                <span className="request-date">{sentDate}</span>
+                                            </div>
+                                        </div>
+                                        <ChevronRight size={18} className="request-chevron" />
+                                    </Pressable>
 
-                                    <div className="request-actions">
-                                        {(request.status === 'declined' || request.status === 'expired') && (
-                                            <Pressable
-                                                className="request-action-btn"
-                                                onClick={() => handleResend(request.id)}
-                                            >
-                                                <RefreshCw size={14} />
-                                                <span>Resend</span>
-                                            </Pressable>
-                                        )}
-                                        {request.status === 'pending' && (
-                                            <span className="request-via">via {request.sentVia}</span>
-                                        )}
+                                    <div className="request-card-footer">
+                                        <div className={`request-status ${displayStatus}`}>
+                                            {getStatusIcon(displayStatus)}
+                                            <span>{getStatusLabel(displayStatus)}</span>
+                                        </div>
+
+                                        <div className="request-actions">
+                                            {(displayStatus === 'declined' || displayStatus === 'expired') && (
+                                                <Pressable
+                                                    className="request-action-btn"
+                                                    onClick={() => handleResend(request.id)}
+                                                >
+                                                    <RefreshCw size={14} />
+                                                    <span>Resend</span>
+                                                </Pressable>
+                                            )}
+                                            {displayStatus === 'pending' && (
+                                                <span className="request-via">via {sentVia}</span>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                        ))}
+                            )
+                        })}
+
+                        {/* Load More */}
+                        {hasNextPage && (
+                            <Pressable
+                                className="load-more-btn"
+                                onClick={() => fetchNextPage()}
+                                disabled={isFetchingNextPage}
+                            >
+                                {isFetchingNextPage ? 'Loading...' : 'Load More'}
+                            </Pressable>
+                        )}
                     </div>
                 )}
             </div>
 
             {/* FAB for new request */}
-            <Pressable className="requests-fab" onClick={() => navigate('/request/new')}>
+            <Pressable className="requests-fab" onClick={() => navigate('/new-request')}>
                 <Send size={24} />
             </Pressable>
         </div>

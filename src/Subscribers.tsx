@@ -1,59 +1,52 @@
-import { useState, useEffect } from 'react'
+import { useState, useMemo } from 'react'
 import { ArrowLeft, Search, X } from 'lucide-react'
 import { Pressable, SkeletonList, ErrorState } from './components'
 import { useViewTransition } from './hooks'
+import { useSubscriptions } from './api/hooks'
 import './Subscribers.css'
 
-// Mock data
-const subscribersData = [
-  { id: 1, name: 'Sarah K.', username: 'sarahk', tier: 'Supporter', amount: 10, status: 'active', since: 'Jan 2025', avatar: null },
-  { id: 2, name: 'James T.', username: 'jamest', tier: 'VIP', amount: 25, status: 'active', since: 'Dec 2024', avatar: null },
-  { id: 3, name: 'Mike R.', username: 'miker', tier: 'Fan', amount: 5, status: 'active', since: 'Feb 2025', avatar: null },
-  { id: 4, name: 'Lisa M.', username: 'lisam', tier: 'Supporter', amount: 10, status: 'cancelled', since: 'Nov 2024', avatar: null },
-  { id: 5, name: 'Alex P.', username: 'alexp', tier: 'VIP', amount: 25, status: 'active', since: 'Jan 2025', avatar: null },
-  { id: 6, name: 'Emma W.', username: 'emmaw', tier: 'Fan', amount: 5, status: 'active', since: 'Mar 2025', avatar: null },
-]
-
-type FilterType = 'all' | 'active' | 'cancelled'
+type FilterType = 'all' | 'active' | 'canceled'
 
 export default function Subscribers() {
   const { navigate, goBack } = useViewTransition()
   const [filter, setFilter] = useState<FilterType>('all')
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
-  const [isLoading, setIsLoading] = useState(true)
-  const [hasError, setHasError] = useState(false)
 
-  // Load data with error handling
-  const loadData = async () => {
-    setIsLoading(true)
-    setHasError(false)
-    try {
-      await new Promise(resolve => setTimeout(resolve, 600))
-    } catch {
-      setHasError(true)
-    } finally {
-      setIsLoading(false)
-    }
-  }
+  // Real API hook - fetch all subscriptions
+  const {
+    data,
+    isLoading,
+    isError,
+    refetch,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useSubscriptions(filter === 'all' ? 'all' : filter)
 
-  useEffect(() => {
-    loadData()
-  }, [])
+  // Flatten paginated data
+  const allSubscriptions = useMemo(() => {
+    return data?.pages.flatMap(page => page.subscriptions) || []
+  }, [data])
 
-  // Filter subscribers
-  const filteredSubscribers = subscribersData.filter(sub => {
-    const matchesFilter = filter === 'all' || sub.status === filter
-    const matchesSearch = searchQuery === '' ||
-      sub.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      sub.username.toLowerCase().includes(searchQuery.toLowerCase())
-    return matchesFilter && matchesSearch
-  })
+  // Filter by search query (client-side search)
+  const filteredSubscribers = useMemo(() => {
+    if (!searchQuery) return allSubscriptions
+    const query = searchQuery.toLowerCase()
+    return allSubscriptions.filter((sub: any) => {
+      const name = sub.subscriber?.profile?.displayName || sub.subscriber?.email || ''
+      const email = sub.subscriber?.email || ''
+      return name.toLowerCase().includes(query) || email.toLowerCase().includes(query)
+    })
+  }, [allSubscriptions, searchQuery])
 
   // Stats
-  const totalActive = subscribersData.filter(s => s.status === 'active').length
-  const totalCancelled = subscribersData.filter(s => s.status === 'cancelled').length
-  const thisMonth = 3 // Mock
+  const totalActive = allSubscriptions.filter((s: any) => s.status === 'active').length
+  const totalCancelled = allSubscriptions.filter((s: any) => s.status === 'canceled').length
+
+  const loadData = () => {
+    refetch()
+  }
 
   return (
     <div className="subscribers-page">
@@ -95,8 +88,8 @@ export default function Subscribers() {
         </div>
         <div className="stat-divider" />
         <div className="stat-item">
-          <span className="stat-value text-green">+{thisMonth}</span>
-          <span className="stat-label">This month</span>
+          <span className="stat-value">{allSubscriptions.length}</span>
+          <span className="stat-label">Total</span>
         </div>
         <div className="stat-divider" />
         <div className="stat-item">
@@ -120,8 +113,8 @@ export default function Subscribers() {
           Active
         </Pressable>
         <Pressable
-          className={`filter-tab ${filter === 'cancelled' ? 'active' : ''}`}
-          onClick={() => setFilter('cancelled')}
+          className={`filter-tab ${filter === 'canceled' ? 'active' : ''}`}
+          onClick={() => setFilter('canceled')}
         >
           Cancelled
         </Pressable>
@@ -129,7 +122,7 @@ export default function Subscribers() {
 
       {/* Subscriber List */}
       <div className="subscribers-content">
-        {hasError ? (
+        {isError ? (
           <ErrorState
             title="Couldn't load subscribers"
             message="We had trouble loading your subscribers. Please try again."
@@ -149,28 +142,51 @@ export default function Subscribers() {
           </div>
         ) : (
           <div className="subscribers-list">
-            {filteredSubscribers.map((subscriber) => (
-              <Pressable
-                key={subscriber.id}
-                className="subscriber-row"
-                onClick={() => navigate(`/subscribers/${subscriber.id}`, { type: 'zoom-in' })}
-              >
-                <div
-                  className="subscriber-avatar"
-                  style={{ viewTransitionName: `avatar-${subscriber.id}` } as React.CSSProperties}
+            {filteredSubscribers.map((subscription: any) => {
+              const subscriber = subscription.subscriber || {}
+              const profile = subscriber.profile || {}
+              const name = profile.displayName || subscriber.email || 'Unknown'
+              const email = subscriber.email || ''
+              const amount = subscription.amount ? subscription.amount / 100 : 0
+              const tier = subscription.tierName || 'Supporter'
+              const status = subscription.status
+
+              return (
+                <Pressable
+                  key={subscription.id}
+                  className="subscriber-row"
+                  onClick={() => navigate(`/subscribers/${subscription.id}`, { type: 'zoom-in' })}
                 >
-                  {subscriber.name.charAt(0)}
-                </div>
-                <div className="subscriber-info">
-                  <span className="subscriber-name">{subscriber.name}</span>
-                  <span className="subscriber-username">@{subscriber.username}</span>
-                </div>
-                <div className="subscriber-meta">
-                  <span className="subscriber-tier">{subscriber.tier}</span>
-                  <span className="subscriber-amount">${subscriber.amount}/mo</span>
-                </div>
+                  <div
+                    className="subscriber-avatar"
+                    style={{ viewTransitionName: `avatar-${subscription.id}` } as React.CSSProperties}
+                  >
+                    {name.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="subscriber-info">
+                    <span className="subscriber-name">{name}</span>
+                    <span className="subscriber-username">{email}</span>
+                  </div>
+                  <div className="subscriber-meta">
+                    <span className={`subscriber-tier ${status === 'canceled' ? 'cancelled' : ''}`}>
+                      {tier}
+                    </span>
+                    <span className="subscriber-amount">${amount}/mo</span>
+                  </div>
+                </Pressable>
+              )
+            })}
+
+            {/* Load More */}
+            {hasNextPage && (
+              <Pressable
+                className="load-more-btn"
+                onClick={() => fetchNextPage()}
+                disabled={isFetchingNextPage}
+              >
+                {isFetchingNextPage ? 'Loading...' : 'Load More'}
               </Pressable>
-            ))}
+            )}
           </div>
         )}
       </div>

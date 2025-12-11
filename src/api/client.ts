@@ -439,6 +439,101 @@ export const media = {
     }),
 }
 
+// ============================================
+// AI (Page Generation)
+// ============================================
+
+export interface AIGenerateInput {
+  audio?: {
+    data: string      // base64 encoded
+    mimeType: string  // audio/webm, audio/mp3, etc.
+  }
+  textDescription?: string
+  deliverables?: {
+    type: string
+    label: string
+    quantity?: number
+    detail?: string
+  }[]
+  credential?: string
+  price: number
+  userName: string
+  includeMarketResearch?: boolean
+}
+
+export interface AIGenerateResult {
+  success: boolean
+  bio: string
+  perks: string[]
+  impactItems: string[]
+  suggestedTitle?: string
+  serviceType: 'personal' | 'professional'
+  transcription?: string
+  marketContext?: {
+    competitorPricing: { low: number; mid: number; high: number }
+    commonPerks: string[]
+    industryTerms: string[]
+    targetAudienceInsights: string
+    pricingRationale: string
+  }
+}
+
+export const ai = {
+  // Check which AI services are configured
+  status: () =>
+    apiFetch<{ gemini: boolean; perplexity: boolean; replicate: boolean }>('/ai/status'),
+
+  // Main page generation (voice or text)
+  generate: (data: AIGenerateInput) =>
+    apiFetch<AIGenerateResult>('/ai/generate', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  // Quick text-only generation
+  quick: (data: {
+    description: string
+    price: number
+    userName: string
+    serviceType: 'personal' | 'professional'
+  }) =>
+    apiFetch<{
+      success: boolean
+      bio: string
+      perks: string[]
+      impactItems: string[]
+      suggestedTitle?: string
+    }>('/ai/quick', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  // Market research
+  research: (serviceDescription: string, industry?: string) =>
+    apiFetch<{
+      success: boolean
+      competitorPricing: { low: number; mid: number; high: number }
+      commonPerks: string[]
+      industryTerms: string[]
+      targetAudienceInsights: string
+      pricingRationale: string
+    }>('/ai/research', {
+      method: 'POST',
+      body: JSON.stringify({ serviceDescription, industry }),
+    }),
+
+  // Price suggestion
+  suggestPrice: (serviceDescription: string) =>
+    apiFetch<{
+      success: boolean
+      suggested: number
+      range: { min: number; max: number }
+    }>('/ai/suggest-price', {
+      method: 'POST',
+      body: JSON.stringify({ serviceDescription }),
+    }),
+}
+
 // Export all
 export const api = {
   auth,
@@ -451,6 +546,7 @@ export const api = {
   requests,
   updates,
   media,
+  ai,
 }
 
 export default api

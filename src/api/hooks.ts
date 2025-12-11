@@ -445,5 +445,57 @@ export async function uploadFile(
  * ```
  */
 
+// ============================================
+// AI HOOKS
+// ============================================
+
+export function useAIStatus() {
+  return useQuery({
+    queryKey: ['aiStatus'],
+    queryFn: api.ai.status,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  })
+}
+
+export function useAIGenerate() {
+  return useMutation({
+    mutationFn: api.ai.generate,
+  })
+}
+
+export function useAIQuickGenerate() {
+  return useMutation({
+    mutationFn: api.ai.quick,
+  })
+}
+
+export function useAIResearch() {
+  return useMutation({
+    mutationFn: ({ serviceDescription, industry }: { serviceDescription: string; industry?: string }) =>
+      api.ai.research(serviceDescription, industry),
+  })
+}
+
+export function useAISuggestPrice() {
+  return useMutation({
+    mutationFn: api.ai.suggestPrice,
+  })
+}
+
+// Helper to convert Blob to base64
+export async function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      const base64 = reader.result as string
+      // Remove the data URL prefix (e.g., "data:audio/webm;base64,")
+      const base64Data = base64.split(',')[1]
+      resolve(base64Data)
+    }
+    reader.onerror = reject
+    reader.readAsDataURL(blob)
+  })
+}
+
 // Re-export for convenience
 export { api } from './client'

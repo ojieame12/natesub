@@ -1,0 +1,132 @@
+/* EditableList Component - follows design system */
+.editable-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.editable-list-label {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: var(--space-xs);
+}
+
+.editable-list-items {
+    background: var(--neutral-50);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+}
+
+/* List Item */
+.editable-list-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-md) var(--space-lg);
+    border-bottom: 1px solid var(--border-default);
+    animation: fadeInUp 0.3s var(--ease-spring) both;
+}
+
+.editable-list-item:last-of-type {
+    border-bottom: none;
+}
+
+/* Icon */
+.editable-list-icon {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.editable-list-icon.check {
+    color: var(--accent-primary);
+}
+
+.editable-list-icon.dot {
+    color: var(--text-secondary);
+}
+
+.editable-list-icon.dot svg {
+    fill: currentColor;
+}
+
+.editable-list-icon.add {
+    color: var(--text-tertiary);
+}
+
+/* Text / Input */
+.editable-list-text {
+    flex: 1;
+    min-width: 0;
+    font-size: 15px;
+    color: var(--text-primary);
+    text-align: left;
+    padding: var(--space-xs) 0;
+}
+
+.editable-list-text:active {
+    opacity: 0.6;
+}
+
+.editable-list-input {
+    flex: 1;
+    min-width: 0;
+    font-size: 15px;
+    color: var(--text-primary);
+    background: transparent;
+    border: none;
+    outline: none;
+    padding: var(--space-xs) 0;
+    font-family: inherit;
+}
+
+.editable-list-input::placeholder {
+    color: var(--text-tertiary);
+}
+
+/* Remove button */
+.editable-list-remove {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-tertiary);
+    border-radius: var(--radius-md);
+    flex-shrink: 0;
+    transition: color 0.15s ease, background 0.15s ease;
+}
+
+.editable-list-remove:active {
+    color: var(--status-error);
+    background: var(--status-error-soft);
+}
+
+/* Add row */
+.editable-list-add {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-md) var(--space-lg);
+    background: transparent;
+}
+
+.editable-list-add-btn {
+    padding: var(--space-xs) var(--space-md);
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--accent-primary);
+    background: transparent;
+    border: 1px solid var(--accent-primary);
+    border-radius: var(--radius-md);
+    transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.editable-list-add-btn:active {
+    transform: scale(0.95);
+    background: rgba(255, 148, 26, 0.1);
+}

@@ -43,6 +43,11 @@ const envSchema = z.object({
   // Feature flags
   ENABLE_FLUTTERWAVE: z.string().transform(v => v === 'true').default('false'),
   ENABLE_SMS: z.string().transform(v => v === 'true').default('false'),
+
+  // AI Services
+  GOOGLE_AI_API_KEY: z.string().optional(),     // Gemini 3 Pro - voice + content generation
+  PERPLEXITY_API_KEY: z.string().optional(),    // Sonar Pro - market research
+  REPLICATE_API_TOKEN: z.string().optional(),   // Recraft V3 - logo generation
 })
 
 function loadEnv() {

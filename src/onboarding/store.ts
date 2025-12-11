@@ -3,6 +3,9 @@ import { persist } from 'zustand/middleware'
 
 // === Types ===
 
+// Branch type - personal vs service
+export type BranchType = 'personal' | 'service' | null
+
 // Subscription purpose - why someone would subscribe to you
 export type SubscriptionPurpose =
     | 'tips'              // Tips & Appreciation - fans showing gratitude
@@ -41,10 +44,38 @@ export interface PerkItem {
     enabled: boolean
 }
 
+// Service deliverable - structured input for AI
+export interface ServiceDeliverable {
+    id: string
+    type: 'calls' | 'async' | 'resources' | 'custom'
+    label: string
+    enabled: boolean
+    quantity?: number
+    unit?: string
+    detail?: string
+}
+
 // === Store Interface ===
 interface OnboardingStore {
     // Current step
     currentStep: number
+
+    // Branch - personal vs service
+    branch: BranchType
+
+    // Service description (for service branch)
+    serviceDescription: string
+    serviceDescriptionAudio: Blob | null
+
+    // Structured service inputs (for better AI generation)
+    serviceDeliverables: ServiceDeliverable[]
+    serviceCredential: string
+
+    // AI-generated content (for service branch)
+    generatedBio: string
+    generatedPerks: string[]
+    generatedImpact: string[]
+    isGenerating: boolean
 
     // Auth
     email: string
@@ -87,6 +118,15 @@ interface OnboardingStore {
     paymentProvider: PaymentProvider
 
     // Actions
+    setBranch: (branch: BranchType) => void
+    setServiceDescription: (description: string) => void
+    setServiceDescriptionAudio: (audio: Blob | null) => void
+    setServiceDeliverables: (deliverables: ServiceDeliverable[]) => void
+    toggleServiceDeliverable: (id: string) => void
+    updateServiceDeliverable: (id: string, updates: Partial<ServiceDeliverable>) => void
+    setServiceCredential: (credential: string) => void
+    setGeneratedContent: (bio: string, perks: string[], impact: string[]) => void
+    setIsGenerating: (isGenerating: boolean) => void
     setEmail: (email: string) => void
     setOtp: (otp: string) => void
     setName: (name: string) => void
@@ -141,8 +181,23 @@ const defaultPerks: PerkItem[] = [
     { id: 'perk-6', title: 'Behind the scenes access', enabled: false },
 ]
 
+const defaultServiceDeliverables: ServiceDeliverable[] = [
+    { id: 'del-1', type: 'calls', label: 'Calls', enabled: false, quantity: 2, unit: 'per month' },
+    { id: 'del-2', type: 'async', label: 'Async support', enabled: false, detail: 'Slack or Email' },
+    { id: 'del-3', type: 'resources', label: 'Resources', enabled: false, detail: 'Templates, guides' },
+]
+
 const initialState = {
     currentStep: 0,
+    branch: null as BranchType,
+    serviceDescription: '',
+    serviceDescriptionAudio: null as Blob | null,
+    serviceDeliverables: defaultServiceDeliverables,
+    serviceCredential: '',
+    generatedBio: '',
+    generatedPerks: [] as string[],
+    generatedImpact: [] as string[],
+    isGenerating: false,
     email: '',
     otp: '',
     name: '',
@@ -169,6 +224,29 @@ export const useOnboardingStore = create<OnboardingStore>()(
     persist(
         (set) => ({
             ...initialState,
+
+            // Branch
+            setBranch: (branch) => set({ branch }),
+            setServiceDescription: (serviceDescription) => set({ serviceDescription }),
+            setServiceDescriptionAudio: (serviceDescriptionAudio) => set({ serviceDescriptionAudio }),
+            setServiceDeliverables: (serviceDeliverables) => set({ serviceDeliverables }),
+            toggleServiceDeliverable: (id) => set((state) => ({
+                serviceDeliverables: state.serviceDeliverables.map((d) =>
+                    d.id === id ? { ...d, enabled: !d.enabled } : d
+                )
+            })),
+            updateServiceDeliverable: (id, updates) => set((state) => ({
+                serviceDeliverables: state.serviceDeliverables.map((d) =>
+                    d.id === id ? { ...d, ...updates } : d
+                )
+            })),
+            setServiceCredential: (serviceCredential) => set({ serviceCredential }),
+            setGeneratedContent: (generatedBio, generatedPerks, generatedImpact) => set({
+                generatedBio,
+                generatedPerks,
+                generatedImpact
+            }),
+            setIsGenerating: (isGenerating) => set({ isGenerating }),
 
             // Auth
             setEmail: (email) => set({ email }),
@@ -244,7 +322,15 @@ export const useOnboardingStore = create<OnboardingStore>()(
         {
             name: 'natepay-onboarding',
             partialize: (state) => ({
-                // Persist everything except currentStep (start fresh on reload)
+                // Persist everything except currentStep, audio blob, and isGenerating
+                branch: state.branch,
+                serviceDescription: state.serviceDescription,
+                // Note: serviceDescriptionAudio is NOT persisted (Blob not serializable)
+                serviceDeliverables: state.serviceDeliverables,
+                serviceCredential: state.serviceCredential,
+                generatedBio: state.generatedBio,
+                generatedPerks: state.generatedPerks,
+                generatedImpact: state.generatedImpact,
                 email: state.email,
                 name: state.name,
                 country: state.country,

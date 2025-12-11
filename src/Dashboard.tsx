@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import {
   Menu,
   Bell,
@@ -20,18 +20,10 @@ import {
   Clock,
   Activity,
 } from 'lucide-react'
-import { useOnboardingStore } from './onboarding/store'
 import { Pressable, useToast, Skeleton, SkeletonList, ErrorState } from './components'
 import { useViewTransition } from './hooks'
+import { useMetrics, useActivity, useProfile } from './api/hooks'
 import './Dashboard.css'
-
-// Mock data
-const activityData = [
-  { id: 1, type: 'new_subscriber', name: 'Sarah K.', amount: 10, time: '2m ago', tier: 'Supporter' },
-  { id: 2, type: 'payment', name: 'James T.', amount: 25, time: '1h ago', tier: 'VIP' },
-  { id: 3, type: 'new_subscriber', name: 'Mike R.', amount: 5, time: '3h ago', tier: 'Fan' },
-  { id: 4, type: 'renewal', name: 'Lisa M.', amount: 10, time: 'Yesterday', tier: 'Supporter' },
-]
 
 const menuItems = [
   { id: 'subscribers', title: 'Subscribers', icon: UserPlus, path: '/subscribers' },
@@ -57,22 +49,49 @@ const notifications = [
 // Activity icon helper
 const getActivityIcon = (type: string) => {
   switch (type) {
+    case 'subscription_created':
     case 'new_subscriber': return <UserPlus size={18} />
+    case 'payment_received':
     case 'payment': return <DollarSign size={18} />
     case 'renewal': return <RefreshCw size={18} />
+    case 'subscription_canceled':
     case 'cancelled': return <UserX size={18} />
+    case 'request_sent': return <Send size={18} />
+    case 'request_accepted': return <Check size={18} />
     default: return <DollarSign size={18} />
   }
 }
 
 const getActivityTitle = (type: string) => {
   switch (type) {
+    case 'subscription_created':
     case 'new_subscriber': return 'New Subscriber'
+    case 'payment_received':
     case 'payment': return 'Payment Received'
     case 'renewal': return 'Renewed'
+    case 'subscription_canceled':
     case 'cancelled': return 'Cancelled'
+    case 'request_sent': return 'Request Sent'
+    case 'request_accepted': return 'Request Accepted'
     default: return 'Activity'
   }
+}
+
+// Format relative time
+const formatRelativeTime = (date: Date | string) => {
+  const now = new Date()
+  const then = new Date(date)
+  const diffMs = now.getTime() - then.getTime()
+  const diffMins = Math.floor(diffMs / 60000)
+  const diffHours = Math.floor(diffMs / 3600000)
+  const diffDays = Math.floor(diffMs / 86400000)
+
+  if (diffMins < 1) return 'Just now'
+  if (diffMins < 60) return `${diffMins}m ago`
+  if (diffHours < 24) return `${diffHours}h ago`
+  if (diffDays === 1) return 'Yesterday'
+  if (diffDays < 7) return `${diffDays}d ago`
+  return then.toLocaleDateString()
 }
 
 export default function Dashboard() {
@@ -81,37 +100,25 @@ export default function Dashboard() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [copied, setCopied] = useState(false)
-  const [isLoading, setIsLoading] = useState(true)
-  const [hasError, setHasError] = useState(false)
 
-  const { username, name } = useOnboardingStore()
+  // Real API hooks
+  const { data: profileData, isLoading: profileLoading } = useProfile()
+  const { data: metricsData, isLoading: metricsLoading, isError: metricsError, refetch: refetchMetrics } = useMetrics()
+  const { data: activityData, isLoading: activityLoading, isError: activityError, refetch: refetchActivity } = useActivity(5)
 
-  // Simulate initial data load with possible error
-  const loadData = async () => {
-    setIsLoading(true)
-    setHasError(false)
-    try {
-      // Simulate API call - in real app, this would fetch dashboard data
-      await new Promise(resolve => setTimeout(resolve, 800))
-    } catch {
-      setHasError(true)
-    } finally {
-      setIsLoading(false)
-    }
+  const profile = profileData?.profile
+  const metrics = metricsData?.metrics
+  const activities = activityData?.pages?.[0]?.activities || []
+
+  const isLoading = profileLoading || metricsLoading || activityLoading
+  const hasError = metricsError || activityError
+
+  const loadData = () => {
+    refetchMetrics()
+    refetchActivity()
   }
 
-  useEffect(() => {
-    loadData()
-  }, [])
-  const pageUrl = `nate.to/${username || 'yourname'}`
-
-  // Mock metrics
-  const metrics = {
-    mrr: 285,
-    subscribers: 12,
-    pageViews: 847,
-    subscriberGrowth: 8,
-  }
+  const pageUrl = `nate.to/${profile?.username || 'yourname'}`
 
   const handleCopyLink = async () => {
     try {
@@ -129,7 +136,7 @@ export default function Dashboard() {
     if (navigator.share) {
       try {
         await navigator.share({
-          title: `Subscribe to ${name || 'me'}`,
+          title: `Subscribe to ${profile?.displayName || 'me'}`,
           text: 'Check out my subscription page!',
           url: `https://${pageUrl}`,
         })
@@ -144,6 +151,9 @@ export default function Dashboard() {
       handleCopyLink()
     }
   }
+
+  const displayName = profile?.displayName || 'Your Name'
+  const username = profile?.username || 'username'
 
   return (
     <div className="dashboard">
@@ -169,11 +179,11 @@ export default function Dashboard() {
         <div className="menu-profile">
           <div className="menu-profile-info">
             <div className="menu-avatar">
-              {name ? name.charAt(0).toUpperCase() : 'U'}
+              {displayName ? displayName.charAt(0).toUpperCase() : 'U'}
             </div>
             <div className="menu-profile-text">
-              <span className="menu-profile-name">{name || 'Your Name'}</span>
-              <span className="menu-profile-username">@{username || 'username'}</span>
+              <span className="menu-profile-name">{displayName}</span>
+              <span className="menu-profile-username">@{username}</span>
             </div>
           </div>
           <Pressable className="menu-close" onClick={() => setMenuOpen(false)}>
@@ -300,21 +310,20 @@ export default function Dashboard() {
         <section className="stats-card">
           <div className="stats-primary">
             <span className="stats-label">Monthly Recurring Revenue</span>
-            <span className="stats-mrr">${metrics.mrr}</span>
+            <span className="stats-mrr">${metrics?.mrr ?? 0}</span>
           </div>
           <div className="stats-secondary-row">
             <div className="stats-metric">
               <div className="stats-metric-value">
-                <span>{metrics.subscribers}</span>
-                <span className="stats-badge">+{metrics.subscriberGrowth}%</span>
+                <span>{metrics?.subscriberCount ?? 0}</span>
               </div>
               <span className="stats-label">Subscribers</span>
             </div>
             <div className="stats-metric">
               <div className="stats-metric-value">
-                <span>{metrics.pageViews}</span>
+                <span>${metrics?.totalRevenue ?? 0}</span>
               </div>
-              <span className="stats-label">Page Views</span>
+              <span className="stats-label">Total Revenue</span>
             </div>
           </div>
         </section>
@@ -322,7 +331,7 @@ export default function Dashboard() {
         {/* Shareable Link Card */}
         <Pressable className="link-card" onClick={() => navigate('/subscribe')}>
           <div className="link-avatar">
-            {name ? name.charAt(0).toUpperCase() : 'U'}
+            {displayName ? displayName.charAt(0).toUpperCase() : 'U'}
           </div>
           <div className="link-info">
             <span className="link-label">Your subscription page</span>
@@ -345,7 +354,7 @@ export default function Dashboard() {
             </Pressable>
           </div>
           <div className="dash-activity-list">
-            {activityData.length === 0 ? (
+            {activities.length === 0 ? (
               <div className="dash-activity-empty">
                 <div className="dash-activity-empty-icon">
                   <Activity size={24} />
@@ -356,27 +365,39 @@ export default function Dashboard() {
                 </p>
               </div>
             ) : (
-              activityData.map((activity) => (
-                <Pressable
-                  key={activity.id}
-                  className="dash-activity-item"
-                  onClick={() => navigate(`/activity/${activity.id}`)}
-                >
-                  <div className="dash-activity-icon">
-                    {getActivityIcon(activity.type)}
-                  </div>
-                  <div className="dash-activity-info">
-                    <div className="dash-activity-item-title">{getActivityTitle(activity.type)}</div>
-                    <div className="dash-activity-item-meta">{activity.time} - {activity.name}</div>
-                  </div>
-                  <div className="dash-activity-amount-col">
-                    <span className={`dash-activity-amount ${activity.type === 'cancelled' ? 'cancelled' : ''}`}>
-                      {activity.type === 'cancelled' ? '-' : '+'}${activity.amount}
-                    </span>
-                    <span className="dash-activity-tier">{activity.tier}</span>
-                  </div>
-                </Pressable>
-              ))
+              activities.map((activity: any) => {
+                const payload = activity.payload || {}
+                const amount = payload.amount ? payload.amount / 100 : 0
+                const name = payload.subscriberName || payload.recipientName || ''
+                const tier = payload.tierName || ''
+                const isCanceled = activity.type === 'subscription_canceled'
+
+                return (
+                  <Pressable
+                    key={activity.id}
+                    className="dash-activity-item"
+                    onClick={() => navigate(`/activity/${activity.id}`)}
+                  >
+                    <div className="dash-activity-icon">
+                      {getActivityIcon(activity.type)}
+                    </div>
+                    <div className="dash-activity-info">
+                      <div className="dash-activity-item-title">{getActivityTitle(activity.type)}</div>
+                      <div className="dash-activity-item-meta">
+                        {formatRelativeTime(activity.createdAt)}{name ? ` - ${name}` : ''}
+                      </div>
+                    </div>
+                    {amount > 0 && (
+                      <div className="dash-activity-amount-col">
+                        <span className={`dash-activity-amount ${isCanceled ? 'cancelled' : ''}`}>
+                          {isCanceled ? '-' : '+'}${amount}
+                        </span>
+                        {tier && <span className="dash-activity-tier">{tier}</span>}
+                      </div>
+                    )}
+                  </Pressable>
+                )
+              })
             )}
           </div>
         </section>

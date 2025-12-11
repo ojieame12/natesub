@@ -3,52 +3,97 @@ import StartStep from './StartStep'
 import EmailStep from './EmailStep'
 import OtpStep from './OtpStep'
 import IdentityStep from './IdentityStep'
-import PurposeStep from './PurposeStep'
-import PricingModelStep from './PricingModelStep'
+import BranchSelectorStep from './BranchSelectorStep'
 import PersonalPricingStep from './PersonalPricingStep'
-import ImpactItemsStep from './ImpactItemsStep'
-import PerksStep from './PerksStep'
-import PersonalAboutStep from './PersonalAboutStep'
+// Skipped for streamlined flow:
+// - PurposeStep (implied by branch choice)
+// - PricingModelStep (default to single tier)
+// - ImpactItemsStep, PerksStep, PersonalAboutStep (AI handles for service, skip for personal)
+// - PersonalReviewStep (user can edit from dashboard)
 import PersonalUsernameStep from './PersonalUsernameStep'
 import AvatarUploadStep from './AvatarUploadStep'
 import PaymentMethodStep from './PaymentMethodStep'
-import PersonalReviewStep from './PersonalReviewStep'
+import ServiceDescriptionStep from './ServiceDescriptionStep'
+import AIGeneratingStep from './AIGeneratingStep'
+import AIReviewStep from './AIReviewStep'
 
 export default function OnboardingFlow() {
-    const { currentStep } = useOnboardingStore()
+    const { currentStep, branch } = useOnboardingStore()
 
-    // Step mapping:
-    // 0: StartStep - Welcome screen
-    // 1: EmailStep - Email input
-    // 2: OtpStep - Verification code
-    // 3: IdentityStep - Name, country
-    // 4: PurposeStep - What's this subscription for?
-    // 5: PricingModelStep - Single amount or tiers?
-    // 6: PersonalPricingStep - Set prices
-    // 7: ImpactItemsStep - How would it help you?
-    // 8: PerksStep - What subscribers get
-    // 9: PersonalAboutStep - Bio/about me
-    // 10: PersonalUsernameStep - Choose username
-    // 11: AvatarUploadStep - Profile photo
-    // 12: PaymentMethodStep - Connect payment
-    // 13: PersonalReviewStep - Review & launch
+    // Step mapping depends on branch selection
+    //
+    // PERSONAL BRANCH (optimized - 9 steps total):
+    // 0: StartStep
+    // 1: EmailStep
+    // 2: OtpStep
+    // 3: IdentityStep
+    // 4: BranchSelectorStep - choose personal vs service
+    // 5: PersonalPricingStep - direct to price (skip purpose, default single tier)
+    // 6: PersonalUsernameStep
+    // 7: AvatarUploadStep
+    // 8: PaymentMethodStep
+    //
+    // SERVICE BRANCH (11 steps total):
+    // 0: StartStep
+    // 1: EmailStep
+    // 2: OtpStep
+    // 3: IdentityStep
+    // 4: BranchSelectorStep - choose personal vs service
+    // 5: ServiceDescriptionStep - describe your service (text/voice)
+    // 6: AIGeneratingStep - AI creates page
+    // 7: AIReviewStep - review/edit AI output
+    // 8: PersonalPricingStep - set price
+    // 9: PersonalUsernameStep
+    // 10: AvatarUploadStep
+    // 11: PaymentMethodStep
 
-    const steps = [
+    // Common steps (0-4)
+    const commonSteps = [
         <StartStep key="start" />,
         <EmailStep key="email" />,
         <OtpStep key="otp" />,
         <IdentityStep key="identity" />,
-        <PurposeStep key="purpose" />,
-        <PricingModelStep key="pricing-model" />,
+        <BranchSelectorStep key="branch" />,
+    ]
+
+    // Personal branch - streamlined (no purpose, no pricing model, no review)
+    // Purpose is implied by "Subscribe to Me" choice
+    // Default to single price tier
+    // User can edit everything from dashboard after launch
+    const personalSteps = [
         <PersonalPricingStep key="pricing" />,
-        <ImpactItemsStep key="impact" />,
-        <PerksStep key="perks" />,
-        <PersonalAboutStep key="about" />,
         <PersonalUsernameStep key="username" />,
         <AvatarUploadStep key="avatar" />,
         <PaymentMethodStep key="payment" />,
-        <PersonalReviewStep key="review" />,
     ]
+
+    // Service branch - AI-assisted setup
+    const serviceSteps = [
+        <ServiceDescriptionStep key="service-desc" />,
+        <AIGeneratingStep key="ai-generating" />,
+        <AIReviewStep key="ai-review" />,
+        <PersonalPricingStep key="pricing" />,
+        <PersonalUsernameStep key="username" />,
+        <AvatarUploadStep key="avatar" />,
+        <PaymentMethodStep key="payment" />,
+    ]
+
+    // Build the appropriate steps array based on branch
+    const getSteps = () => {
+        if (currentStep < 5) {
+            // Haven't reached branch selection yet
+            return commonSteps
+        }
+
+        if (branch === 'service') {
+            return [...commonSteps, ...serviceSteps]
+        }
+
+        // Default to personal (or if branch not selected yet)
+        return [...commonSteps, ...personalSteps]
+    }
+
+    const steps = getSteps()
 
     return steps[currentStep] || <StartStep />
 }

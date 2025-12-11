@@ -1,0 +1,243 @@
+import { useState, useRef, useEffect } from 'react'
+import { Mic, Square, Play, Pause, X, RefreshCw } from 'lucide-react'
+import Pressable from './Pressable'
+import './VoiceRecorder.css'
+
+interface VoiceRecorderProps {
+    onRecorded: (blob: Blob, duration: number) => void
+    onRemove: () => void
+    audioBlob?: Blob | null
+    maxDuration?: number // seconds, default 60
+    label?: string
+    hint?: string
+}
+
+export function VoiceRecorder({
+    onRecorded,
+    onRemove,
+    audioBlob,
+    maxDuration = 60,
+    label = 'Record a voice message',
+    hint,
+}: VoiceRecorderProps) {
+    const [isRecording, setIsRecording] = useState(false)
+    const [recordingTime, setRecordingTime] = useState(0)
+    const [isPlaying, setIsPlaying] = useState(false)
+    const [playbackTime, setPlaybackTime] = useState(0)
+    const [duration, setDuration] = useState(0)
+    const [micError, setMicError] = useState<string | null>(null)
+    const [audioUrl, setAudioUrl] = useState<string | null>(null)
+
+    const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+    const audioChunksRef = useRef<Blob[]>([])
+    const audioRef = useRef<HTMLAudioElement | null>(null)
+    const timerRef = useRef<number | null>(null)
+
+    // Create audio URL from blob
+    useEffect(() => {
+        if (audioBlob) {
+            const url = URL.createObjectURL(audioBlob)
+            setAudioUrl(url)
+
+            // Get duration
+            const audio = new Audio(url)
+            audio.onloadedmetadata = () => {
+                setDuration(Math.ceil(audio.duration))
+            }
+
+            return () => URL.revokeObjectURL(url)
+        } else {
+            setAudioUrl(null)
+            setDuration(0)
+        }
+    }, [audioBlob])
+
+    const startRecording = async () => {
+        setMicError(null)
+
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            setMicError('Voice recording is not supported on this device')
+            return
+        }
+
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+            mediaRecorderRef.current = new MediaRecorder(stream)
+            audioChunksRef.current = []
+
+            mediaRecorderRef.current.ondataavailable = (event) => {
+                audioChunksRef.current.push(event.data)
+            }
+
+            mediaRecorderRef.current.onstop = () => {
+                const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' })
+                onRecorded(blob, recordingTime)
+                stream.getTracks().forEach(track => track.stop())
+            }
+
+            mediaRecorderRef.current.start()
+            setIsRecording(true)
+            setRecordingTime(0)
+
+            timerRef.current = window.setInterval(() => {
+                setRecordingTime(prev => {
+                    if (prev >= maxDuration) {
+                        stopRecording()
+                        return prev
+                    }
+                    return prev + 1
+                })
+            }, 1000)
+        } catch (err: unknown) {
+            console.error('Failed to start recording:', err)
+            const error = err as { name?: string }
+            if (error.name === 'NotAllowedError') {
+                setMicError('Microphone access denied. Check your settings.')
+            } else if (error.name === 'NotFoundError') {
+                setMicError('No microphone found on this device')
+            } else {
+                setMicError('Could not access microphone')
+            }
+        }
+    }
+
+    const stopRecording = () => {
+        if (mediaRecorderRef.current && isRecording) {
+            mediaRecorderRef.current.stop()
+            setIsRecording(false)
+            if (timerRef.current) {
+                clearInterval(timerRef.current)
+            }
+        }
+    }
+
+    const handleRemove = () => {
+        if (audioUrl) {
+            URL.revokeObjectURL(audioUrl)
+        }
+        if (audioRef.current) {
+            audioRef.current.pause()
+            audioRef.current = null
+        }
+        setAudioUrl(null)
+        setPlaybackTime(0)
+        setIsPlaying(false)
+        setDuration(0)
+        onRemove()
+    }
+
+    const togglePlayback = () => {
+        if (!audioUrl) return
+
+        if (!audioRef.current) {
+            audioRef.current = new Audio(audioUrl)
+            audioRef.current.onended = () => {
+                setIsPlaying(false)
+                setPlaybackTime(0)
+            }
+            audioRef.current.ontimeupdate = () => {
+                setPlaybackTime(Math.floor(audioRef.current?.currentTime || 0))
+            }
+        }
+
+        if (isPlaying) {
+            audioRef.current.pause()
+            setIsPlaying(false)
+        } else {
+            audioRef.current.play()
+            setIsPlaying(true)
+        }
+    }
+
+    const formatTime = (seconds: number) => {
+        const mins = Math.floor(seconds / 60)
+        const secs = seconds % 60
+        return `${mins}:${secs.toString().padStart(2, '0')}`
+    }
+
+    // Cleanup on unmount
+    useEffect(() => {
+        return () => {
+            if (timerRef.current) {
+                clearInterval(timerRef.current)
+            }
+            if (audioRef.current) {
+                audioRef.current.pause()
+            }
+        }
+    }, [])
+
+    // Has recording
+    if (audioUrl && !isRecording) {
+        return (
+            <div className="voice-recorder">
+                {label && <label className="voice-recorder-label">{label}</label>}
+                <div className="voice-recorder-playback">
+                    <Pressable className="voice-play-btn" onClick={togglePlayback}>
+                        {isPlaying ? <Pause size={20} /> : <Play size={20} />}
+                    </Pressable>
+                    <div className="voice-progress">
+                        <div className="voice-progress-bar">
+                            <div
+                                className="voice-progress-fill"
+                                style={{ width: `${duration > 0 ? (playbackTime / duration) * 100 : 0}%` }}
+                            />
+                        </div>
+                        <span className="voice-time">
+                            {formatTime(playbackTime)} / {formatTime(duration)}
+                        </span>
+                    </div>
+                    <div className="voice-actions">
+                        <Pressable className="voice-action-btn" onClick={handleRemove}>
+                            <X size={18} />
+                        </Pressable>
+                        <Pressable className="voice-action-btn" onClick={() => { handleRemove(); startRecording(); }}>
+                            <RefreshCw size={18} />
+                        </Pressable>
+                    </div>
+                </div>
+            </div>
+        )
+    }
+
+    // Recording state
+    if (isRecording) {
+        return (
+            <div className="voice-recorder">
+                {label && <label className="voice-recorder-label">{label}</label>}
+                <div className="voice-recorder-recording">
+                    <div className="voice-recording-indicator">
+                        <span className="voice-recording-dot" />
+                        <span className="voice-recording-time">
+                            {formatTime(recordingTime)} / {formatTime(maxDuration)}
+                        </span>
+                    </div>
+                    <div className="voice-waveform">
+                        {Array.from({ length: 12 }).map((_, i) => (
+                            <div key={i} className="voice-waveform-bar" />
+                        ))}
+                    </div>
+                    <Pressable className="voice-stop-btn" onClick={stopRecording}>
+                        <Square size={16} />
+                        <span>Tap to stop</span>
+                    </Pressable>
+                </div>
+            </div>
+        )
+    }
+
+    // Idle state
+    return (
+        <div className="voice-recorder">
+            {label && <label className="voice-recorder-label">{label}</label>}
+            {hint && <p className="voice-recorder-hint">{hint}</p>}
+            <Pressable className="voice-record-btn" onClick={startRecording}>
+                <Mic size={20} />
+                <span>Record voice message</span>
+            </Pressable>
+            {micError && (
+                <p className="voice-recorder-error">{micError}</p>
+            )}
+        </div>
+    )
+}
