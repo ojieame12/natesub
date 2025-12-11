@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { ChevronLeft, ChevronRight, Pencil, Check } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Pencil, Check, Loader2, AlertCircle } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useOnboardingStore } from './store'
 import { Button, Pressable } from './components'
 import { getShareableLink } from '../utils/constants'
+import { api } from '../api'
 import './onboarding.css'
 
 const PURPOSE_LABELS: Record<string, string> = {
@@ -113,6 +114,8 @@ function ReviewRow({
 export default function PersonalReviewStep() {
     const navigate = useNavigate()
     const [editingField, setEditingField] = useState<EditingField>(null)
+    const [launching, setLaunching] = useState(false)
+    const [error, setError] = useState<string | null>(null)
 
     const {
         name,
@@ -122,16 +125,85 @@ export default function PersonalReviewStep() {
         pricingModel,
         singleAmount,
         tiers,
+        impactItems,
+        perks,
+        country,
+        countryCode,
+        currency,
+        avatarUrl,
+        voiceIntroUrl,
+        paymentProvider,
         setName,
         setBio,
         setUsername,
         goToStep,
-        prevStep
+        prevStep,
+        reset
     } = useOnboardingStore()
 
-    const handleLaunch = () => {
-        console.log('Launching page:', { name, username, bio, purpose, pricingModel, singleAmount, tiers })
-        navigate('/dashboard')
+    const handleLaunch = async () => {
+        setLaunching(true)
+        setError(null)
+
+        try {
+            // 1. Save profile to backend
+            const profileData = {
+                username,
+                displayName: name,
+                bio: bio || undefined,
+                avatarUrl: avatarUrl || undefined,
+                voiceIntroUrl: voiceIntroUrl || undefined,
+                country,
+                countryCode,
+                currency,
+                purpose: purpose || 'tips',
+                pricingModel,
+                singleAmount: pricingModel === 'single' ? singleAmount : undefined,
+                tiers: pricingModel === 'tiers' ? tiers : undefined,
+                perks: perks.filter(p => p.enabled),
+                impactItems,
+            }
+
+            await api.profile.update(profileData)
+            console.log('Profile saved successfully')
+
+            // 2. Initiate Stripe connect if selected
+            if (paymentProvider === 'stripe') {
+                try {
+                    const stripeResult = await api.stripe.connect()
+
+                    if (stripeResult.error) {
+                        // Show error but don't block - user can set up payments later
+                        console.warn('Stripe connect warning:', stripeResult.error)
+                        setError(stripeResult.suggestion || stripeResult.error)
+                        // Wait a bit then continue anyway
+                        await new Promise(resolve => setTimeout(resolve, 2000))
+                    } else if (stripeResult.onboardingUrl) {
+                        // Redirect to Stripe for onboarding
+                        window.location.href = stripeResult.onboardingUrl
+                        return // Don't navigate to dashboard yet
+                    } else if (stripeResult.alreadyOnboarded) {
+                        console.log('Stripe already connected')
+                    }
+                } catch (stripeErr: any) {
+                    console.warn('Stripe setup deferred:', stripeErr)
+                    // Don't block launch if Stripe fails - they can set up later
+                    if (stripeErr?.error?.includes('not available')) {
+                        setError('Stripe is not available in your country. You can set up payments later in Settings.')
+                        await new Promise(resolve => setTimeout(resolve, 2000))
+                    }
+                }
+            }
+
+            // 3. Clear onboarding store and navigate to dashboard
+            reset()
+            navigate('/dashboard')
+
+        } catch (err: any) {
+            console.error('Launch error:', err)
+            setError(err?.error || 'Failed to save profile. Please try again.')
+            setLaunching(false)
+        }
     }
 
     // Format pricing display
@@ -206,9 +278,38 @@ export default function PersonalReviewStep() {
                     </div>
                 </div>
 
+                {error && (
+                    <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        padding: '12px 16px',
+                        background: 'rgba(239, 68, 68, 0.1)',
+                        borderRadius: 12,
+                        marginBottom: 16,
+                        color: 'var(--error)'
+                    }}>
+                        <AlertCircle size={18} />
+                        <span style={{ fontSize: 14 }}>{error}</span>
+                    </div>
+                )}
+
                 <div className="step-footer">
-                    <Button variant="primary" size="lg" fullWidth onClick={handleLaunch}>
-                        Launch My Page
+                    <Button
+                        variant="primary"
+                        size="lg"
+                        fullWidth
+                        onClick={handleLaunch}
+                        disabled={launching}
+                    >
+                        {launching ? (
+                            <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <Loader2 size={18} className="spin" />
+                                Launching...
+                            </span>
+                        ) : (
+                            'Launch My Page'
+                        )}
                     </Button>
                 </div>
             </div>

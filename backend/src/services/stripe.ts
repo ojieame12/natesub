@@ -3,7 +3,7 @@ import { env } from '../config/env.js'
 import { db } from '../db/client.js'
 
 export const stripe = new Stripe(env.STRIPE_SECRET_KEY, {
-  apiVersion: '2025-02-24.acacia',
+  apiVersion: '2025-11-17.clover',
 })
 
 // Platform fee percentage (10%)

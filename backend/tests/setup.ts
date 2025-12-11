@@ -1,4 +1,32 @@
+/**
+ * Test Setup - In-Memory Mocks for Prisma and Redis
+ *
+ * SCHEMA SYNC REQUIREMENTS:
+ * When the Prisma schema (prisma/schema.prisma) changes, update the mocks below:
+ *
+ * 1. NEW MODEL ADDED:
+ *    - Add a new Map to dbStorage (e.g., newModels: new Map<string, any>())
+ *    - Add db.newModel: createMockModel(dbStorage.newModels) to the mock
+ *
+ * 2. NEW RELATION ADDED:
+ *    - Update resolveIncludes() to handle the new relation type
+ *    - Follow existing patterns for user, profile, creator, subscriber relations
+ *
+ * 3. NEW AGGREGATE/QUERY METHOD:
+ *    - Currently supported: findUnique, findFirst, findMany, create, update,
+ *      upsert, delete, count, aggregate
+ *    - Add new methods to createMockModel() as needed
+ *
+ * 4. NEW FIELD ADDED:
+ *    - No changes needed - fields are stored dynamically via data spread
+ *
+ * Models currently mocked (must match schema.prisma):
+ *   - user, profile, session, magicLinkToken, subscription, payment,
+ *     request, update, activity
+ */
+
 import { config } from 'dotenv'
+import { randomUUID } from 'crypto'
 import fs from 'fs'
 import path from 'path'
 import { vi } from 'vitest'
@@ -79,8 +107,17 @@ const dbStorage = {
   activities: new Map<string, any>(),
 }
 
-let idCounter = 0
-const generateId = () => `test-${Date.now()}-${++idCounter}`
+const generateId = () => randomUUID()
+
+// Helper to find profile for a user
+function findProfileForUser(userId: string) {
+  for (const profile of dbStorage.profiles.values()) {
+    if (profile.userId === userId) {
+      return profile
+    }
+  }
+  return null
+}
 
 // Helper to resolve includes from storage
 function resolveIncludes(item: any, include: any) {
@@ -94,33 +131,66 @@ function resolveIncludes(item: any, include: any) {
     if (relation === 'user' && item.userId) {
       const user = dbStorage.users.get(item.userId)
       if (user) {
-        result.user = config === true ? user : user
-      }
-    }
-    // Handle profile relation on user
-    if (relation === 'profile' && item.id) {
-      for (const profile of dbStorage.profiles.values()) {
-        if (profile.userId === item.id) {
-          result.profile = profile
-          break
+        result.user = { ...user }
+        // Resolve nested includes on user
+        if (typeof config === 'object' && config.include?.profile) {
+          result.user.profile = findProfileForUser(user.id)
         }
       }
     }
-    // Handle subscriber relation
-    if (relation === 'subscriber' && item.subscriberId) {
-      const subscriber = dbStorage.users.get(item.subscriberId)
-      if (subscriber) {
-        result.subscriber = subscriber
-        // Resolve nested profile if needed
-        if (typeof config === 'object' && config.select?.profile) {
-          for (const profile of dbStorage.profiles.values()) {
-            if (profile.userId === subscriber.id) {
-              result.subscriber.profile = profile
-              break
+
+    // Handle creator relation on request/subscription (links to user via creatorId)
+    if (relation === 'creator' && item.creatorId) {
+      const creator = dbStorage.users.get(item.creatorId)
+      if (creator) {
+        result.creator = { ...creator }
+        // Resolve nested includes on creator
+        if (typeof config === 'object' && config.include?.profile) {
+          result.creator.profile = findProfileForUser(creator.id)
+        }
+        // Handle select on profile
+        if (typeof config === 'object' && config.include?.profile?.select) {
+          const fullProfile = findProfileForUser(creator.id)
+          if (fullProfile) {
+            const selectFields = config.include.profile.select
+            result.creator.profile = {}
+            for (const field of Object.keys(selectFields)) {
+              result.creator.profile[field] = fullProfile[field]
             }
           }
         }
       }
+    }
+
+    // Handle profile relation on user
+    if (relation === 'profile' && item.id) {
+      result.profile = findProfileForUser(item.id)
+    }
+
+    // Handle subscriber relation
+    if (relation === 'subscriber' && item.subscriberId) {
+      const subscriber = dbStorage.users.get(item.subscriberId)
+      if (subscriber) {
+        result.subscriber = { ...subscriber }
+        // Resolve nested profile if needed
+        if (typeof config === 'object' && config.select?.profile) {
+          result.subscriber.profile = findProfileForUser(subscriber.id)
+        }
+        if (typeof config === 'object' && config.include?.profile) {
+          result.subscriber.profile = findProfileForUser(subscriber.id)
+        }
+      }
+    }
+
+    // Handle payments relation on subscription
+    if (relation === 'payments' && item.id) {
+      const payments: any[] = []
+      for (const payment of dbStorage.payments.values()) {
+        if (payment.subscriptionId === item.id) {
+          payments.push(payment)
+        }
+      }
+      result.payments = payments
     }
   }
   return result
@@ -210,6 +280,24 @@ function createMockModel(store: Map<string, any>) {
       return item
     }),
     count: vi.fn(async () => store.size),
+    aggregate: vi.fn(async ({ where, _sum }: any = {}) => {
+      let items = Array.from(store.values())
+      if (where) {
+        items = items.filter(item =>
+          Object.entries(where).every(([k, v]) => item[k] === v)
+        )
+      }
+
+      // Build aggregate result
+      const result: any = {}
+      if (_sum) {
+        result._sum = {}
+        for (const field of Object.keys(_sum)) {
+          result._sum[field] = items.reduce((sum, item) => sum + (item[field] || 0), 0)
+        }
+      }
+      return result
+    }),
   }
 }
 
@@ -229,7 +317,6 @@ vi.mock('../src/db/client.js', () => ({
     $disconnect: vi.fn(),
     $executeRawUnsafe: vi.fn(async () => {
       Object.values(dbStorage).forEach(store => store.clear())
-      idCounter = 0
       return 0
     }),
   },

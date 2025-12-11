@@ -40,28 +40,7 @@ activity.get(
   }
 )
 
-// Get single activity
-activity.get(
-  '/:id',
-  requireAuth,
-  zValidator('param', z.object({ id: z.string().uuid() })),
-  async (c) => {
-    const userId = c.get('userId')
-    const { id } = c.req.valid('param')
-
-    const act = await db.activity.findFirst({
-      where: { id, userId },
-    })
-
-    if (!act) {
-      return c.json({ error: 'Activity not found' }, 404)
-    }
-
-    return c.json({ activity: act })
-  }
-)
-
-// Get dashboard metrics
+// Get dashboard metrics (must be before /:id to avoid route conflict)
 activity.get('/metrics', requireAuth, async (c) => {
   const userId = c.get('userId')
 
@@ -111,5 +90,26 @@ activity.get('/metrics', requireAuth, async (c) => {
     },
   })
 })
+
+// Get single activity (must be after /metrics to avoid route conflict)
+activity.get(
+  '/:id',
+  requireAuth,
+  zValidator('param', z.object({ id: z.string().uuid() })),
+  async (c) => {
+    const userId = c.get('userId')
+    const { id } = c.req.valid('param')
+
+    const act = await db.activity.findFirst({
+      where: { id, userId },
+    })
+
+    if (!act) {
+      return c.json({ error: 'Activity not found' }, 404)
+    }
+
+    return c.json({ activity: act })
+  }
+)
 
 export default activity

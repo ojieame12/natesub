@@ -221,10 +221,14 @@ async function handleCheckoutCompleted(event: Stripe.Event) {
 async function handleInvoicePaid(event: Stripe.Event) {
   const invoice = event.data.object as Stripe.Invoice
 
-  if (!invoice.subscription) return
+  // Get subscription ID from invoice - use subscription_details in newer API versions
+  const subscriptionId = (invoice as any).subscription_details?.subscription
+    || (invoice as any).subscription
+
+  if (!subscriptionId) return
 
   const subscription = await db.subscription.findUnique({
-    where: { stripeSubscriptionId: invoice.subscription as string },
+    where: { stripeSubscriptionId: subscriptionId },
   })
 
   if (!subscription) return
@@ -274,10 +278,14 @@ async function handleInvoicePaid(event: Stripe.Event) {
 async function handleInvoicePaymentFailed(event: Stripe.Event) {
   const invoice = event.data.object as Stripe.Invoice
 
-  if (!invoice.subscription) return
+  // Get subscription ID from invoice - use subscription_details in newer API versions
+  const subscriptionId = (invoice as any).subscription_details?.subscription
+    || (invoice as any).subscription
+
+  if (!subscriptionId) return
 
   const subscription = await db.subscription.findUnique({
-    where: { stripeSubscriptionId: invoice.subscription as string },
+    where: { stripeSubscriptionId: subscriptionId },
   })
 
   if (!subscription) return
@@ -298,6 +306,10 @@ async function handleSubscriptionUpdated(event: Stripe.Event) {
 
   if (!subscription) return
 
+  // Get current period end (property name may vary in different API versions)
+  const currentPeriodEnd = (stripeSubscription as any).current_period_end
+    ?? (stripeSubscription as any).current_period_end_at
+
   await db.subscription.update({
     where: { id: subscription.id },
     data: {
@@ -305,7 +317,7 @@ async function handleSubscriptionUpdated(event: Stripe.Event) {
               stripeSubscription.status === 'canceled' ? 'canceled' :
               stripeSubscription.status === 'past_due' ? 'past_due' : 'paused',
       cancelAtPeriodEnd: stripeSubscription.cancel_at_period_end,
-      currentPeriodEnd: new Date(stripeSubscription.current_period_end * 1000),
+      currentPeriodEnd: currentPeriodEnd ? new Date(currentPeriodEnd * 1000) : null,
     },
   })
 }

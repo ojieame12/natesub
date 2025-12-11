@@ -19,6 +19,11 @@ import updates from './routes/updates.js'
 
 const app = new Hono()
 
+// Log Stripe API version on startup (ensure this matches your Stripe dashboard settings)
+if (process.env.NODE_ENV !== 'test') {
+  console.log('[stripe] API version: 2025-11-17.clover')
+}
+
 // Global middleware
 app.use('*', logger())
 app.use('*', secureHeaders())

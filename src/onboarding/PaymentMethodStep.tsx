@@ -1,21 +1,14 @@
-import { useState } from 'react'
-import { ChevronLeft, CreditCard, Check } from 'lucide-react'
-import { useOnboardingStore } from './store'
+import { useState, useEffect } from 'react'
+import { ChevronLeft, CreditCard, Check, Loader2, AlertCircle } from 'lucide-react'
+import { useOnboardingStore, type PaymentProvider } from './store'
 import { Button, Pressable } from './components'
+import { api } from '../api'
 import '../Dashboard.css'
 import './onboarding.css'
 
-// Countries that support Stripe
-const STRIPE_COUNTRIES = [
-    'United States', 'United Kingdom', 'Canada', 'Australia', 'Germany',
-    'France', 'Spain', 'Italy', 'Netherlands', 'Ireland', 'Singapore',
-    'Japan', 'Mexico', 'Brazil', 'India'
-]
-
-// Countries that use Flutterwave
-const FLUTTERWAVE_COUNTRIES = [
-    'Nigeria', 'Ghana', 'Kenya', 'South Africa', 'Uganda', 'Tanzania',
-    'Rwanda', 'Cameroon', 'Senegal', 'Egypt'
+// Flutterwave supported country codes
+const FLUTTERWAVE_COUNTRY_CODES = [
+    'NG', 'GH', 'KE', 'ZA', 'UG', 'TZ', 'RW', 'CM', 'SN', 'EG'
 ]
 
 interface PaymentMethodCardProps {
@@ -52,15 +45,53 @@ function PaymentMethodCard({ name, description, recommended, selected, onSelect 
 }
 
 export default function PaymentMethodStep() {
-    const { countryCode, country, nextStep, prevStep } = useOnboardingStore()
-    const [selectedMethod, setSelectedMethod] = useState<string | null>(null)
+    const { countryCode, country, paymentProvider, setPaymentProvider, nextStep, prevStep } = useOnboardingStore()
+    const [selectedMethod, setSelectedMethod] = useState<string | null>(paymentProvider)
+    const [stripeCountryCodes, setStripeCountryCodes] = useState<string[]>([])
+    const [loading, setLoading] = useState(true)
+    const [error, setError] = useState<string | null>(null)
 
-    // Determine which payment methods to show based on country
-    const isStripeCountry = STRIPE_COUNTRIES.includes(countryCode)
-    const isFlutterwaveCountry = FLUTTERWAVE_COUNTRIES.includes(countryCode)
+    // Fetch Stripe supported countries on mount
+    useEffect(() => {
+        async function fetchSupportedCountries() {
+            try {
+                const result = await api.stripe.getSupportedCountries()
+                setStripeCountryCodes(result.countries.map(c => c.code))
+            } catch (err) {
+                console.error('Failed to fetch supported countries:', err)
+                // Fallback to common countries if API fails
+                setStripeCountryCodes(['US', 'CA', 'GB', 'AU', 'DE', 'FR', 'JP', 'SG'])
+            } finally {
+                setLoading(false)
+            }
+        }
+        fetchSupportedCountries()
+    }, [])
+
+    // Determine which payment methods to show based on country code
+    const isStripeCountry = stripeCountryCodes.includes(countryCode?.toUpperCase() || '')
+    const isFlutterwaveCountry = FLUTTERWAVE_COUNTRY_CODES.includes(countryCode?.toUpperCase() || '')
 
     // Default recommendation
-    const recommendedMethod = isStripeCountry ? 'stripe' : 'flutterwave'
+    const recommendedMethod = isStripeCountry ? 'stripe' : isFlutterwaveCountry ? 'flutterwave' : 'bank'
+
+    const handleContinue = () => {
+        if (selectedMethod) {
+            setPaymentProvider(selectedMethod as PaymentProvider)
+            setError(null)
+            nextStep()
+        }
+    }
+
+    if (loading) {
+        return (
+            <div className="onboarding">
+                <div className="onboarding-content" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
+                    <Loader2 size={32} className="spin" />
+                </div>
+            </div>
+        )
+    }
 
     return (
         <div className="onboarding">
@@ -80,8 +111,24 @@ export default function PaymentMethodStep() {
                 </div>
 
                 <div className="step-body">
-                    {/* Show Stripe if in supported country or always as an option */}
-                    {(isStripeCountry || !isFlutterwaveCountry) && (
+                    {error && (
+                        <div className="payment-error" style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 8,
+                            padding: '12px 16px',
+                            background: 'rgba(239, 68, 68, 0.1)',
+                            borderRadius: 12,
+                            marginBottom: 16,
+                            color: 'var(--error)'
+                        }}>
+                            <AlertCircle size={18} />
+                            <span style={{ fontSize: 14 }}>{error}</span>
+                        </div>
+                    )}
+
+                    {/* Show Stripe if in supported country */}
+                    {isStripeCountry && (
                         <PaymentMethodCard
                             name="Stripe"
                             description="Bank deposits, cards, Apple Pay"
@@ -91,8 +138,22 @@ export default function PaymentMethodStep() {
                         />
                     )}
 
-                    {/* Show Flutterwave if in Africa or as alternative */}
-                    {(isFlutterwaveCountry || !isStripeCountry) && (
+                    {/* Show warning if user selected Stripe but country isn't supported */}
+                    {!isStripeCountry && selectedMethod === 'stripe' && (
+                        <div style={{
+                            padding: '12px 16px',
+                            background: 'rgba(245, 158, 11, 0.1)',
+                            borderRadius: 12,
+                            marginBottom: 16,
+                            fontSize: 14,
+                            color: 'var(--text-secondary)'
+                        }}>
+                            Stripe is not available in {country || 'your country'}. Please choose another option.
+                        </div>
+                    )}
+
+                    {/* Show Flutterwave if in Africa */}
+                    {isFlutterwaveCountry && (
                         <PaymentMethodCard
                             name="Flutterwave"
                             description="Bank transfers, mobile money"
@@ -102,12 +163,39 @@ export default function PaymentMethodStep() {
                         />
                     )}
 
+                    {/* If neither Stripe nor Flutterwave available, show both as options with disclaimers */}
+                    {!isStripeCountry && !isFlutterwaveCountry && (
+                        <>
+                            <PaymentMethodCard
+                                name="Stripe"
+                                description="Bank deposits, cards, Apple Pay"
+                                selected={selectedMethod === 'stripe'}
+                                onSelect={() => {
+                                    setSelectedMethod('stripe')
+                                    setError(`Stripe may not be available in ${country || 'your country'}. You can try, but setup may fail.`)
+                                }}
+                            />
+                            <PaymentMethodCard
+                                name="Flutterwave"
+                                description="Bank transfers, mobile money (Africa)"
+                                selected={selectedMethod === 'flutterwave'}
+                                onSelect={() => {
+                                    setSelectedMethod('flutterwave')
+                                    setError(`Flutterwave is primarily for African countries.`)
+                                }}
+                            />
+                        </>
+                    )}
+
                     {/* Manual/Bank transfer option always available */}
                     <PaymentMethodCard
-                        name="Bank Transfer"
-                        description="Request payouts manually"
+                        name="Manual Payouts"
+                        description="We'll hold funds until you request withdrawal"
                         selected={selectedMethod === 'bank'}
-                        onSelect={() => setSelectedMethod('bank')}
+                        onSelect={() => {
+                            setSelectedMethod('bank')
+                            setError(null)
+                        }}
                     />
 
                     {country && (
@@ -122,7 +210,7 @@ export default function PaymentMethodStep() {
                         variant="primary"
                         size="lg"
                         fullWidth
-                        onClick={nextStep}
+                        onClick={handleContinue}
                         disabled={!selectedMethod}
                     >
                         Continue

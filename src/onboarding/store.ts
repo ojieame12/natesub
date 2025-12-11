@@ -15,6 +15,9 @@ export type SubscriptionPurpose =
 // Pricing model - single amount or tiered
 export type PricingModel = 'single' | 'tiers'
 
+// Payment provider selection
+export type PaymentProvider = 'stripe' | 'flutterwave' | 'bank' | null
+
 // Tier with perks
 export interface SubscriptionTier {
     id: string
@@ -80,6 +83,9 @@ interface OnboardingStore {
     // Avatar
     avatarUrl: string | null
 
+    // Payment provider
+    paymentProvider: PaymentProvider
+
     // Actions
     setEmail: (email: string) => void
     setOtp: (otp: string) => void
@@ -105,6 +111,7 @@ interface OnboardingStore {
     setBio: (bio: string) => void
     setUsername: (username: string) => void
     setAvatarUrl: (url: string | null) => void
+    setPaymentProvider: (provider: PaymentProvider) => void
     nextStep: () => void
     prevStep: () => void
     goToStep: (step: number) => void
@@ -153,6 +160,7 @@ const initialState = {
     bio: '',
     username: '',
     avatarUrl: null as string | null,
+    paymentProvider: null as PaymentProvider,
 }
 
 // === Store ===
@@ -224,6 +232,9 @@ export const useOnboardingStore = create<OnboardingStore>()(
             // Avatar
             setAvatarUrl: (avatarUrl) => set({ avatarUrl }),
 
+            // Payment provider
+            setPaymentProvider: (paymentProvider) => set({ paymentProvider }),
+
             // Navigation
             nextStep: () => set((state) => ({ currentStep: state.currentStep + 1 })),
             prevStep: () => set((state) => ({ currentStep: Math.max(0, state.currentStep - 1) })),
@@ -250,6 +261,7 @@ export const useOnboardingStore = create<OnboardingStore>()(
                 bio: state.bio,
                 username: state.username,
                 avatarUrl: state.avatarUrl,
+                paymentProvider: state.paymentProvider,
             }),
         }
     )
