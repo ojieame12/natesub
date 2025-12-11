@@ -195,6 +195,85 @@ profile.get('/onboarding-status', requireAuth, async (c) => {
   })
 })
 
+// Notification preferences schema
+const notificationPrefsSchema = z.object({
+  push: z.boolean(),
+  email: z.boolean(),
+  subscriberAlerts: z.boolean(),
+  paymentAlerts: z.boolean(),
+})
+
+// Settings update schema (partial updates)
+const settingsSchema = z.object({
+  notificationPrefs: notificationPrefsSchema.optional(),
+  isPublic: z.boolean().optional(),
+})
+
+// Update settings (notification prefs, visibility)
+profile.patch(
+  '/settings',
+  requireAuth,
+  zValidator('json', settingsSchema),
+  async (c) => {
+    const userId = c.get('userId')
+    const data = c.req.valid('json')
+
+    // Ensure profile exists
+    const existingProfile = await db.profile.findUnique({ where: { userId } })
+    if (!existingProfile) {
+      return c.json({ error: 'Profile not found. Complete onboarding first.' }, 404)
+    }
+
+    // Build update object
+    const updateData: any = {}
+    if (data.notificationPrefs !== undefined) {
+      updateData.notificationPrefs = data.notificationPrefs
+    }
+    if (data.isPublic !== undefined) {
+      updateData.isPublic = data.isPublic
+    }
+
+    const updatedProfile = await db.profile.update({
+      where: { userId },
+      data: updateData,
+    })
+
+    return c.json({
+      success: true,
+      settings: {
+        notificationPrefs: updatedProfile.notificationPrefs,
+        isPublic: updatedProfile.isPublic,
+      },
+    })
+  }
+)
+
+// Get settings
+profile.get('/settings', requireAuth, async (c) => {
+  const userId = c.get('userId')
+
+  const userProfile = await db.profile.findUnique({
+    where: { userId },
+    select: {
+      notificationPrefs: true,
+      isPublic: true,
+    },
+  })
+
+  // Return defaults if profile doesn't exist
+  const defaultPrefs = {
+    push: true,
+    email: true,
+    subscriberAlerts: true,
+    paymentAlerts: true,
+  }
+
+  return c.json({
+    notificationPrefs: userProfile?.notificationPrefs || defaultPrefs,
+    isPublic: userProfile?.isPublic ?? true,
+  })
+})
+
 // Check username availability
 profile.get(
   '/check-username/:username',

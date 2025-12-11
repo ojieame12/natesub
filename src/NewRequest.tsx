@@ -2,12 +2,16 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { X, Copy, Share2, Check } from 'lucide-react'
 import { Pressable } from './components'
+import { useCurrentUser } from './api/hooks'
+import { getCurrencySymbol } from './utils/currency'
 import './NewRequest.css'
 
 const quickAmounts = [5, 10, 25, 50]
 
 export default function NewRequest() {
   const navigate = useNavigate()
+  const { data: userData } = useCurrentUser()
+  const currencySymbol = getCurrencySymbol(userData?.profile?.currency || 'USD')
   const [amount, setAmount] = useState('')
   const [note, setNote] = useState('')
   const [isRecurring, setIsRecurring] = useState(false)
@@ -45,8 +49,8 @@ export default function NewRequest() {
     if (navigator.share) {
       try {
         await navigator.share({
-          title: `Payment Request - $${amount}`,
-          text: note || `Payment request for $${amount}`,
+          title: `Payment Request - ${currencySymbol}${amount}`,
+          text: note || `Payment request for ${currencySymbol}${amount}`,
           url: link,
         })
       } catch (err) {

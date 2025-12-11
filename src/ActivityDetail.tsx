@@ -13,7 +13,8 @@ import {
     Check,
 } from 'lucide-react'
 import { Pressable, useToast, Skeleton, ErrorState } from './components'
-import { useActivityDetail } from './api/hooks'
+import { useActivityDetail, useCurrentUser } from './api/hooks'
+import { getCurrencySymbol } from './utils/currency'
 import './ActivityDetail.css'
 
 // Format date
@@ -70,6 +71,8 @@ export default function ActivityDetail() {
     const goBack = useSafeBack('/activity')
     const toast = useToast()
     const { id } = useParams()
+    const { data: userData } = useCurrentUser()
+    const currencySymbol = getCurrencySymbol(userData?.profile?.currency || 'USD')
 
     // Fetch activity from API
     const { data, isLoading, isError, refetch } = useActivityDetail(id || '')
@@ -174,7 +177,7 @@ export default function ActivityDetail() {
                     {getActivityIcon(activity.type)}
                 </div>
                 <div className="detail-amount">
-                    {isNegative ? '-' : '+'}${activity.amount}
+                    {isNegative ? '-' : '+'}{currencySymbol}{activity.amount}
                     <span className="cents">.00</span>
                 </div>
                 <span className="detail-badge">{getActivityTitle(activity.type)}</span>
@@ -202,7 +205,7 @@ export default function ActivityDetail() {
                     </div>
                     <div className="detail-row">
                         <span className="detail-label">Amount</span>
-                        <span className="detail-value">${activity.amount}.00/mo</span>
+                        <span className="detail-value">{currencySymbol}{activity.amount}.00/mo</span>
                     </div>
                     <div className="detail-row">
                         <span className="detail-label">Date</span>
@@ -242,7 +245,7 @@ export default function ActivityDetail() {
                         )}
                         <div className="detail-row">
                             <span className="detail-label">Lifetime Value</span>
-                            <span className="detail-value">${activity.subscription.lifetimeValue}</span>
+                            <span className="detail-value">{currencySymbol}{activity.subscription.lifetimeValue}</span>
                         </div>
                         <div className="detail-row">
                             <span className="detail-label">Months Subscribed</span>

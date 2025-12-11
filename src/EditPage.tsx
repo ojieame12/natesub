@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Camera, Plus, GripVertical, Trash2, ExternalLink } from 'lucide-react'
 import { useOnboardingStore } from './onboarding/store'
 import { Pressable, useToast, Skeleton } from './components'
+import { getCurrencySymbol } from './utils/currency'
 import './EditPage.css'
 
 interface Tier {
@@ -15,7 +16,8 @@ interface Tier {
 export default function EditPage() {
   const navigate = useNavigate()
   const toast = useToast()
-  const { name, username, bio, setName, setBio } = useOnboardingStore()
+  const { name, username, bio, currency, setName, setBio } = useOnboardingStore()
+  const currencySymbol = getCurrencySymbol(currency)
 
   const [isLoading, setIsLoading] = useState(true)
   const [pageTitle, setPageTitle] = useState(name || '')
@@ -161,7 +163,7 @@ export default function EditPage() {
                       placeholder="Tier name"
                     />
                     <div className="tier-price-wrap">
-                      <span className="tier-currency">$</span>
+                      <span className="tier-currency">{currencySymbol}</span>
                       <input
                         type="number"
                         className="tier-price-input"

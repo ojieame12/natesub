@@ -13,7 +13,8 @@ import {
     Check,
 } from 'lucide-react'
 import { Pressable, Skeleton, SkeletonList, ErrorState } from './components'
-import { useActivity, useMetrics } from './api/hooks'
+import { useActivity, useMetrics, useCurrentUser } from './api/hooks'
+import { getCurrencySymbol } from './utils/currency'
 import './Activity.css'
 
 // Activity icon helper
@@ -85,6 +86,8 @@ const formatTime = (date: Date | string) => {
 
 export default function Activity() {
     const navigate = useNavigate()
+    const { data: userData } = useCurrentUser()
+    const currencySymbol = getCurrencySymbol(userData?.profile?.currency || 'USD')
 
     // Real API hooks
     const {
@@ -208,7 +211,7 @@ export default function Activity() {
                                                 {amount > 0 && (
                                                     <div className="activity-amount-col">
                                                         <span className={`activity-amount ${isCanceled ? 'cancelled' : ''}`}>
-                                                            {isCanceled ? '-' : '+'}${amount}
+                                                            {isCanceled ? '-' : '+'}{currencySymbol}{amount}
                                                         </span>
                                                         {tier && <span className="activity-tier">{tier}</span>}
                                                     </div>
@@ -241,11 +244,11 @@ export default function Activity() {
                                         <span className="summary-label">Subscribers</span>
                                     </div>
                                     <div className="summary-stat">
-                                        <span className="summary-value positive">${metrics.mrr}</span>
+                                        <span className="summary-value positive">{currencySymbol}{metrics.mrr}</span>
                                         <span className="summary-label">MRR</span>
                                     </div>
                                     <div className="summary-stat">
-                                        <span className="summary-value">${metrics.totalRevenue}</span>
+                                        <span className="summary-value">{currencySymbol}{metrics.totalRevenue}</span>
                                         <span className="summary-label">Total Revenue</span>
                                     </div>
                                 </div>

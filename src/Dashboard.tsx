@@ -23,6 +23,7 @@ import {
 import { Pressable, useToast, Skeleton, SkeletonList, ErrorState } from './components'
 import { useViewTransition } from './hooks'
 import { useMetrics, useActivity, useProfile } from './api/hooks'
+import { getCurrencySymbol } from './utils/currency'
 import './Dashboard.css'
 
 const menuItems = [
@@ -106,6 +107,7 @@ export default function Dashboard() {
   const profile = profileData?.profile
   const metrics = metricsData?.metrics
   const activities = activityData?.pages?.[0]?.activities || []
+  const currencySymbol = getCurrencySymbol(profile?.currency || 'USD')
 
   const isLoading = profileLoading || metricsLoading || activityLoading
   const hasError = metricsError || activityError
@@ -316,7 +318,7 @@ export default function Dashboard() {
         <section className="stats-card">
           <div className="stats-primary">
             <span className="stats-label">Monthly Recurring Revenue</span>
-            <span className="stats-mrr">${metrics?.mrr ?? 0}</span>
+            <span className="stats-mrr">{currencySymbol}{metrics?.mrr ?? 0}</span>
           </div>
           <div className="stats-secondary-row">
             <div className="stats-metric">
@@ -327,7 +329,7 @@ export default function Dashboard() {
             </div>
             <div className="stats-metric">
               <div className="stats-metric-value">
-                <span>${metrics?.totalRevenue ?? 0}</span>
+                <span>{currencySymbol}{metrics?.totalRevenue ?? 0}</span>
               </div>
               <span className="stats-label">Total Revenue</span>
             </div>
@@ -437,7 +439,7 @@ export default function Dashboard() {
                     {amount > 0 && (
                       <div className="dash-activity-amount-col">
                         <span className={`dash-activity-amount ${isCanceled ? 'cancelled' : ''}`}>
-                          {isCanceled ? '-' : '+'}${amount}
+                          {isCanceled ? '-' : '+'}{currencySymbol}{amount}
                         </span>
                         {tier && <span className="dash-activity-tier">{tier}</span>}
                       </div>
