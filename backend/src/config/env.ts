@@ -54,6 +54,9 @@ const envSchema = z.object({
   GOOGLE_AI_API_KEY: z.string().optional(),     // Gemini 3 Pro - voice + content generation
   PERPLEXITY_API_KEY: z.string().optional(),    // Sonar Pro - market research
   REPLICATE_API_TOKEN: z.string().optional(),   // Recraft V3 - logo generation
+
+  // Jobs/Scheduler
+  JOBS_API_KEY: z.string().min(16).optional(),  // API key for job endpoints (cron)
 })
 
 function loadEnv() {

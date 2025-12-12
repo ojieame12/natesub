@@ -13,6 +13,7 @@ import {
   PAYSTACK_COUNTRIES,
   type PaystackCountry,
 } from '../services/paystack.js'
+import { maskAccountNumber } from '../utils/pii.js'
 
 const paystackRoutes = new Hono()
 
@@ -125,7 +126,8 @@ paystackRoutes.post(
         bankCode: data.bankCode,
       })
     } catch (error: any) {
-      console.error('Resolve account error:', error)
+      // Log without exposing full account number
+      console.error(`[paystack] Resolve account error for ${maskAccountNumber(data.accountNumber)}:`, error.message)
       return c.json({
         error: error.message || 'Failed to verify bank account',
         verified: false,

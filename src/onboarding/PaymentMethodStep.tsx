@@ -18,19 +18,24 @@ const FLUTTERWAVE_COUNTRY_CODES = [
 interface PaymentMethodCardProps {
     name: string
     description: string
+    logo?: string
     recommended?: boolean
     selected: boolean
     onSelect: () => void
 }
 
-function PaymentMethodCard({ name, description, recommended, selected, onSelect }: PaymentMethodCardProps) {
+function PaymentMethodCard({ name, description, logo, recommended, selected, onSelect }: PaymentMethodCardProps) {
     return (
         <Pressable
             className={`payment-method-card ${selected ? 'selected' : ''}`}
             onClick={onSelect}
         >
             <div className="payment-method-icon">
-                <CreditCard size={24} />
+                {logo ? (
+                    <img src={logo} alt={name} style={{ width: 28, height: 28, borderRadius: 6 }} />
+                ) : (
+                    <CreditCard size={24} />
+                )}
             </div>
             <div className="payment-method-info">
                 <div className="payment-method-name">
@@ -241,6 +246,7 @@ export default function PaymentMethodStep() {
                         <PaymentMethodCard
                             name="Paystack"
                             description="Direct bank deposits in NGN, KES, ZAR"
+                            logo="/paystack-logo.svg"
                             recommended={recommendedMethod === 'paystack'}
                             selected={selectedMethod === 'paystack'}
                             onSelect={() => {
@@ -269,6 +275,7 @@ export default function PaymentMethodStep() {
                         <PaymentMethodCard
                             name="Stripe"
                             description="Bank deposits, cards, Apple Pay"
+                            logo="/stripe-logo.svg"
                             recommended={recommendedMethod === 'stripe'}
                             selected={selectedMethod === 'stripe'}
                             onSelect={() => setSelectedMethod('stripe')}
@@ -310,6 +317,7 @@ export default function PaymentMethodStep() {
                         <PaymentMethodCard
                             name="Stripe"
                             description="Bank deposits, cards, Apple Pay"
+                            logo="/stripe-logo.svg"
                             selected={selectedMethod === 'stripe'}
                             onSelect={() => {
                                 setSelectedMethod('stripe')

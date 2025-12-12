@@ -64,6 +64,10 @@ const defaults: Record<string, string> = {
   R2_PUBLIC_URL: 'https://test.uploads.local',
   ENABLE_FLUTTERWAVE: 'false',
   ENABLE_SMS: 'false',
+  ENABLE_PAYSTACK: 'true',
+  PAYSTACK_SECRET_KEY: 'sk_test_dummy_paystack_key',
+  PAYSTACK_WEBHOOK_SECRET: 'test_paystack_webhook_secret',
+  JOBS_API_KEY: 'test_jobs_api_key_12345678',
 }
 
 for (const [key, value] of Object.entries(defaults)) {
