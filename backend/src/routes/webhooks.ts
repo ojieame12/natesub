@@ -5,6 +5,8 @@ import { stripe } from '../services/stripe.js'
 import { db } from '../db/client.js'
 import { env } from '../config/env.js'
 import { sendNewSubscriberEmail } from '../services/email.js'
+import { handlePlatformSubscriptionEvent } from '../services/platformSubscription.js'
+import { calculateFees, type UserPurpose } from '../services/pricing.js'
 
 const webhooks = new Hono()
 
@@ -37,6 +39,13 @@ webhooks.post('/stripe', async (c) => {
   }
 
   try {
+    // Check if this is a platform subscription event
+    const isPlatformEvent = isPlatformSubscriptionEvent(event)
+    if (isPlatformEvent) {
+      await handlePlatformSubscriptionEvent(event)
+      return c.json({ received: true, type: 'platform_subscription' })
+    }
+
     switch (event.type) {
       case 'checkout.session.completed':
         await handleCheckoutCompleted(event)
