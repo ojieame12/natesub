@@ -65,7 +65,7 @@ export default function SubscriberDetail() {
                     <Pressable className="back-btn" onClick={() => goBack({ type: 'zoom-out' })}>
                         <ArrowLeft size={20} />
                     </Pressable>
-                    <span className="subscriber-detail-title">Subscriber</span>
+                    <img src="/logo.svg" alt="NatePay" className="header-logo" />
                     <div className="header-spacer" />
                 </header>
                 <div className="subscriber-detail-content">
@@ -87,7 +87,7 @@ export default function SubscriberDetail() {
                     <Pressable className="back-btn" onClick={() => goBack({ type: 'zoom-out' })}>
                         <ArrowLeft size={20} />
                     </Pressable>
-                    <span className="subscriber-detail-title">Subscriber</span>
+                    <img src="/logo.svg" alt="NatePay" className="header-logo" />
                     <div className="header-spacer" />
                 </header>
                 <ErrorState
@@ -107,7 +107,7 @@ export default function SubscriberDetail() {
                     <Pressable className="back-btn" onClick={() => goBack({ type: 'zoom-out' })}>
                         <ArrowLeft size={20} />
                     </Pressable>
-                    <span className="subscriber-detail-title">Subscriber</span>
+                    <img src="/logo.svg" alt="NatePay" className="header-logo" />
                     <div className="header-spacer" />
                 </header>
                 <div className="subscriber-empty">
@@ -126,7 +126,7 @@ export default function SubscriberDetail() {
                 <Pressable className="back-btn" onClick={() => goBack({ type: 'zoom-out' })}>
                     <ArrowLeft size={20} />
                 </Pressable>
-                <span className="subscriber-detail-title">Subscriber</span>
+                <img src="/logo.svg" alt="NatePay" className="header-logo" />
                 <Pressable className="more-btn" onClick={() => setShowActions(true)}>
                     <MoreHorizontal size={20} />
                 </Pressable>

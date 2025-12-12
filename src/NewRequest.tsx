@@ -68,7 +68,7 @@ export default function NewRequest() {
         <Pressable className="close-btn" onClick={() => navigate(-1)}>
           <X size={20} />
         </Pressable>
-        <span className="new-request-title">New Request</span>
+        <img src="/logo.svg" alt="NatePay" className="header-logo" />
         <div className="header-spacer" />
       </header>
 

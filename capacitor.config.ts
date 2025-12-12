@@ -1,8 +1,8 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.liquidglass.app',
-  appName: 'Liquid Glass',
+  appId: 'co.natepay.app',
+  appName: 'NatePay',
   webDir: 'dist'
 };
 

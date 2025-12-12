@@ -17,7 +17,7 @@ export default function Billing() {
                 <Pressable className="back-btn" onClick={() => navigate(-1)}>
                     <ArrowLeft size={20} />
                 </Pressable>
-                <span className="billing-title">Billing</span>
+                <img src="/logo.svg" alt="NatePay" className="header-logo" />
                 <div className="header-spacer" />
             </header>
 

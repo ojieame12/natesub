@@ -116,6 +116,8 @@ export default function ActivityDetail() {
                     <Pressable className="back-btn" onClick={() => goBack()}>
                         <ChevronLeft size={24} />
                     </Pressable>
+                    <img src="/logo.svg" alt="NatePay" className="header-logo" />
+                    <div style={{ width: 36 }} />
                 </header>
                 <div className="detail-hero">
                     <Skeleton width={72} height={72} borderRadius="50%" />
@@ -134,6 +136,8 @@ export default function ActivityDetail() {
                     <Pressable className="back-btn" onClick={() => goBack()}>
                         <ChevronLeft size={24} />
                     </Pressable>
+                    <img src="/logo.svg" alt="NatePay" className="header-logo" />
+                    <div style={{ width: 36 }} />
                 </header>
                 <ErrorState
                     title="Couldn't load activity"
@@ -152,6 +156,8 @@ export default function ActivityDetail() {
                     <Pressable className="back-btn" onClick={() => goBack()}>
                         <ChevronLeft size={24} />
                     </Pressable>
+                    <img src="/logo.svg" alt="NatePay" className="header-logo" />
+                    <div style={{ width: 36 }} />
                 </header>
                 <div className="detail-empty">
                     <span>Activity not found</span>
@@ -170,6 +176,8 @@ export default function ActivityDetail() {
                 <Pressable className="back-btn" onClick={() => goBack()}>
                     <ChevronLeft size={24} />
                 </Pressable>
+                <img src="/logo.svg" alt="NatePay" className="header-logo" />
+                <div style={{ width: 36 }} />
             </header>
 
             {/* Hero */}

@@ -55,7 +55,8 @@ export default function Profile() {
     return (
       <div className="profile-page">
         <header className="profile-header">
-          <span className="profile-page-title">Profile</span>
+          <div style={{ width: 36 }} />
+          <img src="/logo.svg" alt="NatePay" className="header-logo" />
           <div style={{ width: 36 }} />
         </header>
         <ErrorState
@@ -71,7 +72,8 @@ export default function Profile() {
     <div className="profile-page">
       {/* Header */}
       <header className="profile-header">
-        <span className="profile-page-title">Profile</span>
+        <div style={{ width: 36 }} />
+        <img src="/logo.svg" alt="NatePay" className="header-logo" />
         <Pressable className="edit-btn" onClick={() => navigate('/edit-page')}>
           <Pen size={18} />
         </Pressable>
