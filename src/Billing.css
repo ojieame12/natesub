@@ -622,7 +622,7 @@
 }
 
 .billing-plan-card.personal {
-    background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+    background: var(--neutral-100);
     color: var(--text-primary);
 }
 

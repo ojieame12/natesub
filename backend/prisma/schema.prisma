@@ -167,6 +167,11 @@ model Profile {
   paystackAccountNumber  String?            // Creator's bank account
   paystackAccountName    String?            // Verified name from resolve API
 
+  // Platform Subscription (for service users - $5/mo)
+  platformCustomerId       String?  @unique  // Stripe customer ID for the creator
+  platformSubscriptionId   String?  @unique  // Stripe subscription ID for $5/mo
+  platformSubscriptionStatus String? // active, past_due, canceled, etc.
+
   // Public URL
   shareUrl String?
 
