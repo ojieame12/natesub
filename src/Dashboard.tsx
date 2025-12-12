@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import {
   Menu,
   Bell,
@@ -19,6 +19,7 @@ import {
   Send,
   Clock,
   Activity,
+  FileText,
 } from 'lucide-react'
 import { Pressable, useToast, Skeleton, SkeletonList, ErrorState } from './components'
 import { useViewTransition } from './hooks'
@@ -26,11 +27,15 @@ import { useMetrics, useActivity, useProfile } from './api/hooks'
 import { getCurrencySymbol } from './utils/currency'
 import './Dashboard.css'
 
-const menuItems = [
-  { id: 'subscribers', title: 'Subscribers', icon: UserPlus, path: '/subscribers' },
-  { id: 'new-request', title: 'New Request', icon: DollarSign, path: '/new-request' },
-  { id: 'sent-requests', title: 'Sent Requests', icon: Clock, path: '/requests' },
-  { id: 'updates', title: 'Updates', icon: Send, path: '/updates' },
+// Menu items are built dynamically based on service vs personal branch
+const getMenuItems = (isService: boolean) => [
+  { id: 'subscribers', title: isService ? 'Clients' : 'Subscribers', icon: UserPlus, path: '/subscribers' },
+  { id: 'new-request', title: isService ? 'New Invoice' : 'New Request', icon: DollarSign, path: '/new-request' },
+  { id: 'sent-requests', title: isService ? 'Sent Invoices' : 'Sent Requests', icon: Clock, path: '/requests' },
+  // Payroll for service, Updates for personal
+  isService
+    ? { id: 'payroll', title: 'Payroll', icon: FileText, path: '/payroll' }
+    : { id: 'updates', title: 'Updates', icon: Send, path: '/updates' },
   { id: 'edit', title: 'Edit My Page', icon: Pen, path: '/edit-page' },
   { id: 'templates', title: 'Templates', icon: Layout, path: '/templates' },
   { id: 'payment', title: 'Payment Settings', icon: CreditCard, path: '/settings/payments' },
@@ -108,6 +113,10 @@ export default function Dashboard() {
   const metrics = metricsData?.metrics
   const activities = activityData?.pages?.[0]?.activities || []
   const currencySymbol = getCurrencySymbol(profile?.currency || 'USD')
+  const isService = profile?.purpose === 'service'
+
+  // Build menu items based on service vs personal
+  const menuItems = useMemo(() => getMenuItems(isService), [isService])
 
   const isLoading = profileLoading || metricsLoading || activityLoading
   const hasError = metricsError || activityError

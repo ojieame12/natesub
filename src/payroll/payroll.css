@@ -1,0 +1,464 @@
+/* ===========================================
+   PAYROLL PAGE STYLES
+   Corporate/Professional aesthetic
+   Following design system tokens
+   =========================================== */
+
+.payroll-page {
+    min-height: 100vh;
+    min-height: 100dvh;
+    max-width: 430px;
+    margin: 0 auto;
+    background: var(--bg-base);
+    display: flex;
+    flex-direction: column;
+}
+
+/* === HEADER - Large Title (like Activity) === */
+.payroll-header {
+    padding: var(--space-lg) var(--space-xl);
+    padding-top: calc(env(safe-area-inset-top, 12px) + var(--space-lg));
+    background: var(--bg-base);
+}
+
+.payroll-title {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0;
+    letter-spacing: -0.5px;
+}
+
+/* === DETAIL HEADER === */
+.payroll-detail-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-md) var(--space-lg);
+    padding-top: calc(env(safe-area-inset-top, 12px) + var(--space-md));
+    background: var(--bg-base);
+}
+
+.payroll-back-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-lg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-primary);
+}
+
+.payroll-back-btn.pressed {
+    background: var(--neutral-100);
+}
+
+.payroll-detail-title {
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.payroll-header-spacer {
+    width: 40px;
+}
+
+/* === CONTENT === */
+.payroll-content {
+    flex: 1;
+    padding: var(--space-lg) var(--space-xl);
+    padding-bottom: calc(100px + env(safe-area-inset-bottom));
+}
+
+/* === YTD CARD === */
+.payroll-ytd-card {
+    background: var(--neutral-900);
+    border-radius: var(--radius-xl);
+    padding: var(--space-xl);
+    margin-bottom: var(--space-xl);
+    text-align: center;
+}
+
+.payroll-ytd-label {
+    display: block;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--neutral-400);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: var(--space-xs);
+}
+
+.payroll-ytd-amount {
+    display: block;
+    font-size: 36px;
+    font-weight: 700;
+    color: white;
+    letter-spacing: -1px;
+}
+
+/* === EMPTY STATE === */
+.payroll-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-4xl) var(--space-xl);
+    text-align: center;
+    min-height: 320px;
+}
+
+.payroll-empty-icon {
+    width: 48px;
+    height: 48px;
+    background: var(--neutral-100);
+    border-radius: var(--radius-lg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-tertiary);
+    margin-bottom: var(--space-md);
+}
+
+.payroll-empty-title {
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0 0 var(--space-xs);
+}
+
+.payroll-empty-desc {
+    font-size: 14px;
+    color: var(--text-tertiary);
+    margin: 0;
+    max-width: 240px;
+    line-height: 1.5;
+}
+
+/* === SECTION === */
+.payroll-section {
+    margin-bottom: var(--space-xl);
+}
+
+.payroll-section-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: var(--space-sm);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+/* === PERIOD LIST === */
+.payroll-period-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.payroll-period-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: white;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-lg);
+    padding: var(--space-md) var(--space-lg);
+    transition: all 0.15s ease;
+}
+
+.payroll-period-card.pressed {
+    background: var(--neutral-50);
+    transform: scale(0.99);
+}
+
+.payroll-period-info {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.payroll-period-range {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.payroll-period-status {
+    display: flex;
+    align-items: center;
+}
+
+.payroll-status-badge {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: var(--radius-sm);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.payroll-status-badge.current {
+    background: rgba(59, 130, 246, 0.1);
+    color: #3b82f6;
+}
+
+.payroll-status-badge.pending {
+    background: rgba(245, 158, 11, 0.1);
+    color: #f59e0b;
+}
+
+.payroll-status-badge.paid {
+    background: rgba(16, 185, 129, 0.1);
+    color: #10b981;
+}
+
+.payroll-period-right {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.payroll-period-amount {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.payroll-period-chevron {
+    color: var(--text-tertiary);
+}
+
+/* === FOOTER NOTE === */
+.payroll-footer-note {
+    font-size: 13px;
+    color: var(--text-tertiary);
+    text-align: center;
+    margin-top: var(--space-xl);
+    line-height: 1.5;
+}
+
+/* ===========================================
+   PAYROLL DETAIL / DOCUMENT STYLES
+   =========================================== */
+
+/* === DOCUMENT PREVIEW === */
+.payroll-document {
+    background: white;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-xl);
+    overflow: hidden;
+    margin-bottom: var(--space-lg);
+}
+
+.payroll-doc-header {
+    background: var(--neutral-50);
+    padding: var(--space-xl);
+    text-align: center;
+    border-bottom: 1px solid var(--border-default);
+}
+
+.payroll-doc-logo {
+    height: 24px;
+    margin-bottom: var(--space-md);
+}
+
+.payroll-doc-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: 2px;
+    margin: 0 0 var(--space-xs);
+}
+
+.payroll-doc-period {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin: 0;
+}
+
+/* === DOCUMENT STATUS === */
+.payroll-doc-status {
+    padding: var(--space-md) var(--space-xl);
+    border-bottom: 1px solid var(--border-default);
+}
+
+.payroll-status-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.payroll-status-row.paid {
+    color: #10b981;
+}
+
+.payroll-status-row.pending {
+    color: #f59e0b;
+}
+
+/* === DOCUMENT SECTIONS === */
+.payroll-doc-section {
+    padding: var(--space-lg) var(--space-xl);
+    border-bottom: 1px solid var(--border-default);
+}
+
+.payroll-doc-section.net {
+    background: var(--neutral-50);
+    border-bottom: none;
+}
+
+.payroll-doc-section-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 0 0 var(--space-sm);
+}
+
+.payroll-doc-table {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.payroll-doc-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.payroll-doc-row.total {
+    padding-top: var(--space-sm);
+}
+
+.payroll-doc-row.total .payroll-doc-label,
+.payroll-doc-row.total .payroll-doc-value {
+    font-size: 18px;
+    font-weight: 700;
+}
+
+.payroll-doc-label {
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+.payroll-doc-value {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.payroll-doc-row.deduction .payroll-doc-value {
+    color: var(--status-error);
+}
+
+/* === BREAKDOWN === */
+.payroll-doc-breakdown {
+    margin-top: var(--space-sm);
+    padding-top: var(--space-sm);
+    border-top: 1px dashed var(--border-default);
+}
+
+.payroll-doc-breakdown-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--text-tertiary);
+    padding: var(--space-xs) 0;
+}
+
+.payroll-doc-breakdown-row.more {
+    font-style: italic;
+}
+
+/* === DOCUMENT FOOTER === */
+.payroll-doc-footer {
+    padding: var(--space-lg) var(--space-xl);
+    background: var(--neutral-50);
+}
+
+.payroll-doc-footer-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    color: var(--text-secondary);
+    padding: var(--space-xs) 0;
+}
+
+.payroll-verification-code {
+    font-family: monospace;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+/* === DOWNLOAD BUTTON === */
+.payroll-download-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-sm);
+    width: 100%;
+    padding: var(--space-md) var(--space-lg);
+    background: var(--neutral-900);
+    color: white;
+    border-radius: var(--radius-lg);
+    font-size: 15px;
+    font-weight: 600;
+    transition: all 0.15s ease;
+    margin-bottom: var(--space-lg);
+}
+
+.payroll-download-btn.pressed {
+    transform: scale(0.98);
+    opacity: 0.9;
+}
+
+.payroll-download-note {
+    text-align: center;
+    font-size: 13px;
+    color: var(--text-tertiary);
+    padding: var(--space-md);
+    background: var(--neutral-50);
+    border-radius: var(--radius-lg);
+    margin-bottom: var(--space-lg);
+}
+
+/* === VERIFICATION === */
+.payroll-verify-section {
+    text-align: center;
+    margin-bottom: var(--space-lg);
+}
+
+.payroll-verify-text {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    margin: 0 0 var(--space-xs);
+}
+
+.payroll-verify-link {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--accent-primary);
+}
+
+/* === DISCLAIMER === */
+.payroll-disclaimer {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    text-align: center;
+    line-height: 1.5;
+    margin: 0;
+    padding: var(--space-md);
+    background: var(--neutral-50);
+    border-radius: var(--radius-md);
+}

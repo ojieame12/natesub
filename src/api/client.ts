@@ -660,6 +660,58 @@ export const ai = {
     }),
 }
 
+// ============================================
+// PAYROLL
+// ============================================
+
+export interface PayPeriod {
+  id: string
+  startDate: string
+  endDate: string
+  grossAmount: number
+  platformFee: number
+  netAmount: number
+  status: 'current' | 'pending' | 'paid'
+  payoutDate?: string
+  bankLast4?: string
+  verificationCode: string
+  payments?: {
+    id: string
+    date: string
+    clientName: string
+    amount: number
+    type: 'subscription' | 'one_time'
+  }[]
+}
+
+export const payroll = {
+  // Get all pay periods
+  getPeriods: () =>
+    apiFetch<{
+      periods: PayPeriod[]
+      ytdTotal: number
+    }>('/payroll/periods'),
+
+  // Get single period detail
+  getPeriod: (id: string) =>
+    apiFetch<{
+      period: PayPeriod
+    }>(`/payroll/periods/${id}`),
+
+  // Verify a pay statement (public endpoint)
+  verify: (code: string) =>
+    apiFetch<{
+      valid: boolean
+      period?: {
+        startDate: string
+        endDate: string
+        netAmount: number
+        payoutDate: string
+        recipientName: string
+      }
+    }>(`/payroll/verify/${code}`),
+}
+
 // Export all
 export const api = {
   auth,
@@ -674,6 +726,7 @@ export const api = {
   updates,
   media,
   ai,
+  payroll,
 }
 
 export default api

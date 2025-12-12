@@ -25,6 +25,8 @@ import NewUpdate from './updates/NewUpdate'
 import UpdatePreview from './updates/UpdatePreview'
 import UpdatesHistory from './updates/UpdatesHistory'
 import UpdateDetail from './updates/UpdateDetail'
+import PayrollHistory from './payroll/PayrollHistory'
+import PayrollDetail from './payroll/PayrollDetail'
 import StripeComplete from './StripeComplete'
 import StripeRefresh from './StripeRefresh'
 import './index.css'
@@ -86,6 +88,10 @@ function App() {
         <Route path="/updates/new" element={<NewUpdate />} />
         <Route path="/updates/preview" element={<UpdatePreview />} />
         <Route path="/updates/:id" element={<UpdateDetail />} />
+
+        {/* Payroll (Service providers only) */}
+        <Route path="/payroll" element={<PayrollHistory />} />
+        <Route path="/payroll/:periodId" element={<PayrollDetail />} />
 
         {/* Vanity URLs - natepay.co/username */}
         {/* This must be LAST before the catch-all */}

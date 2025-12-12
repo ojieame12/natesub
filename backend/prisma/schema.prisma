@@ -98,6 +98,12 @@ enum PaymentProvider {
   bank
 }
 
+enum PayrollPeriodType {
+  weekly
+  biweekly
+  monthly
+}
+
 // ============================================
 // USER & PROFILE
 // ============================================
@@ -109,13 +115,14 @@ model User {
   lastLoginAt DateTime?
   deletedAt   DateTime? // Soft delete timestamp
 
-  profile       Profile?
-  subscriptions Subscription[] @relation("Creator")
-  subscribedTo  Subscription[] @relation("Subscriber")
-  requests      Request[]
-  updates       Update[]
-  activities    Activity[]
-  sessions      Session[]
+  profile        Profile?
+  subscriptions  Subscription[] @relation("Creator")
+  subscribedTo   Subscription[] @relation("Subscriber")
+  requests       Request[]
+  updates        Update[]
+  activities     Activity[]
+  sessions       Session[]
+  payrollPeriods PayrollPeriod[]
 
   @@map("users")
 }
@@ -387,4 +394,51 @@ model Activity {
 
   @@index([userId, createdAt(sort: Desc)])
   @@map("activities")
+}
+
+// ============================================
+// PAYROLL (Service Branch Only)
+// ============================================
+
+model PayrollPeriod {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  // Period boundaries
+  periodStart DateTime
+  periodEnd   DateTime
+  periodType  PayrollPeriodType @default(biweekly)
+
+  // Cached totals (snapshot at generation time)
+  grossCents      Int // Sum of all payment amounts
+  platformFeeCents Int // 8% platform fee
+  processingFeeCents Int // 2% payment processor fee
+  netCents        Int // What creator received
+  paymentCount    Int // Number of transactions
+
+  // YTD (as of period end)
+  ytdGrossCents Int
+  ytdNetCents   Int
+
+  // Payout info
+  payoutDate   DateTime?
+  payoutMethod String?   // 'stripe' | 'paystack'
+  bankLast4    String?   // Last 4 of bank account
+
+  // Verification
+  verificationCode String @unique // NP-2024-DEC-A3F
+
+  // PDF storage
+  pdfUrl         String?   // R2 URL once generated
+  pdfGeneratedAt DateTime?
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, periodStart, periodEnd])
+  @@index([userId, periodStart])
+  @@index([verificationCode])
+  @@map("payroll_periods")
 }

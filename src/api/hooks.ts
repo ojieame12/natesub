@@ -566,6 +566,33 @@ export function useAISuggestPrice() {
   })
 }
 
+// ============================================
+// PAYROLL
+// ============================================
+
+export function usePayrollPeriods() {
+  return useQuery({
+    queryKey: ['payroll', 'periods'],
+    queryFn: () => api.payroll.getPeriods(),
+  })
+}
+
+export function usePayrollPeriod(id: string) {
+  return useQuery({
+    queryKey: ['payroll', 'periods', id],
+    queryFn: () => api.payroll.getPeriod(id),
+    enabled: !!id,
+  })
+}
+
+export function usePayrollVerify(code: string) {
+  return useQuery({
+    queryKey: ['payroll', 'verify', code],
+    queryFn: () => api.payroll.verify(code),
+    enabled: !!code,
+  })
+}
+
 // Helper to convert Blob to base64
 export async function blobToBase64(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
