@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { CheckCircle, AlertCircle, Loader2, Building2, Calendar, Copy, Share2, ExternalLink, ArrowRight } from 'lucide-react'
 import { api } from './api'
 import { useProfile } from './api/hooks'
+import { useOnboardingStore } from './onboarding/store'
 import { Pressable } from './components'
 import './StripeComplete.css'
 
@@ -23,14 +24,68 @@ export default function StripeComplete() {
   const navigate = useNavigate()
   const { data: profileData } = useProfile()
   const profile = profileData?.profile
+  const { reset: resetOnboarding } = useOnboardingStore()
 
   const [status, setStatus] = useState<'loading' | 'success' | 'pending' | 'error'>('loading')
   const [details, setDetails] = useState<StripeDetails | null>(null)
   const [copied, setCopied] = useState(false)
+  const [redirectCountdown, setRedirectCountdown] = useState(5)
 
   useEffect(() => {
     checkStatus()
   }, [])
+
+  // Clear onboarding state when payment is successfully connected
+  useEffect(() => {
+    if (status === 'success') {
+      resetOnboarding()
+    }
+  }, [status, resetOnboarding])
+
+  // Auto-redirect to dashboard after success
+  useEffect(() => {
+    if (status === 'success') {
+      const timer = setInterval(() => {
+        setRedirectCountdown((prev) => {
+          if (prev <= 1) {
+            clearInterval(timer)
+            navigate('/dashboard', { replace: true })
+            return 0
+          }
+          return prev - 1
+        })
+      }, 1000)
+      return () => clearInterval(timer)
+    }
+  }, [status, navigate])
+
+  // Auto-poll when pending (every 5 seconds, max 12 attempts = 1 minute)
+  useEffect(() => {
+    if (status === 'pending') {
+      let attempts = 0
+      const pollInterval = setInterval(async () => {
+        attempts++
+        if (attempts > 12) {
+          clearInterval(pollInterval)
+          return
+        }
+        try {
+          const result = await api.stripe.getStatus()
+          setDetails(result.details || null)
+          if (result.status === 'active') {
+            setStatus('success')
+            clearInterval(pollInterval)
+          } else if (result.status === 'restricted') {
+            setStatus('error')
+            clearInterval(pollInterval)
+          }
+        } catch {
+          // Continue polling on error
+        }
+      }, 5000)
+      return () => clearInterval(pollInterval)
+    }
+  }, [status])
 
   async function checkStatus() {
     try {
@@ -165,8 +220,8 @@ export default function StripeComplete() {
 
             {/* CTAs */}
             <div className="cta-section">
-              <Pressable className="btn-primary" onClick={() => navigate('/dashboard')}>
-                Go to Dashboard
+              <Pressable className="btn-primary" onClick={() => navigate('/dashboard', { replace: true })}>
+                Go to Dashboard {redirectCountdown > 0 && `(${redirectCountdown}s)`}
               </Pressable>
               <Pressable
                 className="btn-secondary"
@@ -181,6 +236,9 @@ export default function StripeComplete() {
                 <ExternalLink size={16} />
               </Pressable>
             </div>
+            <p style={{ fontSize: 13, color: 'var(--text-tertiary)', textAlign: 'center', marginTop: 12 }}>
+              Redirecting to dashboard in {redirectCountdown}s...
+            </p>
           </>
         )}
 
@@ -191,10 +249,13 @@ export default function StripeComplete() {
             </div>
             <h2>Almost there!</h2>
             <p>Your account is being verified. This usually takes a few minutes.</p>
+            <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 8 }}>
+              Checking automatically every few seconds...
+            </p>
 
             <div className="cta-section">
               <Pressable className="btn-secondary" onClick={() => checkStatus()}>
-                Check Status
+                Check Now
               </Pressable>
               <Pressable className="btn-text" onClick={() => navigate('/dashboard')}>
                 Continue to Dashboard

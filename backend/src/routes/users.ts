@@ -31,7 +31,11 @@ users.get(
         impactItems: true,
         currency: true,
         shareUrl: true,
-        // Don't expose: userId, stripeAccountId, payoutStatus, etc.
+        paymentProvider: true,
+        // Check payment readiness without exposing IDs
+        stripeAccountId: true,
+        paystackSubaccountCode: true,
+        payoutStatus: true,
       },
     })
 
@@ -39,14 +43,33 @@ users.get(
       return c.json({ error: 'User not found' }, 404)
     }
 
+    // Check if payments are ready (has provider connected AND is active)
+    const hasPaymentProvider =
+      (profile.paymentProvider === 'stripe' && profile.stripeAccountId) ||
+      (profile.paymentProvider === 'paystack' && profile.paystackSubaccountCode)
+    const paymentsReady = hasPaymentProvider && profile.payoutStatus === 'active'
+
     // Convert cents back to dollars for frontend
+    // Don't expose sensitive IDs - only the computed paymentsReady flag
     const publicProfile = {
-      ...profile,
+      username: profile.username,
+      displayName: profile.displayName,
+      bio: profile.bio,
+      avatarUrl: profile.avatarUrl,
+      voiceIntroUrl: profile.voiceIntroUrl,
+      purpose: profile.purpose,
+      pricingModel: profile.pricingModel,
       singleAmount: profile.singleAmount ? profile.singleAmount / 100 : null,
       tiers: profile.tiers ? (profile.tiers as any[]).map(t => ({
         ...t,
         amount: t.amount / 100,
       })) : null,
+      perks: profile.perks,
+      impactItems: profile.impactItems,
+      currency: profile.currency,
+      shareUrl: profile.shareUrl,
+      paymentProvider: profile.paymentProvider,
+      paymentsReady,
     }
 
     return c.json({ profile: publicProfile })

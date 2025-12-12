@@ -40,6 +40,7 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
         impactItems: profileImpactItems,
         currency,
         paymentProvider,
+        paymentsReady,
     } = profile
 
     // Determine if this is a service page vs personal
@@ -197,6 +198,58 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
                     <Pressable className="sub-btn sub-btn-secondary" onClick={() => navigate('/dashboard')}>
                         Done
                     </Pressable>
+                </div>
+            </div>
+        )
+    }
+
+    // Payments not ready - show coming soon state
+    if (!paymentsReady) {
+        return (
+            <div className="sub-page template-boundary">
+                <div className="sub-header">
+                    <Pressable className="sub-back-btn" onClick={() => navigate(-1)}>
+                        <ChevronLeft size={20} />
+                    </Pressable>
+                    <img src="/logo.svg" alt="nate" className="sub-logo-img" />
+                    <div className="sub-header-spacer" />
+                </div>
+
+                <div className="sub-card">
+                    <div className="sub-hero">
+                        <div className="sub-hero-pattern" />
+                        <div className="sub-hero-content">
+                            <div className="sub-hero-left">
+                                <div className="sub-hero-badge">
+                                    {isService ? <Briefcase size={14} /> : <Banknote size={14} />}
+                                    <span>{isService ? 'Service' : 'Tips'}</span>
+                                </div>
+                                <div className="sub-hero-name">{name}</div>
+                            </div>
+                            <div className="sub-hero-avatar">
+                                <img
+                                    src={avatarUrl || fallbackAvatar}
+                                    alt={name}
+                                    onError={(e) => {
+                                        e.currentTarget.src = fallbackAvatar
+                                    }}
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="sub-content">
+                        <div className="sub-view sub-view-welcome">
+                            <div className="sub-welcome-content">
+                                <h1 className="sub-welcome-title">
+                                    <span className="sub-welcome-highlight">Coming Soon</span>
+                                </h1>
+                                <p className="sub-welcome-text">
+                                    {name} is still setting up their subscription page. Check back soon!
+                                </p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         )

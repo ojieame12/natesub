@@ -161,8 +161,9 @@ describe('Billing Jobs', () => {
       expect(payments.length).toBe(1)
       expect(payments[0].status).toBe('succeeded')
       expect(payments[0].amountCents).toBe(500000)
-      expect(payments[0].feeCents).toBe(50000) // 10% fee
-      expect(payments[0].netCents).toBe(450000) // 90% to creator
+      // Fees include platform + processing (12% total for personal)
+      expect(payments[0].feeCents).toBe(60000)
+      expect(payments[0].netCents).toBe(440000)
 
       // Verify activity was logged
       const activities = Array.from(dbStorage.activities.values())

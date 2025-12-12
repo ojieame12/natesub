@@ -110,12 +110,15 @@ export default function PaymentMethodStep() {
         if (!selectedMethod) return
 
         // Local validation before POST
+        const MIN_AMOUNT = 1 // Minimum $1 (Stripe requires $0.50)
         const validationErrors: string[] = []
         if (!store.username?.trim()) validationErrors.push('Username is required')
         if (!store.name?.trim()) validationErrors.push('Name is required')
         if (!store.country?.trim()) validationErrors.push('Country is required')
         if (!store.countryCode?.trim()) validationErrors.push('Country code is required')
-        if (!store.singleAmount || store.singleAmount <= 0) validationErrors.push('Price must be greater than 0')
+        if (!store.singleAmount || store.singleAmount < MIN_AMOUNT) {
+            validationErrors.push(`Minimum subscription amount is $${MIN_AMOUNT}`)
+        }
 
         if (validationErrors.length > 0) {
             setError(validationErrors.join('. '))
@@ -161,24 +164,33 @@ export default function PaymentMethodStep() {
 
             // Handle Stripe connect flow
             if (selectedMethod === 'stripe') {
-                const result = await api.stripe.connect()
+                try {
+                    const result = await api.stripe.connect()
 
-                if (result.onboardingUrl) {
-                    // Profile is saved - redirect to Stripe onboarding
-                    // Don't reset() here - AuthRedirect will route properly when user returns
-                    window.location.href = result.onboardingUrl
-                    return
-                }
+                    if (result.onboardingUrl) {
+                        // Profile is saved - redirect to Stripe onboarding
+                        // Don't reset() here - AuthRedirect will route properly when user returns
+                        window.location.href = result.onboardingUrl
+                        return
+                    }
 
-                if (result.alreadyOnboarded) {
-                    // Already connected - profile is saved, go to dashboard
-                    reset() // Clear local store since we're done
-                    navigate('/dashboard')
-                    return
-                }
+                    if (result.alreadyOnboarded) {
+                        // Already connected - profile is saved, go to dashboard
+                        reset() // Clear local store since we're done
+                        navigate('/dashboard')
+                        return
+                    }
 
-                if (result.error) {
-                    setError(result.error)
+                    if (result.error) {
+                        // Profile saved but Stripe setup failed - offer retry or redirect
+                        setError(`${result.error}. Your profile was saved - you can retry payment setup from Settings.`)
+                        setSaving(false)
+                        return
+                    }
+                } catch (stripeErr: any) {
+                    // Profile saved but Stripe call failed
+                    console.error('Stripe connect error:', stripeErr)
+                    setError('Payment setup failed. Your profile was saved - you can complete payment setup from Settings.')
                     setSaving(false)
                     return
                 }
@@ -231,17 +243,37 @@ export default function PaymentMethodStep() {
                 <div className="step-body">
                     {error && (
                         <div className="payment-error" style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 8,
                             padding: '12px 16px',
                             background: 'rgba(239, 68, 68, 0.1)',
                             borderRadius: 12,
                             marginBottom: 16,
-                            color: 'var(--error)'
                         }}>
-                            <AlertCircle size={18} />
-                            <span style={{ fontSize: 14 }}>{error}</span>
+                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, color: 'var(--error)' }}>
+                                <AlertCircle size={18} style={{ flexShrink: 0, marginTop: 2 }} />
+                                <span style={{ fontSize: 14 }}>{error}</span>
+                            </div>
+                            {error.includes('Settings') && (
+                                <Pressable
+                                    onClick={() => {
+                                        reset()
+                                        navigate('/settings/payments')
+                                    }}
+                                    style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: 4,
+                                        marginTop: 12,
+                                        padding: '8px 16px',
+                                        background: 'var(--primary)',
+                                        color: 'white',
+                                        borderRadius: 8,
+                                        fontSize: 14,
+                                        fontWeight: 500,
+                                    }}
+                                >
+                                    Go to Settings
+                                </Pressable>
+                            )}
                         </div>
                     )}
 

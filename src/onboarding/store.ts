@@ -341,14 +341,33 @@ export const useOnboardingStore = create<OnboardingStore>()(
                 // Merge server data with local state (server wins for key fields)
                 if (serverData.data) {
                     const d = serverData.data
+                    // Identity
                     if (d.name) updates.name = d.name
                     if (d.country) updates.country = d.country
                     if (d.countryCode) updates.countryCode = d.countryCode
                     if (d.currency) updates.currency = d.currency
                     if (d.username) updates.username = d.username
+                    // Pricing
                     if (d.singleAmount !== undefined) updates.singleAmount = d.singleAmount
                     if (d.pricingModel) updates.pricingModel = d.pricingModel
                     if (d.purpose) updates.purpose = d.purpose
+                    if (d.tiers) updates.tiers = d.tiers
+                    // Content
+                    if (d.bio) updates.bio = d.bio
+                    if (d.avatarUrl) updates.avatarUrl = d.avatarUrl
+                    if (d.voiceIntroUrl) updates.voiceIntroUrl = d.voiceIntroUrl
+                    if (d.hasVoiceIntro !== undefined) updates.hasVoiceIntro = d.hasVoiceIntro
+                    if (d.perks) updates.perks = d.perks
+                    if (d.impactItems) updates.impactItems = d.impactItems
+                    // Service-specific
+                    if (d.serviceDescription) updates.serviceDescription = d.serviceDescription
+                    if (d.serviceDeliverables) updates.serviceDeliverables = d.serviceDeliverables
+                    if (d.serviceCredential) updates.serviceCredential = d.serviceCredential
+                    if (d.generatedBio) updates.generatedBio = d.generatedBio
+                    if (d.generatedPerks) updates.generatedPerks = d.generatedPerks
+                    if (d.generatedImpact) updates.generatedImpact = d.generatedImpact
+                    // Payment
+                    if (d.paymentProvider) updates.paymentProvider = d.paymentProvider
                 }
 
                 return updates
@@ -357,7 +376,8 @@ export const useOnboardingStore = create<OnboardingStore>()(
         {
             name: 'natepay-onboarding',
             partialize: (state) => ({
-                // Persist everything except currentStep, audio blob, and isGenerating
+                // Persist key state for resume (except audio blob and isGenerating)
+                currentStep: state.currentStep,
                 branch: state.branch,
                 serviceDescription: state.serviceDescription,
                 // Note: serviceDescriptionAudio is NOT persisted (Blob not serializable)

@@ -64,10 +64,15 @@ export default function PersonalPricingStep() {
         updateTier(id, { name })
     }
 
-    // Validation
+    // Validation - minimum $1 for subscriptions (Stripe requires $0.50 minimum)
+    const MIN_AMOUNT = 1
     const isValid = pricingModel === 'single'
-        ? (singleAmount && singleAmount > 0)
-        : (tiers.length > 0 && tiers.every(t => t.amount > 0))
+        ? (singleAmount && singleAmount >= MIN_AMOUNT)
+        : (tiers.length > 0 && tiers.every(t => t.amount >= MIN_AMOUNT))
+
+    const showMinAmountWarning = pricingModel === 'single'
+        ? (singleAmount !== null && singleAmount > 0 && singleAmount < MIN_AMOUNT)
+        : (tiers.some(t => t.amount > 0 && t.amount < MIN_AMOUNT))
 
     const handleContinue = async () => {
         // Save pricing milestone to server
@@ -180,6 +185,17 @@ export default function PersonalPricingStep() {
                                 </Pressable>
                             )}
                         </>
+                    )}
+
+                    {showMinAmountWarning && (
+                        <p style={{
+                            fontSize: 13,
+                            color: 'var(--status-warning)',
+                            textAlign: 'center',
+                            marginTop: 16,
+                        }}>
+                            Minimum subscription amount is {currencySymbol}{MIN_AMOUNT}
+                        </p>
                     )}
                 </div>
 

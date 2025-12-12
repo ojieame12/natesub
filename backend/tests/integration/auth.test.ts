@@ -2,13 +2,15 @@ import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import app from '../../src/app.js'
 import { db } from '../../src/db/client.js'
 import { resetDatabase, disconnectDatabase } from '../helpers/db.js'
+// @ts-expect-error mock reset helper
+import { __reset as resetRedis } from '../../src/db/redis.js'
 
-const mockSendMagicLinkEmail = vi.fn()
+const mockSendOtpEmail = vi.fn()
 
 // Mock email to keep tests offline
 vi.mock('../../src/services/email.js', () => ({
-  sendMagicLinkEmail: (email: string, link: string) => {
-    mockSendMagicLinkEmail(email, link)
+  sendOtpEmail: (email: string, otp: string) => {
+    mockSendOtpEmail(email, otp)
     return Promise.resolve()
   },
   sendWelcomeEmail: vi.fn(),
@@ -20,7 +22,8 @@ vi.mock('../../src/services/email.js', () => ({
 describe('auth magic link flow', () => {
   beforeEach(async () => {
     await resetDatabase()
-    mockSendMagicLinkEmail.mockReset()
+    mockSendOtpEmail.mockReset()
+    resetRedis?.()
   })
 
   afterAll(async () => {
@@ -40,7 +43,7 @@ describe('auth magic link flow', () => {
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body).toMatchObject({ success: true })
-    expect(mockSendMagicLinkEmail).toHaveBeenCalledTimes(1)
+    expect(mockSendOtpEmail).toHaveBeenCalledTimes(1)
 
     const storedToken = await db.magicLinkToken.findFirst({
       where: { email: 'test@example.com' },
@@ -58,9 +61,8 @@ describe('auth magic link flow', () => {
       })
     )
 
-    expect(mockSendMagicLinkEmail).toHaveBeenCalledTimes(1)
-    const magicLink = mockSendMagicLinkEmail.mock.calls[0]?.[1] as string
-    const token = magicLink ? new URL(magicLink).searchParams.get('token') : null
+    expect(mockSendOtpEmail).toHaveBeenCalledTimes(1)
+    const token = mockSendOtpEmail.mock.calls[0]?.[1] as string
     expect(token).toBeTruthy()
 
     const verifyRes = await app.fetch(

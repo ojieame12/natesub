@@ -798,5 +798,27 @@ describe('onboarding endpoints', () => {
       expect(body.onboardingData).toMatchObject({ displayName: 'Verify User' })
       expect(body.redirectTo).toContain('/onboarding')
     })
+
+    it('creates new user with default onboarding step after OTP', async () => {
+      const token = '654321'
+      await db.magicLinkToken.create({
+        data: {
+          email: 'newuser@test.com',
+          tokenHash: hashToken(token),
+          expiresAt: new Date(Date.now() + 5 * 60 * 1000),
+        },
+      })
+
+      const res = await app.fetch(new Request(`http://localhost/auth/verify?token=${token}`))
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.success).toBe(true)
+      // New users start at post-OTP step 3
+      expect(body.onboardingStep).toBe(3)
+      expect(body.redirectTo).toBe('/onboarding?step=3')
+
+      const user = await db.user.findUnique({ where: { email: 'newuser@test.com' } })
+      expect(user?.onboardingStep).toBe(3)
+    })
   })
 })

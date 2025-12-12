@@ -32,14 +32,38 @@ import PayrollDetail from './payroll/PayrollDetail'
 import StripeComplete from './StripeComplete'
 import StripeRefresh from './StripeRefresh'
 import { useCurrentUser } from './api/hooks'
-import { getAuthToken } from './api/client'
+import { getAuthToken, AUTH_ERROR_EVENT } from './api/client'
 import './index.css'
+
+// Global auth error handler - listens for 401 errors and redirects to login
+function AuthErrorHandler() {
+  const navigate = useNavigate()
+  const location = useLocation()
+  const { reset } = useOnboardingStore()
+
+  useEffect(() => {
+    function handleAuthError() {
+      // Don't redirect if already on onboarding
+      if (location.pathname === '/onboarding' || location.pathname === '/') {
+        return
+      }
+
+      // Clear onboarding store and redirect to login
+      reset()
+      navigate('/onboarding', { replace: true, state: { sessionExpired: true } })
+    }
+
+    window.addEventListener(AUTH_ERROR_EVENT, handleAuthError)
+    return () => window.removeEventListener(AUTH_ERROR_EVENT, handleAuthError)
+  }, [navigate, location.pathname, reset])
+
+  return null
+}
 
 // Auth check on app launch - redirects based on user state
 function AuthRedirect() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { hydrateFromServer } = useOnboardingStore()
   const [checked, setChecked] = useState(false)
 
   // Only check auth if we have a token
@@ -62,7 +86,7 @@ function AuthRedirect() {
 
     // If we have user data, check their state
     if (user?.onboarding) {
-      const { hasProfile, hasActivePayment, step, branch, data } = user.onboarding
+      const { hasProfile, hasActivePayment } = user.onboarding
 
       // Only redirect if we're on a route that should be redirected
       const shouldRedirect = location.pathname === '/' ||
@@ -70,14 +94,14 @@ function AuthRedirect() {
 
       if (shouldRedirect) {
         if (hasProfile && hasActivePayment) {
+          // Fully set up - go to dashboard
           navigate('/dashboard', { replace: true })
         } else if (hasProfile && !hasActivePayment) {
+          // Profile exists but no payment - go to payment settings
           navigate('/settings/payments', { replace: true })
-        } else if (step && step >= 3) {
-          // Resume onboarding from saved step
-          hydrateFromServer({ step, branch, data })
-          navigate('/onboarding', { replace: true })
         }
+        // Note: Don't auto-resume onboarding here - let OtpStep handle it
+        // after the user verifies their email. This prevents bypassing OTP.
       }
     }
 
@@ -91,6 +115,7 @@ function App() {
   return (
     <BrowserRouter>
       <AuthRedirect />
+      <AuthErrorHandler />
       <Routes>
         {/* Onboarding */}
         <Route path="/onboarding" element={<OnboardingFlow />} />

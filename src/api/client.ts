@@ -58,6 +58,7 @@ export interface Profile {
   paymentProvider: string | null
   payoutStatus: 'pending' | 'active' | 'restricted'
   shareUrl: string | null
+  paymentsReady?: boolean // For public profiles - indicates if checkout will work
 }
 
 export interface Tier {
@@ -145,6 +146,13 @@ export interface Update {
   createdAt: string
 }
 
+// Auth error event for global handling
+export const AUTH_ERROR_EVENT = 'nate:auth_error'
+
+function dispatchAuthError() {
+  window.dispatchEvent(new CustomEvent(AUTH_ERROR_EVENT))
+}
+
 // Base fetch wrapper
 async function apiFetch<T>(
   path: string,
@@ -164,15 +172,35 @@ async function apiFetch<T>(
     headers['Authorization'] = `Bearer ${token}`
   }
 
-  const response = await fetch(url, {
-    ...options,
-    credentials: 'include', // Still include cookies for web
-    headers,
-  })
+  let response: Response
+  try {
+    response = await fetch(url, {
+      ...options,
+      credentials: 'include', // Still include cookies for web
+      headers,
+    })
+  } catch (networkError) {
+    // Network error (offline, CORS, DNS failure) - don't clear auth
+    throw {
+      error: 'Network error. Please check your connection.',
+      status: 0,
+    } as ApiError
+  }
 
-  const data = await response.json()
+  let data: any
+  try {
+    data = await response.json()
+  } catch {
+    data = { error: 'Invalid response from server' }
+  }
 
   if (!response.ok) {
+    // Only clear auth on confirmed 401 from server (not network issues)
+    if (response.status === 401) {
+      clearAuthToken()
+      dispatchAuthError()
+    }
+
     const error: ApiError = {
       error: data.error || 'Request failed',
       status: response.status,

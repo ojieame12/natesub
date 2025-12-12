@@ -79,6 +79,7 @@ for (const [key, value] of Object.entries(defaults)) {
 // Global mock for Redis - prevents connection attempts
 vi.mock('../src/db/redis.js', () => {
   const store = new Map<string, string | number>()
+  const reset = () => store.clear()
   return {
     redis: {
       get: vi.fn(async (key: string) => store.get(key) ?? null),
@@ -95,6 +96,7 @@ vi.mock('../src/db/redis.js', () => {
       on: vi.fn(),
       quit: vi.fn(),
     },
+    __reset: reset,
   }
 })
 
@@ -110,6 +112,7 @@ const dbStorage = {
   updates: new Map<string, any>(),
   activities: new Map<string, any>(),
   payrollPeriods: new Map<string, any>(),
+  pageViews: new Map<string, any>(),
 }
 
 const generateId = () => randomUUID()
@@ -216,6 +219,26 @@ function createMockModel(store: Map<string, any>) {
       }
       return null
     }),
+    updateMany: vi.fn(async ({ where, data }: any = {}) => {
+      let count = 0
+      for (const [id, item] of store.entries()) {
+        const match = !where || Object.entries(where).every(([k, v]) => {
+          if (v && typeof v === 'object' && v.gte !== undefined) {
+            return item[k] >= v.gte
+          }
+          if (v && typeof v === 'object' && v.lte !== undefined) {
+            return item[k] <= v.lte
+          }
+          return item[k] === v
+        })
+        if (match) {
+          const updated = { ...item, ...data, updatedAt: new Date() }
+          store.set(id, updated)
+          count++
+        }
+      }
+      return { count }
+    }),
     findFirst: vi.fn(async ({ where, include, orderBy }: any = {}) => {
       if (!where) {
         const first = store.values().next().value
@@ -319,6 +342,7 @@ vi.mock('../src/db/client.js', () => ({
     update: createMockModel(dbStorage.updates),
     activity: createMockModel(dbStorage.activities),
     payrollPeriod: createMockModel(dbStorage.payrollPeriods),
+    pageView: createMockModel(dbStorage.pageViews),
     $connect: vi.fn(),
     $disconnect: vi.fn(),
     $executeRawUnsafe: vi.fn(async () => {
@@ -328,5 +352,6 @@ vi.mock('../src/db/client.js', () => ({
   },
 }))
 
+// Export for tests to access storage directly
 // Export for tests to access storage directly
 export { dbStorage }
