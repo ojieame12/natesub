@@ -223,56 +223,61 @@ async function handleCheckoutCompleted(event: Stripe.Event) {
     tierName = tier?.name || null
   }
 
-  // Create subscription record
-  const subscription = await db.subscription.create({
-    data: {
-      creatorId,
-      subscriberId: subscriber.id,
-      tierId: tierId || null,
-      tierName,
-      amount: session.amount_total || 0,
-      currency: session.currency?.toUpperCase() || 'USD',
-      interval: session.mode === 'subscription' ? 'month' : 'one_time',
-      status: 'active',
-      stripeSubscriptionId: session.subscription as string || null,
-      stripeCustomerId: session.customer as string || null,
-    },
-  })
-
   // Calculate fees based on creator's purpose (personal: 10%, service: 8%)
   const purpose = creatorProfile?.purpose as UserPurpose
   const { totalFeeCents: feeCents, netCents } = calculateFees(session.amount_total || 0, purpose)
 
-  // Create payment record with idempotency key
-  await db.payment.create({
-    data: {
-      subscriptionId: subscription.id,
-      creatorId,
-      subscriberId: subscriber.id,
-      amountCents: session.amount_total || 0,
-      currency: session.currency?.toUpperCase() || 'USD',
-      feeCents,
-      netCents,
-      type: session.mode === 'subscription' ? 'recurring' : 'one_time',
-      status: 'succeeded',
-      stripeEventId: event.id, // Idempotency key
-    },
-  })
-
-  // Create activity event
-  await db.activity.create({
-    data: {
-      userId: creatorId,
-      type: 'subscription_created',
-      payload: {
-        subscriptionId: subscription.id,
-        subscriberEmail: session.customer_details?.email,
-        subscriberName: session.customer_details?.name,
+  // Use transaction to ensure atomic creation of subscription + payment + activity
+  const subscription = await db.$transaction(async (tx) => {
+    // Create subscription record
+    const newSubscription = await tx.subscription.create({
+      data: {
+        creatorId,
+        subscriberId: subscriber.id,
+        tierId: tierId || null,
         tierName,
-        amount: session.amount_total,
-        currency: session.currency,
+        amount: session.amount_total || 0,
+        currency: session.currency?.toUpperCase() || 'USD',
+        interval: session.mode === 'subscription' ? 'month' : 'one_time',
+        status: 'active',
+        stripeSubscriptionId: session.subscription as string || null,
+        stripeCustomerId: session.customer as string || null,
       },
-    },
+    })
+
+    // Create payment record with idempotency key
+    await tx.payment.create({
+      data: {
+        subscriptionId: newSubscription.id,
+        creatorId,
+        subscriberId: subscriber.id,
+        amountCents: session.amount_total || 0,
+        currency: session.currency?.toUpperCase() || 'USD',
+        feeCents,
+        netCents,
+        type: session.mode === 'subscription' ? 'recurring' : 'one_time',
+        status: 'succeeded',
+        stripeEventId: event.id, // Idempotency key
+      },
+    })
+
+    // Create activity event
+    await tx.activity.create({
+      data: {
+        userId: creatorId,
+        type: 'subscription_created',
+        payload: {
+          subscriptionId: newSubscription.id,
+          subscriberEmail: session.customer_details?.email,
+          subscriberName: session.customer_details?.name,
+          tierName,
+          amount: session.amount_total,
+          currency: session.currency,
+        },
+      },
+    })
+
+    return newSubscription
   })
 
   // Send notification email to creator
@@ -474,6 +479,11 @@ async function handleChargeRefunded(event: Stripe.Event) {
   const subscription = await db.subscription.findFirst({
     where: { stripeCustomerId },
     orderBy: { createdAt: 'desc' },
+    include: {
+      creator: {
+        include: { profile: { select: { purpose: true } } },
+      },
+    },
   })
 
   if (!subscription) {
@@ -483,6 +493,10 @@ async function handleChargeRefunded(event: Stripe.Event) {
 
   const refundAmount = charge.amount_refunded
 
+  // Calculate refund fees based on creator's purpose (reverse the original fee)
+  const creatorPurpose = subscription.creator?.profile?.purpose as UserPurpose
+  const { totalFeeCents: feeCents, netCents } = calculateFees(refundAmount, creatorPurpose)
+
   // Create refund payment record
   await db.payment.create({
     data: {
@@ -491,8 +505,8 @@ async function handleChargeRefunded(event: Stripe.Event) {
       subscriberId: subscription.subscriberId,
       amountCents: -refundAmount, // Negative for refund
       currency: charge.currency.toUpperCase(),
-      feeCents: -Math.round(refundAmount * 0.1), // Reverse the fee
-      netCents: -Math.round(refundAmount * 0.9),
+      feeCents: -feeCents, // Reverse the fee (using actual creator rate)
+      netCents: -netCents,
       type: subscription.interval === 'month' ? 'recurring' : 'one_time',
       status: 'refunded',
       stripeEventId: event.id,
@@ -698,18 +712,22 @@ webhooks.post('/paystack', async (c) => {
 
   const { event, data } = payload
 
-  // Use transaction reference or ID for idempotency
+  // Use transaction reference or ID for idempotency - REQUIRED
   const eventId = data.id?.toString() || data.reference
 
-  // Idempotency check
-  if (eventId) {
-    const existingPayment = await db.payment.findUnique({
-      where: { paystackEventId: eventId },
-    })
+  if (!eventId) {
+    console.error('[paystack] Webhook missing ID/reference - cannot ensure idempotency:', { event, data })
+    return c.json({ error: 'Invalid webhook - missing transaction ID or reference' }, 400)
+  }
 
-    if (existingPayment) {
-      return c.json({ received: true, status: 'already_processed' })
-    }
+  // Idempotency check - prevent duplicate processing
+  const existingPayment = await db.payment.findUnique({
+    where: { paystackEventId: eventId },
+  })
+
+  if (existingPayment) {
+    console.log(`[paystack] Webhook already processed: ${eventId}`)
+    return c.json({ received: true, status: 'already_processed' })
   }
 
   try {
@@ -826,70 +844,75 @@ async function handlePaystackChargeSuccess(data: any, eventId: string) {
   // Create or update subscription (upsert based on unique constraint)
   const subscriptionInterval = interval === 'month' ? 'month' : 'one_time'
 
-  const subscription = await db.subscription.upsert({
-    where: {
-      subscriberId_creatorId_interval: {
-        subscriberId: subscriber.id,
-        creatorId,
-        interval: subscriptionInterval,
+  // Use transaction to ensure atomic creation of subscription + payment + activity
+  const subscription = await db.$transaction(async (tx) => {
+    const newSubscription = await tx.subscription.upsert({
+      where: {
+        subscriberId_creatorId_interval: {
+          subscriberId: subscriber.id,
+          creatorId,
+          interval: subscriptionInterval,
+        },
       },
-    },
-    create: {
-      creatorId,
-      subscriberId: subscriber.id,
-      tierId: tierId || null,
-      tierName,
-      amount,
-      currency: currency?.toUpperCase() || 'NGN',
-      interval: subscriptionInterval,
-      status: 'active',
-      paystackAuthorizationCode: authorization?.authorization_code || null,
-      paystackCustomerCode: customer?.customer_code || null,
-      currentPeriodEnd: interval === 'month'
-        ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // +30 days
-        : null,
-    },
-    update: {
-      paystackAuthorizationCode: authorization?.authorization_code || null,
-      paystackCustomerCode: customer?.customer_code || null,
-      ltvCents: { increment: amount },
-      currentPeriodEnd: interval === 'month'
-        ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-        : undefined,
-    },
-  })
-
-  // Create payment record with idempotency key
-  await db.payment.create({
-    data: {
-      subscriptionId: subscription.id,
-      creatorId,
-      subscriberId: subscriber.id,
-      amountCents: amount,
-      currency: currency?.toUpperCase() || 'NGN',
-      feeCents,
-      netCents,
-      type: subscriptionInterval === 'month' ? 'recurring' : 'one_time',
-      status: 'succeeded',
-      paystackEventId: eventId,
-      paystackTransactionRef: reference,
-    },
-  })
-
-  // Create activity event
-  await db.activity.create({
-    data: {
-      userId: creatorId,
-      type: 'subscription_created',
-      payload: {
-        subscriptionId: subscription.id,
-        subscriberEmail: customer?.email,
+      create: {
+        creatorId,
+        subscriberId: subscriber.id,
+        tierId: tierId || null,
         tierName,
         amount,
-        currency,
-        provider: 'paystack',
+        currency: currency?.toUpperCase() || 'NGN',
+        interval: subscriptionInterval,
+        status: 'active',
+        paystackAuthorizationCode: authorization?.authorization_code || null,
+        paystackCustomerCode: customer?.customer_code || null,
+        currentPeriodEnd: interval === 'month'
+          ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // +30 days
+          : null,
       },
-    },
+      update: {
+        paystackAuthorizationCode: authorization?.authorization_code || null,
+        paystackCustomerCode: customer?.customer_code || null,
+        ltvCents: { increment: amount },
+        currentPeriodEnd: interval === 'month'
+          ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+          : undefined,
+      },
+    })
+
+    // Create payment record with idempotency key
+    await tx.payment.create({
+      data: {
+        subscriptionId: newSubscription.id,
+        creatorId,
+        subscriberId: subscriber.id,
+        amountCents: amount,
+        currency: currency?.toUpperCase() || 'NGN',
+        feeCents,
+        netCents,
+        type: subscriptionInterval === 'month' ? 'recurring' : 'one_time',
+        status: 'succeeded',
+        paystackEventId: eventId,
+        paystackTransactionRef: reference,
+      },
+    })
+
+    // Create activity event
+    await tx.activity.create({
+      data: {
+        userId: creatorId,
+        type: 'subscription_created',
+        payload: {
+          subscriptionId: newSubscription.id,
+          subscriberEmail: customer?.email,
+          tierName,
+          amount,
+          currency,
+          provider: 'paystack',
+        },
+      },
+    })
+
+    return newSubscription
   })
 
   // Send notification email to creator

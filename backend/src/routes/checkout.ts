@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { db } from '../db/client.js'
-import { createCheckoutSession } from '../services/stripe.js'
+import { createCheckoutSession, getAccountStatus } from '../services/stripe.js'
 import { initializeTransaction, generateReference, isPaystackSupported, type PaystackCountry } from '../services/paystack.js'
 import { env } from '../config/env.js'
 
@@ -107,7 +107,19 @@ checkout.post(
         })
       }
 
-      // Default to Stripe
+      // Default to Stripe - verify account is actually active first
+      if (!profile.stripeAccountId) {
+        return c.json({ error: 'Creator has not connected Stripe' }, 400)
+      }
+
+      // Verify with Stripe that account can accept payments
+      const stripeStatus = await getAccountStatus(profile.stripeAccountId)
+      if (!stripeStatus.chargesEnabled) {
+        return c.json({
+          error: 'Creator payment account is not fully set up. Please ask the creator to complete their payment setup.'
+        }, 400)
+      }
+
       const session = await createCheckoutSession({
         creatorId: profile.userId,
         tierId,
