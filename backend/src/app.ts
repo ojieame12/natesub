@@ -21,6 +21,7 @@ import ai from './routes/ai.js'
 import jobs from './routes/jobs.js'
 import payroll from './routes/payroll.js'
 import billing from './routes/billing.js'
+import analytics from './routes/analytics.js'
 
 const app = new Hono()
 
@@ -78,6 +79,7 @@ app.route('/ai', ai)
 app.route('/jobs', jobs)
 app.route('/payroll', payroll)
 app.route('/billing', billing)
+app.route('/analytics', analytics)
 
 // 404 handler
 app.notFound((c) => c.json({ error: 'Not found' }, 404))

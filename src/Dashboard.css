@@ -823,3 +823,77 @@
     font-size: 12px;
     opacity: 0.8;
 }
+
+/* ============================================
+   Analytics Card
+   ============================================ */
+
+.analytics-card {
+    background: var(--neutral-50);
+    border-radius: var(--radius-lg);
+    padding: var(--space-md);
+    margin-bottom: var(--space-md);
+}
+
+.analytics-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--space-md);
+}
+
+.analytics-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.analytics-period {
+    font-size: 12px;
+    color: var(--text-tertiary);
+}
+
+.analytics-metrics {
+    display: flex;
+    gap: var(--space-sm);
+}
+
+.analytics-metric {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm);
+    background: white;
+    border-radius: var(--radius-md);
+}
+
+.analytics-metric-icon {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--neutral-100);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+}
+
+.analytics-metric-content {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.analytics-metric-value {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1;
+}
+
+.analytics-metric-label {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    line-height: 1;
+}

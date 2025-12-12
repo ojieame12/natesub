@@ -5,6 +5,7 @@ import { Hono } from 'hono'
 import { env } from '../config/env.js'
 import { processRecurringBilling, processRetries } from '../jobs/billing.js'
 import { generatePayrollPeriods } from '../jobs/payroll.js'
+import { sendRenewalReminders, sendDunningEmails, sendCancellationEmails } from '../jobs/notifications.js'
 
 const jobs = new Hono()
 
@@ -85,11 +86,91 @@ jobs.post('/payroll', async (c) => {
   }
 })
 
+// Send renewal reminders (run daily, morning)
+jobs.post('/reminders', async (c) => {
+  console.log('[jobs] Starting renewal reminders job')
+
+  try {
+    const result = await sendRenewalReminders()
+
+    console.log(`[jobs] Reminders complete: ${result.sent}/${result.processed} sent`)
+
+    return c.json({
+      success: true,
+      ...result,
+    })
+  } catch (error: any) {
+    console.error('[jobs] Reminders job failed:', error.message)
+    return c.json({ error: 'Reminders job failed', message: error.message }, 500)
+  }
+})
+
+// Send dunning emails for failed payments (run daily, after billing)
+jobs.post('/dunning', async (c) => {
+  console.log('[jobs] Starting dunning emails job')
+
+  try {
+    const result = await sendDunningEmails()
+
+    console.log(`[jobs] Dunning complete: ${result.sent}/${result.processed} sent`)
+
+    return c.json({
+      success: true,
+      ...result,
+    })
+  } catch (error: any) {
+    console.error('[jobs] Dunning job failed:', error.message)
+    return c.json({ error: 'Dunning job failed', message: error.message }, 500)
+  }
+})
+
+// Send cancellation notifications (run daily)
+jobs.post('/cancellations', async (c) => {
+  console.log('[jobs] Starting cancellation emails job')
+
+  try {
+    const result = await sendCancellationEmails()
+
+    console.log(`[jobs] Cancellations complete: ${result.sent}/${result.processed} sent`)
+
+    return c.json({
+      success: true,
+      ...result,
+    })
+  } catch (error: any) {
+    console.error('[jobs] Cancellations job failed:', error.message)
+    return c.json({ error: 'Cancellations job failed', message: error.message }, 500)
+  }
+})
+
+// Run all notification jobs (convenience endpoint)
+jobs.post('/notifications', async (c) => {
+  console.log('[jobs] Starting all notification jobs')
+
+  try {
+    const [reminders, dunning, cancellations] = await Promise.all([
+      sendRenewalReminders(),
+      sendDunningEmails(),
+      sendCancellationEmails(),
+    ])
+
+    return c.json({
+      success: true,
+      reminders,
+      dunning,
+      cancellations,
+    })
+  } catch (error: any) {
+    console.error('[jobs] Notifications job failed:', error.message)
+    return c.json({ error: 'Notifications job failed', message: error.message }, 500)
+  }
+})
+
 // Health check for job system
 jobs.get('/health', async (c) => {
   return c.json({
     status: 'ok',
-    jobs: ['billing', 'retries', 'payroll'],
+    jobs: ['billing', 'retries', 'payroll', 'reminders', 'dunning', 'cancellations', 'notifications'],
     timestamp: new Date().toISOString(),
   })
 })

@@ -20,10 +20,12 @@ import {
   Clock,
   Activity,
   FileText,
+  Eye,
+  TrendingUp,
 } from 'lucide-react'
 import { Pressable, useToast, Skeleton, SkeletonList, ErrorState } from './components'
 import { useViewTransition } from './hooks'
-import { useMetrics, useActivity, useProfile } from './api/hooks'
+import { useMetrics, useActivity, useProfile, useAnalyticsStats } from './api/hooks'
 import { getCurrencySymbol } from './utils/currency'
 import './Dashboard.css'
 
@@ -108,10 +110,12 @@ export default function Dashboard() {
   const { data: profileData, isLoading: profileLoading } = useProfile()
   const { data: metricsData, isLoading: metricsLoading, isError: metricsError, refetch: refetchMetrics } = useMetrics()
   const { data: activityData, isLoading: activityLoading, isError: activityError, refetch: refetchActivity } = useActivity(5)
+  const { data: analyticsData } = useAnalyticsStats()
 
   const profile = profileData?.profile
   const metrics = metricsData?.metrics
   const activities = activityData?.pages?.[0]?.activities || []
+  const analytics = analyticsData
   const currencySymbol = getCurrencySymbol(profile?.currency || 'USD')
   const isService = profile?.purpose === 'service'
 
@@ -344,6 +348,45 @@ export default function Dashboard() {
             </div>
           </div>
         </section>
+
+        {/* Analytics Card */}
+        {analytics && (analytics.views.week > 0 || analytics.funnel.conversions > 0) && (
+          <section className="analytics-card">
+            <div className="analytics-header">
+              <span className="analytics-title">Page Analytics</span>
+              <span className="analytics-period">Last 7 days</span>
+            </div>
+            <div className="analytics-metrics">
+              <div className="analytics-metric">
+                <div className="analytics-metric-icon">
+                  <Eye size={16} />
+                </div>
+                <div className="analytics-metric-content">
+                  <span className="analytics-metric-value">{analytics.views.week}</span>
+                  <span className="analytics-metric-label">Views</span>
+                </div>
+              </div>
+              <div className="analytics-metric">
+                <div className="analytics-metric-icon">
+                  <UserPlus size={16} />
+                </div>
+                <div className="analytics-metric-content">
+                  <span className="analytics-metric-value">{analytics.uniqueVisitors.week}</span>
+                  <span className="analytics-metric-label">Visitors</span>
+                </div>
+              </div>
+              <div className="analytics-metric">
+                <div className="analytics-metric-icon">
+                  <TrendingUp size={16} />
+                </div>
+                <div className="analytics-metric-content">
+                  <span className="analytics-metric-value">{analytics.rates.overall}%</span>
+                  <span className="analytics-metric-label">Conversion</span>
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
 
         {/* Payment Status Banner */}
         {profile?.paymentProvider === 'bank' && (

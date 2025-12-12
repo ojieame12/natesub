@@ -593,6 +593,31 @@ export function usePayrollVerify(code: string) {
   })
 }
 
+// ============================================
+// ANALYTICS HOOKS
+// ============================================
+
+export function useAnalyticsStats() {
+  return useQuery({
+    queryKey: ['analytics', 'stats'],
+    queryFn: api.analytics.getStats,
+    staleTime: 60 * 1000, // 1 minute
+  })
+}
+
+export function useRecordPageView() {
+  return useMutation({
+    mutationFn: api.analytics.recordView,
+  })
+}
+
+export function useUpdatePageView() {
+  return useMutation({
+    mutationFn: ({ viewId, data }: { viewId: string; data: { reachedPayment?: boolean; startedCheckout?: boolean } }) =>
+      api.analytics.updateView(viewId, data),
+  })
+}
+
 // Helper to convert Blob to base64
 export async function blobToBase64(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {

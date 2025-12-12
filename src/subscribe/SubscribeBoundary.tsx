@@ -1,11 +1,11 @@
-import { useState, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useRef, useEffect } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Check, Play, Banknote, Briefcase, X, ChevronLeft } from 'lucide-react'
 import Lottie from 'lottie-react'
 import swipeAnimation from './animations/swipe-left.json'
 import moneyAnimation from './animations/money-send.json'
 import { Pressable } from '../components'
-import { useCreateCheckout } from '../api/hooks'
+import { useCreateCheckout, useRecordPageView, useUpdatePageView } from '../api/hooks'
 import type { Profile } from '../api/client'
 import { getCurrencySymbol } from '../utils/currency'
 import './template-one.css'
@@ -19,10 +19,14 @@ interface SubscribeBoundaryProps {
 
 export default function SubscribeBoundary({ profile, canceled }: SubscribeBoundaryProps) {
     const navigate = useNavigate()
+    const [searchParams] = useSearchParams()
     const { mutateAsync: createCheckout, isPending: isCheckoutLoading } = useCreateCheckout()
+    const { mutateAsync: recordPageView } = useRecordPageView()
+    const { mutateAsync: updatePageView } = useUpdatePageView()
 
     // Extract profile data
     const {
+        id: profileId,
         username,
         displayName,
         bio,
@@ -49,6 +53,44 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
     const [isPlaying, setIsPlaying] = useState(false)
     const [showTerms, setShowTerms] = useState(false)
 
+    // Analytics tracking
+    const viewIdRef = useRef<string | null>(null)
+    const hasTrackedPayment = useRef(false)
+
+    // Record page view on mount
+    useEffect(() => {
+        if (!profileId) return
+
+        const trackView = async () => {
+            try {
+                const result = await recordPageView({
+                    profileId,
+                    referrer: document.referrer || undefined,
+                    utmSource: searchParams.get('utm_source') || undefined,
+                    utmMedium: searchParams.get('utm_medium') || undefined,
+                    utmCampaign: searchParams.get('utm_campaign') || undefined,
+                })
+                viewIdRef.current = result.viewId
+            } catch (err) {
+                // Silently fail - analytics shouldn't break the page
+                console.error('Failed to record page view:', err)
+            }
+        }
+
+        trackView()
+    }, [profileId])
+
+    // Track when user reaches payment screen
+    useEffect(() => {
+        if (currentView === 'payment' && viewIdRef.current && !hasTrackedPayment.current) {
+            hasTrackedPayment.current = true
+            updatePageView({
+                viewId: viewIdRef.current,
+                data: { reachedPayment: true },
+            }).catch(() => {}) // Silently fail
+        }
+    }, [currentView])
+
     // Swipe handling
     const touchStartX = useRef<number>(0)
     const touchEndX = useRef<number>(0)
@@ -69,6 +111,15 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
 
     const handleSubscribe = async () => {
         setCheckoutError(null)
+
+        // Track checkout start
+        if (viewIdRef.current) {
+            updatePageView({
+                viewId: viewIdRef.current,
+                data: { startedCheckout: true },
+            }).catch(() => {}) // Silently fail
+        }
+
         try {
             const result = await createCheckout({
                 creatorUsername: username,

@@ -402,6 +402,36 @@ model Activity {
 }
 
 // ============================================
+// PAGE VIEWS & ANALYTICS
+// ============================================
+
+model PageView {
+  id        String   @id @default(uuid())
+  profileId String
+
+  // Visitor info (anonymous - no PII)
+  visitorHash   String?  // Hashed IP + UA for unique visitor counting
+  referrer      String?  // Where they came from
+  utmSource     String?  // UTM tracking
+  utmMedium     String?
+  utmCampaign   String?
+
+  // Device info
+  deviceType    String?  // mobile, tablet, desktop
+  country       String?  // From IP geolocation
+
+  // Conversion tracking
+  reachedPayment Boolean @default(false)  // Did they swipe to payment screen?
+  startedCheckout Boolean @default(false) // Did they click subscribe?
+
+  createdAt DateTime @default(now())
+
+  @@index([profileId, createdAt(sort: Desc)])
+  @@index([visitorHash])
+  @@map("page_views")
+}
+
+// ============================================
 // PAYROLL (Service Branch Only)
 // ============================================
 

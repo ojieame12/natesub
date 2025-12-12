@@ -754,6 +754,65 @@ export const payroll = {
     }>(`/payroll/verify/${code}`),
 }
 
+// ============================================
+// ANALYTICS
+// ============================================
+
+export interface AnalyticsStats {
+  views: {
+    today: number
+    week: number
+    month: number
+    total: number
+  }
+  uniqueVisitors: {
+    today: number
+    week: number
+    month: number
+  }
+  funnel: {
+    views: number
+    reachedPayment: number
+    startedCheckout: number
+    conversions: number
+  }
+  rates: {
+    viewToPayment: number
+    paymentToCheckout: number
+    checkoutToSubscribe: number
+    overall: number
+  }
+  devices: Array<{ type: string; count: number }>
+  referrers: Array<{ source: string; count: number }>
+  dailyViews: Array<{ date: string; count: number }>
+}
+
+export const analytics = {
+  // Record a page view (public, no auth)
+  recordView: (data: {
+    profileId: string
+    referrer?: string
+    utmSource?: string
+    utmMedium?: string
+    utmCampaign?: string
+  }) =>
+    apiFetch<{ viewId: string; existing?: boolean }>('/analytics/view', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  // Update conversion progress (public, no auth)
+  updateView: (viewId: string, data: { reachedPayment?: boolean; startedCheckout?: boolean }) =>
+    apiFetch<{ success: boolean }>(`/analytics/view/${viewId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  // Get my analytics (auth required)
+  getStats: () =>
+    apiFetch<AnalyticsStats>('/analytics/stats'),
+}
+
 // Export all
 export const api = {
   auth,
@@ -769,6 +828,7 @@ export const api = {
   media,
   ai,
   payroll,
+  analytics,
 }
 
 export default api
