@@ -85,19 +85,18 @@
     right: 0;
     display: flex;
     align-items: center;
-    justify-content: center;
-    padding: calc(env(safe-area-inset-top, 12px) + var(--space-sm)) var(--space-xl);
+    justify-content: space-between;
+    padding: calc(env(safe-area-inset-top, 12px) + var(--space-md)) var(--space-lg);
     z-index: 10;
 }
 
 .template-boundary .sub-back-btn {
-    position: absolute;
-    left: var(--space-xl);
-    top: calc(env(safe-area-inset-top, 12px) + var(--space-sm));
-    width: 44px;
-    height: 44px;
+    width: 36px;
+    height: 36px;
     border-radius: var(--radius-full);
-    background: transparent;
+    background: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     border: none;
     display: flex;
     align-items: center;
@@ -105,20 +104,22 @@
     color: var(--text-primary);
     cursor: pointer;
     transition: all 0.15s ease;
+    flex-shrink: 0;
 }
 
 .template-boundary .sub-back-btn.pressed {
-    opacity: 0.6;
-    transform: scale(0.95);
+    opacity: 0.7;
+    transform: scale(0.92);
 }
 
 .template-boundary .sub-logo-img {
-    height: 28px;
+    height: 24px;
     width: auto;
 }
 
 .template-boundary .sub-header-spacer {
-    display: none;
+    width: 36px;
+    flex-shrink: 0;
 }
 
 /* === MAIN CARD - Fixed Height, Centered === */
