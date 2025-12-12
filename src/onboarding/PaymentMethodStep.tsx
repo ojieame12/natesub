@@ -48,10 +48,17 @@ function PaymentMethodCard({ name, description, recommended, selected, onSelect 
     )
 }
 
+// Paystack country to currency mapping
+const PAYSTACK_CURRENCIES: Record<string, string> = {
+    'NG': 'NGN',
+    'KE': 'KES',
+    'ZA': 'ZAR',
+}
+
 export default function PaymentMethodStep() {
     const navigate = useNavigate()
     const store = useOnboardingStore()
-    const { countryCode, country, paymentProvider, setPaymentProvider, prevStep, reset } = store
+    const { countryCode, country, currency, paymentProvider, setPaymentProvider, prevStep, reset } = store
     const [selectedMethod, setSelectedMethod] = useState<string | null>(paymentProvider)
     const [stripeCountryCodes, setStripeCountryCodes] = useState<string[]>([])
     const [loading, setLoading] = useState(true)
@@ -77,11 +84,17 @@ export default function PaymentMethodStep() {
 
     // Determine which payment methods to show based on country code
     const isStripeCountry = stripeCountryCodes.includes(countryCode?.toUpperCase() || '')
-    const isPaystackCountry = PAYSTACK_COUNTRY_CODES.includes(countryCode?.toUpperCase() || '')
-    const isFlutterwaveCountry = FLUTTERWAVE_COUNTRY_CODES.includes(countryCode?.toUpperCase() || '')
+    const countryUpper = countryCode?.toUpperCase() || ''
+    const isPaystackCountry = PAYSTACK_COUNTRY_CODES.includes(countryUpper)
+    const isFlutterwaveCountry = FLUTTERWAVE_COUNTRY_CODES.includes(countryUpper)
 
-    // Default recommendation - Paystack for NG/KE/ZA, Stripe for supported countries, else bank
-    const recommendedMethod = isPaystackCountry ? 'paystack' : isStripeCountry ? 'stripe' : 'bank'
+    // Currency alignment check - only offer Paystack if currency matches country
+    const expectedPaystackCurrency = PAYSTACK_CURRENCIES[countryUpper]
+    const isCurrencyAligned = !expectedPaystackCurrency || currency?.toUpperCase() === expectedPaystackCurrency
+    const canUsePaystack = isPaystackCountry && isCurrencyAligned
+
+    // Default recommendation - Paystack for NG/KE/ZA with aligned currency, Stripe for supported countries, else bank
+    const recommendedMethod = canUsePaystack ? 'paystack' : isStripeCountry ? 'stripe' : 'bank'
 
     const handleContinue = async () => {
         if (!selectedMethod) return
@@ -223,8 +236,8 @@ export default function PaymentMethodStep() {
                         </div>
                     )}
 
-                    {/* Show Paystack for Nigeria, Kenya, South Africa */}
-                    {isPaystackCountry && (
+                    {/* Show Paystack for Nigeria, Kenya, South Africa with aligned currency */}
+                    {canUsePaystack && (
                         <PaymentMethodCard
                             name="Paystack"
                             description="Direct bank deposits in NGN, KES, ZAR"
@@ -235,6 +248,20 @@ export default function PaymentMethodStep() {
                                 setError(null)
                             }}
                         />
+                    )}
+
+                    {/* Show warning if in Paystack country but currency misaligned */}
+                    {isPaystackCountry && !isCurrencyAligned && (
+                        <div style={{
+                            padding: '12px 16px',
+                            background: 'rgba(245, 158, 11, 0.1)',
+                            borderRadius: 12,
+                            marginBottom: 16,
+                            fontSize: 14,
+                            color: 'var(--text-secondary)'
+                        }}>
+                            Paystack requires {expectedPaystackCurrency} currency for {country}. Your selected currency is {currency?.toUpperCase()}.
+                        </div>
                     )}
 
                     {/* Show Stripe if in supported country */}
@@ -262,8 +289,8 @@ export default function PaymentMethodStep() {
                         </div>
                     )}
 
-                    {/* Flutterwave - Coming Soon (only show if not a Paystack country) */}
-                    {isFlutterwaveCountry && !isPaystackCountry && (
+                    {/* Flutterwave - Coming Soon (only show if not using Paystack) */}
+                    {isFlutterwaveCountry && !canUsePaystack && (
                         <div className="payment-method-card disabled" style={{ opacity: 0.6, cursor: 'not-allowed' }}>
                             <div className="payment-method-icon">
                                 <CreditCard size={24} />
@@ -278,8 +305,8 @@ export default function PaymentMethodStep() {
                         </div>
                     )}
 
-                    {/* If not in Stripe country and not in Paystack country, show Stripe with warning */}
-                    {!isStripeCountry && !isPaystackCountry && (
+                    {/* If not in Stripe country and can't use Paystack, show Stripe with warning */}
+                    {!isStripeCountry && !canUsePaystack && (
                         <PaymentMethodCard
                             name="Stripe"
                             description="Bank deposits, cards, Apple Pay"

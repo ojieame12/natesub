@@ -152,6 +152,94 @@ export default function PaymentSettings() {
     )
   }
 
+  // Show Paystack not connected or pending
+  if (paymentProvider === 'paystack' && (!paystackStatus?.connected || paystackStatus.status === 'pending')) {
+    const isPending = paystackStatus?.status === 'pending'
+    return (
+      <div className="payment-settings-page">
+        <header className="payment-settings-header">
+          <Pressable className="back-btn" onClick={() => navigate(-1)}>
+            <ArrowLeft size={20} />
+          </Pressable>
+          <span className="payment-settings-title">Payment Settings</span>
+          <div className="header-spacer" />
+        </header>
+
+        <div className="payment-settings-content">
+          <section className="connect-card" style={{
+            textAlign: 'center',
+            padding: '32px 24px',
+            background: 'var(--surface)',
+            borderRadius: 16,
+            marginBottom: 16,
+          }}>
+            <div style={{
+              width: 64,
+              height: 64,
+              borderRadius: '50%',
+              background: isPending ? 'linear-gradient(135deg, #f59e0b, #d97706)' : 'linear-gradient(135deg, #00C3F7, #0AA5C2)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 16px',
+            }}>
+              {isPending ? <AlertCircle size={28} color="white" /> : <Building2 size={28} color="white" />}
+            </div>
+            <h2 style={{ fontSize: 20, fontWeight: 600, marginBottom: 8 }}>
+              {isPending ? 'Verification Pending' : 'Connect Bank Account'}
+            </h2>
+            <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 24 }}>
+              {isPending
+                ? 'Your bank account is being verified. This usually takes a few minutes.'
+                : 'Connect your bank account via Paystack to receive payments directly.'}
+            </p>
+
+            {error && (
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '12px 16px',
+                background: 'rgba(239, 68, 68, 0.1)',
+                borderRadius: 12,
+                marginBottom: 16,
+                textAlign: 'left',
+              }}>
+                <AlertCircle size={18} color="var(--error)" />
+                <span style={{ fontSize: 14, color: 'var(--error)' }}>{error}</span>
+              </div>
+            )}
+
+            {!isPending && (
+              <Pressable
+                onClick={() => navigate('/onboarding/paystack')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  width: '100%',
+                  padding: '14px 24px',
+                  background: 'linear-gradient(135deg, #00C3F7, #0AA5C2)',
+                  color: 'white',
+                  borderRadius: 12,
+                  fontWeight: 600,
+                  fontSize: 16,
+                }}
+              >
+                Connect Bank Account
+              </Pressable>
+            )}
+          </section>
+
+          <p style={{ fontSize: 13, color: 'var(--text-tertiary)', textAlign: 'center', padding: '0 16px' }}>
+            Paystack is available in Nigeria, Kenya, and South Africa.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   // Show Paystack connected account
   if (paymentProvider === 'paystack' && paystackStatus?.connected) {
     const details = paystackStatus.details

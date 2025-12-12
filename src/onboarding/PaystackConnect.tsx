@@ -15,7 +15,7 @@ interface Bank {
 export default function PaystackConnect() {
     const navigate = useNavigate()
     const store = useOnboardingStore()
-    const { countryCode, prevStep, reset } = store
+    const { countryCode, reset } = store
 
     // Form state
     const [selectedBank, setSelectedBank] = useState<Bank | null>(null)
@@ -23,9 +23,10 @@ export default function PaystackConnect() {
     const [idNumber, setIdNumber] = useState('') // For South Africa
     const [showBankDropdown, setShowBankDropdown] = useState(false)
     const [bankSearchQuery, setBankSearchQuery] = useState('')
+    const [connectError, setConnectError] = useState<string | null>(null)
 
     // API hooks
-    const { data: banksData, isLoading: loadingBanks } = usePaystackBanks(countryCode || '')
+    const { data: banksData, isLoading: loadingBanks, isError: banksError } = usePaystackBanks(countryCode || '')
     const resolveAccount = usePaystackResolveAccount()
     const connectPaystack = usePaystackConnect()
 
@@ -35,16 +36,26 @@ export default function PaystackConnect() {
 
     const banks = banksData?.banks || []
     const isSouthAfrica = countryCode?.toUpperCase() === 'ZA'
+    const isKenya = countryCode?.toUpperCase() === 'KE'
+
+    // Account number length varies by country
+    const minAccountLength = isSouthAfrica ? 9 : isKenya ? 10 : 10 // NG: 10, KE: 10-14, ZA: 9-11
+    const accountHint = isSouthAfrica ? '9-11 digits' : isKenya ? '10-14 digits' : '10 digits'
+
+    // Go back to payment method step
+    const handleBack = () => {
+        navigate(-1)
+    }
 
     // Filter banks by search query
     const filteredBanks = banks.filter(bank =>
         bank.name.toLowerCase().includes(bankSearchQuery.toLowerCase())
     )
 
-    // Auto-verify account when account number is complete (10 digits for Nigeria)
+    // Auto-verify account when account number meets minimum length
     useEffect(() => {
         const verifyAccount = async () => {
-            if (!selectedBank || accountNumber.length < 10) {
+            if (!selectedBank || accountNumber.length < minAccountLength) {
                 setVerifiedName(null)
                 setVerifyError(null)
                 return
@@ -61,17 +72,17 @@ export default function PaystackConnect() {
                     setVerifyError(null)
                 } else {
                     setVerifiedName(null)
-                    setVerifyError(result.error || 'Could not verify account')
+                    setVerifyError(result.error || 'Could not verify account. Please check the details.')
                 }
             } catch (err: any) {
                 setVerifiedName(null)
-                setVerifyError(err?.error || 'Could not verify account')
+                setVerifyError(err?.error || 'Could not verify account. Please check the details.')
             }
         }
 
         const debounce = setTimeout(verifyAccount, 500)
         return () => clearTimeout(debounce)
-    }, [accountNumber, selectedBank, idNumber, isSouthAfrica])
+    }, [accountNumber, selectedBank, idNumber, isSouthAfrica, minAccountLength])
 
     const handleSelectBank = (bank: Bank) => {
         setSelectedBank(bank)
@@ -80,14 +91,16 @@ export default function PaystackConnect() {
         // Reset verification when bank changes
         setVerifiedName(null)
         setVerifyError(null)
+        setConnectError(null)
     }
 
-    const canSubmit = selectedBank && accountNumber.length >= 10 && verifiedName && !resolveAccount.isPending
+    const canSubmit = selectedBank && accountNumber.length >= minAccountLength && verifiedName && !resolveAccount.isPending
         && (!isSouthAfrica || idNumber.length >= 13)
 
     const handleSubmit = async () => {
         if (!canSubmit || !selectedBank || !verifiedName) return
 
+        setConnectError(null)
         try {
             await connectPaystack.mutateAsync({
                 bankCode: selectedBank.code,
@@ -100,7 +113,7 @@ export default function PaystackConnect() {
             reset()
             navigate('/dashboard')
         } catch (err: any) {
-            setVerifyError(err?.error || 'Failed to connect bank account')
+            setConnectError(err?.error || 'Failed to connect bank account. Please try again.')
         }
     }
 
@@ -114,13 +127,40 @@ export default function PaystackConnect() {
         )
     }
 
+    // Banks API error
+    if (banksError) {
+        return (
+            <div className="onboarding">
+                <div className="onboarding-logo-header">
+                    <img src="/logo.svg" alt="NatePay" />
+                </div>
+                <div className="onboarding-header">
+                    <Pressable className="onboarding-back" onClick={handleBack}>
+                        <ChevronLeft size={24} />
+                    </Pressable>
+                </div>
+                <div className="onboarding-content">
+                    <div className="paystack-error" style={{ marginTop: 32 }}>
+                        <AlertCircle size={18} />
+                        <span>Failed to load banks. Please check your connection and try again.</span>
+                    </div>
+                    <div style={{ marginTop: 16 }}>
+                        <Button variant="secondary" size="lg" fullWidth onClick={handleBack}>
+                            Go Back
+                        </Button>
+                    </div>
+                </div>
+            </div>
+        )
+    }
+
     return (
         <div className="onboarding">
             <div className="onboarding-logo-header">
                 <img src="/logo.svg" alt="NatePay" />
             </div>
             <div className="onboarding-header">
-                <Pressable className="onboarding-back" onClick={prevStep}>
+                <Pressable className="onboarding-back" onClick={handleBack}>
                     <ChevronLeft size={24} />
                 </Pressable>
             </div>
@@ -133,10 +173,10 @@ export default function PaystackConnect() {
 
                 <div className="step-body">
                     {/* Error display */}
-                    {(verifyError || connectPaystack.isError) && (
+                    {(verifyError || connectError) && (
                         <div className="paystack-error">
                             <AlertCircle size={18} />
-                            <span>{verifyError || 'Failed to connect. Please try again.'}</span>
+                            <span>{connectError || verifyError}</span>
                         </div>
                     )}
 
@@ -200,6 +240,7 @@ export default function PaystackConnect() {
                             onChange={(e) => setAccountNumber(e.target.value.replace(/\D/g, ''))}
                             maxLength={15}
                         />
+                        <span className="paystack-hint">{accountHint}</span>
                     </div>
 
                     {/* Verification Status */}

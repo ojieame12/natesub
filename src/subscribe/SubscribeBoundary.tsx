@@ -74,9 +74,11 @@ export default function SubscribeBoundary({ profile }: SubscribeBoundaryProps) {
                 amount: currentAmount,
                 interval: 'month',
             })
-            // Redirect to Stripe Checkout
+            // Redirect to checkout (Stripe or Paystack based on creator's provider)
             if (result.url) {
                 window.location.href = result.url
+            } else {
+                setCheckoutError('Unable to create checkout session. Please try again.')
             }
         } catch (error: any) {
             console.error('Checkout failed:', error)

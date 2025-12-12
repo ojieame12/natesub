@@ -3,6 +3,7 @@
 
 import { env } from '../config/env.js'
 import { db } from '../db/client.js'
+import { maskAccountNumber, maskEmail } from '../utils/pii.js'
 
 const PAYSTACK_API_URL = 'https://api.paystack.co'
 
@@ -111,6 +112,8 @@ async function paystackFetch<T>(
   const data = await response.json()
 
   if (!response.ok || !data.status) {
+    // Log error without exposing request body (may contain PII)
+    console.error(`[paystack] API error on ${path}: ${data.message || 'Unknown error'}`)
     throw new Error(data.message || 'Paystack API error')
   }
 
@@ -193,6 +196,9 @@ export async function createSubaccount(params: {
   if (profile?.paystackSubaccountCode) {
     return { subaccountCode: profile.paystackSubaccountCode }
   }
+
+  // Log creation attempt with masked PII
+  console.log(`[paystack] Creating subaccount for user ${params.userId}, account ${maskAccountNumber(params.accountNumber)}`)
 
   const response = await paystackFetch<Subaccount>('/subaccount', {
     method: 'POST',

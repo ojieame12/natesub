@@ -3,10 +3,17 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { db } from '../db/client.js'
 import { createCheckoutSession } from '../services/stripe.js'
-import { initializeTransaction, generateReference } from '../services/paystack.js'
+import { initializeTransaction, generateReference, isPaystackSupported, type PaystackCountry } from '../services/paystack.js'
 import { env } from '../config/env.js'
 
 const checkout = new Hono()
+
+// Country to currency mapping for Paystack
+const PAYSTACK_CURRENCIES: Record<PaystackCountry, string> = {
+  NG: 'NGN',
+  KE: 'KES',
+  ZA: 'ZAR',
+}
 
 // Create checkout session for subscription
 checkout.post(
@@ -61,6 +68,21 @@ checkout.post(
       if (hasPaystack && profile.paystackSubaccountCode) {
         if (!subscriberEmail) {
           return c.json({ error: 'Subscriber email is required for Paystack checkout' }, 400)
+        }
+
+        // Validate currency matches creator's Paystack country
+        const expectedCurrency = isPaystackSupported(profile.countryCode)
+          ? PAYSTACK_CURRENCIES[profile.countryCode as PaystackCountry]
+          : null
+
+        if (!expectedCurrency) {
+          return c.json({ error: 'Creator country not supported by Paystack' }, 400)
+        }
+
+        if (profile.currency !== expectedCurrency) {
+          return c.json({
+            error: `Currency mismatch. Creator's currency is ${profile.currency}, but Paystack in ${profile.countryCode} requires ${expectedCurrency}`,
+          }, 400)
         }
 
         const reference = generateReference('SUB')
