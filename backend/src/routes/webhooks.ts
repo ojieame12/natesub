@@ -135,10 +135,37 @@ async function handleCheckoutCompleted(event: Stripe.Event) {
   const creatorId = session.metadata?.creatorId
   const tierId = session.metadata?.tierId
   const requestId = session.metadata?.requestId
+  const viewId = session.metadata?.viewId
 
   if (!creatorId) {
     console.error('Missing creatorId in session metadata')
     return
+  }
+
+  // Server-side conversion tracking (more reliable than client-side)
+  if (viewId) {
+    // If viewId was passed, mark that specific view as converted
+    await db.pageView.update({
+      where: { id: viewId },
+      data: { startedCheckout: true },
+    }).catch(() => {}) // Ignore if view doesn't exist
+  } else {
+    // Fallback: find most recent view for this profile in last hour
+    const creatorProfile = await db.profile.findUnique({
+      where: { userId: creatorId },
+      select: { id: true },
+    })
+    if (creatorProfile) {
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000)
+      await db.pageView.updateMany({
+        where: {
+          profileId: creatorProfile.id,
+          createdAt: { gte: oneHourAgo },
+          startedCheckout: false,
+        },
+        data: { startedCheckout: true },
+      })
+    }
   }
 
   // If this checkout was triggered by a request, finalize it

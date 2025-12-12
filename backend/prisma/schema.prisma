@@ -432,6 +432,22 @@ model PageView {
 }
 
 // ============================================
+// NOTIFICATION LOGS (Idempotency)
+// ============================================
+
+model NotificationLog {
+  id             String   @id @default(uuid())
+  subscriptionId String
+  type           String   // 'renewal_reminder' | 'payment_failed' | 'subscription_canceled'
+  sentAt         DateTime @default(now())
+
+  // Unique constraint prevents duplicate sends
+  @@unique([subscriptionId, type])
+  @@index([subscriptionId])
+  @@map("notification_logs")
+}
+
+// ============================================
 // PAYROLL (Service Branch Only)
 // ============================================
 

@@ -57,6 +57,21 @@ export async function sendRenewalReminders(): Promise<NotificationResult> {
       continue
     }
 
+    // Idempotency check - skip if already sent this period
+    const existingLog = await db.notificationLog.findUnique({
+      where: {
+        subscriptionId_type: {
+          subscriptionId: sub.id,
+          type: 'renewal_reminder',
+        },
+      },
+    })
+
+    if (existingLog) {
+      console.log(`[notifications] Skipping sub ${sub.id} - reminder already sent`)
+      continue
+    }
+
     try {
       await sendRenewalReminderEmail(
         sub.subscriber.email,
@@ -65,6 +80,15 @@ export async function sendRenewalReminders(): Promise<NotificationResult> {
         sub.currency,
         sub.currentPeriodEnd!
       )
+
+      // Log the send for idempotency
+      await db.notificationLog.create({
+        data: {
+          subscriptionId: sub.id,
+          type: 'renewal_reminder',
+        },
+      })
+
       result.sent++
       console.log(`[notifications] Sent renewal reminder for sub ${sub.id}`)
     } catch (error: any) {
@@ -124,6 +148,20 @@ export async function sendDunningEmails(): Promise<NotificationResult> {
 
     result.processed++
 
+    // Idempotency check - use payment ID in type to allow one email per failed payment
+    const idempotencyType = `payment_failed_${payment.id}`
+    const existingLog = await db.notificationLog.findFirst({
+      where: {
+        subscriptionId: sub.id,
+        type: idempotencyType,
+      },
+    })
+
+    if (existingLog) {
+      console.log(`[notifications] Skipping sub ${sub.id} - dunning already sent for this payment`)
+      continue
+    }
+
     // Calculate next retry date (1 day after failure)
     const retryDate = new Date(payment.createdAt.getTime() + 24 * 60 * 60 * 1000)
 
@@ -135,6 +173,14 @@ export async function sendDunningEmails(): Promise<NotificationResult> {
         sub.currency,
         retryDate
       )
+
+      await db.notificationLog.create({
+        data: {
+          subscriptionId: sub.id,
+          type: idempotencyType,
+        },
+      })
+
       result.sent++
       console.log(`[notifications] Sent dunning email for sub ${sub.id}`)
     } catch (error: any) {
@@ -186,11 +232,34 @@ export async function sendCancellationEmails(): Promise<NotificationResult> {
 
     result.processed++
 
+    // Idempotency check
+    const existingLog = await db.notificationLog.findUnique({
+      where: {
+        subscriptionId_type: {
+          subscriptionId: sub.id,
+          type: 'subscription_canceled',
+        },
+      },
+    })
+
+    if (existingLog) {
+      console.log(`[notifications] Skipping sub ${sub.id} - cancellation already sent`)
+      continue
+    }
+
     try {
       await sendSubscriptionCanceledEmail(
         sub.subscriber.email,
         sub.creator.profile.displayName
       )
+
+      await db.notificationLog.create({
+        data: {
+          subscriptionId: sub.id,
+          type: 'subscription_canceled',
+        },
+      })
+
       result.sent++
       console.log(`[notifications] Sent cancellation email for sub ${sub.id}`)
     } catch (error: any) {
