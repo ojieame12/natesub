@@ -34,11 +34,13 @@ export default function SubscribeBoundary({ profile }: SubscribeBoundaryProps) {
         perks: profilePerks,
         impactItems: profileImpactItems,
         currency,
+        paymentProvider,
     } = profile
 
     // Determine if this is a service page vs personal
     const isService = purpose === 'service'
     const currencySymbol = getCurrencySymbol(currency)
+    const isPaystack = paymentProvider === 'paystack'
 
     // State
     const [currentView, setCurrentView] = useState<ViewType>('welcome')
@@ -306,23 +308,35 @@ export default function SubscribeBoundary({ profile }: SubscribeBoundaryProps) {
                             )}
 
                             <div className="sub-payment-methods">
-                                <Pressable
-                                    className="sub-payment-btn sub-payment-stripe"
-                                    onClick={handleSubscribe}
-                                    disabled={isCheckoutLoading}
-                                >
-                                    <img src="/stripe-logo.svg" alt="Stripe" className="sub-payment-logo" />
-                                    <span>{isCheckoutLoading ? 'Loading...' : 'Pay with Stripe'}</span>
-                                </Pressable>
+                                {isPaystack ? (
+                                    <Pressable
+                                        className="sub-payment-btn sub-payment-paystack"
+                                        onClick={handleSubscribe}
+                                        disabled={isCheckoutLoading}
+                                    >
+                                        <span>{isCheckoutLoading ? 'Loading...' : 'Pay with Card or Bank'}</span>
+                                    </Pressable>
+                                ) : (
+                                    <>
+                                        <Pressable
+                                            className="sub-payment-btn sub-payment-stripe"
+                                            onClick={handleSubscribe}
+                                            disabled={isCheckoutLoading}
+                                        >
+                                            <img src="/stripe-logo.svg" alt="Stripe" className="sub-payment-logo" />
+                                            <span>{isCheckoutLoading ? 'Loading...' : 'Pay with Stripe'}</span>
+                                        </Pressable>
 
-                                <Pressable
-                                    className="sub-payment-btn sub-payment-apple"
-                                    onClick={handleSubscribe}
-                                    disabled={isCheckoutLoading}
-                                >
-                                    <img src="/apple-logo.svg" alt="Apple" className="sub-payment-logo-apple" />
-                                    <span>Pay</span>
-                                </Pressable>
+                                        <Pressable
+                                            className="sub-payment-btn sub-payment-apple"
+                                            onClick={handleSubscribe}
+                                            disabled={isCheckoutLoading}
+                                        >
+                                            <img src="/apple-logo.svg" alt="Apple" className="sub-payment-logo-apple" />
+                                            <span>Pay</span>
+                                        </Pressable>
+                                    </>
+                                )}
                             </div>
 
                             <p className="sub-payment-note">

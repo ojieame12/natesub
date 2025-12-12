@@ -7,7 +7,10 @@ import { api } from '../api'
 import '../Dashboard.css'
 import './onboarding.css'
 
-// Flutterwave supported country codes
+// Paystack supported country codes (primary for Africa)
+const PAYSTACK_COUNTRY_CODES = ['NG', 'KE', 'ZA']
+
+// Flutterwave supported country codes (as fallback)
 const FLUTTERWAVE_COUNTRY_CODES = [
     'NG', 'GH', 'KE', 'ZA', 'UG', 'TZ', 'RW', 'CM', 'SN', 'EG'
 ]
@@ -74,10 +77,11 @@ export default function PaymentMethodStep() {
 
     // Determine which payment methods to show based on country code
     const isStripeCountry = stripeCountryCodes.includes(countryCode?.toUpperCase() || '')
+    const isPaystackCountry = PAYSTACK_COUNTRY_CODES.includes(countryCode?.toUpperCase() || '')
     const isFlutterwaveCountry = FLUTTERWAVE_COUNTRY_CODES.includes(countryCode?.toUpperCase() || '')
 
-    // Default recommendation
-    const recommendedMethod = isStripeCountry ? 'stripe' : isFlutterwaveCountry ? 'flutterwave' : 'bank'
+    // Default recommendation - Paystack for NG/KE/ZA, Stripe for supported countries, else bank
+    const recommendedMethod = isPaystackCountry ? 'paystack' : isStripeCountry ? 'stripe' : 'bank'
 
     const handleContinue = async () => {
         if (!selectedMethod) return
@@ -158,6 +162,12 @@ export default function PaymentMethodStep() {
                 }
             }
 
+            // Handle Paystack connect flow - navigate to bank account step
+            if (selectedMethod === 'paystack') {
+                navigate('/onboarding/paystack')
+                return
+            }
+
             // For other payment methods (flutterwave, bank), go to dashboard
             reset()
             navigate('/dashboard')
@@ -213,6 +223,20 @@ export default function PaymentMethodStep() {
                         </div>
                     )}
 
+                    {/* Show Paystack for Nigeria, Kenya, South Africa */}
+                    {isPaystackCountry && (
+                        <PaymentMethodCard
+                            name="Paystack"
+                            description="Direct bank deposits in NGN, KES, ZAR"
+                            recommended={recommendedMethod === 'paystack'}
+                            selected={selectedMethod === 'paystack'}
+                            onSelect={() => {
+                                setSelectedMethod('paystack')
+                                setError(null)
+                            }}
+                        />
+                    )}
+
                     {/* Show Stripe if in supported country */}
                     {isStripeCountry && (
                         <PaymentMethodCard
@@ -238,8 +262,8 @@ export default function PaymentMethodStep() {
                         </div>
                     )}
 
-                    {/* Flutterwave - Coming Soon (not implemented yet) */}
-                    {isFlutterwaveCountry && (
+                    {/* Flutterwave - Coming Soon (only show if not a Paystack country) */}
+                    {isFlutterwaveCountry && !isPaystackCountry && (
                         <div className="payment-method-card disabled" style={{ opacity: 0.6, cursor: 'not-allowed' }}>
                             <div className="payment-method-icon">
                                 <CreditCard size={24} />
@@ -254,8 +278,8 @@ export default function PaymentMethodStep() {
                         </div>
                     )}
 
-                    {/* If not in Stripe country, show Stripe with warning */}
-                    {!isStripeCountry && (
+                    {/* If not in Stripe country and not in Paystack country, show Stripe with warning */}
+                    {!isStripeCountry && !isPaystackCountry && (
                         <PaymentMethodCard
                             name="Stripe"
                             description="Bank deposits, cards, Apple Pay"
@@ -300,6 +324,8 @@ export default function PaymentMethodStep() {
                             </>
                         ) : selectedMethod === 'stripe' ? (
                             'Connect with Stripe'
+                        ) : selectedMethod === 'paystack' ? (
+                            'Connect Bank Account'
                         ) : (
                             'Complete Setup'
                         )}

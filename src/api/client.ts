@@ -315,6 +315,81 @@ export const stripe = {
 }
 
 // ============================================
+// PAYSTACK (for NG, KE, ZA)
+// ============================================
+
+export interface PaystackBank {
+  code: string
+  name: string
+  type: string
+}
+
+export interface PaystackConnectionStatus {
+  connected: boolean
+  status: string
+  details?: {
+    businessName: string
+    bank: string
+    accountNumber: string
+    accountName: string
+    percentageCharge: number
+  }
+}
+
+export const paystack = {
+  getSupportedCountries: () =>
+    apiFetch<{
+      countries: { code: string; name: string; currency: string }[]
+      total: number
+    }>('/paystack/supported-countries'),
+
+  getBanks: (country: string) =>
+    apiFetch<{ banks: PaystackBank[] }>(`/paystack/banks/${country}`),
+
+  resolveAccount: (data: {
+    accountNumber: string
+    bankCode: string
+    idNumber?: string
+    accountType?: 'personal' | 'business'
+  }) =>
+    apiFetch<{
+      verified: boolean
+      accountName: string
+      accountNumber: string
+      bankCode: string
+      error?: string
+    }>('/paystack/resolve-account', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  connect: (data: {
+    bankCode: string
+    accountNumber: string
+    accountName: string
+    idNumber?: string
+  }) =>
+    apiFetch<{
+      success: boolean
+      subaccountCode?: string
+      alreadyConnected?: boolean
+      message?: string
+      error?: string
+    }>('/paystack/connect', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  getStatus: () =>
+    apiFetch<PaystackConnectionStatus>('/paystack/connect/status'),
+
+  disconnect: () =>
+    apiFetch<{ success: boolean; message: string }>('/paystack/disconnect', {
+      method: 'POST',
+    }),
+}
+
+// ============================================
 // CHECKOUT
 // ============================================
 
@@ -326,7 +401,12 @@ export const checkout = {
     interval: 'month' | 'one_time'
     subscriberEmail?: string
   }) =>
-    apiFetch<{ sessionId: string; url: string }>('/checkout/session', {
+    apiFetch<{
+      provider: 'stripe' | 'paystack'
+      sessionId?: string  // Stripe
+      reference?: string  // Paystack
+      url: string
+    }>('/checkout/session', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
@@ -586,6 +666,7 @@ export const api = {
   profile,
   users,
   stripe,
+  paystack,
   checkout,
   subscriptions,
   activity,

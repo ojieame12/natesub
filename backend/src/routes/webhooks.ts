@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import crypto from 'crypto'
 import Stripe from 'stripe'
 import { stripe } from '../services/stripe.js'
 import { db } from '../db/client.js'
@@ -572,6 +573,274 @@ async function handleCheckoutExpired(event: Stripe.Event) {
   })
 
   console.log(`Checkout expired for request ${requestId}, reverted to sent status`)
+}
+
+// ============================================
+// PAYSTACK WEBHOOKS
+// ============================================
+
+// Verify Paystack webhook signature
+function verifyPaystackSignature(body: string, signature: string): boolean {
+  const webhookSecret = env.PAYSTACK_WEBHOOK_SECRET
+  if (!webhookSecret) return false
+
+  const hash = crypto
+    .createHmac('sha512', webhookSecret)
+    .update(body)
+    .digest('hex')
+
+  return hash === signature
+}
+
+// Paystack webhook handler
+webhooks.post('/paystack', async (c) => {
+  const signature = c.req.header('x-paystack-signature')
+
+  if (!signature) {
+    return c.json({ error: 'Missing signature' }, 400)
+  }
+
+  const body = await c.req.text()
+
+  // Verify signature
+  if (!verifyPaystackSignature(body, signature)) {
+    console.error('Paystack webhook signature verification failed')
+    return c.json({ error: 'Invalid signature' }, 400)
+  }
+
+  let payload: { event: string; data: any }
+
+  try {
+    payload = JSON.parse(body)
+  } catch (err) {
+    console.error('Failed to parse Paystack webhook body:', err)
+    return c.json({ error: 'Invalid JSON' }, 400)
+  }
+
+  const { event, data } = payload
+
+  // Use transaction reference or ID for idempotency
+  const eventId = data.id?.toString() || data.reference
+
+  // Idempotency check
+  if (eventId) {
+    const existingPayment = await db.payment.findUnique({
+      where: { paystackEventId: eventId },
+    })
+
+    if (existingPayment) {
+      return c.json({ received: true, status: 'already_processed' })
+    }
+  }
+
+  try {
+    switch (event) {
+      case 'charge.success':
+        await handlePaystackChargeSuccess(data, eventId)
+        break
+
+      case 'charge.failed':
+        await handlePaystackChargeFailed(data)
+        break
+
+      case 'transfer.success':
+        console.log('Paystack transfer successful:', data.reference)
+        break
+
+      case 'transfer.failed':
+        console.log('Paystack transfer failed:', data.reference)
+        break
+
+      default:
+        console.log(`Unhandled Paystack event: ${event}`)
+    }
+
+    return c.json({ received: true })
+  } catch (error) {
+    console.error(`Error processing Paystack webhook ${event}:`, error)
+    return c.json({ error: 'Webhook processing failed' }, 500)
+  }
+})
+
+// Handle Paystack charge.success
+async function handlePaystackChargeSuccess(data: any, eventId: string) {
+  const {
+    reference,
+    amount,
+    currency,
+    customer,
+    authorization,
+    metadata,
+  } = data
+
+  // Extract metadata
+  const creatorId = metadata?.creatorId
+  const tierId = metadata?.tierId
+  const requestId = metadata?.requestId
+  const interval = metadata?.interval || 'one_time'
+
+  if (!creatorId) {
+    console.error('Missing creatorId in Paystack metadata')
+    return
+  }
+
+  // If this checkout was triggered by a request, finalize it
+  if (requestId) {
+    await db.request.update({
+      where: { id: requestId },
+      data: {
+        status: 'accepted',
+        respondedAt: new Date(),
+        paystackTransactionRef: reference,
+      },
+    })
+
+    const request = await db.request.findUnique({ where: { id: requestId } })
+    if (request) {
+      await db.activity.create({
+        data: {
+          userId: creatorId,
+          type: 'request_accepted',
+          payload: {
+            requestId: request.id,
+            recipientName: request.recipientName,
+            amount: request.amountCents,
+            provider: 'paystack',
+          },
+        },
+      })
+    }
+  }
+
+  // Get or create subscriber user
+  let subscriber = await db.user.findUnique({
+    where: { email: customer?.email || '' },
+  })
+
+  if (!subscriber && customer?.email) {
+    subscriber = await db.user.create({
+      data: { email: customer.email },
+    })
+  }
+
+  if (!subscriber) {
+    console.error('Could not find or create subscriber for Paystack payment')
+    return
+  }
+
+  // Get creator profile for tier info
+  const creatorProfile = await db.profile.findUnique({
+    where: { userId: creatorId },
+  })
+
+  let tierName: string | null = null
+  if (tierId && creatorProfile?.tiers) {
+    const tiers = creatorProfile.tiers as any[]
+    const tier = tiers.find(t => t.id === tierId)
+    tierName = tier?.name || null
+  }
+
+  // Calculate fees (10% platform fee)
+  const feeCents = Math.round(amount * 0.10)
+  const netCents = amount - feeCents
+
+  // Create or update subscription (upsert based on unique constraint)
+  const subscriptionInterval = interval === 'month' ? 'month' : 'one_time'
+
+  const subscription = await db.subscription.upsert({
+    where: {
+      subscriberId_creatorId_interval: {
+        subscriberId: subscriber.id,
+        creatorId,
+        interval: subscriptionInterval,
+      },
+    },
+    create: {
+      creatorId,
+      subscriberId: subscriber.id,
+      tierId: tierId || null,
+      tierName,
+      amount,
+      currency: currency?.toUpperCase() || 'NGN',
+      interval: subscriptionInterval,
+      status: 'active',
+      paystackAuthorizationCode: authorization?.authorization_code || null,
+      paystackCustomerCode: customer?.customer_code || null,
+      currentPeriodEnd: interval === 'month'
+        ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // +30 days
+        : null,
+    },
+    update: {
+      paystackAuthorizationCode: authorization?.authorization_code || null,
+      paystackCustomerCode: customer?.customer_code || null,
+      ltvCents: { increment: amount },
+      currentPeriodEnd: interval === 'month'
+        ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+        : undefined,
+    },
+  })
+
+  // Create payment record with idempotency key
+  await db.payment.create({
+    data: {
+      subscriptionId: subscription.id,
+      creatorId,
+      subscriberId: subscriber.id,
+      amountCents: amount,
+      currency: currency?.toUpperCase() || 'NGN',
+      feeCents,
+      netCents,
+      type: subscriptionInterval === 'month' ? 'recurring' : 'one_time',
+      status: 'succeeded',
+      paystackEventId: eventId,
+      paystackTransactionRef: reference,
+    },
+  })
+
+  // Create activity event
+  await db.activity.create({
+    data: {
+      userId: creatorId,
+      type: 'subscription_created',
+      payload: {
+        subscriptionId: subscription.id,
+        subscriberEmail: customer?.email,
+        tierName,
+        amount,
+        currency,
+        provider: 'paystack',
+      },
+    },
+  })
+
+  // Send notification email to creator
+  const creator = await db.user.findUnique({ where: { id: creatorId } })
+  if (creator) {
+    await sendNewSubscriberEmail(
+      creator.email,
+      customer?.email || 'Someone',
+      tierName,
+      amount,
+      currency?.toUpperCase() || 'NGN'
+    )
+  }
+}
+
+// Handle Paystack charge.failed
+async function handlePaystackChargeFailed(data: any) {
+  const { metadata, reference } = data
+
+  const subscriptionId = metadata?.subscriptionId
+
+  if (subscriptionId) {
+    // This is a failed recurring charge
+    await db.subscription.update({
+      where: { id: subscriptionId },
+      data: { status: 'past_due' },
+    })
+
+    console.log(`Paystack charge failed for subscription ${subscriptionId}, ref: ${reference}`)
+  }
 }
 
 export default webhooks

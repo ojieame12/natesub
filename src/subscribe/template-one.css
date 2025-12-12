@@ -609,6 +609,19 @@
     border-radius: 6px;
 }
 
+/* Paystack button - teal gradient */
+.template-boundary .sub-payment-paystack {
+    background: linear-gradient(135deg, #00C3F7 0%, #0AA5C2 100%);
+    color: white;
+    font-weight: 600;
+    width: 100%;
+}
+
+.template-boundary .sub-payment-paystack.pressed {
+    filter: brightness(0.95);
+    transform: scale(0.98);
+}
+
 /* Apple Pay button - black */
 .template-boundary .sub-payment-apple {
     background: #000;

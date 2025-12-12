@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import OnboardingFlow from './onboarding'
+import PaystackConnect from './onboarding/PaystackConnect'
 import AppLayout from './AppLayout'
 import Dashboard from './Dashboard'
 import Activity from './Activity'
@@ -34,6 +35,7 @@ function App() {
       <Routes>
         {/* Onboarding */}
         <Route path="/onboarding" element={<OnboardingFlow />} />
+        <Route path="/onboarding/paystack" element={<PaystackConnect />} />
 
         {/* Main app with tab bar */}
         <Route path="/dashboard" element={

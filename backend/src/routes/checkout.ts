@@ -3,6 +3,7 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { db } from '../db/client.js'
 import { createCheckoutSession } from '../services/stripe.js'
+import { initializeTransaction, generateReference } from '../services/paystack.js'
 import { env } from '../config/env.js'
 
 const checkout = new Hono()
@@ -30,8 +31,16 @@ checkout.post(
       return c.json({ error: 'Creator not found' }, 404)
     }
 
-    if (!profile.stripeAccountId || profile.payoutStatus !== 'active') {
+    // Check if creator has payment set up
+    const hasStripe = profile.paymentProvider === 'stripe' && profile.stripeAccountId
+    const hasPaystack = profile.paymentProvider === 'paystack' && profile.paystackSubaccountCode
+
+    if (!hasStripe && !hasPaystack) {
       return c.json({ error: 'Creator has not set up payments' }, 400)
+    }
+
+    if (profile.payoutStatus !== 'active') {
+      return c.json({ error: 'Creator payments are not active' }, 400)
     }
 
     // Validate amount against creator's pricing
@@ -48,18 +57,48 @@ checkout.post(
     }
 
     try {
+      // Use Paystack for creators who have Paystack connected
+      if (hasPaystack && profile.paystackSubaccountCode) {
+        if (!subscriberEmail) {
+          return c.json({ error: 'Subscriber email is required for Paystack checkout' }, 400)
+        }
+
+        const reference = generateReference('SUB')
+        const result = await initializeTransaction({
+          email: subscriberEmail,
+          amount, // Already in smallest unit (kobo/cents)
+          currency: profile.currency,
+          subaccountCode: profile.paystackSubaccountCode,
+          callbackUrl: `${env.APP_URL}/${profile.username}?success=true&provider=paystack`,
+          reference,
+          metadata: {
+            creatorId: profile.userId,
+            tierId: tierId || '',
+            interval,
+          },
+        })
+
+        return c.json({
+          provider: 'paystack',
+          url: result.authorization_url,
+          reference: result.reference,
+        })
+      }
+
+      // Default to Stripe
       const session = await createCheckoutSession({
         creatorId: profile.userId,
         tierId,
         amount,
         currency: profile.currency,
         interval,
-        successUrl: `${env.APP_URL}/${profile.username}?success=true`,
+        successUrl: `${env.APP_URL}/${profile.username}?success=true&provider=stripe`,
         cancelUrl: `${env.APP_URL}/${profile.username}?canceled=true`,
         subscriberEmail,
       })
 
       return c.json({
+        provider: 'stripe',
         sessionId: session.id,
         url: session.url,
       })

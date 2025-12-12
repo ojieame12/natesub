@@ -9,6 +9,7 @@ import auth from './routes/auth.js'
 import profile from './routes/profile.js'
 import users from './routes/users.js'
 import stripeRoutes from './routes/stripe.js'
+import paystackRoutes from './routes/paystack.js'
 import checkout from './routes/checkout.js'
 import webhooks from './routes/webhooks.js'
 import media from './routes/media.js'
@@ -45,6 +46,7 @@ app.route('/auth', auth)
 app.route('/profile', profile)
 app.route('/users', users)
 app.route('/stripe', stripeRoutes)
+app.route('/paystack', paystackRoutes)
 app.route('/checkout', checkout)
 app.route('/webhooks', webhooks)
 app.route('/media', media)

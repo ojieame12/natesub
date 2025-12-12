@@ -113,7 +113,7 @@ stripeRoutes.get('/connect/status', requireAuth, async (c) => {
     let payoutStatus: 'pending' | 'active' | 'restricted' = 'pending'
     if (status.chargesEnabled && status.payoutsEnabled) {
       payoutStatus = 'active'
-    } else if (status.requirements?.disabled_reason) {
+    } else if (status.requirements?.disabledReason) {
       payoutStatus = 'restricted'
     }
 

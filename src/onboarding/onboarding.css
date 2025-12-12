@@ -2166,3 +2166,197 @@
 .service-credential-input::placeholder {
     color: var(--text-tertiary);
 }
+
+/* ============================================
+   PAYSTACK CONNECT STYLES
+   ============================================ */
+
+.paystack-error {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-md);
+    background: rgba(239, 68, 68, 0.1);
+    border-radius: var(--radius-lg);
+    margin-bottom: var(--space-lg);
+    color: var(--status-error);
+    font-size: 14px;
+}
+
+.paystack-field {
+    margin-bottom: var(--space-lg);
+}
+
+.paystack-label {
+    display: block;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: var(--space-sm);
+}
+
+.paystack-input {
+    width: 100%;
+    padding: var(--space-md);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-lg);
+    font-size: 16px;
+    font-family: var(--font-primary);
+    color: var(--text-primary);
+    background: var(--bg-card);
+    transition: border-color 0.2s ease;
+}
+
+.paystack-input:focus {
+    outline: none;
+    border-color: var(--neutral-400);
+}
+
+.paystack-input::placeholder {
+    color: var(--text-tertiary);
+}
+
+.paystack-hint {
+    display: block;
+    font-size: 13px;
+    color: var(--text-tertiary);
+    margin-top: var(--space-xs);
+}
+
+/* Dropdown trigger */
+.paystack-dropdown-trigger {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: var(--space-md);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-lg);
+    background: var(--bg-card);
+    cursor: pointer;
+    transition: border-color 0.2s ease;
+}
+
+.paystack-dropdown-trigger:hover {
+    border-color: var(--neutral-300);
+}
+
+.paystack-dropdown-trigger.open {
+    border-color: var(--neutral-400);
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+}
+
+.paystack-selected-bank {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    color: var(--text-primary);
+    font-size: 15px;
+}
+
+.paystack-placeholder {
+    color: var(--text-tertiary);
+    font-size: 15px;
+}
+
+.paystack-chevron {
+    color: var(--text-tertiary);
+    transition: transform 0.2s ease;
+}
+
+.paystack-chevron.rotated {
+    transform: rotate(180deg);
+}
+
+/* Dropdown panel */
+.paystack-dropdown {
+    position: relative;
+    border: 1px solid var(--border-default);
+    border-top: none;
+    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+    background: var(--bg-card);
+    overflow: hidden;
+    animation: fadeInUp 0.2s ease-out;
+}
+
+.paystack-dropdown-search {
+    width: 100%;
+    padding: var(--space-md);
+    border: none;
+    border-bottom: 1px solid var(--border-light);
+    font-size: 14px;
+    font-family: var(--font-primary);
+    color: var(--text-primary);
+    background: var(--neutral-50);
+}
+
+.paystack-dropdown-search:focus {
+    outline: none;
+}
+
+.paystack-dropdown-search::placeholder {
+    color: var(--text-tertiary);
+}
+
+.paystack-dropdown-list {
+    max-height: 240px;
+    overflow-y: auto;
+}
+
+.paystack-dropdown-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-md);
+    font-size: 14px;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.paystack-dropdown-item:hover {
+    background: var(--neutral-50);
+}
+
+.paystack-dropdown-item.selected {
+    background: var(--neutral-100);
+    color: var(--accent-primary);
+}
+
+.paystack-dropdown-empty {
+    padding: var(--space-lg);
+    text-align: center;
+    color: var(--text-tertiary);
+    font-size: 14px;
+}
+
+/* Verification states */
+.paystack-verifying {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.paystack-verified {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    background: rgba(16, 185, 129, 0.1);
+    border-radius: var(--radius-md);
+    font-size: 14px;
+    color: var(--status-success);
+    margin-bottom: var(--space-lg);
+}
+
+.paystack-security-note {
+    font-size: 13px;
+    color: var(--text-tertiary);
+    text-align: center;
+    margin-top: var(--space-lg);
+    line-height: 1.5;
+}

@@ -25,6 +25,11 @@ const envSchema = z.object({
   STRIPE_ONBOARDING_RETURN_URL: z.string().url(),
   STRIPE_ONBOARDING_REFRESH_URL: z.string().url(),
 
+  // Paystack (for NG, KE, ZA)
+  PAYSTACK_SECRET_KEY: z.string().startsWith('sk_').optional(),
+  PAYSTACK_PUBLIC_KEY: z.string().startsWith('pk_').optional(),
+  PAYSTACK_WEBHOOK_SECRET: z.string().optional(),
+
   // Flutterwave (optional)
   FLUTTERWAVE_SECRET_KEY: z.string().optional(),
   FLUTTERWAVE_WEBHOOK_SECRET: z.string().optional(),
@@ -41,6 +46,7 @@ const envSchema = z.object({
   R2_PUBLIC_URL: z.string().url(),
 
   // Feature flags
+  ENABLE_PAYSTACK: z.string().transform(v => v === 'true').default('false'),
   ENABLE_FLUTTERWAVE: z.string().transform(v => v === 'true').default('false'),
   ENABLE_SMS: z.string().transform(v => v === 'true').default('false'),
 

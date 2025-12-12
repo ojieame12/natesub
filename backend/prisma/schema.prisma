@@ -93,6 +93,7 @@ enum PricingModel {
 
 enum PaymentProvider {
   stripe
+  paystack
   flutterwave
   bank
 }
@@ -148,10 +149,16 @@ model Profile {
   perks       Json? // array of perk objects
   impactItems Json? // array of impact items
 
-  // Payments
+  // Payments - Stripe
   paymentProvider PaymentProvider?
   stripeAccountId String?          @unique
   payoutStatus    PayoutStatus     @default(pending)
+
+  // Payments - Paystack (for NG, KE, ZA)
+  paystackSubaccountCode String?   @unique  // "ACCT_xxxxx"
+  paystackBankCode       String?            // Bank code for payouts
+  paystackAccountNumber  String?            // Creator's bank account
+  paystackAccountName    String?            // Verified name from resolve API
 
   // Public URL
   shareUrl String?
@@ -223,6 +230,10 @@ model Subscription {
   stripeSubscriptionId String? @unique
   stripeCustomerId     String?
 
+  // Paystack (for recurring charges)
+  paystackAuthorizationCode String?  // Authorization for recurring charges
+  paystackCustomerCode      String?  // Paystack customer ID
+
   // Metrics
   ltvCents Int @default(0)
 
@@ -234,6 +245,7 @@ model Subscription {
 
   payments Payment[]
 
+  @@unique([subscriberId, creatorId, interval])  // Prevent duplicate subs per interval type
   @@index([creatorId])
   @@index([subscriberId])
   @@map("subscriptions")
@@ -262,12 +274,17 @@ model Payment {
   stripeChargeId        String?
   stripeEventId         String? @unique
 
+  // Paystack (paystack_event_id for webhook idempotency)
+  paystackEventId        String? @unique
+  paystackTransactionRef String? @unique
+
   // Timestamps
   occurredAt DateTime @default(now())
   createdAt  DateTime @default(now())
 
   @@index([creatorId])
   @@index([stripeEventId])
+  @@index([paystackEventId])
   @@map("payments")
 }
 
@@ -305,6 +322,7 @@ model Request {
 
   // Payment tracking
   stripeCheckoutSessionId String? @unique  // Links to Stripe checkout session
+  paystackTransactionRef  String? @unique  // Links to Paystack transaction
 
   // Timestamps
   sentAt      DateTime?
@@ -315,6 +333,7 @@ model Request {
   @@index([creatorId])
   @@index([publicTokenHash])
   @@index([stripeCheckoutSessionId])
+  @@index([paystackTransactionRef])
   @@map("requests")
 }
 

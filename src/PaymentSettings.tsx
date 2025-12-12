@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Building2, Plus, Check, Loader2, AlertCircle, CreditCard, ExternalLink } from 'lucide-react'
 import { Pressable } from './components'
 import { api } from './api'
+import type { PaystackConnectionStatus } from './api/client'
+import { useProfile } from './api/hooks'
 import './PaymentSettings.css'
 
 const payoutSchedules = [
@@ -55,36 +57,47 @@ export default function PaymentSettings() {
   const [connecting, setConnecting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Get profile to know which provider they use
+  const { data: profileData } = useProfile()
+  const paymentProvider = profileData?.profile?.paymentProvider
+
   // Real data from API
   const [stripeStatus, setStripeStatus] = useState<{
     connected: boolean
     status: string
     details?: any
   } | null>(null)
+  const [paystackStatus, setPaystackStatus] = useState<PaystackConnectionStatus | null>(null)
   const [balance, setBalance] = useState({ available: 0, pending: 0 })
   const [payoutHistory, setPayoutHistory] = useState<Payout[]>([])
 
   useEffect(() => {
     loadPaymentData()
-  }, [])
+  }, [paymentProvider])
 
   async function loadPaymentData() {
     setLoading(true)
     setError(null)
 
     try {
-      // Check Stripe connection status
-      const status = await api.stripe.getStatus()
-      setStripeStatus(status)
+      // Check status based on payment provider
+      if (paymentProvider === 'paystack') {
+        const status = await api.paystack.getStatus()
+        setPaystackStatus(status)
+      } else {
+        // Default to Stripe
+        const status = await api.stripe.getStatus()
+        setStripeStatus(status)
 
-      if (status.connected && status.status === 'active') {
-        // Fetch balance and payouts
-        const [balanceResult, payoutsResult] = await Promise.all([
-          api.stripe.getBalance().catch(() => ({ balance: { available: 0, pending: 0 } })),
-          api.stripe.getPayouts().catch(() => ({ payouts: [] })),
-        ])
-        setBalance(balanceResult.balance)
-        setPayoutHistory(payoutsResult.payouts)
+        if (status.connected && status.status === 'active') {
+          // Fetch balance and payouts
+          const [balanceResult, payoutsResult] = await Promise.all([
+            api.stripe.getBalance().catch(() => ({ balance: { available: 0, pending: 0 } })),
+            api.stripe.getPayouts().catch(() => ({ payouts: [] })),
+          ])
+          setBalance(balanceResult.balance)
+          setPayoutHistory(payoutsResult.payouts)
+        }
       }
     } catch (err: any) {
       console.error('Failed to load payment data:', err)
@@ -134,6 +147,82 @@ export default function PaymentSettings() {
         </header>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
           <Loader2 size={32} className="spin" />
+        </div>
+      </div>
+    )
+  }
+
+  // Show Paystack connected account
+  if (paymentProvider === 'paystack' && paystackStatus?.connected) {
+    const details = paystackStatus.details
+    return (
+      <div className="payment-settings-page">
+        <header className="payment-settings-header">
+          <Pressable className="back-btn" onClick={() => navigate(-1)}>
+            <ArrowLeft size={20} />
+          </Pressable>
+          <span className="payment-settings-title">Payment Settings</span>
+          <div className="header-spacer" />
+        </header>
+
+        <div className="payment-settings-content">
+          {/* Connected Status */}
+          <section className="settings-section">
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '12px 16px',
+              background: 'rgba(34, 197, 94, 0.1)',
+              borderRadius: 12,
+              marginBottom: 16,
+            }}>
+              <Check size={18} color="var(--success)" />
+              <span style={{ fontSize: 14, color: 'var(--success)' }}>
+                Paystack connected and active
+              </span>
+            </div>
+          </section>
+
+          {/* Bank Account Info */}
+          <section className="settings-section">
+            <h3 className="section-title">Connected Bank Account</h3>
+            <div className="method-card">
+              <div className="method-row" style={{ cursor: 'default' }}>
+                <div className="method-icon">
+                  <Building2 size={20} />
+                </div>
+                <div className="method-info">
+                  <span className="method-name">{details?.bank || 'Bank Account'}</span>
+                  <span className="method-detail">
+                    {details?.accountNumber ? `****${details.accountNumber.slice(-4)}` : '****'}
+                    {details?.accountName && ` - ${details.accountName}`}
+                  </span>
+                </div>
+                <div className="method-default">
+                  <Check size={16} />
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* Info about Paystack payouts */}
+          <section className="settings-section">
+            <div style={{
+              padding: '16px',
+              background: 'var(--surface)',
+              borderRadius: 12,
+            }}>
+              <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 8 }}>
+                Paystack automatically settles funds to your bank account. Settlement times vary by country:
+              </p>
+              <ul style={{ fontSize: 13, color: 'var(--text-tertiary)', paddingLeft: 20, margin: 0 }}>
+                <li>Nigeria: Next business day</li>
+                <li>Kenya: T+1 to T+2 business days</li>
+                <li>South Africa: T+2 business days</li>
+              </ul>
+            </div>
+          </section>
         </div>
       </div>
     )

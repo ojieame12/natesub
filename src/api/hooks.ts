@@ -222,6 +222,46 @@ export function useStripeDashboardLink() {
 }
 
 // ============================================
+// PAYSTACK HOOKS
+// ============================================
+
+export function usePaystackBanks(country: string) {
+  return useQuery({
+    queryKey: ['paystackBanks', country],
+    queryFn: () => api.paystack.getBanks(country),
+    enabled: !!country,
+    staleTime: 5 * 60 * 1000, // 5 minutes - banks don't change often
+  })
+}
+
+export function usePaystackResolveAccount() {
+  return useMutation({
+    mutationFn: (data: { accountNumber: string; bankCode: string; idNumber?: string; accountType?: 'personal' | 'business' }) =>
+      api.paystack.resolveAccount(data),
+  })
+}
+
+export function usePaystackConnect() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: api.paystack.connect,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['paystackStatus'] })
+      queryClient.invalidateQueries({ queryKey: ['profile'] })
+    },
+  })
+}
+
+export function usePaystackStatus() {
+  return useQuery({
+    queryKey: ['paystackStatus'],
+    queryFn: api.paystack.getStatus,
+    staleTime: 30 * 1000, // 30 seconds
+  })
+}
+
+// ============================================
 // CHECKOUT HOOKS
 // ============================================
 

@@ -1,0 +1,407 @@
+// Paystack Service for Nigeria, Kenya, South Africa
+// API Docs: https://paystack.com/docs/api/
+
+import { env } from '../config/env.js'
+import { db } from '../db/client.js'
+
+const PAYSTACK_API_URL = 'https://api.paystack.co'
+
+// Platform fee percentage (10%)
+const PLATFORM_FEE_PERCENT = 10
+
+// Supported countries for Paystack
+export const PAYSTACK_COUNTRIES = ['NG', 'KE', 'ZA'] as const
+export type PaystackCountry = typeof PAYSTACK_COUNTRIES[number]
+
+// Check if a country is supported by Paystack
+export function isPaystackSupported(countryCode: string): countryCode is PaystackCountry {
+  return PAYSTACK_COUNTRIES.includes(countryCode as PaystackCountry)
+}
+
+// Types
+interface PaystackResponse<T> {
+  status: boolean
+  message: string
+  data: T
+}
+
+interface Bank {
+  id: number
+  name: string
+  slug: string
+  code: string
+  longcode: string
+  country: string
+  currency: string
+  type: string
+  active: boolean
+}
+
+interface ResolvedAccount {
+  account_number: string
+  account_name: string
+  bank_id: number
+}
+
+interface Subaccount {
+  id: number
+  subaccount_code: string
+  business_name: string
+  description: string | null
+  primary_contact_name: string | null
+  primary_contact_email: string | null
+  primary_contact_phone: string | null
+  percentage_charge: number
+  settlement_bank: string
+  account_number: string
+  currency: string
+  active: boolean
+}
+
+interface TransactionInit {
+  authorization_url: string
+  access_code: string
+  reference: string
+}
+
+interface TransactionData {
+  id: number
+  reference: string
+  amount: number
+  currency: string
+  status: string
+  channel: string
+  paid_at: string
+  customer: {
+    id: number
+    email: string
+    customer_code: string
+  }
+  authorization: {
+    authorization_code: string
+    card_type: string
+    last4: string
+    exp_month: string
+    exp_year: string
+    reusable: boolean
+  }
+  metadata: Record<string, any>
+}
+
+// Base fetch wrapper
+async function paystackFetch<T>(
+  path: string,
+  options: RequestInit = {}
+): Promise<PaystackResponse<T>> {
+  const secretKey = env.PAYSTACK_SECRET_KEY
+
+  if (!secretKey) {
+    throw new Error('Paystack is not configured')
+  }
+
+  const response = await fetch(`${PAYSTACK_API_URL}${path}`, {
+    ...options,
+    headers: {
+      Authorization: `Bearer ${secretKey}`,
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  })
+
+  const data = await response.json()
+
+  if (!response.ok || !data.status) {
+    throw new Error(data.message || 'Paystack API error')
+  }
+
+  return data
+}
+
+// ============================================
+// BANK OPERATIONS
+// ============================================
+
+// List banks for a country
+export async function listBanks(country: PaystackCountry): Promise<Bank[]> {
+  const countryMap: Record<PaystackCountry, string> = {
+    NG: 'nigeria',
+    KE: 'kenya',
+    ZA: 'south_africa',
+  }
+
+  const response = await paystackFetch<Bank[]>(
+    `/bank?country=${countryMap[country]}&perPage=100`
+  )
+
+  return response.data.filter(bank => bank.active)
+}
+
+// Resolve bank account (Nigeria & Ghana only)
+export async function resolveAccount(
+  accountNumber: string,
+  bankCode: string
+): Promise<ResolvedAccount> {
+  const response = await paystackFetch<ResolvedAccount>(
+    `/bank/resolve?account_number=${accountNumber}&bank_code=${bankCode}`
+  )
+
+  return response.data
+}
+
+// Validate bank account (South Africa - requires ID)
+export async function validateAccount(
+  accountNumber: string,
+  bankCode: string,
+  accountType: 'personal' | 'business',
+  documentType: string,
+  documentNumber: string
+): Promise<{ verified: boolean; account_name: string }> {
+  const response = await paystackFetch<{ verified: boolean; account_name: string }>(
+    '/bank/validate',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        account_number: accountNumber,
+        bank_code: bankCode,
+        account_type: accountType,
+        document_type: documentType,
+        document_number: documentNumber,
+        country_code: 'ZA',
+      }),
+    }
+  )
+
+  return response.data
+}
+
+// ============================================
+// SUBACCOUNT (Creator Onboarding)
+// ============================================
+
+// Create subaccount for a creator
+export async function createSubaccount(params: {
+  userId: string
+  businessName: string
+  bankCode: string
+  accountNumber: string
+  email: string
+  phone?: string
+}): Promise<{ subaccountCode: string }> {
+  // Check if user already has a subaccount
+  const profile = await db.profile.findUnique({ where: { userId: params.userId } })
+
+  if (profile?.paystackSubaccountCode) {
+    return { subaccountCode: profile.paystackSubaccountCode }
+  }
+
+  const response = await paystackFetch<Subaccount>('/subaccount', {
+    method: 'POST',
+    body: JSON.stringify({
+      business_name: params.businessName,
+      settlement_bank: params.bankCode,
+      account_number: params.accountNumber,
+      percentage_charge: PLATFORM_FEE_PERCENT, // Platform takes 10%
+      primary_contact_email: params.email,
+      primary_contact_phone: params.phone,
+      settlement_schedule: 'auto', // T+1 settlement
+    }),
+  })
+
+  const subaccountCode = response.data.subaccount_code
+
+  // Save to profile
+  await db.profile.update({
+    where: { userId: params.userId },
+    data: {
+      paystackSubaccountCode: subaccountCode,
+      paystackBankCode: params.bankCode,
+      paystackAccountNumber: params.accountNumber,
+      paymentProvider: 'paystack',
+      payoutStatus: 'active', // Paystack subaccounts are active immediately
+    },
+  })
+
+  return { subaccountCode }
+}
+
+// Get subaccount details
+export async function getSubaccount(subaccountCode: string): Promise<Subaccount> {
+  const response = await paystackFetch<Subaccount>(`/subaccount/${subaccountCode}`)
+  return response.data
+}
+
+// Update subaccount
+export async function updateSubaccount(
+  subaccountCode: string,
+  data: {
+    businessName?: string
+    settlementBank?: string
+    accountNumber?: string
+  }
+): Promise<Subaccount> {
+  const response = await paystackFetch<Subaccount>(`/subaccount/${subaccountCode}`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      business_name: data.businessName,
+      settlement_bank: data.settlementBank,
+      account_number: data.accountNumber,
+    }),
+  })
+  return response.data
+}
+
+// ============================================
+// TRANSACTIONS (Checkout)
+// ============================================
+
+// Initialize transaction with split to creator
+export async function initializeTransaction(params: {
+  email: string
+  amount: number // in smallest unit (kobo/cents)
+  currency: string
+  subaccountCode: string
+  callbackUrl: string
+  metadata: Record<string, any>
+  reference?: string
+}): Promise<TransactionInit> {
+  const response = await paystackFetch<TransactionInit>('/transaction/initialize', {
+    method: 'POST',
+    body: JSON.stringify({
+      email: params.email,
+      amount: params.amount,
+      currency: params.currency.toUpperCase(),
+      subaccount: params.subaccountCode,
+      bearer: 'account', // Platform bears Paystack fees
+      callback_url: params.callbackUrl,
+      metadata: params.metadata,
+      reference: params.reference,
+    }),
+  })
+
+  return response.data
+}
+
+// Verify transaction
+export async function verifyTransaction(reference: string): Promise<TransactionData> {
+  const response = await paystackFetch<TransactionData>(
+    `/transaction/verify/${reference}`
+  )
+  return response.data
+}
+
+// ============================================
+// RECURRING CHARGES
+// ============================================
+
+// Charge authorization for recurring payments
+export async function chargeAuthorization(params: {
+  authorizationCode: string
+  email: string
+  amount: number // in smallest unit
+  currency: string
+  subaccountCode: string
+  metadata: Record<string, any>
+  reference?: string
+}): Promise<TransactionData> {
+  const response = await paystackFetch<TransactionData>('/transaction/charge_authorization', {
+    method: 'POST',
+    body: JSON.stringify({
+      authorization_code: params.authorizationCode,
+      email: params.email,
+      amount: params.amount,
+      currency: params.currency.toUpperCase(),
+      subaccount: params.subaccountCode,
+      bearer: 'account', // Platform bears fees
+      metadata: params.metadata,
+      reference: params.reference,
+    }),
+  })
+
+  return response.data
+}
+
+// ============================================
+// TRANSFERS (Manual Payouts - if needed)
+// ============================================
+
+// Create transfer recipient
+export async function createTransferRecipient(params: {
+  name: string
+  accountNumber: string
+  bankCode: string
+  currency: string
+}): Promise<{ recipientCode: string }> {
+  const response = await paystackFetch<{ recipient_code: string }>('/transferrecipient', {
+    method: 'POST',
+    body: JSON.stringify({
+      type: 'nuban', // For Nigerian banks
+      name: params.name,
+      account_number: params.accountNumber,
+      bank_code: params.bankCode,
+      currency: params.currency,
+    }),
+  })
+
+  return { recipientCode: response.data.recipient_code }
+}
+
+// Initiate transfer
+export async function initiateTransfer(params: {
+  amount: number
+  recipientCode: string
+  reason: string
+  reference?: string
+}): Promise<{ transferCode: string; reference: string }> {
+  const response = await paystackFetch<{ transfer_code: string; reference: string }>(
+    '/transfer',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        source: 'balance',
+        amount: params.amount,
+        recipient: params.recipientCode,
+        reason: params.reason,
+        reference: params.reference,
+      }),
+    }
+  )
+
+  return {
+    transferCode: response.data.transfer_code,
+    reference: response.data.reference,
+  }
+}
+
+// ============================================
+// BALANCE
+// ============================================
+
+// Get platform balance (not subaccount balance)
+export async function getBalance(): Promise<{
+  currency: string
+  balance: number
+}[]> {
+  const response = await paystackFetch<{ currency: string; balance: number }[]>('/balance')
+  return response.data
+}
+
+// ============================================
+// HELPERS
+// ============================================
+
+// Generate unique reference
+export function generateReference(prefix = 'TX'): string {
+  const timestamp = Date.now().toString(36)
+  const random = Math.random().toString(36).substring(2, 8)
+  return `${prefix}_${timestamp}_${random}`.toUpperCase()
+}
+
+// Convert amount to display format
+export function formatPaystackAmount(amount: number, currency: string): string {
+  const displayAmount = amount / 100
+  const formatter = new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: currency,
+  })
+  return formatter.format(displayAmount)
+}
