@@ -1,7 +1,17 @@
 import Stripe from 'stripe'
+import crypto from 'crypto'
 import { env } from '../config/env.js'
 import { db } from '../db/client.js'
 import { getPlatformFeePercent, type UserPurpose } from './pricing.js'
+
+// Generate idempotency key for Stripe API calls
+// Uses 5-minute time buckets so duplicate requests within 5 minutes get same key
+function generateIdempotencyKey(prefix: string, ...parts: (string | number | undefined)[]): string {
+  const timeBucket = Math.floor(Date.now() / (5 * 60 * 1000)) // 5-minute buckets
+  const data = [...parts.filter(Boolean), timeBucket].join(':')
+  const hash = crypto.createHash('sha256').update(data).digest('hex').substring(0, 24)
+  return `${prefix}_${hash}`
+}
 
 export const stripe = new Stripe(env.STRIPE_SECRET_KEY, {
   apiVersion: '2025-11-17.clover',
@@ -191,36 +201,49 @@ export async function createCheckoutSession(params: {
     priceData.recurring = { interval: 'month' }
   }
 
-  // Create checkout session
-  const session = await stripe.checkout.sessions.create({
-    mode: params.interval === 'month' ? 'subscription' : 'payment',
-    line_items: [
-      {
-        price_data: priceData,
-        quantity: 1,
+  // Generate idempotency key to prevent duplicate sessions
+  const idempotencyKey = generateIdempotencyKey(
+    'checkout',
+    params.creatorId,
+    params.subscriberEmail,
+    params.tierId,
+    params.amount.toString(),
+    params.interval
+  )
+
+  // Create checkout session with idempotency key
+  const session = await stripe.checkout.sessions.create(
+    {
+      mode: params.interval === 'month' ? 'subscription' : 'payment',
+      line_items: [
+        {
+          price_data: priceData,
+          quantity: 1,
+        },
+      ],
+      payment_intent_data: params.interval === 'one_time' ? {
+        application_fee_amount: applicationFeeAmount,
+        transfer_data: {
+          destination: creatorProfile.stripeAccountId,
+        },
+      } : undefined,
+      subscription_data: params.interval === 'month' ? {
+        application_fee_percent: platformFeePercent,
+        transfer_data: {
+          destination: creatorProfile.stripeAccountId,
+        },
+      } : undefined,
+      success_url: params.successUrl,
+      cancel_url: params.cancelUrl,
+      customer_email: params.subscriberEmail,
+      metadata: {
+        creatorId: params.creatorId,
+        tierId: params.tierId || '',
+        requestId: params.requestId || '',  // Track which request triggered this checkout
       },
-    ],
-    payment_intent_data: params.interval === 'one_time' ? {
-      application_fee_amount: applicationFeeAmount,
-      transfer_data: {
-        destination: creatorProfile.stripeAccountId,
-      },
-    } : undefined,
-    subscription_data: params.interval === 'month' ? {
-      application_fee_percent: platformFeePercent,
-      transfer_data: {
-        destination: creatorProfile.stripeAccountId,
-      },
-    } : undefined,
-    success_url: params.successUrl,
-    cancel_url: params.cancelUrl,
-    customer_email: params.subscriberEmail,
-    metadata: {
-      creatorId: params.creatorId,
-      tierId: params.tierId || '',
-      requestId: params.requestId || '',  // Track which request triggered this checkout
     },
-  })
+    { idempotencyKey }
+  )
 
   return session
 }

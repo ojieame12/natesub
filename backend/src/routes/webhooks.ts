@@ -7,8 +7,12 @@ import { env } from '../config/env.js'
 import { sendNewSubscriberEmail } from '../services/email.js'
 import { handlePlatformSubscriptionEvent } from '../services/platformSubscription.js'
 import { calculateFees, type UserPurpose } from '../services/pricing.js'
+import { webhookRateLimit } from '../middleware/rateLimit.js'
 
 const webhooks = new Hono()
+
+// Apply rate limiting to all webhook endpoints (100 requests/hour per IP)
+webhooks.use('*', webhookRateLimit)
 
 // Helper to identify platform subscription events
 function isPlatformSubscriptionEvent(event: Stripe.Event): boolean {
@@ -123,8 +127,11 @@ webhooks.post('/stripe', async (c) => {
 
     return c.json({ received: true })
   } catch (error) {
-    console.error(`Error processing webhook ${event.type}:`, error)
-    return c.json({ error: 'Webhook processing failed' }, 500)
+    // Log the error but return 200 to prevent unnecessary retries
+    // Stripe will retry on 500, but processing errors shouldn't trigger retries
+    // Only infrastructure errors (signature validation, JSON parsing) should return non-200
+    console.error(`[stripe] Error processing webhook ${event.type}:`, error)
+    return c.json({ received: true, error: 'Processing failed - logged for review' })
   }
 })
 
@@ -245,6 +252,17 @@ async function handleCheckoutCompleted(event: Stripe.Event) {
       },
     })
 
+    // Get charge ID from payment intent if available
+    let stripeChargeId: string | null = null
+    if (session.payment_intent) {
+      try {
+        const paymentIntent = await stripe.paymentIntents.retrieve(session.payment_intent as string)
+        stripeChargeId = paymentIntent.latest_charge as string || null
+      } catch (err) {
+        console.warn('Could not retrieve payment intent for charge ID:', err)
+      }
+    }
+
     // Create payment record with idempotency key
     await tx.payment.create({
       data: {
@@ -258,6 +276,8 @@ async function handleCheckoutCompleted(event: Stripe.Event) {
         type: session.mode === 'subscription' ? 'recurring' : 'one_time',
         status: 'succeeded',
         stripeEventId: event.id, // Idempotency key
+        stripePaymentIntentId: session.payment_intent as string || null,
+        stripeChargeId,
       },
     })
 
@@ -329,7 +349,9 @@ async function handleInvoicePaid(event: Stripe.Event) {
   const purpose = subscription.creator?.profile?.purpose as UserPurpose
   const { totalFeeCents: feeCents, netCents } = calculateFees(invoice.amount_paid, purpose)
 
-  // Create payment record
+  // Create payment record with charge ID
+  // Use type casting for properties that may vary across Stripe API versions
+  const invoiceAny = invoice as any
   await db.payment.create({
     data: {
       subscriptionId: subscription.id,
@@ -342,6 +364,8 @@ async function handleInvoicePaid(event: Stripe.Event) {
       type: 'recurring',
       status: 'succeeded',
       stripeEventId: event.id,
+      stripePaymentIntentId: invoiceAny.payment_intent as string || null,
+      stripeChargeId: invoiceAny.charge as string || null,
     },
   })
 
@@ -565,6 +589,8 @@ async function handleDisputeCreated(event: Stripe.Event) {
       netCents: -dispute.amount,
       type: subscription.interval === 'month' ? 'recurring' : 'one_time',
       status: 'pending', // Dispute is open, funds held
+      stripeDisputeId: dispute.id, // Track dispute for later resolution
+      stripeChargeId: dispute.charge as string || null,
       stripeEventId: event.id,
     },
   })
@@ -589,14 +615,21 @@ async function handleDisputeCreated(event: Stripe.Event) {
 async function handleDisputeClosed(event: Stripe.Event) {
   const dispute = event.data.object as Stripe.Dispute
 
-  // Find the open dispute payment
-  const disputePayment = await db.payment.findFirst({
-    where: {
-      status: 'pending',
-      amountCents: -dispute.amount,
-    },
-    orderBy: { createdAt: 'desc' },
+  // Find the open dispute payment by dispute ID (more reliable than amount matching)
+  let disputePayment = await db.payment.findUnique({
+    where: { stripeDisputeId: dispute.id },
   })
+
+  // Fallback to amount-based matching for older disputes without ID
+  if (!disputePayment) {
+    disputePayment = await db.payment.findFirst({
+      where: {
+        status: 'pending',
+        amountCents: -dispute.amount,
+      },
+      orderBy: { createdAt: 'desc' },
+    })
+  }
 
   if (!disputePayment) return
 
@@ -754,8 +787,10 @@ webhooks.post('/paystack', async (c) => {
 
     return c.json({ received: true })
   } catch (error) {
-    console.error(`Error processing Paystack webhook ${event}:`, error)
-    return c.json({ error: 'Webhook processing failed' }, 500)
+    // Log the error but return 200 to prevent unnecessary retries
+    // Paystack will retry on non-200, but processing errors shouldn't trigger retries
+    console.error(`[paystack] Error processing webhook ${event}:`, error)
+    return c.json({ received: true, error: 'Processing failed - logged for review' })
   }
 })
 

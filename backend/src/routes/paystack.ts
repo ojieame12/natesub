@@ -14,6 +14,7 @@ import {
   type PaystackCountry,
 } from '../services/paystack.js'
 import { maskAccountNumber } from '../utils/pii.js'
+import { decryptAccountNumber } from '../utils/encryption.js'
 
 const paystackRoutes = new Hono()
 
@@ -244,7 +245,7 @@ paystackRoutes.get('/connect/status', requireAuth, async (c) => {
       details: {
         businessName: subaccount.business_name,
         bank: subaccount.settlement_bank,
-        accountNumber: profile.paystackAccountNumber,
+        accountNumber: decryptAccountNumber(profile.paystackAccountNumber),
         accountName: profile.paystackAccountName,
         percentageCharge: subaccount.percentage_charge,
       },

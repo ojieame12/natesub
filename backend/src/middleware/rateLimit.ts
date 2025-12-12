@@ -91,3 +91,22 @@ export const aiAudioRateLimit = rateLimit({
   keyPrefix: 'ai_audio_ratelimit',
   message: 'Voice processing limit reached. Please try again tomorrow.',
 })
+
+/**
+ * Webhook rate limiter - IP-based
+ * 100 requests per hour per IP to prevent abuse
+ * Stripe/Paystack webhooks should never hit this limit under normal use
+ */
+export const webhookRateLimit = rateLimit({
+  windowMs: 60 * 60 * 1000,  // 1 hour
+  maxRequests: 100,
+  keyPrefix: 'webhook_ratelimit',
+  keyGenerator: (c) => {
+    // Use IP address for webhook rate limiting (not user ID)
+    const ip = c.req.header('x-forwarded-for')?.split(',')[0]?.trim()
+      || c.req.header('x-real-ip')
+      || 'unknown'
+    return `webhook_ratelimit:${ip}`
+  },
+  message: 'Too many webhook requests. Please contact support if this persists.',
+})

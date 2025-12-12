@@ -2,11 +2,15 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { db } from '../db/client.js'
+import { redis } from '../db/redis.js'
 import { createCheckoutSession, getAccountStatus } from '../services/stripe.js'
 import { initializeTransaction, generateReference, isPaystackSupported, type PaystackCountry } from '../services/paystack.js'
 import { env } from '../config/env.js'
 
 const checkout = new Hono()
+
+// Checkout deduplication TTL (10 minutes)
+const CHECKOUT_DEDUPE_TTL = 600
 
 // Country to currency mapping for Paystack
 const PAYSTACK_CURRENCIES: Record<PaystackCountry, string> = {
@@ -50,6 +54,17 @@ checkout.post(
       return c.json({ error: 'Creator payments are not active' }, 400)
     }
 
+    // Enforce platform subscription for service providers
+    if (profile.purpose === 'service') {
+      const validSubscriptionStatuses = ['active', 'trialing']
+      if (!profile.platformSubscriptionStatus || !validSubscriptionStatuses.includes(profile.platformSubscriptionStatus)) {
+        return c.json({
+          error: 'This creator needs to activate their service plan to receive payments.',
+          code: 'PLATFORM_SUBSCRIPTION_REQUIRED',
+        }, 402) // 402 Payment Required
+      }
+    }
+
     // Validate amount against creator's pricing
     if (profile.pricingModel === 'single' && profile.singleAmount) {
       if (amount !== profile.singleAmount) {
@@ -85,6 +100,21 @@ checkout.post(
           }, 400)
         }
 
+        // Deduplication: Check for existing pending checkout (prevents double-clicks)
+        const dedupeKey = `checkout:paystack:${subscriberEmail}:${profile.userId}:${tierId || amount}`
+        const existingCheckout = await redis.get(dedupeKey)
+
+        if (existingCheckout) {
+          const cached = JSON.parse(existingCheckout)
+          console.log(`[checkout] Returning cached Paystack checkout for ${dedupeKey}`)
+          return c.json({
+            provider: 'paystack',
+            url: cached.url,
+            reference: cached.reference,
+            cached: true,
+          })
+        }
+
         const reference = generateReference('SUB')
         const result = await initializeTransaction({
           email: subscriberEmail,
@@ -99,6 +129,12 @@ checkout.post(
             interval,
           },
         })
+
+        // Cache the checkout URL to prevent duplicates
+        await redis.setex(dedupeKey, CHECKOUT_DEDUPE_TTL, JSON.stringify({
+          url: result.authorization_url,
+          reference: result.reference,
+        }))
 
         return c.json({
           provider: 'paystack',

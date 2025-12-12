@@ -4,6 +4,7 @@
 import { env } from '../config/env.js'
 import { db } from '../db/client.js'
 import { maskAccountNumber, maskEmail } from '../utils/pii.js'
+import { encryptAccountNumber, decryptAccountNumber } from '../utils/encryption.js'
 import { getPlatformFeePercent, type UserPurpose } from './pricing.js'
 
 const PAYSTACK_API_URL = 'https://api.paystack.co'
@@ -217,13 +218,13 @@ export async function createSubaccount(params: {
 
   const subaccountCode = response.data.subaccount_code
 
-  // Save to profile
+  // Save to profile (encrypt sensitive account number)
   await db.profile.update({
     where: { userId: params.userId },
     data: {
       paystackSubaccountCode: subaccountCode,
       paystackBankCode: params.bankCode,
-      paystackAccountNumber: params.accountNumber,
+      paystackAccountNumber: encryptAccountNumber(params.accountNumber),
       paymentProvider: 'paystack',
       payoutStatus: 'active', // Paystack subaccounts are active immediately
     },

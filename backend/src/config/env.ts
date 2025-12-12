@@ -57,6 +57,9 @@ const envSchema = z.object({
 
   // Jobs/Scheduler
   JOBS_API_KEY: z.string().min(16).optional(),  // API key for job endpoints (cron)
+
+  // Encryption
+  ENCRYPTION_KEY: z.string().min(32).optional(), // For encrypting PII (account numbers)
 })
 
 function loadEnv() {

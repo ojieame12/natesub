@@ -298,6 +298,7 @@ model Payment {
   // Stripe (stripe_event_id for webhook idempotency)
   stripePaymentIntentId String? @unique
   stripeChargeId        String?
+  stripeDisputeId       String? @unique // For tracking disputes/chargebacks
   stripeEventId         String? @unique
 
   // Paystack (paystack_event_id for webhook idempotency)
