@@ -43,6 +43,7 @@ billing.get('/status', requireAuth, async (c) => {
       status: subscription.status,
       subscriptionId: subscription.subscriptionId,
       currentPeriodEnd: subscription.currentPeriodEnd?.toISOString() || null,
+      trialEndsAt: subscription.trialEndsAt?.toISOString() || null,
       cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
     },
   })
@@ -71,7 +72,7 @@ billing.post('/checkout', requireAuth, async (c) => {
     const { url, sessionId } = await createPlatformCheckout(
       userId,
       user.email,
-      `${env.APP_URL}/settings/billing/success`,
+      `${env.APP_URL}/settings/billing?success=true`,
       `${env.APP_URL}/settings/billing`
     )
 

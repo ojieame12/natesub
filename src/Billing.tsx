@@ -1,14 +1,81 @@
-import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Check, FileText, Sparkles, Zap } from 'lucide-react'
-import { Pressable } from './components'
-import { useProfile } from './api/hooks'
+import { useEffect } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { ArrowLeft, Check, Crown, Sparkles, Zap, AlertCircle } from 'lucide-react'
+import { Pressable, useToast } from './components'
+import { useBillingStatus, useCreateBillingCheckout, useCreateBillingPortal } from './api/hooks'
 import './Billing.css'
+
+// Calculate days remaining in trial
+function getDaysRemaining(trialEndsAt: string | null): number {
+    if (!trialEndsAt) return 0
+    const now = new Date()
+    const end = new Date(trialEndsAt)
+    const diff = end.getTime() - now.getTime()
+    return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)))
+}
+
+// Format trial end date
+function formatTrialEnd(trialEndsAt: string | null): string {
+    if (!trialEndsAt) return ''
+    return new Date(trialEndsAt).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+    })
+}
 
 export default function Billing() {
     const navigate = useNavigate()
-    const { data: profileData } = useProfile()
-    const profile = profileData?.profile
-    const isService = profile?.purpose === 'service'
+    const [searchParams, setSearchParams] = useSearchParams()
+    const toast = useToast()
+    const { data: billingData, isLoading, refetch } = useBillingStatus()
+    const { mutate: createCheckout, isPending: isCheckoutLoading } = useCreateBillingCheckout()
+    const { mutate: createPortal, isPending: isPortalLoading } = useCreateBillingPortal()
+
+    // Handle success redirect from Stripe checkout
+    useEffect(() => {
+        if (searchParams.get('success') === 'true') {
+            toast.success('Your free trial has started!')
+            // Remove query param and refetch status
+            setSearchParams({})
+            refetch()
+        }
+    }, [searchParams, setSearchParams, toast, refetch])
+
+    const isService = billingData?.plan === 'service'
+    const subscription = billingData?.subscription
+    const status = subscription?.status
+    const isTrialing = status === 'trialing'
+    const isActive = status === 'active'
+    const isPastDue = status === 'past_due'
+    const hasSubscription = subscription?.subscriptionId != null
+
+    const daysRemaining = getDaysRemaining(subscription?.trialEndsAt || null)
+    const trialProgress = isTrialing ? Math.max(0, Math.min(100, ((30 - daysRemaining) / 30) * 100)) : 0
+
+    const handleStartTrial = () => {
+        createCheckout()
+    }
+
+    const handleManageSubscription = () => {
+        createPortal()
+    }
+
+    if (isLoading) {
+        return (
+            <div className="billing-page">
+                <header className="billing-header">
+                    <Pressable className="back-btn" onClick={() => navigate(-1)}>
+                        <ArrowLeft size={20} />
+                    </Pressable>
+                    <img src="/logo.svg" alt="NatePay" className="header-logo" />
+                    <div className="header-spacer" />
+                </header>
+                <div className="billing-content">
+                    <div className="billing-loading">Loading...</div>
+                </div>
+            </div>
+        )
+    }
 
     return (
         <div className="billing-page">
@@ -25,10 +92,113 @@ export default function Billing() {
                 {isService ? (
                     // SERVICE BRANCH - $5/mo subscription
                     <>
+                        {/* Current Status Card */}
+                        <div className={`billing-status-card ${isTrialing ? 'trialing' : isActive ? 'active' : isPastDue ? 'past-due' : ''}`}>
+                            {isTrialing ? (
+                                <>
+                                    <div className="billing-status-icon trialing">
+                                        <Sparkles size={24} />
+                                    </div>
+                                    <div className="billing-status-info">
+                                        <span className="billing-status-label">Free Trial</span>
+                                        <span className="billing-status-detail">
+                                            {daysRemaining} days left · Ends {formatTrialEnd(subscription?.trialEndsAt || null)}
+                                        </span>
+                                    </div>
+                                    <div className="trial-progress-ring">
+                                        <svg viewBox="0 0 36 36">
+                                            <path
+                                                className="trial-progress-bg"
+                                                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                                            />
+                                            <path
+                                                className="trial-progress-fill"
+                                                strokeDasharray={`${trialProgress}, 100`}
+                                                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                                            />
+                                        </svg>
+                                        <span className="trial-days">{daysRemaining}</span>
+                                    </div>
+                                </>
+                            ) : isActive ? (
+                                <>
+                                    <div className="billing-status-icon active">
+                                        <Crown size={24} />
+                                    </div>
+                                    <div className="billing-status-info">
+                                        <span className="billing-status-label">Service Plan</span>
+                                        <span className="billing-status-detail">
+                                            $5/month · {subscription?.cancelAtPeriodEnd ? 'Cancels' : 'Renews'} {subscription?.currentPeriodEnd
+                                                ? new Date(subscription.currentPeriodEnd).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                                                : 'soon'}
+                                        </span>
+                                    </div>
+                                    <div className="billing-status-badge active">Active</div>
+                                </>
+                            ) : isPastDue ? (
+                                <>
+                                    <div className="billing-status-icon past-due">
+                                        <AlertCircle size={24} />
+                                    </div>
+                                    <div className="billing-status-info">
+                                        <span className="billing-status-label">Payment Failed</span>
+                                        <span className="billing-status-detail">Update your payment method</span>
+                                    </div>
+                                    <div className="billing-status-badge past-due">Past Due</div>
+                                </>
+                            ) : !hasSubscription ? (
+                                <>
+                                    <div className="billing-status-icon inactive">
+                                        <Sparkles size={24} />
+                                    </div>
+                                    <div className="billing-status-info">
+                                        <span className="billing-status-label">Start Your Free Trial</span>
+                                        <span className="billing-status-detail">First month free, then $5/month</span>
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    <div className="billing-status-icon inactive">
+                                        <Sparkles size={24} />
+                                    </div>
+                                    <div className="billing-status-info">
+                                        <span className="billing-status-label">Subscription Ended</span>
+                                        <span className="billing-status-detail">Resubscribe to access pro features</span>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+
+                        {/* Trial Banner for trialing users */}
+                        {isTrialing && (
+                            <div className="trial-banner">
+                                <div className="trial-progress">
+                                    <div className="trial-progress-bar" style={{ width: `${trialProgress}%` }} />
+                                </div>
+                                <p className="trial-text">
+                                    Enjoying your trial? Your card won't be charged until {formatTrialEnd(subscription?.trialEndsAt || null)}.
+                                </p>
+                            </div>
+                        )}
+
+                        {/* Past Due Warning */}
+                        {isPastDue && (
+                            <div className="past-due-banner">
+                                <AlertCircle size={18} />
+                                <span>Update your payment method to continue using Service features.</span>
+                            </div>
+                        )}
+
+                        {/* Plan Card */}
                         <div className="billing-plan-card service">
-                            <div className="billing-plan-badge">
-                                <Sparkles size={14} />
-                                <span>Service Plan</span>
+                            <div className="billing-plan-header">
+                                <div className="billing-plan-badge">
+                                    <Sparkles size={14} />
+                                    <span>Service Plan</span>
+                                </div>
+                                {!hasSubscription && (
+                                    <span className="billing-trial-badge">First month free</span>
+                                )}
                             </div>
                             <div className="billing-plan-price">
                                 <span className="billing-price-amount">$5</span>
@@ -70,13 +240,29 @@ export default function Billing() {
                             </div>
                         </section>
 
-                        {/* Manage Subscription */}
-                        <Pressable className="billing-manage-btn">
-                            <span>Manage Subscription</span>
-                        </Pressable>
+                        {/* Action Button */}
+                        {!hasSubscription ? (
+                            <Pressable
+                                className="billing-cta-btn"
+                                onClick={handleStartTrial}
+                                disabled={isCheckoutLoading}
+                            >
+                                <span>{isCheckoutLoading ? 'Loading...' : 'Start Free Trial'}</span>
+                            </Pressable>
+                        ) : (
+                            <Pressable
+                                className="billing-manage-btn"
+                                onClick={handleManageSubscription}
+                                disabled={isPortalLoading}
+                            >
+                                <span>{isPortalLoading ? 'Loading...' : 'Manage Subscription'}</span>
+                            </Pressable>
+                        )}
 
                         <p className="billing-footer-note">
-                            Cancel anytime. Your subscription helps us build better tools for service providers.
+                            {!hasSubscription
+                                ? 'You won\'t be charged until your trial ends. Cancel anytime.'
+                                : 'Cancel anytime. Your subscription helps us build better tools for service providers.'}
                         </p>
                     </>
                 ) : (
@@ -122,28 +308,6 @@ export default function Billing() {
                                 </div>
                             </div>
                         </section>
-
-                        {/* Upgrade CTA */}
-                        <div className="billing-upgrade-section">
-                            <h4 className="billing-upgrade-title">Want more features?</h4>
-                            <div className="billing-upgrade-card">
-                                <div className="billing-upgrade-header">
-                                    <FileText size={20} />
-                                    <div>
-                                        <span className="billing-upgrade-name">Service Plan</span>
-                                        <span className="billing-upgrade-price">$5/mo</span>
-                                    </div>
-                                </div>
-                                <ul className="billing-upgrade-perks">
-                                    <li>AI-generated page content</li>
-                                    <li>Payroll documents for loans</li>
-                                    <li>Lower 8% transaction fees</li>
-                                </ul>
-                                <Pressable className="billing-upgrade-btn">
-                                    <span>Upgrade to Service</span>
-                                </Pressable>
-                            </div>
-                        </div>
 
                         <p className="billing-footer-note">
                             You keep 90% of every payment. No monthly commitment.

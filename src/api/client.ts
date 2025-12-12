@@ -863,6 +863,37 @@ export const payroll = {
 }
 
 // ============================================
+// BILLING (Platform Subscription)
+// ============================================
+
+export interface BillingStatus {
+  plan: 'personal' | 'service'
+  subscriptionRequired: boolean
+  subscription: {
+    status: string | null  // trialing, active, past_due, canceled
+    subscriptionId: string | null
+    currentPeriodEnd: string | null
+    trialEndsAt: string | null
+    cancelAtPeriodEnd: boolean
+  } | null
+}
+
+export const billing = {
+  getStatus: () =>
+    apiFetch<BillingStatus>('/billing/status'),
+
+  createCheckout: () =>
+    apiFetch<{ url: string; sessionId: string }>('/billing/checkout', {
+      method: 'POST',
+    }),
+
+  createPortalSession: () =>
+    apiFetch<{ url: string }>('/billing/portal', {
+      method: 'POST',
+    }),
+}
+
+// ============================================
 // ANALYTICS
 // ============================================
 
@@ -937,6 +968,7 @@ export const api = {
   ai,
   payroll,
   analytics,
+  billing,
 }
 
 export default api

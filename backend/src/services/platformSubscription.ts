@@ -124,13 +124,18 @@ export async function createPlatformCheckout(
   const { priceId } = await ensurePlatformProduct()
   const customerId = await getOrCreateCustomer(userId, email)
 
-  // Check if already subscribed
+  // Check if already subscribed (any status except canceled)
   const profile = await db.profile.findUnique({
     where: { userId },
-    select: { platformSubscriptionStatus: true },
+    select: {
+      platformSubscriptionId: true,
+      platformSubscriptionStatus: true,
+    },
   })
 
-  if (profile?.platformSubscriptionStatus === 'active') {
+  // Block if subscription exists and isn't canceled
+  // This prevents duplicate subscriptions for trialing/active/past_due users
+  if (profile?.platformSubscriptionId && profile.platformSubscriptionStatus !== 'canceled') {
     throw new Error('Already subscribed to platform')
   }
 
@@ -143,6 +148,13 @@ export async function createPlatformCheckout(
         quantity: 1,
       },
     ],
+    subscription_data: {
+      trial_period_days: 30, // First month free
+      metadata: {
+        userId,
+        type: 'platform_subscription',
+      },
+    },
     success_url: successUrl,
     cancel_url: cancelUrl,
     metadata: {
@@ -188,6 +200,7 @@ export async function getPlatformSubscriptionStatus(userId: string): Promise<{
   status: string | null
   subscriptionId: string | null
   currentPeriodEnd: Date | null
+  trialEndsAt: Date | null
   cancelAtPeriodEnd: boolean
 }> {
   const profile = await db.profile.findUnique({
@@ -195,6 +208,7 @@ export async function getPlatformSubscriptionStatus(userId: string): Promise<{
     select: {
       platformSubscriptionId: true,
       platformSubscriptionStatus: true,
+      platformTrialEndsAt: true,
     },
   })
 
@@ -203,6 +217,7 @@ export async function getPlatformSubscriptionStatus(userId: string): Promise<{
       status: null,
       subscriptionId: null,
       currentPeriodEnd: null,
+      trialEndsAt: null,
       cancelAtPeriodEnd: false,
     }
   }
@@ -210,12 +225,12 @@ export async function getPlatformSubscriptionStatus(userId: string): Promise<{
   // Get fresh status from Stripe
   try {
     const subscription = await stripe.subscriptions.retrieve(profile.platformSubscriptionId)
-    // Access properties with type assertion for API compatibility
     const sub = subscription as any
     return {
       status: sub.status,
       subscriptionId: sub.id,
       currentPeriodEnd: sub.current_period_end ? new Date(sub.current_period_end * 1000) : null,
+      trialEndsAt: sub.trial_end ? new Date(sub.trial_end * 1000) : profile.platformTrialEndsAt,
       cancelAtPeriodEnd: sub.cancel_at_period_end || false,
     }
   } catch {
@@ -223,6 +238,7 @@ export async function getPlatformSubscriptionStatus(userId: string): Promise<{
       status: profile.platformSubscriptionStatus,
       subscriptionId: profile.platformSubscriptionId,
       currentPeriodEnd: null,
+      trialEndsAt: profile.platformTrialEndsAt,
       cancelAtPeriodEnd: false,
     }
   }
@@ -244,22 +260,30 @@ export async function handlePlatformSubscriptionEvent(
 
       // Get subscription details
       const subscription = await stripe.subscriptions.retrieve(subscriptionId)
+      const sub = subscription as any
+
+      // Calculate trial end date
+      const trialEndsAt = sub.trial_end
+        ? new Date(sub.trial_end * 1000)
+        : null
 
       await db.profile.update({
         where: { userId },
         data: {
           platformSubscriptionId: subscriptionId,
-          platformSubscriptionStatus: subscription.status,
+          platformSubscriptionStatus: subscription.status, // 'trialing' during trial
+          platformTrialEndsAt: trialEndsAt,
         },
       })
 
-      console.log(`[platform] User ${userId} subscribed: ${subscriptionId}`)
+      console.log(`[platform] User ${userId} subscribed: ${subscriptionId} (trial until ${trialEndsAt?.toISOString() || 'none'})`)
       break
     }
 
     case 'customer.subscription.updated': {
       const subscription = event.data.object as Stripe.Subscription
       const customerId = subscription.customer as string
+      const sub = subscription as any
 
       // Find user by customer ID
       const profile = await db.profile.findFirst({
@@ -267,10 +291,16 @@ export async function handlePlatformSubscriptionEvent(
       })
 
       if (profile) {
+        // Update status and trial end date (keeps DB in sync with Stripe)
+        const trialEndsAt = sub.trial_end
+          ? new Date(sub.trial_end * 1000)
+          : null
+
         await db.profile.update({
           where: { id: profile.id },
           data: {
             platformSubscriptionStatus: subscription.status,
+            platformTrialEndsAt: trialEndsAt,
           },
         })
         console.log(`[platform] Subscription ${subscription.id} updated: ${subscription.status}`)

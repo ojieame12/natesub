@@ -2,9 +2,19 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, ChevronRight, Mail, Bell, Eye, Download, Trash2, LogOut, CreditCard, Loader2 } from 'lucide-react'
 import { Pressable, useToast } from './components'
-import { useCurrentUser, useLogout, useDeleteAccount, useSettings, useUpdateSettings } from './api/hooks'
+import { useCurrentUser, useLogout, useDeleteAccount, useSettings, useUpdateSettings, useBillingStatus } from './api/hooks'
 import { getPricing } from './utils/pricing'
+
 import './Settings.css'
+
+// Helper to get days remaining in trial
+function getTrialDaysRemaining(trialEndsAt: string | null): number {
+  if (!trialEndsAt) return 0
+  const now = new Date()
+  const end = new Date(trialEndsAt)
+  const diff = end.getTime() - now.getTime()
+  return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)))
+}
 
 // Toggle component
 interface ToggleProps {
@@ -31,9 +41,15 @@ export default function Settings() {
   // API hooks
   const { data: user } = useCurrentUser()
   const { data: settings } = useSettings()
+  const { data: billingData } = useBillingStatus()
   const { mutateAsync: updateSettings } = useUpdateSettings()
   const { mutateAsync: logout } = useLogout()
   const { mutateAsync: deleteAccount, isPending: isDeleting } = useDeleteAccount()
+
+  // Billing status
+  const isService = user?.profile?.purpose === 'service'
+  const subscriptionStatus = billingData?.subscription?.status
+  const trialDaysLeft = getTrialDaysRemaining(billingData?.subscription?.trialEndsAt || null)
 
   // Local state for toggles (optimistic UI)
   const [pushNotifications, setPushNotifications] = useState(true)
@@ -164,7 +180,17 @@ export default function Settings() {
               <div className="settings-info">
                 <span className="settings-row-title">Billing</span>
                 <span className="settings-row-value">
-                  {getPricing(user?.profile?.purpose).planName} - {getPricing(user?.profile?.purpose).transactionFeeLabel} fees
+                  {isService && subscriptionStatus === 'trialing' ? (
+                    `Free Trial · ${trialDaysLeft} days left`
+                  ) : isService && subscriptionStatus === 'active' ? (
+                    'Service Plan · $5/mo'
+                  ) : isService && subscriptionStatus === 'past_due' ? (
+                    'Payment Failed'
+                  ) : isService && !subscriptionStatus ? (
+                    'Start Free Trial'
+                  ) : (
+                    `${getPricing(user?.profile?.purpose).planName} · ${getPricing(user?.profile?.purpose).transactionFeeLabel} fees`
+                  )}
                 </span>
               </div>
               <ChevronRight size={18} className="settings-chevron" />

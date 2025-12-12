@@ -624,6 +624,42 @@ export function useUpdatePageView() {
   })
 }
 
+// ============================================
+// BILLING (Platform Subscription)
+// ============================================
+
+export function useBillingStatus() {
+  return useQuery({
+    queryKey: ['billing', 'status'],
+    queryFn: () => api.billing.getStatus(),
+    staleTime: 1000 * 60 * 5, // 5 minutes
+  })
+}
+
+export function useCreateBillingCheckout() {
+  return useMutation({
+    mutationFn: () => api.billing.createCheckout(),
+    onSuccess: (data) => {
+      // Redirect to Stripe checkout
+      if (data.url) {
+        window.location.href = data.url
+      }
+    },
+  })
+}
+
+export function useCreateBillingPortal() {
+  return useMutation({
+    mutationFn: () => api.billing.createPortalSession(),
+    onSuccess: (data) => {
+      // Redirect to Stripe customer portal
+      if (data.url) {
+        window.location.href = data.url
+      }
+    },
+  })
+}
+
 // Helper to convert Blob to base64
 export async function blobToBase64(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
