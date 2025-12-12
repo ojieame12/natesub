@@ -122,9 +122,11 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
         }
 
         try {
+            // Convert to cents for backend (currentAmount is in dollars from public profile)
+            const amountInCents = Math.round(currentAmount * 100)
             const result = await createCheckout({
                 creatorUsername: username,
-                amount: currentAmount,
+                amount: amountInCents,
                 interval: 'month',
             })
             // Redirect to checkout (Stripe or Paystack based on creator's provider)

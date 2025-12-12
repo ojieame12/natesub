@@ -1,44 +1,73 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Camera, Plus, GripVertical, Trash2, ExternalLink } from 'lucide-react'
-import { useOnboardingStore } from './onboarding/store'
+import { ArrowLeft, Camera, Plus, GripVertical, Trash2, ExternalLink, Check, X } from 'lucide-react'
 import { Pressable, useToast, Skeleton } from './components'
+import { useProfile, useUpdateProfile } from './api/hooks'
 import { getCurrencySymbol } from './utils/currency'
+import type { Tier, Perk, ImpactItem } from './api/client'
 import './EditPage.css'
-
-interface Tier {
-  id: string
-  name: string
-  price: number
-  description: string
-}
 
 export default function EditPage() {
   const navigate = useNavigate()
   const toast = useToast()
-  const { name, username, bio, currency, setName, setBio } = useOnboardingStore()
-  const currencySymbol = getCurrencySymbol(currency)
+  const { data: profileData, isLoading, error } = useProfile()
+  const { mutateAsync: updateProfile, isPending: isSaving } = useUpdateProfile()
 
-  const [isLoading, setIsLoading] = useState(true)
-  const [pageTitle, setPageTitle] = useState(name || '')
-  const [pageDescription, setPageDescription] = useState(bio || '')
-  const [tiers, setTiers] = useState<Tier[]>([
-    { id: '1', name: 'Fan', price: 5, description: 'Basic access to content' },
-    { id: '2', name: 'Supporter', price: 10, description: 'Extra perks and behind the scenes' },
-    { id: '3', name: 'VIP', price: 25, description: 'All access plus 1-on-1 time' },
-  ])
+  const profile = profileData?.profile
 
+  // Local state for editing
+  const [displayName, setDisplayName] = useState('')
+  const [bio, setBio] = useState('')
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+  const [pricingModel, setPricingModel] = useState<'single' | 'tiers'>('single')
+  const [singleAmount, setSingleAmount] = useState<number>(10)
+  const [tiers, setTiers] = useState<Tier[]>([])
+  const [perks, setPerks] = useState<Perk[]>([])
+  const [impactItems, setImpactItems] = useState<ImpactItem[]>([])
+  const [hasChanges, setHasChanges] = useState(false)
+
+  // Hydrate local state from profile
+  useEffect(() => {
+    if (profile) {
+      setDisplayName(profile.displayName || '')
+      setBio(profile.bio || '')
+      setAvatarUrl(profile.avatarUrl)
+      setPricingModel(profile.pricingModel || 'single')
+      setSingleAmount(profile.singleAmount || 10)
+      setTiers(profile.tiers || [])
+      setPerks(profile.perks || [])
+      setImpactItems(profile.impactItems || [])
+    }
+  }, [profile])
+
+  const currencySymbol = getCurrencySymbol(profile?.currency || 'USD')
+
+  // Track changes
+  useEffect(() => {
+    if (!profile) return
+    const changed =
+      displayName !== (profile.displayName || '') ||
+      bio !== (profile.bio || '') ||
+      pricingModel !== profile.pricingModel ||
+      singleAmount !== (profile.singleAmount || 10) ||
+      JSON.stringify(tiers) !== JSON.stringify(profile.tiers || []) ||
+      JSON.stringify(perks) !== JSON.stringify(profile.perks || []) ||
+      JSON.stringify(impactItems) !== JSON.stringify(profile.impactItems || [])
+    setHasChanges(changed)
+  }, [displayName, bio, pricingModel, singleAmount, tiers, perks, impactItems, profile])
+
+  // Tier handlers
   const handleAddTier = () => {
     const newTier: Tier = {
       id: Date.now().toString(),
       name: 'New Tier',
-      price: 15,
-      description: 'Describe what subscribers get',
+      amount: 15,
+      perks: [],
     }
     setTiers([...tiers, newTier])
   }
 
-  const handleUpdateTier = (id: string, field: keyof Tier, value: string | number) => {
+  const handleUpdateTier = (id: string, field: keyof Tier, value: string | number | string[]) => {
     setTiers(tiers.map(tier =>
       tier.id === id ? { ...tier, [field]: value } : tier
     ))
@@ -50,23 +79,122 @@ export default function EditPage() {
     }
   }
 
+  // Perk handlers
+  const handleAddPerk = () => {
+    const newPerk: Perk = {
+      id: Date.now().toString(),
+      title: 'New perk',
+      enabled: true,
+    }
+    setPerks([...perks, newPerk])
+  }
+
+  const handleUpdatePerk = (id: string, field: keyof Perk, value: string | boolean) => {
+    setPerks(perks.map(perk =>
+      perk.id === id ? { ...perk, [field]: value } : perk
+    ))
+  }
+
+  const handleDeletePerk = (id: string) => {
+    setPerks(perks.filter(perk => perk.id !== id))
+  }
+
+  // Impact item handlers
+  const handleAddImpact = () => {
+    const newItem: ImpactItem = {
+      id: Date.now().toString(),
+      title: '',
+      subtitle: '',
+    }
+    setImpactItems([...impactItems, newItem])
+  }
+
+  const handleUpdateImpact = (id: string, field: keyof ImpactItem, value: string) => {
+    setImpactItems(impactItems.map(item =>
+      item.id === id ? { ...item, [field]: value } : item
+    ))
+  }
+
+  const handleDeleteImpact = (id: string) => {
+    setImpactItems(impactItems.filter(item => item.id !== id))
+  }
+
   const handlePreview = () => {
-    window.open(`https://nate.to/${username}`, '_blank')
+    if (profile?.username) {
+      window.open(`/${profile.username}`, '_blank')
+    }
   }
 
-  // Simulate initial data load
-  useEffect(() => {
-    const timer = setTimeout(() => setIsLoading(false), 500)
-    return () => clearTimeout(timer)
-  }, [])
+  const handleSave = async () => {
+    if (!profile) return
 
-  const handleSave = () => {
-    setName(pageTitle)
-    setBio(pageDescription)
-    // Tiers would be saved to their own store/API
-    toast.success('Changes saved')
-    navigate(-1)
+    try {
+      await updateProfile({
+        ...profile,
+        displayName,
+        bio,
+        pricingModel,
+        singleAmount: pricingModel === 'single' ? singleAmount : null,
+        tiers: pricingModel === 'tiers' ? tiers : null,
+        perks,
+        impactItems,
+      })
+      toast.success('Changes saved')
+      setHasChanges(false)
+    } catch (err: any) {
+      toast.error(err?.error || 'Failed to save changes')
+    }
   }
+
+  if (isLoading) {
+    return (
+      <div className="edit-page">
+        <header className="edit-page-header">
+          <Pressable className="back-btn" onClick={() => navigate(-1)}>
+            <ArrowLeft size={20} />
+          </Pressable>
+          <span className="edit-page-title">Edit My Page</span>
+          <div style={{ width: 36 }} />
+        </header>
+        <div className="edit-page-content">
+          <section className="edit-section">
+            <Skeleton width={80} height={16} style={{ marginBottom: 16 }} />
+            <div className="profile-card">
+              <Skeleton width={80} height={80} borderRadius="50%" />
+              <div className="profile-fields" style={{ flex: 1 }}>
+                <Skeleton width="100%" height={40} style={{ marginBottom: 12 }} />
+                <Skeleton width="100%" height={80} />
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+    )
+  }
+
+  if (error || !profile) {
+    return (
+      <div className="edit-page">
+        <header className="edit-page-header">
+          <Pressable className="back-btn" onClick={() => navigate(-1)}>
+            <ArrowLeft size={20} />
+          </Pressable>
+          <span className="edit-page-title">Edit My Page</span>
+          <div style={{ width: 36 }} />
+        </header>
+        <div className="edit-page-content">
+          <div className="edit-error">
+            <p>Failed to load profile. Please try again.</p>
+            <Pressable className="retry-btn" onClick={() => window.location.reload()}>
+              Retry
+            </Pressable>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  const isService = profile.purpose === 'service'
 
   return (
     <div className="edit-page">
@@ -82,47 +210,30 @@ export default function EditPage() {
       </header>
 
       <div className="edit-page-content">
-        {isLoading ? (
-          <>
-            <section className="edit-section">
-              <Skeleton width={80} height={16} style={{ marginBottom: 16 }} />
-              <div className="profile-card">
-                <Skeleton width={80} height={80} borderRadius="50%" />
-                <div className="profile-fields" style={{ flex: 1 }}>
-                  <Skeleton width="100%" height={40} style={{ marginBottom: 12 }} />
-                  <Skeleton width="100%" height={80} />
-                </div>
-              </div>
-            </section>
-            <section className="edit-section">
-              <Skeleton width={140} height={16} style={{ marginBottom: 16 }} />
-              <Skeleton width="100%" height={100} style={{ marginBottom: 12 }} />
-              <Skeleton width="100%" height={100} style={{ marginBottom: 12 }} />
-              <Skeleton width="100%" height={100} />
-            </section>
-          </>
-        ) : (
-          <>
         {/* Profile Section */}
         <section className="edit-section">
           <h3 className="section-title">Profile</h3>
           <div className="profile-card">
             <Pressable className="avatar-edit">
-              <div className="avatar-placeholder">
-                {pageTitle ? pageTitle.charAt(0).toUpperCase() : 'U'}
-              </div>
+              {avatarUrl ? (
+                <img src={avatarUrl} alt="" className="avatar-image" />
+              ) : (
+                <div className="avatar-placeholder">
+                  {displayName ? displayName.charAt(0).toUpperCase() : 'U'}
+                </div>
+              )}
               <div className="avatar-overlay">
                 <Camera size={16} />
               </div>
             </Pressable>
             <div className="profile-fields">
               <div className="field">
-                <label className="field-label">Page Title</label>
+                <label className="field-label">Display Name</label>
                 <input
                   type="text"
                   className="field-input"
-                  value={pageTitle}
-                  onChange={(e) => setPageTitle(e.target.value)}
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
                   placeholder="Your name or brand"
                 />
               </div>
@@ -130,8 +241,8 @@ export default function EditPage() {
                 <label className="field-label">Bio</label>
                 <textarea
                   className="field-textarea"
-                  value={pageDescription}
-                  onChange={(e) => setPageDescription(e.target.value)}
+                  value={bio}
+                  onChange={(e) => setBio(e.target.value)}
                   placeholder="Tell people what you do..."
                   rows={3}
                 />
@@ -140,70 +251,168 @@ export default function EditPage() {
           </div>
         </section>
 
-        {/* Tiers Section */}
+        {/* Pricing Section */}
         <section className="edit-section">
-          <div className="section-header">
-            <h3 className="section-title">Subscription Tiers</h3>
-            <span className="tier-count">{tiers.length} tiers</span>
+          <h3 className="section-title">Pricing</h3>
+
+          <div className="pricing-toggle">
+            <Pressable
+              className={`toggle-option ${pricingModel === 'single' ? 'active' : ''}`}
+              onClick={() => setPricingModel('single')}
+            >
+              Single Price
+            </Pressable>
+            <Pressable
+              className={`toggle-option ${pricingModel === 'tiers' ? 'active' : ''}`}
+              onClick={() => setPricingModel('tiers')}
+            >
+              Multiple Tiers
+            </Pressable>
           </div>
 
-          <div className="tiers-list">
-            {tiers.map((tier) => (
-              <div key={tier.id} className="tier-card">
-                <div className="tier-drag">
-                  <GripVertical size={16} />
-                </div>
-                <div className="tier-content">
-                  <div className="tier-row">
-                    <input
-                      type="text"
-                      className="tier-name-input"
-                      value={tier.name}
-                      onChange={(e) => handleUpdateTier(tier.id, 'name', e.target.value)}
-                      placeholder="Tier name"
-                    />
-                    <div className="tier-price-wrap">
-                      <span className="tier-currency">{currencySymbol}</span>
-                      <input
-                        type="number"
-                        className="tier-price-input"
-                        value={tier.price}
-                        onChange={(e) => handleUpdateTier(tier.id, 'price', parseInt(e.target.value) || 0)}
-                      />
-                      <span className="tier-period">/mo</span>
+          {pricingModel === 'single' ? (
+            <div className="single-price-card">
+              <span className="price-currency">{currencySymbol}</span>
+              <input
+                type="number"
+                className="price-input"
+                value={singleAmount}
+                onChange={(e) => setSingleAmount(parseInt(e.target.value) || 0)}
+                min={1}
+              />
+              <span className="price-period">/month</span>
+            </div>
+          ) : (
+            <>
+              <div className="tiers-list">
+                {tiers.map((tier) => (
+                  <div key={tier.id} className="tier-card">
+                    <div className="tier-drag">
+                      <GripVertical size={16} />
                     </div>
+                    <div className="tier-content">
+                      <div className="tier-row">
+                        <input
+                          type="text"
+                          className="tier-name-input"
+                          value={tier.name}
+                          onChange={(e) => handleUpdateTier(tier.id, 'name', e.target.value)}
+                          placeholder="Tier name"
+                        />
+                        <div className="tier-price-wrap">
+                          <span className="tier-currency">{currencySymbol}</span>
+                          <input
+                            type="number"
+                            className="tier-price-input"
+                            value={tier.amount}
+                            onChange={(e) => handleUpdateTier(tier.id, 'amount', parseInt(e.target.value) || 0)}
+                          />
+                          <span className="tier-period">/mo</span>
+                        </div>
+                      </div>
+                    </div>
+                    <Pressable
+                      className="tier-delete"
+                      onClick={() => handleDeleteTier(tier.id)}
+                    >
+                      <Trash2 size={16} />
+                    </Pressable>
                   </div>
+                ))}
+              </div>
+              <Pressable className="add-tier-btn" onClick={handleAddTier}>
+                <Plus size={18} />
+                <span>Add Tier</span>
+              </Pressable>
+            </>
+          )}
+        </section>
+
+        {/* Perks Section */}
+        <section className="edit-section">
+          <div className="section-header">
+            <h3 className="section-title">{isService ? "What's Included" : 'Subscriber Perks'}</h3>
+            <span className="item-count">{perks.filter(p => p.enabled).length} active</span>
+          </div>
+
+          <div className="perks-list">
+            {perks.map((perk) => (
+              <div key={perk.id} className="perk-card">
+                <Pressable
+                  className={`perk-toggle ${perk.enabled ? 'enabled' : ''}`}
+                  onClick={() => handleUpdatePerk(perk.id, 'enabled', !perk.enabled)}
+                >
+                  {perk.enabled && <Check size={12} />}
+                </Pressable>
+                <input
+                  type="text"
+                  className="perk-input"
+                  value={perk.title}
+                  onChange={(e) => handleUpdatePerk(perk.id, 'title', e.target.value)}
+                  placeholder="Perk title"
+                />
+                <Pressable className="perk-delete" onClick={() => handleDeletePerk(perk.id)}>
+                  <X size={16} />
+                </Pressable>
+              </div>
+            ))}
+          </div>
+
+          <Pressable className="add-tier-btn" onClick={handleAddPerk}>
+            <Plus size={18} />
+            <span>Add Perk</span>
+          </Pressable>
+        </section>
+
+        {/* Impact Section */}
+        <section className="edit-section">
+          <div className="section-header">
+            <h3 className="section-title">{isService ? 'Why Work With Me' : 'How It Helps'}</h3>
+            <span className="item-count">{impactItems.length} items</span>
+          </div>
+
+          <div className="impact-list">
+            {impactItems.map((item, index) => (
+              <div key={item.id} className="impact-card">
+                <div className="impact-number">{index + 1}</div>
+                <div className="impact-fields">
                   <input
                     type="text"
-                    className="tier-desc-input"
-                    value={tier.description}
-                    onChange={(e) => handleUpdateTier(tier.id, 'description', e.target.value)}
-                    placeholder="What do subscribers get?"
+                    className="impact-title-input"
+                    value={item.title}
+                    onChange={(e) => handleUpdateImpact(item.id, 'title', e.target.value)}
+                    placeholder="Main point"
+                  />
+                  <input
+                    type="text"
+                    className="impact-subtitle-input"
+                    value={item.subtitle}
+                    onChange={(e) => handleUpdateImpact(item.id, 'subtitle', e.target.value)}
+                    placeholder="Optional details"
                   />
                 </div>
-                <Pressable
-                  className="tier-delete"
-                  onClick={() => handleDeleteTier(tier.id)}
-                >
+                <Pressable className="impact-delete" onClick={() => handleDeleteImpact(item.id)}>
                   <Trash2 size={16} />
                 </Pressable>
               </div>
             ))}
           </div>
 
-          <Pressable className="add-tier-btn" onClick={handleAddTier}>
+          <Pressable className="add-tier-btn" onClick={handleAddImpact}>
             <Plus size={18} />
-            <span>Add Tier</span>
+            <span>Add Item</span>
           </Pressable>
         </section>
-          </>
-        )}
       </div>
 
       {/* Save Button */}
       <div className="edit-page-footer">
-        <Pressable className="save-btn" onClick={handleSave}>
-          Save Changes
+        <Pressable
+          className={`save-btn ${!hasChanges ? 'disabled' : ''}`}
+          onClick={handleSave}
+          disabled={!hasChanges || isSaving}
+        >
+          {isSaving ? 'Saving...' : 'Save Changes'}
         </Pressable>
       </div>
     </div>
