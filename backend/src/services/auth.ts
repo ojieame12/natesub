@@ -4,9 +4,20 @@ import { db } from '../db/client.js'
 import { redis } from '../db/redis.js'
 import { env } from '../config/env.js'
 import { sendOtpEmail } from './email.js'
+import type { OnboardingBranch } from '@prisma/client'
 
 const OTP_EXPIRES_MS = parseInt(env.MAGIC_LINK_EXPIRES_MINUTES) * 60 * 1000
 const SESSION_EXPIRES_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
+
+// Onboarding state returned to frontend
+export interface OnboardingState {
+  hasProfile: boolean
+  hasActivePayment: boolean
+  onboardingStep: number | null
+  onboardingBranch: OnboardingBranch | null
+  onboardingData: Record<string, any> | null
+  redirectTo: string
+}
 
 // Hash token for storage (never store raw tokens)
 function hashToken(token: string): string {
@@ -71,8 +82,52 @@ export async function requestMagicLink(email: string): Promise<{ success: boolea
   return { success: true }
 }
 
+// Compute onboarding state and redirect for a user
+export function computeOnboardingState(user: {
+  id: string
+  onboardingStep: number | null
+  onboardingBranch: OnboardingBranch | null
+  onboardingData: any
+  profile: {
+    payoutStatus: string
+    paymentProvider: string | null
+  } | null
+}): OnboardingState {
+  const hasProfile = !!user.profile
+  const hasActivePayment = user.profile?.payoutStatus === 'active'
+
+  let redirectTo: string
+
+  if (hasProfile && hasActivePayment) {
+    // Fully complete - go to dashboard
+    redirectTo = '/dashboard'
+  } else if (hasProfile && !hasActivePayment) {
+    // Profile exists but payment not set up - go to payment settings
+    redirectTo = '/settings/payments'
+  } else if (user.onboardingStep !== null && user.onboardingStep >= 3) {
+    // Has progress - resume from saved step
+    redirectTo = `/onboarding?step=${user.onboardingStep}`
+  } else {
+    // Fresh start - go to onboarding (will start at identity step after OTP)
+    redirectTo = '/onboarding'
+  }
+
+  return {
+    hasProfile,
+    hasActivePayment,
+    onboardingStep: user.onboardingStep,
+    onboardingBranch: user.onboardingBranch,
+    onboardingData: user.onboardingData as Record<string, any> | null,
+    redirectTo,
+  }
+}
+
 // Verify OTP code
-export async function verifyMagicLink(token: string): Promise<{ sessionToken: string; userId: string }> {
+export async function verifyMagicLink(token: string): Promise<{
+  sessionToken: string
+  userId: string
+  onboarding: OnboardingState
+}> {
   const tokenHash = hashToken(token)
 
   // Find token
@@ -101,13 +156,16 @@ export async function verifyMagicLink(token: string): Promise<{ sessionToken: st
   // Find or create user
   let user = await db.user.findUnique({
     where: { email: magicLinkToken.email },
+    include: { profile: true },
   })
 
   if (!user) {
     user = await db.user.create({
       data: {
         email: magicLinkToken.email,
+        onboardingStep: 3, // Post-OTP step (identity)
       },
+      include: { profile: true },
     })
   }
 
@@ -130,9 +188,13 @@ export async function verifyMagicLink(token: string): Promise<{ sessionToken: st
     },
   })
 
+  // Compute onboarding state
+  const onboarding = computeOnboardingState(user)
+
   return {
     sessionToken,
     userId: user.id,
+    onboarding,
   }
 }
 

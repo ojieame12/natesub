@@ -104,6 +104,11 @@ enum PayrollPeriodType {
   monthly
 }
 
+enum OnboardingBranch {
+  personal
+  service
+}
+
 // ============================================
 // USER & PROFILE
 // ============================================
@@ -114,6 +119,11 @@ model User {
   createdAt   DateTime  @default(now())
   lastLoginAt DateTime?
   deletedAt   DateTime? // Soft delete timestamp
+
+  // Onboarding state (server-side tracking)
+  onboardingStep   Int?              // Last completed step (0-11)
+  onboardingBranch OnboardingBranch? // 'personal' | 'service'
+  onboardingData   Json?             // Partial form data for recovery
 
   profile        Profile?
   subscriptions  Subscription[] @relation("Creator")
