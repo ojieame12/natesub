@@ -81,6 +81,11 @@ export async function createAccountLink(accountId: string) {
     refresh_url: env.STRIPE_ONBOARDING_REFRESH_URL,
     return_url: env.STRIPE_ONBOARDING_RETURN_URL,
     type: 'account_onboarding',
+    // Collect all required fields upfront, not just minimum
+    collection_options: {
+      fields: 'eventually_due', // Collect all fields that will eventually be required
+      future_requirements: 'include', // Include future requirements too
+    },
   })
 
   return accountLink.url
