@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronLeft, MessageSquare, Mail, Link2, Check, Mic, Plus } from 'lucide-react'
+import { ChevronLeft, MessageSquare, Mail, Link2, Check, Mic, Plus, Calendar } from 'lucide-react'
 import { useRequestStore, getRelationshipLabel } from './store'
 import { useCreateRequest, useSendRequest, useCurrentUser } from '../api/hooks'
 import { getCurrencySymbol } from '../utils/currency'
@@ -18,6 +18,7 @@ export default function RequestPreview() {
         amount,
         isRecurring,
         purpose,
+        dueDate,
         message,
         voiceNoteUrl,
         voiceNoteDuration,
@@ -212,6 +213,12 @@ export default function RequestPreview() {
                             </div>
                             {purpose && (
                                 <span className="request-preview-purpose">{purpose}</span>
+                            )}
+                            {dueDate && (
+                                <div className="request-preview-due-date">
+                                    <Calendar size={14} />
+                                    <span>Due {new Date(dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                                </div>
                             )}
                         </div>
 

@@ -17,15 +17,16 @@ export default function RequestDetails() {
         amount,
         isRecurring,
         purpose,
+        dueDate,
         setAmount,
         setIsRecurring,
         setPurpose,
+        setDueDate,
     } = useRequestStore()
 
     const currency = userData?.profile?.currency || 'USD'
     const currencySymbol = getCurrencySymbol(currency)
     const [customAmount, setCustomAmount] = useState(amount.toString())
-    const [dueDate, setDueDate] = useState('')
 
     if (!recipient) {
         navigate('/request/new')
@@ -167,8 +168,8 @@ export default function RequestDetails() {
                         <label className="request-label">Due date (optional)</label>
                         <input
                             type="date"
-                            value={dueDate}
-                            onChange={(e) => setDueDate(e.target.value)}
+                            value={dueDate || ''}
+                            onChange={(e) => setDueDate(e.target.value || null)}
                             className="request-text-input"
                             min={new Date().toISOString().split('T')[0]}
                         />

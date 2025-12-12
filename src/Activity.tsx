@@ -48,17 +48,17 @@ const getActivityIconClass = (type: string) => {
     }
 }
 
-const getActivityTitle = (type: string) => {
+const getActivityTitle = (type: string, isService: boolean) => {
     switch (type) {
         case 'subscription_created':
-        case 'new_subscriber': return 'New Subscriber'
+        case 'new_subscriber': return isService ? 'New Client' : 'New Subscriber'
         case 'payment_received':
-        case 'payment': return 'Payment Received'
-        case 'renewal': return 'Renewed'
+        case 'payment': return isService ? 'Invoice Paid' : 'Payment Received'
+        case 'renewal': return isService ? 'Retainer Renewed' : 'Renewed'
         case 'subscription_canceled':
-        case 'cancelled': return 'Cancelled'
-        case 'request_sent': return 'Request Sent'
-        case 'request_accepted': return 'Request Accepted'
+        case 'cancelled': return isService ? 'Client Left' : 'Cancelled'
+        case 'request_sent': return isService ? 'Invoice Sent' : 'Request Sent'
+        case 'request_accepted': return isService ? 'Invoice Accepted' : 'Request Accepted'
         default: return 'Activity'
     }
 }
@@ -88,6 +88,7 @@ export default function Activity() {
     const navigate = useNavigate()
     const { data: userData } = useCurrentUser()
     const currencySymbol = getCurrencySymbol(userData?.profile?.currency || 'USD')
+    const isService = userData?.profile?.purpose === 'service'
 
     // Real API hooks
     const {
@@ -167,7 +168,10 @@ export default function Activity() {
                         </div>
                         <h3 className="activity-empty-title">No activity yet</h3>
                         <p className="activity-empty-desc">
-                            When you get subscribers or receive payments, they'll show up here.
+                            {isService
+                                ? "When you get clients or receive payments, they'll show up here."
+                                : "When you get subscribers or receive payments, they'll show up here."
+                            }
                         </p>
                         <Pressable className="activity-empty-btn" onClick={() => navigate('/dashboard')}>
                             <Share2 size={18} />
@@ -203,7 +207,7 @@ export default function Activity() {
                                                     {getActivityIcon(activity.type)}
                                                 </div>
                                                 <div className="activity-info">
-                                                    <div className="activity-row-title">{getActivityTitle(activity.type)}</div>
+                                                    <div className="activity-row-title">{getActivityTitle(activity.type, isService)}</div>
                                                     <div className="activity-row-meta">
                                                         {formatTime(activity.createdAt)}{name ? ` - ${name}` : ''}
                                                     </div>
@@ -241,7 +245,7 @@ export default function Activity() {
                                 <div className="summary-grid">
                                     <div className="summary-stat">
                                         <span className="summary-value">{metrics.subscriberCount}</span>
-                                        <span className="summary-label">Subscribers</span>
+                                        <span className="summary-label">{isService ? 'Clients' : 'Subscribers'}</span>
                                     </div>
                                     <div className="summary-stat">
                                         <span className="summary-value positive">{currencySymbol}{metrics.mrr}</span>

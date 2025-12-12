@@ -183,6 +183,7 @@ interface RequestStoreData {
   message: string
   voiceNoteUrl: string | null // frontend name
   customPerks: Array<{ id: string; title: string; enabled: boolean }>
+  dueDate: string | null // ISO date string for service invoices
 }
 
 interface RequestApiPayload {
@@ -196,6 +197,7 @@ interface RequestApiPayload {
   message?: string
   voiceUrl?: string // backend name
   customPerks?: string[]
+  dueDate?: string // ISO datetime string
 }
 
 /**
@@ -217,6 +219,8 @@ export function mapRequestToApi(data: RequestStoreData, currency = 'USD'): Reque
     customPerks: data.customPerks
       .filter(p => p.enabled)
       .map(p => p.title),
+    // Convert date to ISO datetime for backend (set to end of day)
+    dueDate: data.dueDate ? new Date(data.dueDate + 'T23:59:59Z').toISOString() : undefined,
   }
 }
 

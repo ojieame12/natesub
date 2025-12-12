@@ -100,6 +100,7 @@ export interface Request {
   isRecurring: boolean
   message: string | null
   voiceUrl: string | null
+  dueDate: string | null
   status: string
   sendMethod: string | null
   sentAt: string | null

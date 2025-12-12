@@ -52,17 +52,17 @@ const getActivityIcon = (type: string) => {
     }
 }
 
-const getActivityTitle = (type: string) => {
+const getActivityTitle = (type: string, isService: boolean) => {
     switch (type) {
         case 'subscription_created':
-        case 'new_subscriber': return 'New Subscriber'
+        case 'new_subscriber': return isService ? 'New Client' : 'New Subscriber'
         case 'payment_received':
-        case 'payment': return 'Payment Received'
-        case 'renewal': return 'Renewed'
+        case 'payment': return isService ? 'Invoice Paid' : 'Payment Received'
+        case 'renewal': return isService ? 'Retainer Renewed' : 'Renewed'
         case 'subscription_canceled':
-        case 'cancelled': return 'Cancelled'
-        case 'request_sent': return 'Request Sent'
-        case 'request_accepted': return 'Request Accepted'
+        case 'cancelled': return isService ? 'Client Left' : 'Cancelled'
+        case 'request_sent': return isService ? 'Invoice Sent' : 'Request Sent'
+        case 'request_accepted': return isService ? 'Invoice Accepted' : 'Request Accepted'
         default: return 'Activity'
     }
 }
@@ -73,6 +73,7 @@ export default function ActivityDetail() {
     const { id } = useParams()
     const { data: userData } = useCurrentUser()
     const currencySymbol = getCurrencySymbol(userData?.profile?.currency || 'USD')
+    const isService = userData?.profile?.purpose === 'service'
 
     // Fetch activity from API
     const { data, isLoading, isError, refetch } = useActivityDetail(id || '')
@@ -88,7 +89,7 @@ export default function ActivityDetail() {
         email: payload.subscriberEmail || payload.recipientEmail || '',
         amount: (payload.amount || 0) / 100,
         time: formatTime(activityData.createdAt),
-        tier: payload.tierName || 'Supporter',
+        tier: payload.tierName || (isService ? 'Client' : 'Supporter'),
         date: formatDate(activityData.createdAt),
         transactionId: payload.transactionId || payload.paymentId || activityData.id,
         paymentMethod: payload.paymentMethod || null,
@@ -180,13 +181,13 @@ export default function ActivityDetail() {
                     {isNegative ? '-' : '+'}{currencySymbol}{activity.amount}
                     <span className="cents">.00</span>
                 </div>
-                <span className="detail-badge">{getActivityTitle(activity.type)}</span>
+                <span className="detail-badge">{getActivityTitle(activity.type, isService)}</span>
             </div>
 
             <div className="detail-content">
                 {/* Customer Card */}
                 <div className="detail-card">
-                    <div className="detail-card-title">Customer</div>
+                    <div className="detail-card-title">{isService ? 'Client' : 'Customer'}</div>
                     <div className="customer-row">
                         <div className="customer-avatar">{activity.name[0]}</div>
                         <div className="customer-info">
@@ -230,7 +231,7 @@ export default function ActivityDetail() {
                 {/* Subscription Info */}
                 {activity.subscription && (
                     <div className="detail-card">
-                        <div className="detail-card-title">Subscription</div>
+                        <div className="detail-card-title">{isService ? 'Retainer' : 'Subscription'}</div>
                         <div className="detail-row">
                             <span className="detail-label">Status</span>
                             <span className={`detail-status ${activity.subscription.status}`}>
@@ -244,11 +245,11 @@ export default function ActivityDetail() {
                             </div>
                         )}
                         <div className="detail-row">
-                            <span className="detail-label">Lifetime Value</span>
+                            <span className="detail-label">{isService ? 'Total Billed' : 'Lifetime Value'}</span>
                             <span className="detail-value">{currencySymbol}{activity.subscription.lifetimeValue}</span>
                         </div>
                         <div className="detail-row">
-                            <span className="detail-label">Months Subscribed</span>
+                            <span className="detail-label">{isService ? 'Months as Client' : 'Months Subscribed'}</span>
                             <span className="detail-value">{activity.subscription.monthsSubscribed}</span>
                         </div>
                     </div>

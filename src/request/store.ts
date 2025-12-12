@@ -36,6 +36,7 @@ interface RequestState {
     amount: number
     isRecurring: boolean
     purpose: string
+    dueDate: string | null // ISO date string for service invoices
 
     // Step 4: Personalize
     message: string
@@ -53,6 +54,7 @@ interface RequestState {
     setAmount: (amount: number) => void
     setIsRecurring: (isRecurring: boolean) => void
     setPurpose: (purpose: string) => void
+    setDueDate: (dueDate: string | null) => void
     setMessage: (message: string) => void
     setVoiceNote: (url: string | null, duration: number) => void
     setSelectedPerks: (perks: string[]) => void
@@ -68,6 +70,7 @@ const initialState = {
     amount: 10,
     isRecurring: true,
     purpose: '',
+    dueDate: null,
     message: '',
     voiceNoteUrl: null,
     voiceNoteDuration: 0,
@@ -86,6 +89,7 @@ export const useRequestStore = create<RequestState>()(
             setAmount: (amount) => set({ amount }),
             setIsRecurring: (isRecurring) => set({ isRecurring }),
             setPurpose: (purpose) => set({ purpose }),
+            setDueDate: (dueDate) => set({ dueDate }),
             setMessage: (message) => set({ message }),
             setVoiceNote: (voiceNoteUrl, voiceNoteDuration) => set({ voiceNoteUrl, voiceNoteDuration }),
             setSelectedPerks: (selectedPerks) => set({ selectedPerks }),
@@ -109,6 +113,7 @@ export const useRequestStore = create<RequestState>()(
                 amount: state.amount,
                 isRecurring: state.isRecurring,
                 purpose: state.purpose,
+                dueDate: state.dueDate,
                 message: state.message,
                 selectedPerks: state.selectedPerks,
                 customPerks: state.customPerks,

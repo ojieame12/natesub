@@ -293,6 +293,7 @@ model Request {
   message     String?
   voiceUrl    String?
   customPerks Json?
+  dueDate     DateTime? // For service invoices
 
   // Delivery
   sendMethod RequestSendMethod?

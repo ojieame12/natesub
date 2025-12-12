@@ -230,6 +230,7 @@ requests.post(
     message: z.string().max(1000).optional(),
     voiceUrl: z.string().url().optional(),
     customPerks: z.array(z.string()).optional(),
+    dueDate: z.string().datetime().optional(), // ISO date string for invoices
   })),
   async (c) => {
     const userId = c.get('userId')
@@ -253,6 +254,7 @@ requests.post(
         message: data.message || null,
         voiceUrl: data.voiceUrl || null,
         customPerks: data.customPerks || Prisma.JsonNull,
+        dueDate: data.dueDate ? new Date(data.dueDate) : null,
         status: 'draft',
       },
     })
