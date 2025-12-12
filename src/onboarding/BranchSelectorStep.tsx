@@ -3,6 +3,7 @@ import { ChevronLeft, User, Briefcase, Check } from 'lucide-react'
 import { useOnboardingStore } from './store'
 import type { BranchType } from './store'
 import { Button, Pressable } from './components'
+import { useSaveOnboardingProgress } from '../api/hooks'
 import './onboarding.css'
 
 interface BranchOption {
@@ -28,8 +29,9 @@ const BRANCH_OPTIONS: BranchOption[] = [
 ]
 
 export default function BranchSelectorStep() {
-    const { branch, setBranch, setPricingModel, setPurpose, nextStep, prevStep, goToStep } = useOnboardingStore()
+    const { branch, setBranch, setPricingModel, setPurpose, nextStep, prevStep, goToStep, currentStep } = useOnboardingStore()
     const [selected, setSelected] = useState<BranchType>(branch)
+    const { mutateAsync: saveProgress } = useSaveOnboardingProgress()
 
     const handleSelect = (type: Exclude<BranchType, null>) => {
         setSelected(type)
@@ -50,6 +52,19 @@ export default function BranchSelectorStep() {
             setPricingModel('single') // Service also defaults to single pricing
             // Purpose will be 'service' - set in PaymentMethodStep
         }
+    }
+
+    const handleContinue = async () => {
+        // Save branch selection to server
+        try {
+            await saveProgress({
+                step: currentStep + 1,
+                branch: selected as 'personal' | 'service',
+            })
+        } catch (err) {
+            console.warn('Failed to save onboarding progress:', err)
+        }
+        nextStep()
     }
 
     return (
@@ -103,7 +118,7 @@ export default function BranchSelectorStep() {
                         variant="primary"
                         size="lg"
                         fullWidth
-                        onClick={nextStep}
+                        onClick={handleContinue}
                         disabled={!selected}
                     >
                         Continue

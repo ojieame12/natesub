@@ -88,17 +88,45 @@ export async function createAccountLink(accountId: string) {
 
 // Get account status with detailed requirements
 export async function getAccountStatus(stripeAccountId: string) {
-  const account = await stripe.accounts.retrieve(stripeAccountId)
+  const account = await stripe.accounts.retrieve(stripeAccountId, {
+    expand: ['external_accounts'],
+  })
 
   // Parse requirements into user-friendly format
   const currentlyDue = account.requirements?.currently_due || []
   const eventuallyDue = account.requirements?.eventually_due || []
   const pendingVerification = account.requirements?.pending_verification || []
 
+  // Get default bank account info if available
+  let bankAccount: {
+    bankName: string | null
+    last4: string | null
+    accountHolderName: string | null
+    routingNumber: string | null
+  } | null = null
+
+  if (account.external_accounts?.data?.length) {
+    const defaultBank = account.external_accounts.data.find(
+      (acc) => acc.object === 'bank_account' && (acc as Stripe.BankAccount).default_for_currency
+    ) || account.external_accounts.data[0]
+
+    if (defaultBank && defaultBank.object === 'bank_account') {
+      const bank = defaultBank as Stripe.BankAccount
+      bankAccount = {
+        bankName: bank.bank_name || null,
+        last4: bank.last4 || null,
+        accountHolderName: bank.account_holder_name || null,
+        routingNumber: bank.routing_number || null,
+      }
+    }
+  }
+
   return {
     detailsSubmitted: account.details_submitted,
     chargesEnabled: account.charges_enabled,
     payoutsEnabled: account.payouts_enabled,
+    bankAccount,
+    payoutSchedule: account.settings?.payouts?.schedule?.interval || 'daily',
     requirements: {
       currentlyDue,
       eventuallyDue,

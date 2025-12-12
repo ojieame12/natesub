@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Building2, Plus, Check, Loader2, AlertCircle, CreditCard, ExternalLink } from 'lucide-react'
+import { ArrowLeft, Building2, Check, Loader2, AlertCircle, CreditCard, ExternalLink } from 'lucide-react'
 import { Pressable } from './components'
 import { api } from './api'
 import type { PaystackConnectionStatus } from './api/client'
@@ -52,7 +52,6 @@ interface Payout {
 
 export default function PaymentSettings() {
   const navigate = useNavigate()
-  const [payoutSchedule, setPayoutSchedule] = useState('daily')
   const [loading, setLoading] = useState(true)
   const [connecting, setConnecting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -535,8 +534,16 @@ export default function PaymentSettings() {
               <span className="balance-value pending">${(balance.pending / 100).toFixed(2)}</span>
             </div>
           </div>
-          <Pressable className="cashout-btn">
-            Cash Out
+          <Pressable
+            className="cashout-btn"
+            onClick={async () => {
+              try {
+                const result = await api.stripe.getDashboardLink()
+                if (result.url) window.open(result.url, '_blank')
+              } catch {}
+            }}
+          >
+            View in Stripe
           </Pressable>
         </section>
 
@@ -587,47 +594,69 @@ export default function PaymentSettings() {
         <section className="settings-section">
           <h3 className="section-title">Payout Method</h3>
           <div className="method-card">
-            <Pressable className="method-row">
+            <div className="method-row" style={{ cursor: 'default' }}>
               <div className="method-icon">
                 <Building2 size={20} />
               </div>
               <div className="method-info">
-                <span className="method-name">Chase Bank</span>
-                <span className="method-detail">••••4521 · Checking</span>
+                <span className="method-name">
+                  {stripeStatus?.details?.bankAccount?.bankName || 'Bank Account'}
+                </span>
+                <span className="method-detail">
+                  {stripeStatus?.details?.bankAccount?.last4
+                    ? `••••${stripeStatus.details.bankAccount.last4}`
+                    : 'Connected via Stripe'}
+                </span>
               </div>
               <div className="method-default">
                 <Check size={16} />
               </div>
-            </Pressable>
+            </div>
           </div>
-          <Pressable className="add-method-btn">
-            <Plus size={18} />
-            <span>Add Payment Method</span>
-          </Pressable>
+          <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 8 }}>
+            Manage bank accounts in your{' '}
+            <Pressable
+              onClick={async () => {
+                try {
+                  const result = await api.stripe.getDashboardLink()
+                  if (result.url) window.open(result.url, '_blank')
+                } catch {}
+              }}
+              style={{ color: 'var(--primary)', fontWeight: 500, display: 'inline' }}
+            >
+              Stripe Dashboard
+            </Pressable>
+          </p>
         </section>
 
         {/* Payout Schedule */}
         <section className="settings-section">
           <h3 className="section-title">Payout Schedule</h3>
           <div className="schedule-card">
-            {payoutSchedules.map((schedule) => (
-              <Pressable
-                key={schedule.id}
-                className={`schedule-row ${payoutSchedule === schedule.id ? 'selected' : ''}`}
-                onClick={() => setPayoutSchedule(schedule.id)}
-              >
-                <div className="schedule-info">
-                  <span className="schedule-label">{schedule.label}</span>
-                  <span className="schedule-desc">{schedule.desc}</span>
-                </div>
-                {payoutSchedule === schedule.id && (
-                  <div className="schedule-check">
-                    <Check size={16} />
+            {payoutSchedules.map((schedule) => {
+              const isSelected = stripeStatus?.details?.payoutSchedule === schedule.id
+              return (
+                <div
+                  key={schedule.id}
+                  className={`schedule-row ${isSelected ? 'selected' : ''}`}
+                  style={{ cursor: 'default', opacity: isSelected ? 1 : 0.5 }}
+                >
+                  <div className="schedule-info">
+                    <span className="schedule-label">{schedule.label}</span>
+                    <span className="schedule-desc">{schedule.desc}</span>
                   </div>
-                )}
-              </Pressable>
-            ))}
+                  {isSelected && (
+                    <div className="schedule-check">
+                      <Check size={16} />
+                    </div>
+                  )}
+                </div>
+              )
+            })}
           </div>
+          <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 8 }}>
+            Change payout schedule in your Stripe Dashboard
+          </p>
         </section>
 
         {/* Payout History */}

@@ -2,7 +2,14 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { setCookie, deleteCookie, getCookie } from 'hono/cookie'
-import { requestMagicLink, verifyMagicLink, logout, getCurrentUser } from '../services/auth.js'
+import {
+  requestMagicLink,
+  verifyMagicLink,
+  logout,
+  getCurrentUser,
+  getCurrentUserWithOnboarding,
+  saveOnboardingProgress,
+} from '../services/auth.js'
 import { requireAuth } from '../middleware/auth.js'
 import { env } from '../config/env.js'
 import { db } from '../db/client.js'
@@ -38,7 +45,7 @@ auth.get(
     const { token } = c.req.valid('query')
 
     try {
-      const { sessionToken, userId } = await verifyMagicLink(token)
+      const { sessionToken, userId, onboarding } = await verifyMagicLink(token)
 
       // Set session cookie (for web)
       setCookie(c, 'session', sessionToken, {
@@ -49,16 +56,17 @@ auth.get(
         path: '/',
       })
 
-      // Check if user has completed onboarding
-      const user = await getCurrentUser(userId)
-      const hasProfile = !!user?.profile
-
-      // Return token in response (for mobile apps that can't use cookies)
+      // Return full onboarding state for smart routing
       return c.json({
         success: true,
-        hasProfile,
-        redirectTo: hasProfile ? '/dashboard' : '/onboarding',
         token: sessionToken, // Mobile apps store this and send in Authorization header
+        // Onboarding state for frontend routing
+        hasProfile: onboarding.hasProfile,
+        hasActivePayment: onboarding.hasActivePayment,
+        onboardingStep: onboarding.onboardingStep,
+        onboardingBranch: onboarding.onboardingBranch,
+        onboardingData: onboarding.onboardingData,
+        redirectTo: onboarding.redirectTo,
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Verification failed'
@@ -80,22 +88,67 @@ auth.post('/logout', async (c) => {
   return c.json({ success: true })
 })
 
-// Get current user
+// Get current user with onboarding state
 auth.get('/me', requireAuth, async (c) => {
   const userId = c.get('userId')
-  const user = await getCurrentUser(userId)
+  const result = await getCurrentUserWithOnboarding(userId)
 
-  if (!user) {
+  if (!result) {
     return c.json({ error: 'User not found' }, 404)
   }
+
+  const { user, onboarding } = result
 
   return c.json({
     id: user.id,
     email: user.email,
     profile: user.profile,
     createdAt: user.createdAt,
+    // Onboarding state for smart routing
+    onboarding: {
+      hasProfile: onboarding.hasProfile,
+      hasActivePayment: onboarding.hasActivePayment,
+      step: onboarding.onboardingStep,
+      branch: onboarding.onboardingBranch,
+      data: onboarding.onboardingData,
+      redirectTo: onboarding.redirectTo,
+    },
   })
 })
+
+const onboardingDataSchema = z.object({
+  name: z.string().min(1).max(100).optional(),
+  displayName: z.string().min(1).max(100).optional(),
+  country: z.string().min(2).max(100).optional(),
+  countryCode: z.string().length(2).optional(),
+  currency: z.string().length(3).optional(),
+  username: z.string().min(3).max(20).regex(/^[a-z0-9_]+$/i).optional(),
+  pricingModel: z.enum(['single', 'tiers']).optional(),
+  singleAmount: z.number().int().min(1).max(1_000_000).optional(),
+}).partial()
+
+// Save onboarding progress
+auth.put(
+  '/onboarding',
+  requireAuth,
+  zValidator('json', z.object({
+    step: z.number().min(0).max(15),
+    branch: z.enum(['personal', 'service']).optional(),
+    data: onboardingDataSchema.optional(),
+  })),
+  async (c) => {
+    const userId = c.get('userId')
+    const body = c.req.valid('json')
+
+    try {
+      await saveOnboardingProgress(userId, body)
+      return c.json({ success: true })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to save progress'
+      return c.json({ error: message }, 400)
+    }
+  }
+)
 
 // Delete account (soft delete)
 auth.delete(

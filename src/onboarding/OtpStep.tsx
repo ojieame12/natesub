@@ -1,4 +1,5 @@
 import { useRef, useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { ChevronLeft, Loader2 } from 'lucide-react'
 import { useOnboardingStore } from './store'
 import { Pressable } from './components'
@@ -7,7 +8,8 @@ import '../Dashboard.css'
 import './onboarding.css'
 
 export default function OtpStep() {
-    const { otp, setOtp, nextStep, prevStep, email } = useOnboardingStore()
+    const navigate = useNavigate()
+    const { otp, setOtp, nextStep, prevStep, email, hydrateFromServer } = useOnboardingStore()
     const inputRefs = useRef<(HTMLInputElement | null)[]>([])
     const [error, setError] = useState<string | null>(null)
     const [isVerifying, setIsVerifying] = useState(false)
@@ -37,8 +39,27 @@ export default function OtpStep() {
         setIsVerifying(true)
         setError(null)
         try {
-            await verifyCode(otp)
-            nextStep()
+            const result = await verifyCode(otp)
+
+            // Smart routing based on user state
+            if (result.hasProfile && result.hasActivePayment) {
+                // Fully set up - go to dashboard
+                navigate('/dashboard', { replace: true })
+            } else if (result.hasProfile && !result.hasActivePayment) {
+                // Profile exists but no payment - go to payment settings
+                navigate('/settings/payments', { replace: true })
+            } else if (result.onboardingStep && result.onboardingStep >= 3) {
+                // Has progress - resume from saved step
+                hydrateFromServer({
+                    step: result.onboardingStep,
+                    branch: result.onboardingBranch,
+                    data: result.onboardingData,
+                })
+                // Stay in onboarding, store will update currentStep
+            } else {
+                // Fresh user - continue to next step (identity)
+                nextStep()
+            }
         } catch (err: any) {
             setError(err?.error || 'Invalid code. Please try again.')
             setOtp('') // Clear for retry

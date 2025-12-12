@@ -1,6 +1,8 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import OnboardingFlow from './onboarding'
 import PaystackConnect from './onboarding/PaystackConnect'
+import { useOnboardingStore } from './onboarding/store'
 import AppLayout from './AppLayout'
 import Dashboard from './Dashboard'
 import Activity from './Activity'
@@ -29,11 +31,66 @@ import PayrollHistory from './payroll/PayrollHistory'
 import PayrollDetail from './payroll/PayrollDetail'
 import StripeComplete from './StripeComplete'
 import StripeRefresh from './StripeRefresh'
+import { useCurrentUser } from './api/hooks'
+import { getAuthToken } from './api/client'
 import './index.css'
+
+// Auth check on app launch - redirects based on user state
+function AuthRedirect() {
+  const navigate = useNavigate()
+  const location = useLocation()
+  const { hydrateFromServer } = useOnboardingStore()
+  const [checked, setChecked] = useState(false)
+
+  // Only check auth if we have a token
+  const hasToken = !!getAuthToken()
+  const { data: user, isLoading, error } = useCurrentUser()
+
+  useEffect(() => {
+    // Skip if already checked, loading, or no token
+    if (checked || isLoading) return
+    if (!hasToken) {
+      setChecked(true)
+      return
+    }
+
+    // If error (401), token is invalid - stay on current route
+    if (error) {
+      setChecked(true)
+      return
+    }
+
+    // If we have user data, check their state
+    if (user?.onboarding) {
+      const { hasProfile, hasActivePayment, step, branch, data } = user.onboarding
+
+      // Only redirect if we're on a route that should be redirected
+      const shouldRedirect = location.pathname === '/' ||
+        location.pathname === '/onboarding'
+
+      if (shouldRedirect) {
+        if (hasProfile && hasActivePayment) {
+          navigate('/dashboard', { replace: true })
+        } else if (hasProfile && !hasActivePayment) {
+          navigate('/settings/payments', { replace: true })
+        } else if (step && step >= 3) {
+          // Resume onboarding from saved step
+          hydrateFromServer({ step, branch, data })
+          navigate('/onboarding', { replace: true })
+        }
+      }
+    }
+
+    setChecked(true)
+  }, [user, isLoading, error, hasToken, checked, location.pathname])
+
+  return null
+}
 
 function App() {
   return (
     <BrowserRouter>
+      <AuthRedirect />
       <Routes>
         {/* Onboarding */}
         <Route path="/onboarding" element={<OnboardingFlow />} />

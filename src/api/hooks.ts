@@ -88,6 +88,12 @@ export function useVerifyMagicLink() {
   })
 }
 
+export function useSaveOnboardingProgress() {
+  return useMutation({
+    mutationFn: api.auth.saveOnboardingProgress,
+  })
+}
+
 export function useLogout() {
   const queryClient = useQueryClient()
 

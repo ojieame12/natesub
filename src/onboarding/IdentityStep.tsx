@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { ChevronLeft, ChevronDown, Check, Search } from 'lucide-react'
 import { useOnboardingStore } from './store'
 import { Button, Pressable } from './components'
+import { useSaveOnboardingProgress } from '../api/hooks'
 import '../Dashboard.css'
 import './onboarding.css'
 
@@ -48,9 +49,10 @@ const countries = [
 ]
 
 export default function IdentityStep() {
-    const { name, setName, countryCode, setCountry, setCurrency, nextStep, prevStep } = useOnboardingStore()
+    const { name, setName, country, countryCode, currency, setCountry, setCurrency, nextStep, prevStep, currentStep } = useOnboardingStore()
     const [showCountryPicker, setShowCountryPicker] = useState(false)
     const [searchQuery, setSearchQuery] = useState('')
+    const { mutateAsync: saveProgress } = useSaveOnboardingProgress()
 
     const selectedCountry = countries.find(c => c.code === countryCode)
 
@@ -64,6 +66,20 @@ export default function IdentityStep() {
         setCurrency(c.currency)
         setShowCountryPicker(false)
         setSearchQuery('')
+    }
+
+    const handleContinue = async () => {
+        // Save progress to server at this milestone
+        try {
+            await saveProgress({
+                step: currentStep + 1, // Will be moving to next step
+                data: { name, country, countryCode, currency },
+            })
+        } catch (err) {
+            // Non-blocking - continue even if save fails
+            console.warn('Failed to save onboarding progress:', err)
+        }
+        nextStep()
     }
 
     return (
@@ -114,7 +130,7 @@ export default function IdentityStep() {
                         variant="primary"
                         size="lg"
                         fullWidth
-                        onClick={nextStep}
+                        onClick={handleContinue}
                         disabled={!name.trim() || !countryCode}
                     >
                         Continue

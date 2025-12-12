@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from 'crypto'
 import { nanoid } from 'nanoid'
+import { Prisma } from '@prisma/client'
 import { db } from '../db/client.js'
 import { redis } from '../db/redis.js'
 import { env } from '../config/env.js'
@@ -229,7 +230,7 @@ export async function logout(sessionToken: string): Promise<void> {
   })
 }
 
-// Get current user
+// Get current user with onboarding state
 export async function getCurrentUser(userId: string) {
   const user = await db.user.findUnique({
     where: { id: userId },
@@ -237,4 +238,63 @@ export async function getCurrentUser(userId: string) {
   })
 
   return user
+}
+
+// Get current user with full onboarding state (for /auth/me)
+export async function getCurrentUserWithOnboarding(userId: string) {
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    include: { profile: true },
+  })
+
+  if (!user) return null
+
+  const onboarding = computeOnboardingState(user)
+
+  return {
+    user,
+    onboarding,
+  }
+}
+
+// Save onboarding progress
+export async function saveOnboardingProgress(
+  userId: string,
+  data: {
+    step: number
+    branch?: 'personal' | 'service'
+    data?: Record<string, any>
+  }
+) {
+  // Merge with existing onboarding data if present
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    select: { onboardingData: true },
+  })
+
+  const existingData = (user?.onboardingData as Record<string, any>) || {}
+  const mergedData = data.data ? { ...existingData, ...data.data } : existingData
+
+  await db.user.update({
+    where: { id: userId },
+    data: {
+      onboardingStep: data.step,
+      onboardingBranch: data.branch as any,
+      onboardingData: mergedData,
+    },
+  })
+
+  return { success: true }
+}
+
+// Clear onboarding state (called when profile is fully created)
+export async function clearOnboardingState(userId: string) {
+  await db.user.update({
+    where: { id: userId },
+    data: {
+      onboardingStep: null,
+      onboardingBranch: null,
+      onboardingData: Prisma.DbNull, // Use DbNull to clear JSON field
+    },
+  })
 }

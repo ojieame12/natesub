@@ -715,4 +715,88 @@ describe('onboarding endpoints', () => {
       expect(body.payouts[0].amount).toBe(5000)
     })
   })
+
+  describe('PUT /auth/onboarding', () => {
+    it('saves onboarding progress with validated data', async () => {
+      const { user, rawToken } = await createTestUserWithSession('onboard@test.com')
+
+      const res = await authRequest('/auth/onboarding', {
+        method: 'PUT',
+        body: JSON.stringify({
+          step: 5,
+          branch: 'service',
+          data: {
+            displayName: 'Service User',
+            country: 'United States',
+            countryCode: 'US',
+            currency: 'USD',
+            username: 'serviceuser',
+            singleAmount: 2500,
+          },
+        }),
+      }, rawToken)
+
+      expect(res.status).toBe(200)
+      const updated = await db.user.findUnique({ where: { id: user.id } })
+      expect(updated?.onboardingStep).toBe(5)
+      expect(updated?.onboardingBranch).toBe('service')
+      expect(updated?.onboardingData).toMatchObject({
+        displayName: 'Service User',
+        country: 'United States',
+        countryCode: 'US',
+        currency: 'USD',
+        username: 'serviceuser',
+        singleAmount: 2500,
+      })
+    })
+
+    it('rejects invalid onboarding data', async () => {
+      await createTestUserWithSession('badonboard@test.com')
+
+      const res = await authRequest('/auth/onboarding', {
+        method: 'PUT',
+        body: JSON.stringify({
+          step: 2,
+          branch: 'personal',
+          data: {
+            username: 'ab', // too short
+          },
+        }),
+      })
+
+      expect(res.status).toBe(400)
+    })
+  })
+
+  describe('GET /auth/verify onboarding state', () => {
+    it('returns onboarding state for existing user', async () => {
+      // Create user with onboarding progress
+      const user = await db.user.create({
+        data: {
+          email: 'verify@test.com',
+          onboardingStep: 6,
+          onboardingBranch: 'service',
+          onboardingData: { displayName: 'Verify User' },
+        },
+      })
+
+      // Create OTP token
+      const token = '123456'
+      await db.magicLinkToken.create({
+        data: {
+          email: user.email,
+          tokenHash: hashToken(token),
+          expiresAt: new Date(Date.now() + 5 * 60 * 1000),
+        },
+      })
+
+      const res = await app.fetch(new Request(`http://localhost/auth/verify?token=${token}`))
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.onboardingStep).toBe(6)
+      expect(body.onboardingBranch).toBe('service')
+      expect(body.onboardingData).toMatchObject({ displayName: 'Verify User' })
+      expect(body.redirectTo).toContain('/onboarding')
+    })
+  })
 })

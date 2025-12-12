@@ -22,11 +22,21 @@ export interface ApiError {
   status: number
 }
 
+export interface OnboardingState {
+  hasProfile: boolean
+  hasActivePayment: boolean
+  step: number | null
+  branch: 'personal' | 'service' | null
+  data: Record<string, any> | null
+  redirectTo: string
+}
+
 export interface User {
   id: string
   email: string
   profile: Profile | null
   createdAt: string
+  onboarding?: OnboardingState
 }
 
 export interface Profile {
@@ -177,6 +187,17 @@ async function apiFetch<T>(
 // AUTH
 // ============================================
 
+export interface VerifyResponse {
+  success: boolean
+  token: string
+  hasProfile: boolean
+  hasActivePayment: boolean
+  onboardingStep: number | null
+  onboardingBranch: 'personal' | 'service' | null
+  onboardingData: Record<string, any> | null
+  redirectTo: string
+}
+
 export const auth = {
   requestMagicLink: (email: string) =>
     apiFetch<{ success: boolean; message: string }>('/auth/magic-link', {
@@ -184,13 +205,8 @@ export const auth = {
       body: JSON.stringify({ email }),
     }),
 
-  verify: async (otp: string) => {
-    const result = await apiFetch<{
-      success: boolean
-      hasProfile: boolean
-      redirectTo: string
-      token: string  // Session token for mobile apps
-    }>(`/auth/verify?token=${otp}`)
+  verify: async (otp: string): Promise<VerifyResponse> => {
+    const result = await apiFetch<VerifyResponse>(`/auth/verify?token=${otp}`)
 
     // Store token for mobile apps (Bearer auth)
     if (result.token) {
@@ -208,6 +224,17 @@ export const auth = {
   },
 
   me: () => apiFetch<User>('/auth/me'),
+
+  // Save onboarding progress to server
+  saveOnboardingProgress: (data: {
+    step: number
+    branch?: 'personal' | 'service'
+    data?: Record<string, any>
+  }) =>
+    apiFetch<{ success: boolean }>('/auth/onboarding', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
 
   deleteAccount: async () => {
     const result = await apiFetch<{ success: boolean; message: string }>('/auth/account', {

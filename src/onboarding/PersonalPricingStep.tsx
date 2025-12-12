@@ -3,6 +3,7 @@ import { ChevronLeft, Plus, Trash2 } from 'lucide-react'
 import { useOnboardingStore } from './store'
 import type { SubscriptionTier } from './store'
 import { Button, Pressable } from './components'
+import { useSaveOnboardingProgress } from '../api/hooks'
 import { getCurrencySymbol } from '../utils/currency'
 import './onboarding.css'
 
@@ -18,9 +19,12 @@ export default function PersonalPricingStep() {
         addTier,
         removeTier,
         currency,
+        branch,
+        currentStep,
         nextStep,
         prevStep
     } = useOnboardingStore()
+    const { mutateAsync: saveProgress } = useSaveOnboardingProgress()
 
     const currencySymbol = getCurrencySymbol(currency)
 
@@ -64,6 +68,23 @@ export default function PersonalPricingStep() {
     const isValid = pricingModel === 'single'
         ? (singleAmount && singleAmount > 0)
         : (tiers.length > 0 && tiers.every(t => t.amount > 0))
+
+    const handleContinue = async () => {
+        // Save pricing milestone to server
+        try {
+            await saveProgress({
+                step: currentStep + 1,
+                branch: branch as 'personal' | 'service',
+                data: {
+                    pricingModel,
+                    singleAmount: pricingModel === 'single' ? singleAmount : undefined,
+                },
+            })
+        } catch (err) {
+            console.warn('Failed to save onboarding progress:', err)
+        }
+        nextStep()
+    }
 
     return (
         <div className="onboarding">
@@ -167,7 +188,7 @@ export default function PersonalPricingStep() {
                         variant="primary"
                         size="lg"
                         fullWidth
-                        onClick={nextStep}
+                        onClick={handleContinue}
                         disabled={!isValid}
                     >
                         Continue

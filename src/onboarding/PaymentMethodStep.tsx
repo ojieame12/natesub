@@ -164,16 +164,15 @@ export default function PaymentMethodStep() {
                 const result = await api.stripe.connect()
 
                 if (result.onboardingUrl) {
-                    // Reset store before redirecting
-                    reset()
-                    // Redirect to Stripe onboarding
+                    // Profile is saved - redirect to Stripe onboarding
+                    // Don't reset() here - AuthRedirect will route properly when user returns
                     window.location.href = result.onboardingUrl
                     return
                 }
 
                 if (result.alreadyOnboarded) {
-                    // Already connected, go to dashboard
-                    reset()
+                    // Already connected - profile is saved, go to dashboard
+                    reset() // Clear local store since we're done
                     navigate('/dashboard')
                     return
                 }
@@ -192,7 +191,7 @@ export default function PaymentMethodStep() {
             }
 
             // For other payment methods (flutterwave, bank), go to dashboard
-            reset()
+            reset() // Clear local store since we're done
             navigate('/dashboard')
 
         } catch (err: any) {

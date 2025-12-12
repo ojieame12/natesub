@@ -157,6 +157,12 @@ interface OnboardingStore {
     prevStep: () => void
     goToStep: (step: number) => void
     reset: () => void
+    // Hydrate from server data (for resume flows)
+    hydrateFromServer: (data: {
+        step?: number
+        branch?: 'personal' | 'service' | null
+        data?: Record<string, any> | null
+    }) => void
 }
 
 // === Default Values ===
@@ -319,6 +325,34 @@ export const useOnboardingStore = create<OnboardingStore>()(
             prevStep: () => set((state) => ({ currentStep: Math.max(0, state.currentStep - 1) })),
             goToStep: (step) => set({ currentStep: step }),
             reset: () => set(initialState),
+
+            // Hydrate from server data (for resume flows)
+            hydrateFromServer: (serverData) => set(() => {
+                const updates: Partial<typeof initialState> = {}
+
+                // Set step and branch from server
+                if (serverData.step !== undefined) {
+                    updates.currentStep = serverData.step
+                }
+                if (serverData.branch) {
+                    updates.branch = serverData.branch
+                }
+
+                // Merge server data with local state (server wins for key fields)
+                if (serverData.data) {
+                    const d = serverData.data
+                    if (d.name) updates.name = d.name
+                    if (d.country) updates.country = d.country
+                    if (d.countryCode) updates.countryCode = d.countryCode
+                    if (d.currency) updates.currency = d.currency
+                    if (d.username) updates.username = d.username
+                    if (d.singleAmount !== undefined) updates.singleAmount = d.singleAmount
+                    if (d.pricingModel) updates.pricingModel = d.pricingModel
+                    if (d.purpose) updates.purpose = d.purpose
+                }
+
+                return updates
+            }),
         }),
         {
             name: 'natepay-onboarding',
