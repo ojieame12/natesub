@@ -210,11 +210,13 @@ export async function getPlatformSubscriptionStatus(userId: string): Promise<{
   // Get fresh status from Stripe
   try {
     const subscription = await stripe.subscriptions.retrieve(profile.platformSubscriptionId)
+    // Access properties with type assertion for API compatibility
+    const sub = subscription as any
     return {
-      status: subscription.status,
-      subscriptionId: subscription.id,
-      currentPeriodEnd: new Date(subscription.current_period_end * 1000),
-      cancelAtPeriodEnd: subscription.cancel_at_period_end,
+      status: sub.status,
+      subscriptionId: sub.id,
+      currentPeriodEnd: sub.current_period_end ? new Date(sub.current_period_end * 1000) : null,
+      cancelAtPeriodEnd: sub.cancel_at_period_end || false,
     }
   } catch {
     return {

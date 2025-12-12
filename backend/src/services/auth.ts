@@ -3,9 +3,9 @@ import { nanoid } from 'nanoid'
 import { db } from '../db/client.js'
 import { redis } from '../db/redis.js'
 import { env } from '../config/env.js'
-import { sendMagicLinkEmail } from './email.js'
+import { sendOtpEmail } from './email.js'
 
-const MAGIC_LINK_EXPIRES_MS = parseInt(env.MAGIC_LINK_EXPIRES_MINUTES) * 60 * 1000
+const OTP_EXPIRES_MS = parseInt(env.MAGIC_LINK_EXPIRES_MINUTES) * 60 * 1000
 const SESSION_EXPIRES_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
 
 // Hash token for storage (never store raw tokens)
@@ -13,17 +13,25 @@ function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex')
 }
 
-// Generate a secure token
+// Generate a secure session token
 function generateToken(): string {
   return randomBytes(32).toString('hex')
 }
 
-// Request a magic link
+// Generate a 6-digit OTP code
+function generateOtp(): string {
+  // Generate cryptographically secure random 6-digit number
+  const bytes = randomBytes(3)
+  const num = (bytes[0] << 16 | bytes[1] << 8 | bytes[2]) % 1000000
+  return num.toString().padStart(6, '0')
+}
+
+// Request an OTP code
 export async function requestMagicLink(email: string): Promise<{ success: boolean }> {
   const normalizedEmail = email.toLowerCase().trim()
 
   // Rate limit: max 3 requests per email per 10 minutes
-  const rateLimitKey = `magic_link_rate:${normalizedEmail}`
+  const rateLimitKey = `otp_rate:${normalizedEmail}`
   const attempts = await redis.incr(rateLimitKey)
   if (attempts === 1) {
     await redis.expire(rateLimitKey, 600) // 10 minutes
@@ -32,30 +40,38 @@ export async function requestMagicLink(email: string): Promise<{ success: boolea
     throw new Error('Too many requests. Please try again later.')
   }
 
-  // Generate token
-  const token = generateToken()
-  const tokenHash = hashToken(token)
-  const expiresAt = new Date(Date.now() + MAGIC_LINK_EXPIRES_MS)
+  // Invalidate any existing OTPs for this email
+  await db.magicLinkToken.updateMany({
+    where: {
+      email: normalizedEmail,
+      usedAt: null,
+    },
+    data: {
+      usedAt: new Date(), // Mark as used to invalidate
+    },
+  })
 
-  // Store in database
+  // Generate 6-digit OTP
+  const otp = generateOtp()
+  const otpHash = hashToken(otp)
+  const expiresAt = new Date(Date.now() + OTP_EXPIRES_MS)
+
+  // Store in database (reusing magicLinkToken table)
   await db.magicLinkToken.create({
     data: {
       email: normalizedEmail,
-      tokenHash,
+      tokenHash: otpHash,
       expiresAt,
     },
   })
 
-  // Build magic link URL
-  const magicLink = `${env.APP_URL}/auth/verify?token=${token}`
-
-  // Send email
-  await sendMagicLinkEmail(normalizedEmail, magicLink)
+  // Send OTP email
+  await sendOtpEmail(normalizedEmail, otp)
 
   return { success: true }
 }
 
-// Verify magic link token
+// Verify OTP code
 export async function verifyMagicLink(token: string): Promise<{ sessionToken: string; userId: string }> {
   const tokenHash = hashToken(token)
 
@@ -65,15 +81,15 @@ export async function verifyMagicLink(token: string): Promise<{ sessionToken: st
   })
 
   if (!magicLinkToken) {
-    throw new Error('Invalid or expired link')
+    throw new Error('Invalid code')
   }
 
   if (magicLinkToken.usedAt) {
-    throw new Error('This link has already been used')
+    throw new Error('This code has already been used')
   }
 
   if (magicLinkToken.expiresAt < new Date()) {
-    throw new Error('This link has expired')
+    throw new Error('This code has expired')
   }
 
   // Mark token as used

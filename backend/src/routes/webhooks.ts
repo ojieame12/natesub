@@ -10,6 +10,36 @@ import { calculateFees, type UserPurpose } from '../services/pricing.js'
 
 const webhooks = new Hono()
 
+// Helper to identify platform subscription events
+function isPlatformSubscriptionEvent(event: Stripe.Event): boolean {
+  const platformEventTypes = [
+    'checkout.session.completed',
+    'customer.subscription.updated',
+    'customer.subscription.deleted',
+    'invoice.payment_failed',
+  ]
+
+  if (!platformEventTypes.includes(event.type)) {
+    return false
+  }
+
+  const data = event.data.object as any
+
+  // Check metadata for platform_subscription type
+  if (data.metadata?.type === 'platform_subscription') {
+    return true
+  }
+
+  // For subscription events, check if the customer is a platform customer
+  if (data.customer) {
+    // Platform customers have metadata['type'] = 'platform_customer'
+    // This is set when we create the customer in platformSubscription.ts
+    // We can't check synchronously, so we check the profile instead
+  }
+
+  return false
+}
+
 // Stripe webhook handler
 webhooks.post('/stripe', async (c) => {
   const signature = c.req.header('stripe-signature')
@@ -182,6 +212,10 @@ async function handleCheckoutCompleted(event: Stripe.Event) {
     },
   })
 
+  // Calculate fees based on creator's purpose (personal: 10%, service: 8%)
+  const purpose = creatorProfile?.purpose as UserPurpose
+  const { totalFeeCents: feeCents, netCents } = calculateFees(session.amount_total || 0, purpose)
+
   // Create payment record with idempotency key
   await db.payment.create({
     data: {
@@ -190,8 +224,8 @@ async function handleCheckoutCompleted(event: Stripe.Event) {
       subscriberId: subscriber.id,
       amountCents: session.amount_total || 0,
       currency: session.currency?.toUpperCase() || 'USD',
-      feeCents: Math.round((session.amount_total || 0) * 0.1), // 10% platform fee
-      netCents: Math.round((session.amount_total || 0) * 0.9),
+      feeCents,
+      netCents,
       type: session.mode === 'subscription' ? 'recurring' : 'one_time',
       status: 'succeeded',
       stripeEventId: event.id, // Idempotency key
@@ -239,6 +273,11 @@ async function handleInvoicePaid(event: Stripe.Event) {
 
   const subscription = await db.subscription.findUnique({
     where: { stripeSubscriptionId: subscriptionId },
+    include: {
+      creator: {
+        include: { profile: { select: { purpose: true } } },
+      },
+    },
   })
 
   if (!subscription) return
@@ -254,6 +293,10 @@ async function handleInvoicePaid(event: Stripe.Event) {
     },
   })
 
+  // Calculate fees based on creator's purpose (personal: 10%, service: 8%)
+  const purpose = subscription.creator?.profile?.purpose as UserPurpose
+  const { totalFeeCents: feeCents, netCents } = calculateFees(invoice.amount_paid, purpose)
+
   // Create payment record
   await db.payment.create({
     data: {
@@ -262,8 +305,8 @@ async function handleInvoicePaid(event: Stripe.Event) {
       subscriberId: subscription.subscriberId,
       amountCents: invoice.amount_paid,
       currency: invoice.currency.toUpperCase(),
-      feeCents: Math.round(invoice.amount_paid * 0.1),
-      netCents: Math.round(invoice.amount_paid * 0.9),
+      feeCents,
+      netCents,
       type: 'recurring',
       status: 'succeeded',
       stripeEventId: event.id,
@@ -749,9 +792,9 @@ async function handlePaystackChargeSuccess(data: any, eventId: string) {
     tierName = tier?.name || null
   }
 
-  // Calculate fees (10% platform fee)
-  const feeCents = Math.round(amount * 0.10)
-  const netCents = amount - feeCents
+  // Calculate fees based on creator's purpose (personal: 10%, service: 8%)
+  const purpose = creatorProfile?.purpose as UserPurpose
+  const { totalFeeCents: feeCents, netCents } = calculateFees(amount, purpose)
 
   // Create or update subscription (upsert based on unique constraint)
   const subscriptionInterval = interval === 'month' ? 'month' : 'one_time'

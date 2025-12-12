@@ -20,9 +20,9 @@ auth.post(
 
     try {
       await requestMagicLink(email)
-      return c.json({ success: true, message: 'Check your email for a sign-in link' })
+      return c.json({ success: true, message: 'Check your email for a verification code' })
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to send magic link'
+      const message = error instanceof Error ? error.message : 'Failed to send code'
       return c.json({ error: message }, 400)
     }
   }

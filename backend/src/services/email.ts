@@ -3,17 +3,19 @@ import { env } from '../config/env.js'
 
 const resend = new Resend(env.RESEND_API_KEY)
 
-export async function sendMagicLinkEmail(to: string, magicLink: string): Promise<void> {
+export async function sendOtpEmail(to: string, otp: string): Promise<void> {
   await resend.emails.send({
     from: env.EMAIL_FROM,
     to,
-    subject: 'Sign in to Nate',
+    subject: `${otp} is your Nate verification code`,
     html: `
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 500px; margin: 0 auto; padding: 40px 20px;">
-        <h1 style="font-size: 24px; font-weight: 600; margin-bottom: 24px; color: #1a1a1a;">Sign in to Nate</h1>
-        <p style="font-size: 16px; color: #4a4a4a; margin-bottom: 24px;">Click the button below to sign in. This link expires in 15 minutes.</p>
-        <a href="${magicLink}" style="display: inline-block; background-color: #FF941A; color: white; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: 600; font-size: 16px;">Sign In</a>
-        <p style="font-size: 14px; color: #888; margin-top: 32px;">If you didn't request this email, you can safely ignore it.</p>
+        <h1 style="font-size: 24px; font-weight: 600; margin-bottom: 24px; color: #1a1a1a;">Your verification code</h1>
+        <p style="font-size: 16px; color: #4a4a4a; margin-bottom: 24px;">Enter this code in the app to sign in:</p>
+        <div style="background-color: #f5f5f5; border-radius: 12px; padding: 24px; text-align: center; margin-bottom: 24px;">
+          <span style="font-size: 36px; font-weight: 700; letter-spacing: 8px; color: #1a1a1a;">${otp}</span>
+        </div>
+        <p style="font-size: 14px; color: #888;">This code expires in 15 minutes. If you didn't request this, you can safely ignore it.</p>
       </div>
     `,
   })

@@ -35,7 +35,7 @@ app.use('*', secureHeaders())
 
 // CORS - allow multiple origins for web and mobile
 const allowedOrigins = [
-  env.APP_URL,
+  ...env.APP_URL.split(',').map(o => o.trim()).filter(Boolean),
   'capacitor://localhost',      // iOS Capacitor
   'http://localhost',           // Android Capacitor
   'http://localhost:5173',      // Local dev
@@ -45,12 +45,13 @@ const allowedOrigins = [
 app.use('*', cors({
   origin: (origin) => {
     // Allow requests with no origin (mobile apps, Postman, etc.)
-    if (!origin) return env.APP_URL
+    if (!origin) return '*'
     // Check if origin is in allowed list
-    if (allowedOrigins.some(allowed => origin.startsWith(allowed))) {
+    if (allowedOrigins.some(allowed => origin && origin.startsWith(allowed))) {
       return origin
     }
-    return env.APP_URL
+    // Deny unknown origins
+    return null
   },
   credentials: true,
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],

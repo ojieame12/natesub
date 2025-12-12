@@ -55,19 +55,17 @@ export default function ServiceDescriptionStep() {
 
             <div className="onboarding-content">
                 <div className="step-header">
-                    <h1>Tell us about your service</h1>
-                    <p>This helps us create your page</p>
+                    <h1>What do you do?</h1>
                 </div>
 
                 <div className="step-body service-step-body">
                     {/* What do you help with */}
                     <div className="service-section">
-                        <label className="service-section-label">What do you help people with?</label>
                         <div className="service-description-field">
                             <textarea
                                 value={serviceDescription}
                                 onChange={(e) => setServiceDescription(e.target.value)}
-                                placeholder="I help startup founders turn scattered ideas into focused product strategies..."
+                                placeholder="I help founders turn ideas into products..."
                                 className="service-description-textarea"
                                 rows={3}
                                 maxLength={300}
