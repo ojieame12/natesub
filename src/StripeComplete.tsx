@@ -132,6 +132,9 @@ export default function StripeComplete() {
 
   return (
     <div className="stripe-complete-page">
+      <div className="stripe-complete-header">
+        <img src="/logo.svg" alt="NatePay" className="stripe-complete-logo" />
+      </div>
       <div className="stripe-complete-card">
         {status === 'loading' && (
           <div className="status-content">

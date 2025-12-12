@@ -7,12 +7,32 @@
   min-height: 100vh;
   min-height: 100dvh;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: var(--space-lg);
   padding-top: calc(env(safe-area-inset-top, 20px) + var(--space-lg));
   padding-bottom: calc(env(safe-area-inset-bottom, 20px) + var(--space-lg));
-  background: var(--neutral-100);
+  background: linear-gradient(
+    180deg,
+    #fff9e6 0%,
+    #fff5d6 25%,
+    #ffffff 50%,
+    #fff8e0 75%,
+    #fffbf0 100%
+  );
+}
+
+.stripe-complete-header {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 20px) + var(--space-lg));
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.stripe-complete-logo {
+  height: 28px;
+  width: auto;
 }
 
 .stripe-complete-card {
@@ -83,8 +103,8 @@
 }
 
 .status-icon.error {
-  background: rgba(239, 68, 68, 0.15);
-  color: var(--accent-red);
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
 }
 
 /* === CONNECTED DETAILS === */
@@ -273,20 +293,20 @@
   padding: var(--space-lg) var(--space-xl);
   font-size: 16px;
   font-weight: 600;
-  color: white;
-  background: var(--neutral-900);
+  color: #000;
+  background: var(--accent-yellow, #FFC233);
   border-radius: var(--radius-lg);
   display: flex;
   align-items: center;
   justify-content: center;
   gap: var(--space-sm);
-  box-shadow: 0 4px 0 var(--neutral-700);
+  box-shadow: 0 4px 0 #cc9a29;
   transition: transform 0.1s ease, box-shadow 0.1s ease;
 }
 
 .btn-primary.pressed {
   transform: translateY(2px);
-  box-shadow: 0 2px 0 var(--neutral-700);
+  box-shadow: 0 2px 0 #cc9a29;
 }
 
 .btn-secondary {
@@ -330,16 +350,17 @@
 /* === REQUIREMENTS LIST === */
 .requirements-list {
   margin-top: var(--space-lg);
-  padding: var(--space-md);
-  background: rgba(239, 68, 68, 0.08);
+  padding: var(--space-md) var(--space-lg);
+  background: rgba(245, 158, 11, 0.1);
   border-radius: var(--radius-lg);
   text-align: left;
+  border: 1px solid rgba(245, 158, 11, 0.2);
 }
 
 .requirements-label {
   font-size: 13px;
   font-weight: 600;
-  color: var(--accent-red);
+  color: #b45309;
   display: block;
   margin-bottom: var(--space-sm);
 }

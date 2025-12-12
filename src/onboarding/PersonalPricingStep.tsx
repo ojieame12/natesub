@@ -4,10 +4,8 @@ import { useOnboardingStore } from './store'
 import type { SubscriptionTier } from './store'
 import { Button, Pressable } from './components'
 import { useSaveOnboardingProgress } from '../api/hooks'
-import { getCurrencySymbol } from '../utils/currency'
+import { getCurrencySymbol, getSuggestedAmounts } from '../utils/currency'
 import './onboarding.css'
-
-const QUICK_AMOUNTS = [5, 10, 15, 25]
 
 export default function PersonalPricingStep() {
     const {
@@ -28,6 +26,8 @@ export default function PersonalPricingStep() {
     const { mutateAsync: saveProgress } = useSaveOnboardingProgress()
 
     const currencySymbol = getCurrencySymbol(currency)
+    // Get currency-aware suggested amounts (e.g., NGN shows ₦5000, not ₦5)
+    const suggestedAmounts = getSuggestedAmounts(currency, branch === 'service' ? 'service' : 'personal')
 
     const [inputValue, setInputValue] = useState(singleAmount?.toString() || '')
 
@@ -147,13 +147,13 @@ export default function PersonalPricingStep() {
                             </div>
 
                             <div className="quick-amounts">
-                                {QUICK_AMOUNTS.map((amount) => (
+                                {suggestedAmounts.map((amount) => (
                                     <Pressable
                                         key={amount}
                                         className={`quick-amount-btn ${singleAmount === amount ? 'selected' : ''}`}
                                         onClick={() => handleQuickAmount(amount)}
                                     >
-                                        {currencySymbol}{amount}
+                                        {currencySymbol}{amount.toLocaleString()}
                                     </Pressable>
                                 ))}
                             </div>
