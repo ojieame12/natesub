@@ -192,7 +192,7 @@ export default function RequestPreview() {
                 <Pressable className="request-back-btn" onClick={() => navigate(-1)}>
                     <ChevronLeft size={20} />
                 </Pressable>
-                <span className="request-title">{isService ? 'Invoice Preview' : 'Preview'}</span>
+                <img src="/logo.svg" alt="NatePay" className="header-logo" />
                 <div className="request-header-spacer" />
             </header>
 

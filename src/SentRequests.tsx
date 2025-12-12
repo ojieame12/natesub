@@ -123,7 +123,7 @@ export default function SentRequests() {
                 <Pressable className="back-btn" onClick={() => navigate(-1)}>
                     <ArrowLeft size={20} />
                 </Pressable>
-                <span className="sent-requests-title">Sent Requests</span>
+                <img src="/logo.svg" alt="NatePay" className="header-logo" />
                 <Pressable className="filter-btn" onClick={() => setShowFilters(!showFilters)}>
                     <Filter size={20} />
                 </Pressable>

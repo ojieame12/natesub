@@ -14,29 +14,31 @@
     flex-direction: column;
 }
 
-/* === HEADER - Large Title (like Activity) === */
+/* === HEADER - With Logo === */
 .payroll-header {
-    padding: var(--space-lg) var(--space-xl);
-    padding-top: calc(env(safe-area-inset-top, 12px) + var(--space-lg));
-    background: var(--bg-base);
-}
-
-.payroll-title {
-    font-size: 28px;
-    font-weight: 700;
-    color: var(--text-primary);
-    margin: 0;
-    letter-spacing: -0.5px;
-}
-
-/* === DETAIL HEADER === */
-.payroll-detail-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     padding: var(--space-md) var(--space-lg);
     padding-top: calc(env(safe-area-inset-top, 12px) + var(--space-md));
     background: var(--bg-base);
+}
+
+.payroll-logo {
+    height: 24px;
+}
+
+/* === PAGE TITLE === */
+.payroll-page-title {
+    padding: var(--space-sm) var(--space-xl) var(--space-md);
+}
+
+.payroll-page-title h1 {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0;
+    letter-spacing: -0.5px;
 }
 
 .payroll-back-btn {
@@ -51,12 +53,6 @@
 
 .payroll-back-btn.pressed {
     background: var(--neutral-100);
-}
-
-.payroll-detail-title {
-    font-size: 17px;
-    font-weight: 600;
-    color: var(--text-primary);
 }
 
 .payroll-header-spacer {

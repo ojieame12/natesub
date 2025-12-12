@@ -74,7 +74,7 @@ export default function SelectRecipient() {
                 <Pressable className="request-close-btn" onClick={handleClose}>
                     <X size={20} />
                 </Pressable>
-                <span className="request-title">{isService ? 'Bill Client' : 'New Request'}</span>
+                <img src="/logo.svg" alt="NatePay" className="header-logo" />
                 <div className="request-header-spacer" />
             </header>
 

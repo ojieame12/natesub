@@ -137,7 +137,7 @@ export default function UpdatePreview() {
         <Pressable className="back-btn" onClick={() => navigate(-1)}>
           <ChevronLeft size={24} />
         </Pressable>
-        <span className="update-preview-title">Preview</span>
+        <img src="/logo.svg" alt="NatePay" className="header-logo" />
         <div className="header-spacer" />
       </header>
 

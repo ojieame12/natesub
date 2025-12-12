@@ -85,7 +85,7 @@ export default function UpdateDetail() {
                     <Pressable className="back-btn" onClick={() => navigate(-1)}>
                         <ArrowLeft size={20} />
                     </Pressable>
-                    <span className="update-detail-title">Update</span>
+                    <img src="/logo.svg" alt="NatePay" className="header-logo" />
                     <div style={{ width: 36 }} />
                 </header>
                 <div className="update-detail-empty">
@@ -105,7 +105,7 @@ export default function UpdateDetail() {
                 <Pressable className="back-btn" onClick={() => navigate(-1)}>
                     <ArrowLeft size={20} />
                 </Pressable>
-                <span className="update-detail-title">Update</span>
+                <img src="/logo.svg" alt="NatePay" className="header-logo" />
                 <div style={{ width: 36 }} />
             </header>
 

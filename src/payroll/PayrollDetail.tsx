@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ChevronLeft, Download, CheckCircle, Clock, ExternalLink, Loader2 } from 'lucide-react'
+import { ArrowLeft, Download, CheckCircle, Clock, ExternalLink, Loader2 } from 'lucide-react'
 import { Pressable, Skeleton, ErrorState, useToast } from '../components'
 import { usePayrollPeriod, useCurrentUser } from '../api/hooks'
 import { getCurrencySymbol } from '../utils/currency'
@@ -75,13 +75,18 @@ export default function PayrollDetail() {
     return (
         <div className="payroll-page">
             {/* Header */}
-            <header className="payroll-detail-header">
+            <header className="payroll-header">
                 <Pressable className="payroll-back-btn" onClick={() => navigate(-1)}>
-                    <ChevronLeft size={20} />
+                    <ArrowLeft size={20} />
                 </Pressable>
-                <span className="payroll-detail-title">Pay Statement</span>
+                <img src="/logo.svg" alt="NatePay" className="payroll-logo" />
                 <div className="payroll-header-spacer" />
             </header>
+
+            {/* Page Title */}
+            <div className="payroll-page-title">
+                <h1>Pay Statement</h1>
+            </div>
 
             {/* Content */}
             <div className="payroll-content">

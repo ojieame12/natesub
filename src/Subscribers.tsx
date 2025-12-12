@@ -72,7 +72,7 @@ export default function Subscribers() {
             <Pressable className="back-btn" onClick={goBack}>
               <ArrowLeft size={20} />
             </Pressable>
-            <span className="subscribers-title">Subscribers</span>
+            <img src="/logo.svg" alt="NatePay" className="header-logo" />
             <Pressable className="search-btn" onClick={() => setSearchOpen(true)}>
               <Search size={20} />
             </Pressable>

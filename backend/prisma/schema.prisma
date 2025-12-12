@@ -189,6 +189,9 @@ model Profile {
   notificationPrefs Json? // { push: bool, email: bool, subscriberAlerts: bool, paymentAlerts: bool }
   isPublic          Boolean @default(true) // Profile visibility
 
+  // Template
+  template String @default("boundary") // Subscribe page template: boundary, minimal, editorial
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

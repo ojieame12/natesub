@@ -70,7 +70,7 @@ export default function HelpSupport() {
         <Pressable className="back-btn" onClick={() => navigate(-1)}>
           <ArrowLeft size={20} />
         </Pressable>
-        <span className="help-title">Help & Support</span>
+        <img src="/logo.svg" alt="NatePay" className="header-logo" />
         <div className="header-spacer" />
       </header>
 

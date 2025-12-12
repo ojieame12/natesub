@@ -141,7 +141,7 @@ export default function PaymentSettings() {
           <Pressable className="back-btn" onClick={() => navigate(-1)}>
             <ArrowLeft size={20} />
           </Pressable>
-          <span className="payment-settings-title">Payment Settings</span>
+          <img src="/logo.svg" alt="NatePay" className="header-logo" />
           <div className="header-spacer" />
         </header>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
@@ -160,7 +160,7 @@ export default function PaymentSettings() {
           <Pressable className="back-btn" onClick={() => navigate(-1)}>
             <ArrowLeft size={20} />
           </Pressable>
-          <span className="payment-settings-title">Payment Settings</span>
+          <img src="/logo.svg" alt="NatePay" className="header-logo" />
           <div className="header-spacer" />
         </header>
 
@@ -248,7 +248,7 @@ export default function PaymentSettings() {
           <Pressable className="back-btn" onClick={() => navigate(-1)}>
             <ArrowLeft size={20} />
           </Pressable>
-          <span className="payment-settings-title">Payment Settings</span>
+          <img src="/logo.svg" alt="NatePay" className="header-logo" />
           <div className="header-spacer" />
         </header>
 
@@ -323,7 +323,7 @@ export default function PaymentSettings() {
           <Pressable className="back-btn" onClick={() => navigate(-1)}>
             <ArrowLeft size={20} />
           </Pressable>
-          <span className="payment-settings-title">Payment Settings</span>
+          <img src="/logo.svg" alt="NatePay" className="header-logo" />
           <div className="header-spacer" />
         </header>
 
@@ -419,7 +419,7 @@ export default function PaymentSettings() {
           <Pressable className="back-btn" onClick={() => navigate(-1)}>
             <ArrowLeft size={20} />
           </Pressable>
-          <span className="payment-settings-title">Payment Settings</span>
+          <img src="/logo.svg" alt="NatePay" className="header-logo" />
           <div className="header-spacer" />
         </header>
 
@@ -517,7 +517,7 @@ export default function PaymentSettings() {
         <Pressable className="back-btn" onClick={() => navigate(-1)}>
           <ArrowLeft size={20} />
         </Pressable>
-        <span className="payment-settings-title">Payment Settings</span>
+        <img src="/logo.svg" alt="NatePay" className="header-logo" />
         <div className="header-spacer" />
       </header>
 

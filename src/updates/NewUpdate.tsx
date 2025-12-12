@@ -53,7 +53,7 @@ export default function NewUpdate() {
         <Pressable className="close-btn" onClick={() => navigate(-1)}>
           <X size={20} />
         </Pressable>
-        <span className="new-update-title">New Update</span>
+        <img src="/logo.svg" alt="NatePay" className="header-logo" />
         <div className="header-spacer" />
       </header>
 

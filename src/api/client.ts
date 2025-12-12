@@ -58,6 +58,7 @@ export interface Profile {
   paymentProvider: string | null
   payoutStatus: 'pending' | 'active' | 'restricted'
   shareUrl: string | null
+  template?: 'boundary' | 'minimal' | 'editorial' // Subscribe page template
   paymentsReady?: boolean // For public profiles - indicates if checkout will work
 }
 

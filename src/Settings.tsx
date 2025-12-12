@@ -136,7 +136,7 @@ export default function Settings() {
         <Pressable className="back-btn" onClick={() => navigate(-1)}>
           <ArrowLeft size={20} />
         </Pressable>
-        <span className="settings-title">Settings</span>
+        <img src="/logo.svg" alt="NatePay" className="header-logo" />
         <div className="header-spacer" />
       </header>
 

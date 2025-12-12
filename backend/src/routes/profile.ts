@@ -56,6 +56,7 @@ const profileSchema = z.object({
   perks: z.array(perkSchema).optional().nullable(),
   impactItems: z.array(impactItemSchema).optional().nullable(),
   paymentProvider: z.enum(['stripe', 'flutterwave', 'bank']).optional().nullable(),
+  template: z.enum(['boundary', 'minimal', 'editorial']).optional(),
 })
 
 // Get own profile
@@ -128,6 +129,7 @@ profile.put(
       perks: perksData,
       impactItems: impactItemsData,
       paymentProvider: data.paymentProvider || null,
+      template: data.template || 'boundary',
       shareUrl: `https://natepay.co/${data.username.toLowerCase()}`,
     }
 

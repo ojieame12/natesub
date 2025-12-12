@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Camera, Plus, GripVertical, Trash2, ExternalLink, Check, X } from 'lucide-react'
+import { ArrowLeft, Camera, Plus, GripVertical, Trash2, ExternalLink, Check, X, Loader2 } from 'lucide-react'
 import { Pressable, useToast, Skeleton } from './components'
-import { useProfile, useUpdateProfile } from './api/hooks'
+import { useProfile, useUpdateProfile, uploadFile } from './api/hooks'
 import { getCurrencySymbol } from './utils/currency'
 import type { Tier, Perk, ImpactItem } from './api/client'
 import './EditPage.css'
@@ -12,6 +12,7 @@ export default function EditPage() {
   const toast = useToast()
   const { data: profileData, isLoading, error } = useProfile()
   const { mutateAsync: updateProfile, isPending: isSaving } = useUpdateProfile()
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const profile = profileData?.profile
 
@@ -25,6 +26,7 @@ export default function EditPage() {
   const [perks, setPerks] = useState<Perk[]>([])
   const [impactItems, setImpactItems] = useState<ImpactItem[]>([])
   const [hasChanges, setHasChanges] = useState(false)
+  const [isUploading, setIsUploading] = useState(false)
 
   // Hydrate local state from profile
   useEffect(() => {
@@ -48,13 +50,51 @@ export default function EditPage() {
     const changed =
       displayName !== (profile.displayName || '') ||
       bio !== (profile.bio || '') ||
+      avatarUrl !== (profile.avatarUrl || null) ||
       pricingModel !== profile.pricingModel ||
       singleAmount !== (profile.singleAmount || 10) ||
       JSON.stringify(tiers) !== JSON.stringify(profile.tiers || []) ||
       JSON.stringify(perks) !== JSON.stringify(profile.perks || []) ||
       JSON.stringify(impactItems) !== JSON.stringify(profile.impactItems || [])
     setHasChanges(changed)
-  }, [displayName, bio, pricingModel, singleAmount, tiers, perks, impactItems, profile])
+  }, [displayName, bio, avatarUrl, pricingModel, singleAmount, tiers, perks, impactItems, profile])
+
+  // Avatar upload handler
+  const handleAvatarClick = () => {
+    fileInputRef.current?.click()
+  }
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // Validate file type
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      toast.error('Please upload a JPG, PNG, or WebP image')
+      return
+    }
+
+    // Validate file size (5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image must be less than 5MB')
+      return
+    }
+
+    setIsUploading(true)
+    try {
+      const url = await uploadFile(file, 'avatar')
+      setAvatarUrl(url)
+      toast.success('Avatar uploaded')
+    } catch (err: any) {
+      toast.error(err?.error || 'Failed to upload avatar')
+    } finally {
+      setIsUploading(false)
+      // Reset input so same file can be selected again
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+    }
+  }
 
   // Tier handlers
   const handleAddTier = () => {
@@ -133,6 +173,7 @@ export default function EditPage() {
         ...profile,
         displayName,
         bio,
+        avatarUrl,
         pricingModel,
         singleAmount: pricingModel === 'single' ? singleAmount : null,
         tiers: pricingModel === 'tiers' ? tiers : null,
@@ -153,7 +194,7 @@ export default function EditPage() {
           <Pressable className="back-btn" onClick={() => navigate(-1)}>
             <ArrowLeft size={20} />
           </Pressable>
-          <span className="edit-page-title">Edit My Page</span>
+          <img src="/logo.svg" alt="NatePay" className="header-logo" />
           <div style={{ width: 36 }} />
         </header>
         <div className="edit-page-content">
@@ -179,7 +220,7 @@ export default function EditPage() {
           <Pressable className="back-btn" onClick={() => navigate(-1)}>
             <ArrowLeft size={20} />
           </Pressable>
-          <span className="edit-page-title">Edit My Page</span>
+          <img src="/logo.svg" alt="NatePay" className="header-logo" />
           <div style={{ width: 36 }} />
         </header>
         <div className="edit-page-content">
@@ -203,7 +244,7 @@ export default function EditPage() {
         <Pressable className="back-btn" onClick={() => navigate(-1)}>
           <ArrowLeft size={20} />
         </Pressable>
-        <span className="edit-page-title">Edit My Page</span>
+        <img src="/logo.svg" alt="NatePay" className="header-logo" />
         <Pressable className="preview-btn" onClick={handlePreview}>
           <ExternalLink size={18} />
         </Pressable>
@@ -214,7 +255,7 @@ export default function EditPage() {
         <section className="edit-section">
           <h3 className="section-title">Profile</h3>
           <div className="profile-card">
-            <Pressable className="avatar-edit">
+            <Pressable className="avatar-edit" onClick={handleAvatarClick} disabled={isUploading}>
               {avatarUrl ? (
                 <img src={avatarUrl} alt="" className="avatar-image" />
               ) : (
@@ -223,9 +264,16 @@ export default function EditPage() {
                 </div>
               )}
               <div className="avatar-overlay">
-                <Camera size={16} />
+                {isUploading ? <Loader2 size={16} className="animate-spin" /> : <Camera size={16} />}
               </div>
             </Pressable>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              onChange={handleFileChange}
+              className="hidden-input"
+            />
             <div className="profile-fields">
               <div className="field">
                 <label className="field-label">Display Name</label>

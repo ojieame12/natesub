@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { FileText, ChevronRight, Calendar } from 'lucide-react'
+import { FileText, ChevronRight, Calendar, ArrowLeft } from 'lucide-react'
 import type { PayPeriod } from '../api/client'
 import { Pressable, Skeleton, ErrorState } from '../components'
 import { usePayrollPeriods, useCurrentUser } from '../api/hooks'
@@ -45,8 +45,17 @@ export default function PayrollHistory() {
         <div className="payroll-page">
             {/* Header */}
             <header className="payroll-header">
-                <h1 className="payroll-title">Payroll</h1>
+                <Pressable className="payroll-back-btn" onClick={() => navigate(-1)}>
+                    <ArrowLeft size={20} />
+                </Pressable>
+                <img src="/logo.svg" alt="NatePay" className="payroll-logo" />
+                <div className="payroll-header-spacer" />
             </header>
+
+            {/* Page Title */}
+            <div className="payroll-page-title">
+                <h1>Payroll</h1>
+            </div>
 
             {/* Content */}
             <div className="payroll-content">

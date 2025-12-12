@@ -1,12 +1,12 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Check, Eye, Sparkles } from 'lucide-react'
-import { Pressable, useToast } from './components'
-import { useProfile } from './api/hooks'
+import { ArrowLeft, Check, Eye, Sparkles, Loader2 } from 'lucide-react'
+import { Pressable, useToast, Skeleton } from './components'
+import { useProfile, useUpdateProfile } from './api/hooks'
 import './Templates.css'
 
 interface Template {
-  id: string
+  id: 'boundary' | 'minimal' | 'editorial'
   name: string
   description: string
   preview: string
@@ -40,17 +40,34 @@ const templates: Template[] = [
 export default function Templates() {
   const navigate = useNavigate()
   const toast = useToast()
-  const { data: profileData } = useProfile()
+  const { data: profileData, isLoading } = useProfile()
+  const { mutateAsync: updateProfile, isPending: isSaving } = useUpdateProfile()
   const profile = profileData?.profile
 
-  // Get saved template or default to boundary
-  const savedTemplate = localStorage.getItem('natepay-template') || 'boundary'
-  const [selectedTemplate, setSelectedTemplate] = useState(savedTemplate)
+  // Get saved template from profile or default to boundary
+  const savedTemplate = (profile?.template || 'boundary') as 'boundary' | 'minimal' | 'editorial'
+  const [selectedTemplate, setSelectedTemplate] = useState<'boundary' | 'minimal' | 'editorial'>(savedTemplate)
 
-  const handleApply = () => {
-    localStorage.setItem('natepay-template', selectedTemplate)
-    toast.success('Template applied')
-    navigate(-1)
+  // Sync selected template when profile loads
+  useEffect(() => {
+    if (profile?.template) {
+      setSelectedTemplate(profile.template)
+    }
+  }, [profile?.template])
+
+  const handleApply = async () => {
+    if (!profile) return
+
+    try {
+      await updateProfile({
+        ...profile,
+        template: selectedTemplate,
+      })
+      toast.success('Template applied')
+      navigate(-1)
+    } catch (err: any) {
+      toast.error(err?.error || 'Failed to apply template')
+    }
   }
 
   const handlePreview = () => {
@@ -68,6 +85,29 @@ export default function Templates() {
     }
   }
 
+  if (isLoading) {
+    return (
+      <div className="templates-page">
+        <header className="templates-header">
+          <Pressable className="back-btn" onClick={() => navigate(-1)}>
+            <ArrowLeft size={20} />
+          </Pressable>
+          <img src="/logo.svg" alt="NatePay" className="header-logo" />
+          <div style={{ width: 36 }} />
+        </header>
+        <div className="templates-content">
+          <Skeleton width={200} height={16} style={{ marginBottom: 24 }} />
+          <div className="templates-grid">
+            <Skeleton width="100%" height={200} borderRadius="16px" />
+            <Skeleton width="100%" height={200} borderRadius="16px" />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  const hasChanges = selectedTemplate !== savedTemplate
+
   return (
     <div className="templates-page">
       {/* Header */}
@@ -75,7 +115,7 @@ export default function Templates() {
         <Pressable className="back-btn" onClick={() => navigate(-1)}>
           <ArrowLeft size={20} />
         </Pressable>
-        <span className="templates-title">Templates</span>
+        <img src="/logo.svg" alt="NatePay" className="header-logo" />
         <Pressable className="preview-btn" onClick={handlePreview}>
           <Eye size={18} />
         </Pressable>
@@ -123,7 +163,7 @@ export default function Templates() {
         <div className="templates-current">
           <span className="current-label">Currently using:</span>
           <span className="current-value">
-            {templates.find(t => t.id === selectedTemplate)?.name || 'Boundary'}
+            {templates.find(t => t.id === savedTemplate)?.name || 'Boundary'}
           </span>
         </div>
       </div>
@@ -131,11 +171,18 @@ export default function Templates() {
       {/* Apply Button */}
       <div className="templates-footer">
         <Pressable
-          className={`apply-btn ${selectedTemplate === savedTemplate ? 'disabled' : ''}`}
+          className={`apply-btn ${!hasChanges ? 'disabled' : ''}`}
           onClick={handleApply}
-          disabled={selectedTemplate === savedTemplate}
+          disabled={!hasChanges || isSaving}
         >
-          Apply Template
+          {isSaving ? (
+            <>
+              <Loader2 size={18} className="animate-spin" />
+              Applying...
+            </>
+          ) : (
+            'Apply Template'
+          )}
         </Pressable>
       </div>
     </div>

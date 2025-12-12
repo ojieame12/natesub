@@ -46,7 +46,7 @@ export default function UpdatesHistory() {
                 <Pressable className="back-btn" onClick={() => navigate(-1)}>
                     <ArrowLeft size={20} />
                 </Pressable>
-                <span className="updates-history-title">Updates</span>
+                <img src="/logo.svg" alt="NatePay" className="header-logo" />
                 <Pressable className="new-btn" onClick={() => navigate('/updates/new')}>
                     <Send size={20} />
                 </Pressable>
