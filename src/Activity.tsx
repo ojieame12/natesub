@@ -1,13 +1,12 @@
 import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-    ChevronLeft,
     Calendar,
     UserPlus,
     DollarSign,
     RefreshCw,
     UserX,
-    Activity as ActivityIcon,
+    Inbox,
     Share2,
     Send,
     Check,
@@ -129,11 +128,7 @@ export default function Activity() {
         <div className="activity-page">
             {/* Header */}
             <header className="activity-header">
-                <Pressable className="back-btn" onClick={() => navigate(-1)}>
-                    <ChevronLeft size={24} />
-                </Pressable>
-                <span className="activity-page-title">Activity</span>
-                <div className="header-spacer" />
+                <h1 className="activity-page-title">Activity</h1>
             </header>
 
             {/* Content */}
@@ -164,7 +159,7 @@ export default function Activity() {
                 ) : allActivities.length === 0 ? (
                     <div className="activity-empty">
                         <div className="activity-empty-icon">
-                            <ActivityIcon size={32} />
+                            <Inbox size={24} />
                         </div>
                         <h3 className="activity-empty-title">No activity yet</h3>
                         <p className="activity-empty-desc">
@@ -174,7 +169,7 @@ export default function Activity() {
                             }
                         </p>
                         <Pressable className="activity-empty-btn" onClick={() => navigate('/dashboard')}>
-                            <Share2 size={18} />
+                            <Share2 size={16} />
                             <span>Share Your Page</span>
                         </Pressable>
                     </div>
