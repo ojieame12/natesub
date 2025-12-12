@@ -1,28 +1,10 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { X, Search, User, Phone, Mail, ChevronRight, Users } from 'lucide-react'
+import { X, User, Phone, Mail, ChevronRight, Users, Loader2 } from 'lucide-react'
 import { useRequestStore, type Recipient } from './store'
-import { useCurrentUser } from '../api/hooks'
-import { Pressable } from '../components'
+import { useCurrentUser, useRequests } from '../api/hooks'
+import { Pressable, Skeleton } from '../components'
 import './request.css'
-
-// Mock contacts data - personal
-const personalContacts: Recipient[] = [
-    { id: '1', name: 'Mom', phone: '+1 (555) 123-4567' },
-    { id: '2', name: 'Dad', phone: '+1 (555) 234-5678' },
-    { id: '3', name: 'Sarah Johnson', phone: '+1 (555) 345-6789', email: 'sarah@email.com' },
-    { id: '4', name: 'Mike Chen', email: 'mike.chen@gmail.com' },
-    { id: '5', name: 'Jessica Williams', phone: '+1 (555) 456-7890' },
-]
-
-// Mock contacts data - service (clients)
-const serviceContacts: Recipient[] = [
-    { id: '1', name: 'Acme Corp', email: 'billing@acme.com' },
-    { id: '2', name: 'John Smith', email: 'john.smith@company.com' },
-    { id: '3', name: 'Sarah Chen', phone: '+1 (555) 345-6789', email: 'sarah@startup.io' },
-    { id: '4', name: 'Tech Solutions LLC', email: 'accounts@techsol.com' },
-    { id: '5', name: 'Maria Garcia', email: 'maria.g@email.com' },
-]
 
 export default function SelectRecipient() {
     const navigate = useNavigate()
@@ -30,22 +12,37 @@ export default function SelectRecipient() {
     const isService = userData?.profile?.purpose === 'service'
     const { setRecipient, reset } = useRequestStore()
 
-    // Use appropriate contacts based on user type
-    const mockContacts = isService ? serviceContacts : personalContacts
-    const recentContacts = mockContacts.slice(0, 3)
-    const [searchQuery, setSearchQuery] = useState('')
-    const [showManualEntry, setShowManualEntry] = useState(false)
+    // Fetch past requests to get recent recipients
+    const { data: requestsData, isLoading: loadingRequests } = useRequests('all')
+
+    // Extract unique recent recipients from past requests
+    const recentRecipients = useMemo(() => {
+        if (!requestsData?.pages) return []
+
+        const allRequests = requestsData.pages.flatMap(page => page.requests)
+        const seen = new Set<string>()
+        const recipients: Recipient[] = []
+
+        for (const req of allRequests) {
+            const key = req.recipientEmail || req.recipientName
+            if (!seen.has(key) && recipients.length < 5) {
+                seen.add(key)
+                recipients.push({
+                    id: `recent-${req.id}`,
+                    name: req.recipientName,
+                    email: req.recipientEmail || undefined,
+                })
+            }
+        }
+
+        return recipients
+    }, [requestsData])
+
     const [manualName, setManualName] = useState('')
     const [manualContact, setManualContact] = useState('')
 
-    const filteredContacts = mockContacts.filter(contact =>
-        contact.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        contact.phone?.includes(searchQuery) ||
-        contact.email?.toLowerCase().includes(searchQuery.toLowerCase())
-    )
-
-    const handleSelectContact = (contact: Recipient) => {
-        setRecipient(contact)
+    const handleSelectRecipient = (recipient: Recipient) => {
+        setRecipient(recipient)
         navigate('/request/relationship')
     }
 
@@ -67,6 +64,8 @@ export default function SelectRecipient() {
         navigate(-1)
     }
 
+    const canContinue = manualName.trim().length > 0
+
     return (
         <div className="request-page">
             {/* Header */}
@@ -78,144 +77,98 @@ export default function SelectRecipient() {
                 <div className="request-header-spacer" />
             </header>
 
-            {/* Search */}
-            <div className="request-search-section">
-                <div className="request-search-bar">
-                    <Search size={18} className="request-search-icon" />
-                    <input
-                        type="text"
-                        placeholder={isService ? "Search clients..." : "Search contacts..."}
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="request-search-input"
-                    />
-                </div>
-            </div>
-
             <div className="request-content">
-                {/* Manual Entry Toggle */}
-                <Pressable
-                    className="request-manual-toggle"
-                    onClick={() => setShowManualEntry(!showManualEntry)}
-                >
-                    <div className="request-manual-icon">
-                        {showManualEntry ? <Users size={20} /> : <User size={20} />}
-                    </div>
-                    <span>{showManualEntry ? 'Choose from contacts' : 'Enter manually'}</span>
-                    <ChevronRight size={18} className="request-chevron" />
-                </Pressable>
+                {/* Title */}
+                <div className="request-title-section">
+                    <h1 className="request-page-title">
+                        {isService ? 'Bill a Client' : 'Send a Request'}
+                    </h1>
+                    <p className="request-page-subtitle">
+                        {isService ? 'Who would you like to invoice?' : 'Who would you like to request from?'}
+                    </p>
+                </div>
 
-                {showManualEntry ? (
-                    /* Manual Entry Form */
-                    <div className="request-manual-form">
-                        <div className="request-input-group">
-                            <label className="request-input-label">Name</label>
-                            <div className="request-input-wrapper">
-                                <User size={18} className="request-input-icon" />
-                                <input
-                                    type="text"
-                                    placeholder="Enter name"
-                                    value={manualName}
-                                    onChange={(e) => setManualName(e.target.value)}
-                                    className="request-input"
-                                />
-                            </div>
+                {/* Manual Entry Form */}
+                <div className="request-manual-form">
+                    <div className="request-input-group">
+                        <label className="request-input-label">Name *</label>
+                        <div className="request-input-wrapper">
+                            <User size={18} className="request-input-icon" />
+                            <input
+                                type="text"
+                                placeholder={isService ? "Client or company name" : "Enter name"}
+                                value={manualName}
+                                onChange={(e) => setManualName(e.target.value)}
+                                className="request-input"
+                            />
                         </div>
-
-                        <div className="request-input-group">
-                            <label className="request-input-label">Phone or Email</label>
-                            <div className="request-input-wrapper">
-                                {manualContact.includes('@') ? (
-                                    <Mail size={18} className="request-input-icon" />
-                                ) : (
-                                    <Phone size={18} className="request-input-icon" />
-                                )}
-                                <input
-                                    type="text"
-                                    placeholder="Phone number or email"
-                                    value={manualContact}
-                                    onChange={(e) => setManualContact(e.target.value)}
-                                    className="request-input"
-                                />
-                            </div>
-                        </div>
-
-                        <Pressable
-                            className={`request-continue-btn ${manualName.trim() ? '' : 'disabled'}`}
-                            onClick={handleManualSubmit}
-                        >
-                            Continue
-                        </Pressable>
                     </div>
-                ) : (
-                    /* Contacts List */
-                    <>
-                        {/* Recent Section */}
-                        {!searchQuery && recentContacts.length > 0 && (
-                            <div className="request-contacts-section">
-                                <h3 className="request-section-title">{isService ? 'Recent Clients' : 'Recent'}</h3>
-                                <div className="request-contacts-list">
-                                    {recentContacts.map((contact) => (
-                                        <Pressable
-                                            key={contact.id}
-                                            className="request-contact-item"
-                                            onClick={() => handleSelectContact(contact)}
-                                        >
-                                            <div className="request-contact-avatar">
-                                                {contact.name.charAt(0).toUpperCase()}
-                                            </div>
-                                            <div className="request-contact-info">
-                                                <span className="request-contact-name">{contact.name}</span>
-                                                <span className="request-contact-detail">
-                                                    {contact.phone || contact.email}
-                                                </span>
-                                            </div>
-                                            <ChevronRight size={18} className="request-chevron" />
-                                        </Pressable>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
 
-                        {/* All Contacts Section */}
-                        <div className="request-contacts-section">
-                            <h3 className="request-section-title">
-                                {searchQuery ? 'Search Results' : (isService ? 'All Clients' : 'All Contacts')}
-                            </h3>
-                            <div className="request-contacts-list">
-                                {filteredContacts.length > 0 ? (
-                                    filteredContacts.map((contact) => (
-                                        <Pressable
-                                            key={contact.id}
-                                            className="request-contact-item"
-                                            onClick={() => handleSelectContact(contact)}
-                                        >
-                                            <div className="request-contact-avatar">
-                                                {contact.name.charAt(0).toUpperCase()}
-                                            </div>
-                                            <div className="request-contact-info">
-                                                <span className="request-contact-name">{contact.name}</span>
-                                                <span className="request-contact-detail">
-                                                    {contact.phone || contact.email}
-                                                </span>
-                                            </div>
-                                            <ChevronRight size={18} className="request-chevron" />
-                                        </Pressable>
-                                    ))
-                                ) : (
-                                    <div className="request-empty-state">
-                                        <p>No contacts found</p>
-                                        <Pressable
-                                            className="request-empty-action"
-                                            onClick={() => setShowManualEntry(true)}
-                                        >
-                                            Enter manually instead
-                                        </Pressable>
+                    <div className="request-input-group">
+                        <label className="request-input-label">Email or Phone</label>
+                        <div className="request-input-wrapper">
+                            {manualContact.includes('@') ? (
+                                <Mail size={18} className="request-input-icon" />
+                            ) : (
+                                <Phone size={18} className="request-input-icon" />
+                            )}
+                            <input
+                                type="text"
+                                placeholder="Email address or phone number"
+                                value={manualContact}
+                                onChange={(e) => setManualContact(e.target.value)}
+                                className="request-input"
+                            />
+                        </div>
+                        <span className="request-input-hint">
+                            Optional - you can share the link manually
+                        </span>
+                    </div>
+
+                    <Pressable
+                        className={`request-continue-btn ${canContinue ? '' : 'disabled'}`}
+                        onClick={handleManualSubmit}
+                        disabled={!canContinue}
+                    >
+                        Continue
+                    </Pressable>
+                </div>
+
+                {/* Recent Recipients */}
+                {loadingRequests ? (
+                    <div className="request-contacts-section">
+                        <Skeleton width={100} height={16} style={{ marginBottom: 12 }} />
+                        <Skeleton width="100%" height={60} borderRadius={12} />
+                        <Skeleton width="100%" height={60} borderRadius={12} style={{ marginTop: 8 }} />
+                    </div>
+                ) : recentRecipients.length > 0 && (
+                    <div className="request-contacts-section">
+                        <h3 className="request-section-title">
+                            {isService ? 'Recent Clients' : 'Recent Recipients'}
+                        </h3>
+                        <div className="request-contacts-list">
+                            {recentRecipients.map((recipient) => (
+                                <Pressable
+                                    key={recipient.id}
+                                    className="request-contact-item"
+                                    onClick={() => handleSelectRecipient(recipient)}
+                                >
+                                    <div className="request-contact-avatar">
+                                        {recipient.name.charAt(0).toUpperCase()}
                                     </div>
-                                )}
-                            </div>
+                                    <div className="request-contact-info">
+                                        <span className="request-contact-name">{recipient.name}</span>
+                                        {recipient.email && (
+                                            <span className="request-contact-detail">
+                                                {recipient.email}
+                                            </span>
+                                        )}
+                                    </div>
+                                    <ChevronRight size={18} className="request-chevron" />
+                                </Pressable>
+                            ))}
                         </div>
-                    </>
+                    </div>
                 )}
             </div>
         </div>
