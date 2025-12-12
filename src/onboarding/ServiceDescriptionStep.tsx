@@ -1,29 +1,16 @@
 import { useState } from 'react'
-import { ChevronLeft, Mic, Check, Phone, MessageSquare, FolderOpen } from 'lucide-react'
+import { ChevronLeft, Mic } from 'lucide-react'
 import { useOnboardingStore } from './store'
-import type { ServiceDeliverable } from './store'
 import { Button, Pressable } from './components'
 import { VoiceRecorder } from '../components'
 import './onboarding.css'
-
-const DELIVERABLE_ICONS: Record<ServiceDeliverable['type'], React.ReactNode> = {
-    calls: <Phone size={18} />,
-    async: <MessageSquare size={18} />,
-    resources: <FolderOpen size={18} />,
-    custom: <Check size={18} />,
-}
 
 export default function ServiceDescriptionStep() {
     const {
         serviceDescription,
         serviceDescriptionAudio,
-        serviceDeliverables,
-        serviceCredential,
         setServiceDescription,
         setServiceDescriptionAudio,
-        toggleServiceDeliverable,
-        updateServiceDeliverable,
-        setServiceCredential,
         nextStep,
         prevStep,
     } = useOnboardingStore()
@@ -31,8 +18,6 @@ export default function ServiceDescriptionStep() {
     const [showVoice, setShowVoice] = useState(!!serviceDescriptionAudio)
 
     const hasDescription = serviceDescription.trim().length > 0 || serviceDescriptionAudio !== null
-    const hasDeliverables = serviceDeliverables.some(d => d.enabled)
-    const canContinue = hasDescription && hasDeliverables
 
     const handleRecorded = (blob: Blob, _duration: number) => {
         setServiceDescriptionAudio(blob)
@@ -59,19 +44,18 @@ export default function ServiceDescriptionStep() {
                 </div>
 
                 <div className="step-body service-step-body">
-                    {/* What do you help with */}
                     <div className="service-section">
                         <div className="service-description-field">
                             <textarea
                                 value={serviceDescription}
                                 onChange={(e) => setServiceDescription(e.target.value)}
-                                placeholder="I help founders turn ideas into products..."
+                                placeholder="Describe your service and what people get when they subscribe..."
                                 className="service-description-textarea"
-                                rows={3}
-                                maxLength={300}
+                                rows={5}
+                                maxLength={500}
                             />
                             <span className="service-description-count">
-                                {serviceDescription.length}/300
+                                {serviceDescription.length}/500
                             </span>
                         </div>
 
@@ -94,70 +78,6 @@ export default function ServiceDescriptionStep() {
                             </Pressable>
                         )}
                     </div>
-
-                    {/* What subscribers get */}
-                    <div className="service-section">
-                        <label className="service-section-label">What do subscribers get?</label>
-                        <div className="service-deliverables">
-                            {serviceDeliverables.map((deliverable) => (
-                                <div key={deliverable.id} className="service-deliverable">
-                                    <Pressable
-                                        className={`service-deliverable-checkbox ${deliverable.enabled ? 'checked' : ''}`}
-                                        onClick={() => toggleServiceDeliverable(deliverable.id)}
-                                    >
-                                        {deliverable.enabled && <Check size={14} />}
-                                    </Pressable>
-                                    <div className="service-deliverable-icon">
-                                        {DELIVERABLE_ICONS[deliverable.type]}
-                                    </div>
-                                    <span className="service-deliverable-label">{deliverable.label}</span>
-
-                                    {/* Quantity input for calls */}
-                                    {deliverable.type === 'calls' && deliverable.enabled && (
-                                        <div className="service-deliverable-qty">
-                                            <input
-                                                type="number"
-                                                min={1}
-                                                max={20}
-                                                value={deliverable.quantity || 2}
-                                                onChange={(e) => updateServiceDeliverable(deliverable.id, {
-                                                    quantity: parseInt(e.target.value) || 1
-                                                })}
-                                                className="service-qty-input"
-                                            />
-                                            <span className="service-qty-unit">/mo</span>
-                                        </div>
-                                    )}
-
-                                    {/* Detail for async/resources */}
-                                    {(deliverable.type === 'async' || deliverable.type === 'resources') && deliverable.enabled && (
-                                        <input
-                                            type="text"
-                                            value={deliverable.detail || ''}
-                                            onChange={(e) => updateServiceDeliverable(deliverable.id, {
-                                                detail: e.target.value
-                                            })}
-                                            placeholder={deliverable.type === 'async' ? 'Slack, Email...' : 'Templates...'}
-                                            className="service-detail-input"
-                                        />
-                                    )}
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* Your background */}
-                    <div className="service-section">
-                        <label className="service-section-label">Your background (optional)</label>
-                        <input
-                            type="text"
-                            value={serviceCredential}
-                            onChange={(e) => setServiceCredential(e.target.value)}
-                            placeholder="10 years product leadership, ex-Google"
-                            className="service-credential-input"
-                            maxLength={100}
-                        />
-                    </div>
                 </div>
 
                 <div className="step-footer">
@@ -166,14 +86,12 @@ export default function ServiceDescriptionStep() {
                         size="lg"
                         fullWidth
                         onClick={nextStep}
-                        disabled={!canContinue}
+                        disabled={!hasDescription}
                     >
                         Continue
                     </Button>
-                    {!canContinue && (
-                        <p className="step-hint">
-                            {!hasDescription ? 'Describe your service' : 'Select at least one deliverable'}
-                        </p>
+                    {!hasDescription && (
+                        <p className="step-hint">Describe what you offer</p>
                     )}
                 </div>
             </div>
