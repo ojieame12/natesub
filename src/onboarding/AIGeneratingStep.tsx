@@ -10,8 +10,6 @@ export default function AIGeneratingStep() {
     const {
         serviceDescription,
         serviceDescriptionAudio,
-        serviceDeliverables,
-        serviceCredential,
         name,
         singleAmount,
         setGeneratedContent,
@@ -40,24 +38,12 @@ export default function AIGeneratingStep() {
                 }
             }
 
-            // Format deliverables for API
-            const enabledDeliverables = serviceDeliverables
-                .filter(d => d.enabled)
-                .map(d => ({
-                    type: d.type,
-                    label: d.label,
-                    quantity: d.quantity,
-                    detail: d.detail,
-                }))
-
             // Call real API
             const result = await generatePage({
                 audio: audioData,
                 textDescription: serviceDescription || undefined,
-                deliverables: enabledDeliverables,
-                credential: serviceCredential || undefined,
                 price: singleAmount || 25,
-                userName: name || 'Creator',
+                userName: name || '',
                 includeMarketResearch: false,
             })
 
