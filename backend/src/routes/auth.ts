@@ -5,6 +5,7 @@ import { setCookie, deleteCookie, getCookie } from 'hono/cookie'
 import { requestMagicLink, verifyMagicLink, logout, getCurrentUser } from '../services/auth.js'
 import { requireAuth } from '../middleware/auth.js'
 import { env } from '../config/env.js'
+import { db } from '../db/client.js'
 
 const auth = new Hono()
 
@@ -93,5 +94,55 @@ auth.get('/me', requireAuth, async (c) => {
     createdAt: user.createdAt,
   })
 })
+
+// Delete account (soft delete)
+auth.delete(
+  '/account',
+  requireAuth,
+  zValidator('json', z.object({
+    confirmation: z.literal('DELETE'),
+  })),
+  async (c) => {
+    const userId = c.get('userId')
+    const sessionToken = getCookie(c, 'session')
+
+    // Soft delete user - sets deletedAt timestamp
+    // Profile will be cascade deleted due to onDelete: Cascade
+    await db.$transaction(async (tx) => {
+      // Anonymize user data for GDPR compliance
+      const anonymizedEmail = `deleted_${userId}@deleted.natepay.co`
+
+      // Update user with soft delete and anonymize email
+      await tx.user.update({
+        where: { id: userId },
+        data: {
+          deletedAt: new Date(),
+          email: anonymizedEmail,
+        },
+      })
+
+      // Delete all sessions for this user
+      await tx.session.deleteMany({
+        where: { userId },
+      })
+
+      // Delete profile (contains PII)
+      await tx.profile.deleteMany({
+        where: { userId },
+      })
+
+      // Optionally: Cancel active subscriptions via Stripe
+      // This would require additional Stripe API calls
+    })
+
+    // Clear session cookie
+    deleteCookie(c, 'session', { path: '/' })
+
+    return c.json({
+      success: true,
+      message: 'Your account has been deleted.',
+    })
+  }
+)
 
 export default auth

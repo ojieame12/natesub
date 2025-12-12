@@ -4,7 +4,7 @@ import { persist } from 'zustand/middleware'
 export type RelationshipType =
     | 'family_mom' | 'family_dad' | 'family_sibling' | 'family_spouse' | 'family_child' | 'family_grandparent' | 'family_other'
     | 'friend_close' | 'friend_acquaintance'
-    | 'client'
+    | 'client' | 'client_new' | 'client_referral'
     | 'fan'
     | 'colleague'
     | 'partner'
@@ -131,6 +131,8 @@ export const getRelationshipLabel = (type: RelationshipType | null): string => {
         friend_close: 'Close Friend',
         friend_acquaintance: 'Friend',
         client: 'Client',
+        client_new: 'New Client',
+        client_referral: 'Referral',
         fan: 'Fan/Supporter',
         colleague: 'Colleague',
         partner: 'Partner',
@@ -145,7 +147,7 @@ export const getSuggestedAmounts = (type: RelationshipType | null): number[] => 
 
     if (type.startsWith('family_')) return [20, 50, 100, 200]
     if (type.startsWith('friend_')) return [5, 10, 15, 25]
-    if (type === 'client') return [25, 50, 100, 250]
+    if (type.startsWith('client')) return [25, 50, 100, 250]
     if (type === 'fan') return [5, 10, 15, 25]
     if (type === 'partner') return [25, 50, 100, 150]
 

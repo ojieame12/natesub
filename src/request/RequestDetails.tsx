@@ -10,6 +10,7 @@ import './request.css'
 export default function RequestDetails() {
     const navigate = useNavigate()
     const { data: userData } = useCurrentUser()
+    const isService = userData?.profile?.purpose === 'service'
     const {
         recipient,
         relationship,
@@ -24,6 +25,7 @@ export default function RequestDetails() {
     const currency = userData?.profile?.currency || 'USD'
     const currencySymbol = getCurrencySymbol(currency)
     const [customAmount, setCustomAmount] = useState(amount.toString())
+    const [dueDate, setDueDate] = useState('')
 
     if (!recipient) {
         navigate('/request/new')
@@ -52,10 +54,12 @@ export default function RequestDetails() {
         }
     }
 
-    // Purpose suggestions based on relationship
-    const purposeSuggestions = relationship?.startsWith('family_')
+    // Purpose suggestions based on relationship and user type
+    const purposeSuggestions = isService
+        ? ['Retainer', 'Project fee', 'Consultation', 'Coaching session', 'Services rendered']
+        : relationship?.startsWith('family_')
         ? ['Help with bills', 'Allowance', 'Support my goals', 'Just because']
-        : relationship === 'client'
+        : relationship?.startsWith('client')
         ? ['Retainer', 'Project fee', 'Consultation', 'Services']
         : ['Support my work', 'Monthly support', 'Tip jar', 'General support']
 
@@ -66,7 +70,7 @@ export default function RequestDetails() {
                 <Pressable className="request-back-btn" onClick={() => navigate(-1)}>
                     <ChevronLeft size={20} />
                 </Pressable>
-                <span className="request-title">Request Details</span>
+                <span className="request-title">{isService ? 'Invoice Details' : 'Request Details'}</span>
                 <div className="request-header-spacer" />
             </header>
 
@@ -134,12 +138,14 @@ export default function RequestDetails() {
 
                 {/* Purpose Section */}
                 <div className="request-option-section">
-                    <label className="request-label">What's this for? (optional)</label>
+                    <label className="request-label">
+                        {isService ? 'Service description (optional)' : "What's this for? (optional)"}
+                    </label>
                     <input
                         type="text"
                         value={purpose}
                         onChange={(e) => setPurpose(e.target.value)}
-                        placeholder="Add a purpose..."
+                        placeholder={isService ? "Describe the service..." : "Add a purpose..."}
                         className="request-text-input"
                     />
                     <div className="request-purpose-suggestions">
@@ -154,6 +160,20 @@ export default function RequestDetails() {
                         ))}
                     </div>
                 </div>
+
+                {/* Due Date - Service providers only */}
+                {isService && (
+                    <div className="request-option-section">
+                        <label className="request-label">Due date (optional)</label>
+                        <input
+                            type="date"
+                            value={dueDate}
+                            onChange={(e) => setDueDate(e.target.value)}
+                            className="request-text-input"
+                            min={new Date().toISOString().split('T')[0]}
+                        />
+                    </div>
+                )}
             </div>
 
             {/* Continue Button */}

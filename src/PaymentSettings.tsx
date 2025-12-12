@@ -12,6 +12,33 @@ const payoutSchedules = [
   { id: 'monthly', label: 'Monthly', desc: 'First of the month' },
 ]
 
+// Format Stripe requirement keys into readable text
+function formatRequirement(key: string): string {
+  const map: Record<string, string> = {
+    'individual.address.city': 'City',
+    'individual.address.line1': 'Street address',
+    'individual.address.postal_code': 'Postal code',
+    'individual.address.state': 'State/Province',
+    'individual.dob.day': 'Date of birth',
+    'individual.dob.month': 'Date of birth',
+    'individual.dob.year': 'Date of birth',
+    'individual.email': 'Email address',
+    'individual.first_name': 'First name',
+    'individual.last_name': 'Last name',
+    'individual.phone': 'Phone number',
+    'individual.id_number': 'ID number (SSN/Tax ID)',
+    'individual.ssn_last_4': 'Last 4 digits of SSN',
+    'individual.verification.document': 'Identity document',
+    'individual.verification.additional_document': 'Additional document',
+    'business_profile.url': 'Business website',
+    'business_profile.mcc': 'Business category',
+    'external_account': 'Bank account',
+    'tos_acceptance.date': 'Terms of service acceptance',
+    'tos_acceptance.ip': 'Terms of service acceptance',
+  }
+  return map[key] || key.replace(/[._]/g, ' ').replace(/individual /i, '')
+}
+
 interface Payout {
   id: string
   amount: number
@@ -207,6 +234,9 @@ export default function PaymentSettings() {
 
   // Show pending status
   if (stripeStatus.status === 'pending' || stripeStatus.status === 'restricted') {
+    const requirements = stripeStatus.details?.requirements
+    const hasMissingInfo = requirements?.currentlyDue?.length > 0
+
     return (
       <div className="payment-settings-page">
         <header className="payment-settings-header">
@@ -228,11 +258,52 @@ export default function PaymentSettings() {
             <h2 style={{ fontSize: 20, fontWeight: 600, marginBottom: 8 }}>
               {stripeStatus.status === 'pending' ? 'Verification Pending' : 'Action Required'}
             </h2>
-            <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 24 }}>
+            <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 16 }}>
               {stripeStatus.status === 'pending'
                 ? 'Your account is being verified. This usually takes a few minutes.'
                 : 'Additional information is required to complete your account setup.'}
             </p>
+
+            {/* Show missing requirements */}
+            {hasMissingInfo && (
+              <div style={{
+                textAlign: 'left',
+                padding: '12px 16px',
+                background: 'var(--surface-secondary)',
+                borderRadius: 12,
+                marginBottom: 16,
+              }}>
+                <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Missing Information:</p>
+                <ul style={{ fontSize: 13, color: 'var(--text-secondary)', paddingLeft: 16, margin: 0 }}>
+                  {requirements.currentlyDue.slice(0, 5).map((item: string) => (
+                    <li key={item} style={{ marginBottom: 4 }}>
+                      {formatRequirement(item)}
+                    </li>
+                  ))}
+                  {requirements.currentlyDue.length > 5 && (
+                    <li>And {requirements.currentlyDue.length - 5} more...</li>
+                  )}
+                </ul>
+              </div>
+            )}
+
+            {/* Deadline warning */}
+            {requirements?.currentDeadline && (
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '8px 12px',
+                background: 'rgba(239, 68, 68, 0.1)',
+                borderRadius: 8,
+                marginBottom: 16,
+              }}>
+                <AlertCircle size={16} color="var(--error)" />
+                <span style={{ fontSize: 13, color: 'var(--error)' }}>
+                  Complete by {new Date(requirements.currentDeadline).toLocaleDateString()}
+                </span>
+              </div>
+            )}
 
             <Pressable
               className="action-btn"
@@ -297,15 +368,41 @@ export default function PaymentSettings() {
           <div style={{
             display: 'flex',
             alignItems: 'center',
+            justifyContent: 'space-between',
             gap: 8,
             padding: '12px 16px',
             background: 'rgba(34, 197, 94, 0.1)',
             borderRadius: 12,
           }}>
-            <Check size={18} color="var(--success)" />
-            <span style={{ fontSize: 14, color: 'var(--success)' }}>
-              Stripe connected and active
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Check size={18} color="var(--success)" />
+              <span style={{ fontSize: 14, color: 'var(--success)' }}>
+                Stripe connected and active
+              </span>
+            </div>
+            <Pressable
+              onClick={async () => {
+                try {
+                  const result = await api.stripe.getDashboardLink()
+                  if (result.url) {
+                    window.open(result.url, '_blank')
+                  }
+                } catch (err) {
+                  setError('Failed to open dashboard')
+                }
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                fontSize: 13,
+                color: 'var(--primary)',
+                fontWeight: 500,
+              }}
+            >
+              Stripe Dashboard
+              <ExternalLink size={14} />
+            </Pressable>
           </div>
         </section>
 

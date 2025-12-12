@@ -2,27 +2,37 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { X, Search, User, Phone, Mail, ChevronRight, Users } from 'lucide-react'
 import { useRequestStore, type Recipient } from './store'
+import { useCurrentUser } from '../api/hooks'
 import { Pressable } from '../components'
 import './request.css'
 
-// Mock contacts data
-const mockContacts: Recipient[] = [
+// Mock contacts data - personal
+const personalContacts: Recipient[] = [
     { id: '1', name: 'Mom', phone: '+1 (555) 123-4567' },
     { id: '2', name: 'Dad', phone: '+1 (555) 234-5678' },
     { id: '3', name: 'Sarah Johnson', phone: '+1 (555) 345-6789', email: 'sarah@email.com' },
     { id: '4', name: 'Mike Chen', email: 'mike.chen@gmail.com' },
     { id: '5', name: 'Jessica Williams', phone: '+1 (555) 456-7890' },
-    { id: '6', name: 'David Brown', phone: '+1 (555) 567-8901', email: 'david@work.com' },
-    { id: '7', name: 'Emily Davis', email: 'emily.d@email.com' },
-    { id: '8', name: 'Chris Martinez', phone: '+1 (555) 678-9012' },
 ]
 
-// Recent contacts (would come from history)
-const recentContacts = mockContacts.slice(0, 3)
+// Mock contacts data - service (clients)
+const serviceContacts: Recipient[] = [
+    { id: '1', name: 'Acme Corp', email: 'billing@acme.com' },
+    { id: '2', name: 'John Smith', email: 'john.smith@company.com' },
+    { id: '3', name: 'Sarah Chen', phone: '+1 (555) 345-6789', email: 'sarah@startup.io' },
+    { id: '4', name: 'Tech Solutions LLC', email: 'accounts@techsol.com' },
+    { id: '5', name: 'Maria Garcia', email: 'maria.g@email.com' },
+]
 
 export default function SelectRecipient() {
     const navigate = useNavigate()
+    const { data: userData } = useCurrentUser()
+    const isService = userData?.profile?.purpose === 'service'
     const { setRecipient, reset } = useRequestStore()
+
+    // Use appropriate contacts based on user type
+    const mockContacts = isService ? serviceContacts : personalContacts
+    const recentContacts = mockContacts.slice(0, 3)
     const [searchQuery, setSearchQuery] = useState('')
     const [showManualEntry, setShowManualEntry] = useState(false)
     const [manualName, setManualName] = useState('')
@@ -64,7 +74,7 @@ export default function SelectRecipient() {
                 <Pressable className="request-close-btn" onClick={handleClose}>
                     <X size={20} />
                 </Pressable>
-                <span className="request-title">New Request</span>
+                <span className="request-title">{isService ? 'Bill Client' : 'New Request'}</span>
                 <div className="request-header-spacer" />
             </header>
 
@@ -74,7 +84,7 @@ export default function SelectRecipient() {
                     <Search size={18} className="request-search-icon" />
                     <input
                         type="text"
-                        placeholder="Search contacts..."
+                        placeholder={isService ? "Search clients..." : "Search contacts..."}
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         className="request-search-input"
@@ -143,7 +153,7 @@ export default function SelectRecipient() {
                         {/* Recent Section */}
                         {!searchQuery && recentContacts.length > 0 && (
                             <div className="request-contacts-section">
-                                <h3 className="request-section-title">Recent</h3>
+                                <h3 className="request-section-title">{isService ? 'Recent Clients' : 'Recent'}</h3>
                                 <div className="request-contacts-list">
                                     {recentContacts.map((contact) => (
                                         <Pressable
@@ -170,7 +180,7 @@ export default function SelectRecipient() {
                         {/* All Contacts Section */}
                         <div className="request-contacts-section">
                             <h3 className="request-section-title">
-                                {searchQuery ? 'Search Results' : 'All Contacts'}
+                                {searchQuery ? 'Search Results' : (isService ? 'All Clients' : 'All Contacts')}
                             </h3>
                             <div className="request-contacts-list">
                                 {filteredContacts.length > 0 ? (

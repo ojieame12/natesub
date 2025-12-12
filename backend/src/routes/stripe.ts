@@ -9,6 +9,7 @@ import {
   getAccountStatus,
   getAccountBalance,
   getPayoutHistory,
+  createExpressDashboardLink,
 } from '../services/stripe.js'
 import { isStripeSupported, getStripeSupportedCountries, STRIPE_SUPPORTED_COUNTRIES } from '../utils/constants.js'
 
@@ -50,7 +51,8 @@ stripeRoutes.post('/connect', requireAuth, async (c) => {
     const result = await createExpressAccount(
       userId,
       user.email,
-      user.profile.countryCode
+      user.profile.countryCode,
+      user.profile.displayName // Prefill KYC with name
     )
 
     if (result.alreadyOnboarded) {
@@ -168,6 +170,31 @@ stripeRoutes.get('/payouts', requireAuth, async (c) => {
   } catch (error) {
     console.error('Payouts error:', error)
     return c.json({ error: 'Failed to get payouts' }, 500)
+  }
+})
+
+// Get Express Dashboard login link
+stripeRoutes.get('/dashboard-link', requireAuth, async (c) => {
+  const userId = c.get('userId')
+
+  const profile = await db.profile.findUnique({ where: { userId } })
+
+  if (!profile?.stripeAccountId) {
+    return c.json({ error: 'No payment account found' }, 400)
+  }
+
+  try {
+    // Only allow dashboard access for fully onboarded accounts
+    const status = await getAccountStatus(profile.stripeAccountId)
+    if (!status.detailsSubmitted) {
+      return c.json({ error: 'Complete onboarding first' }, 400)
+    }
+
+    const dashboardUrl = await createExpressDashboardLink(profile.stripeAccountId)
+    return c.json({ url: dashboardUrl })
+  } catch (error) {
+    console.error('Dashboard link error:', error)
+    return c.json({ error: 'Failed to create dashboard link' }, 500)
   }
 })
 

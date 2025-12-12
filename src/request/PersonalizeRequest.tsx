@@ -2,11 +2,16 @@ import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronLeft, Mic, Square, Play, Pause, Trash2, Sparkles } from 'lucide-react'
 import { useRequestStore, getDefaultMessage } from './store'
+import { useCurrentUser } from '../api/hooks'
+import { getCurrencySymbol } from '../utils/currency'
 import { Pressable } from '../components'
 import './request.css'
 
 export default function PersonalizeRequest() {
     const navigate = useNavigate()
+    const { data: userData } = useCurrentUser()
+    const isService = userData?.profile?.purpose === 'service'
+    const currencySymbol = getCurrencySymbol(userData?.profile?.currency || 'USD')
     const {
         recipient,
         relationship,
@@ -160,7 +165,7 @@ export default function PersonalizeRequest() {
                 <Pressable className="request-back-btn" onClick={() => navigate(-1)}>
                     <ChevronLeft size={20} />
                 </Pressable>
-                <span className="request-title">Personalize</span>
+                <span className="request-title">{isService ? 'Add Note' : 'Personalize'}</span>
                 <div className="request-header-spacer" />
             </header>
 
@@ -171,13 +176,13 @@ export default function PersonalizeRequest() {
                         {recipient.name.charAt(0).toUpperCase()}
                     </div>
                     <span className="request-recipient-badge-name">{firstName}</span>
-                    <span className="request-amount-badge">${amount}{isRecurring ? '/mo' : ''}</span>
+                    <span className="request-amount-badge">{currencySymbol}{amount}{isRecurring ? '/mo' : ''}</span>
                 </div>
 
                 {/* Message Section */}
                 <div className="request-message-section">
                     <div className="request-label-row">
-                        <label className="request-label">Your message</label>
+                        <label className="request-label">{isService ? 'Invoice note' : 'Your message'}</label>
                         <Pressable className="request-regenerate-btn" onClick={regenerateMessage}>
                             <Sparkles size={14} />
                             <span>Regenerate</span>
@@ -186,7 +191,7 @@ export default function PersonalizeRequest() {
                     <textarea
                         value={message}
                         onChange={(e) => setMessage(e.target.value)}
-                        placeholder="Write a personal message..."
+                        placeholder={isService ? "Add details about this invoice..." : "Write a personal message..."}
                         className="request-message-textarea"
                         rows={4}
                     />
@@ -252,7 +257,7 @@ export default function PersonalizeRequest() {
             {/* Continue Button */}
             <div className="request-footer">
                 <Pressable className="request-continue-btn" onClick={handleContinue}>
-                    Preview Request
+                    {isService ? 'Preview Invoice' : 'Preview Request'}
                 </Pressable>
             </div>
         </div>

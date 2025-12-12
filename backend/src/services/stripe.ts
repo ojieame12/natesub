@@ -10,7 +10,12 @@ export const stripe = new Stripe(env.STRIPE_SECRET_KEY, {
 const PLATFORM_FEE_PERCENT = 10
 
 // Create Express account for a user
-export async function createExpressAccount(userId: string, email: string, country: string) {
+export async function createExpressAccount(
+  userId: string,
+  email: string,
+  country: string,
+  displayName?: string
+) {
   // Check if user already has an account
   const profile = await db.profile.findUnique({ where: { userId } })
 
@@ -26,7 +31,12 @@ export async function createExpressAccount(userId: string, email: string, countr
     return { accountId: profile.stripeAccountId, accountLink: null, alreadyOnboarded: true }
   }
 
-  // Create new Express account
+  // Parse name for KYC prefill
+  const nameParts = displayName?.trim().split(' ') || []
+  const firstName = nameParts[0] || undefined
+  const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : undefined
+
+  // Create new Express account with prefilled KYC data
   const account = await stripe.accounts.create({
     type: 'express',
     email,
@@ -36,6 +46,12 @@ export async function createExpressAccount(userId: string, email: string, countr
       transfers: { requested: true },
     },
     business_type: 'individual',
+    // Prefill KYC data to speed up onboarding
+    individual: {
+      email,
+      first_name: firstName,
+      last_name: lastName,
+    },
     settings: {
       payouts: {
         schedule: {
@@ -72,16 +88,35 @@ export async function createAccountLink(accountId: string) {
   return accountLink.url
 }
 
-// Get account status
+// Get account status with detailed requirements
 export async function getAccountStatus(stripeAccountId: string) {
   const account = await stripe.accounts.retrieve(stripeAccountId)
+
+  // Parse requirements into user-friendly format
+  const currentlyDue = account.requirements?.currently_due || []
+  const eventuallyDue = account.requirements?.eventually_due || []
+  const pendingVerification = account.requirements?.pending_verification || []
 
   return {
     detailsSubmitted: account.details_submitted,
     chargesEnabled: account.charges_enabled,
     payoutsEnabled: account.payouts_enabled,
-    requirements: account.requirements,
+    requirements: {
+      currentlyDue,
+      eventuallyDue,
+      pendingVerification,
+      disabledReason: account.requirements?.disabled_reason || null,
+      currentDeadline: account.requirements?.current_deadline
+        ? new Date(account.requirements.current_deadline * 1000)
+        : null,
+    },
   }
+}
+
+// Create Express Dashboard login link
+export async function createExpressDashboardLink(stripeAccountId: string) {
+  const loginLink = await stripe.accounts.createLoginLink(stripeAccountId)
+  return loginLink.url
 }
 
 // Create checkout session for subscription

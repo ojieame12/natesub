@@ -24,9 +24,10 @@ export default function RequestPreview() {
         reset,
     } = useRequestStore()
 
-    // Currency from user profile
+    // Currency and user type from profile
     const currency = userData?.profile?.currency || 'USD'
     const currencySymbol = getCurrencySymbol(currency)
+    const isService = userData?.profile?.purpose === 'service'
 
     // API hooks
     const { mutateAsync: createRequest } = useCreateRequest()
@@ -146,9 +147,9 @@ export default function RequestPreview() {
                     <div className="request-success-icon">
                         <Check size={32} />
                     </div>
-                    <h2 className="request-success-title">Request Sent!</h2>
+                    <h2 className="request-success-title">{isService ? 'Invoice Sent!' : 'Request Sent!'}</h2>
                     <p className="request-success-text">
-                        Your request has been sent to {recipient.name}
+                        Your {isService ? 'invoice' : 'request'} has been sent to {recipient.name}
                         {sendMethod === 'sms' && ' via SMS'}
                         {sendMethod === 'email' && ' via email'}
                         {sendMethod === 'link' && '. Link copied!'}
@@ -190,7 +191,7 @@ export default function RequestPreview() {
                 <Pressable className="request-back-btn" onClick={() => navigate(-1)}>
                     <ChevronLeft size={20} />
                 </Pressable>
-                <span className="request-title">Preview</span>
+                <span className="request-title">{isService ? 'Invoice Preview' : 'Preview'}</span>
                 <div className="request-header-spacer" />
             </header>
 
@@ -198,7 +199,7 @@ export default function RequestPreview() {
                 {/* Preview Card */}
                 <div className="request-preview-card">
                     <div className="request-preview-header">
-                        <span className="request-preview-label">What {firstName} will see</span>
+                        <span className="request-preview-label">What {firstName} will {isService ? 'receive' : 'see'}</span>
                     </div>
 
                     <div className="request-preview-content">

@@ -169,6 +169,12 @@ export const auth = {
     apiFetch<{ success: boolean }>('/auth/logout', { method: 'POST' }),
 
   me: () => apiFetch<User>('/auth/me'),
+
+  deleteAccount: () =>
+    apiFetch<{ success: boolean; message: string }>('/auth/account', {
+      method: 'DELETE',
+      body: JSON.stringify({ confirmation: 'DELETE' }),
+    }),
 }
 
 // ============================================
@@ -203,6 +209,18 @@ export interface OnboardingStatus {
   nextStep: 'profile' | 'payments' | null
 }
 
+export interface NotificationPrefs {
+  push: boolean
+  email: boolean
+  subscriberAlerts: boolean
+  paymentAlerts: boolean
+}
+
+export interface Settings {
+  notificationPrefs: NotificationPrefs
+  isPublic: boolean
+}
+
 export const profile = {
   get: () => apiFetch<{ profile: Profile | null }>('/profile'),
 
@@ -219,6 +237,15 @@ export const profile = {
 
   getOnboardingStatus: () =>
     apiFetch<OnboardingStatus>('/profile/onboarding-status'),
+
+  // Settings
+  getSettings: () => apiFetch<Settings>('/profile/settings'),
+
+  updateSettings: (data: { notificationPrefs?: NotificationPrefs; isPublic?: boolean }) =>
+    apiFetch<{ success: boolean; settings: Settings }>('/profile/settings', {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
 }
 
 // ============================================
@@ -233,6 +260,21 @@ export const users = {
 // ============================================
 // STRIPE
 // ============================================
+
+export interface StripeRequirements {
+  currentlyDue: string[]
+  eventuallyDue: string[]
+  pendingVerification: string[]
+  disabledReason: string | null
+  currentDeadline: string | null
+}
+
+export interface StripeStatusDetails {
+  detailsSubmitted: boolean
+  chargesEnabled: boolean
+  payoutsEnabled: boolean
+  requirements: StripeRequirements
+}
 
 export const stripe = {
   connect: () =>
@@ -252,7 +294,7 @@ export const stripe = {
     }),
 
   getStatus: () =>
-    apiFetch<{ connected: boolean; status: string; details?: any }>(
+    apiFetch<{ connected: boolean; status: string; details?: StripeStatusDetails }>(
       '/stripe/connect/status'
     ),
 
@@ -266,6 +308,9 @@ export const stripe = {
     apiFetch<{ countries: { code: string; name: string }[]; total: number }>(
       '/stripe/supported-countries'
     ),
+
+  getDashboardLink: () =>
+    apiFetch<{ url: string }>('/stripe/dashboard-link'),
 }
 
 // ============================================

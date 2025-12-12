@@ -1,92 +1,127 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, ChevronRight, Mail, Lock, Shield, Bell, Eye, Download, Trash2, LogOut, CreditCard } from 'lucide-react'
+import { ArrowLeft, ChevronRight, Mail, Bell, Eye, Download, Trash2, LogOut, CreditCard, Loader2 } from 'lucide-react'
 import { Pressable, useToast, Skeleton, SkeletonList } from './components'
+import { useCurrentUser, useLogout, useDeleteAccount, useSettings, useUpdateSettings } from './api/hooks'
 import './Settings.css'
 
 // Toggle component
 interface ToggleProps {
   value: boolean
   onChange: (value: boolean) => void
+  disabled?: boolean
 }
 
-const Toggle = ({ value, onChange }: ToggleProps) => {
+const Toggle = ({ value, onChange, disabled }: ToggleProps) => {
   return (
     <div
-      className={`toggle ${value ? 'on' : ''}`}
-      onClick={() => onChange(!value)}
+      className={`toggle ${value ? 'on' : ''} ${disabled ? 'disabled' : ''}`}
+      onClick={() => !disabled && onChange(!value)}
     >
       <div className="toggle-knob" />
     </div>
   )
 }
 
-// Load settings from localStorage
-const loadSettings = () => {
-  try {
-    const saved = localStorage.getItem('natepay-settings')
-    return saved ? JSON.parse(saved) : null
-  } catch {
-    return null
-  }
-}
-
 export default function Settings() {
   const navigate = useNavigate()
   const toast = useToast()
-  const saved = loadSettings()
 
-  const [isLoading, setIsLoading] = useState(true)
-  const [pushNotifications, setPushNotifications] = useState(saved?.pushNotifications ?? true)
-  const [emailNotifications, setEmailNotifications] = useState(saved?.emailNotifications ?? true)
-  const [newSubscriberAlerts, setNewSubscriberAlerts] = useState(saved?.newSubscriberAlerts ?? true)
-  const [paymentAlerts, setPaymentAlerts] = useState(saved?.paymentAlerts ?? true)
+  // API hooks
+  const { data: user, isLoading: userLoading } = useCurrentUser()
+  const { data: settings, isLoading: settingsLoading } = useSettings()
+  const { mutateAsync: updateSettings } = useUpdateSettings()
+  const { mutateAsync: logout } = useLogout()
+  const { mutateAsync: deleteAccount, isPending: isDeleting } = useDeleteAccount()
+
+  // Local state for toggles (optimistic UI)
+  const [pushNotifications, setPushNotifications] = useState(true)
+  const [emailNotifications, setEmailNotifications] = useState(true)
+  const [newSubscriberAlerts, setNewSubscriberAlerts] = useState(true)
+  const [paymentAlerts, setPaymentAlerts] = useState(true)
+  const [isPublic, setIsPublic] = useState(true)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
-  // Simulate initial data load
+  // Sync local state with server data
   useEffect(() => {
-    const timer = setTimeout(() => setIsLoading(false), 500)
-    return () => clearTimeout(timer)
-  }, [])
+    if (settings) {
+      const prefs = settings.notificationPrefs
+      setPushNotifications(prefs?.push ?? true)
+      setEmailNotifications(prefs?.email ?? true)
+      setNewSubscriberAlerts(prefs?.subscriberAlerts ?? true)
+      setPaymentAlerts(prefs?.paymentAlerts ?? true)
+      setIsPublic(settings.isPublic ?? true)
+    }
+  }, [settings])
 
-  // Save settings when they change
-  useEffect(() => {
-    localStorage.setItem('natepay-settings', JSON.stringify({
-      pushNotifications,
-      emailNotifications,
-      newSubscriberAlerts,
-      paymentAlerts,
-    }))
-  }, [pushNotifications, emailNotifications, newSubscriberAlerts, paymentAlerts])
+  const isLoading = userLoading || settingsLoading
 
-  const handleLogout = () => {
-    localStorage.removeItem('natepay-onboarding')
-    localStorage.removeItem('natepay-settings')
-    localStorage.removeItem('natepay-request')
-    navigate('/onboarding')
+  // Save notification preference to backend
+  const handleNotificationChange = async (key: string, value: boolean) => {
+    // Optimistic update
+    switch (key) {
+      case 'push': setPushNotifications(value); break
+      case 'email': setEmailNotifications(value); break
+      case 'subscriberAlerts': setNewSubscriberAlerts(value); break
+      case 'paymentAlerts': setPaymentAlerts(value); break
+    }
+
+    try {
+      await updateSettings({
+        notificationPrefs: {
+          push: key === 'push' ? value : pushNotifications,
+          email: key === 'email' ? value : emailNotifications,
+          subscriberAlerts: key === 'subscriberAlerts' ? value : newSubscriberAlerts,
+          paymentAlerts: key === 'paymentAlerts' ? value : paymentAlerts,
+        },
+      })
+    } catch {
+      // Revert on error
+      switch (key) {
+        case 'push': setPushNotifications(!value); break
+        case 'email': setEmailNotifications(!value); break
+        case 'subscriberAlerts': setNewSubscriberAlerts(!value); break
+        case 'paymentAlerts': setPaymentAlerts(!value); break
+      }
+      toast.error('Failed to update setting')
+    }
   }
 
-  const handleDeleteAccount = () => {
-    localStorage.clear()
-    setShowDeleteConfirm(false)
-    toast.success('Account deleted')
-    navigate('/onboarding')
+  // Toggle profile visibility
+  const handleVisibilityToggle = async () => {
+    const newValue = !isPublic
+    setIsPublic(newValue)
+
+    try {
+      await updateSettings({ isPublic: newValue })
+      toast.success(newValue ? 'Profile is now public' : 'Profile is now private')
+    } catch {
+      setIsPublic(!newValue)
+      toast.error('Failed to update visibility')
+    }
   }
 
-  const handleEmailChange = () => {
-    toast.info('Email change coming soon')
+  const handleLogout = async () => {
+    try {
+      await logout()
+      localStorage.removeItem('natepay-onboarding')
+      localStorage.removeItem('natepay-request')
+      navigate('/onboarding')
+    } catch {
+      toast.error('Failed to log out')
+    }
   }
 
-  const handlePasswordChange = () => {
-    toast.info('Password change coming soon')
-  }
-
-  const handleTwoFactor = () => {
-    toast.info('Two-factor settings coming soon')
-  }
-
-  const handleProfileVisibility = () => {
-    toast.info('Profile visibility coming soon')
+  const handleDeleteAccount = async () => {
+    try {
+      await deleteAccount()
+      localStorage.clear()
+      setShowDeleteConfirm(false)
+      toast.success('Account deleted')
+      navigate('/onboarding')
+    } catch {
+      toast.error('Failed to delete account')
+    }
   }
 
   const handleExportData = () => {
@@ -109,7 +144,7 @@ export default function Settings() {
           <>
             <section className="settings-section">
               <Skeleton width={80} height={14} style={{ marginBottom: 12 }} />
-              <SkeletonList count={3} />
+              <SkeletonList count={2} />
             </section>
             <section className="settings-section">
               <Skeleton width={100} height={14} style={{ marginBottom: 12 }} />
@@ -122,30 +157,13 @@ export default function Settings() {
         <section className="settings-section">
           <h3 className="section-label">Account</h3>
           <div className="settings-card">
-            <Pressable className="settings-row" onClick={handleEmailChange}>
+            <div className="settings-row">
               <Mail size={20} className="settings-icon" />
               <div className="settings-info">
                 <span className="settings-row-title">Email</span>
-                <span className="settings-row-value">john@example.com</span>
+                <span className="settings-row-value">{user?.email || 'Not set'}</span>
               </div>
-              <ChevronRight size={18} className="settings-chevron" />
-            </Pressable>
-            <Pressable className="settings-row" onClick={handlePasswordChange}>
-              <Lock size={20} className="settings-icon" />
-              <div className="settings-info">
-                <span className="settings-row-title">Password</span>
-                <span className="settings-row-value">••••••••</span>
-              </div>
-              <ChevronRight size={18} className="settings-chevron" />
-            </Pressable>
-            <Pressable className="settings-row" onClick={handleTwoFactor}>
-              <Shield size={20} className="settings-icon" />
-              <div className="settings-info">
-                <span className="settings-row-title">Two-Factor Auth</span>
-                <span className="settings-row-value">Enabled</span>
-              </div>
-              <ChevronRight size={18} className="settings-chevron" />
-            </Pressable>
+            </div>
           </div>
         </section>
 
@@ -157,7 +175,7 @@ export default function Settings() {
               <CreditCard size={20} className="settings-icon" />
               <div className="settings-info">
                 <span className="settings-row-title">Billing</span>
-                <span className="settings-row-value">Free Trial - 23 days left</span>
+                <span className="settings-row-value">Manage plan</span>
               </div>
               <ChevronRight size={18} className="settings-chevron" />
             </Pressable>
@@ -173,28 +191,28 @@ export default function Settings() {
               <div className="settings-info">
                 <span className="settings-row-title">Push Notifications</span>
               </div>
-              <Toggle value={pushNotifications} onChange={setPushNotifications} />
+              <Toggle value={pushNotifications} onChange={(v) => handleNotificationChange('push', v)} />
             </div>
             <div className="settings-row">
               <Mail size={20} className="settings-icon" />
               <div className="settings-info">
                 <span className="settings-row-title">Email Notifications</span>
               </div>
-              <Toggle value={emailNotifications} onChange={setEmailNotifications} />
+              <Toggle value={emailNotifications} onChange={(v) => handleNotificationChange('email', v)} />
             </div>
             <div className="settings-row">
               <Bell size={20} className="settings-icon" />
               <div className="settings-info">
                 <span className="settings-row-title">New Subscriber Alerts</span>
               </div>
-              <Toggle value={newSubscriberAlerts} onChange={setNewSubscriberAlerts} />
+              <Toggle value={newSubscriberAlerts} onChange={(v) => handleNotificationChange('subscriberAlerts', v)} />
             </div>
             <div className="settings-row">
               <Bell size={20} className="settings-icon" />
               <div className="settings-info">
                 <span className="settings-row-title">Payment Alerts</span>
               </div>
-              <Toggle value={paymentAlerts} onChange={setPaymentAlerts} />
+              <Toggle value={paymentAlerts} onChange={(v) => handleNotificationChange('paymentAlerts', v)} />
             </div>
           </div>
         </section>
@@ -203,14 +221,14 @@ export default function Settings() {
         <section className="settings-section">
           <h3 className="section-label">Privacy</h3>
           <div className="settings-card">
-            <Pressable className="settings-row" onClick={handleProfileVisibility}>
+            <div className="settings-row">
               <Eye size={20} className="settings-icon" />
               <div className="settings-info">
                 <span className="settings-row-title">Profile Visibility</span>
-                <span className="settings-row-value">Public</span>
+                <span className="settings-row-value">{isPublic ? 'Public' : 'Private'}</span>
               </div>
-              <ChevronRight size={18} className="settings-chevron" />
-            </Pressable>
+              <Toggle value={isPublic} onChange={handleVisibilityToggle} />
+            </div>
             <Pressable className="settings-row" onClick={handleExportData}>
               <Download size={20} className="settings-icon" />
               <div className="settings-info">
@@ -223,7 +241,7 @@ export default function Settings() {
 
         {/* Danger Zone */}
         <section className="settings-section">
-          <h3 className="section-label">Danger Zone</h3>
+          <h3 className="section-label danger">Danger Zone</h3>
           <div className="settings-card">
             <Pressable className="settings-row" onClick={handleLogout}>
               <LogOut size={20} className="settings-icon" />
@@ -251,18 +269,33 @@ export default function Settings() {
       {/* Delete Account Confirmation Modal */}
       {showDeleteConfirm && (
         <>
-          <div className="modal-overlay" onClick={() => setShowDeleteConfirm(false)} />
+          <div className="modal-overlay" onClick={() => !isDeleting && setShowDeleteConfirm(false)} />
           <div className="delete-modal">
             <h3 className="delete-modal-title">Delete Account?</h3>
             <p className="delete-modal-text">
               This will permanently delete your account and all your data. This action cannot be undone.
             </p>
             <div className="delete-modal-buttons">
-              <Pressable className="delete-modal-cancel" onClick={() => setShowDeleteConfirm(false)}>
+              <Pressable
+                className="delete-modal-cancel"
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={isDeleting}
+              >
                 Cancel
               </Pressable>
-              <Pressable className="delete-modal-confirm" onClick={handleDeleteAccount}>
-                Delete Account
+              <Pressable
+                className="delete-modal-confirm"
+                onClick={handleDeleteAccount}
+                disabled={isDeleting}
+              >
+                {isDeleting ? (
+                  <>
+                    <Loader2 size={16} className="spin" style={{ marginRight: 8 }} />
+                    Deleting...
+                  </>
+                ) : (
+                  'Delete Account'
+                )}
               </Pressable>
             </div>
           </div>

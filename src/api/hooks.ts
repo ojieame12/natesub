@@ -99,6 +99,17 @@ export function useLogout() {
   })
 }
 
+export function useDeleteAccount() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: api.auth.deleteAccount,
+    onSuccess: () => {
+      queryClient.clear()
+    },
+  })
+}
+
 // ============================================
 // PROFILE HOOKS
 // ============================================
@@ -119,6 +130,25 @@ export function useUpdateProfile() {
     onSuccess: (data) => {
       queryClient.setQueryData(['profile'], data)
       queryClient.invalidateQueries({ queryKey: ['currentUser'] })
+    },
+  })
+}
+
+export function useSettings() {
+  return useQuery({
+    queryKey: ['settings'],
+    queryFn: api.profile.getSettings,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  })
+}
+
+export function useUpdateSettings() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: api.profile.updateSettings,
+    onSuccess: (data) => {
+      queryClient.setQueryData(['settings'], data.settings)
     },
   })
 }
@@ -182,6 +212,12 @@ export function useStripePayouts() {
     queryKey: ['stripePayouts'],
     queryFn: api.stripe.getPayouts,
     staleTime: 60 * 1000,
+  })
+}
+
+export function useStripeDashboardLink() {
+  return useMutation({
+    mutationFn: api.stripe.getDashboardLink,
   })
 }
 

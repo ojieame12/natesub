@@ -50,6 +50,8 @@ const relationshipMap: Record<RelationshipType, string> = {
   friend_close: 'friend',
   friend_acquaintance: 'friend',
   client: 'client',
+  client_new: 'client',
+  client_referral: 'client',
   fan: 'fan',
   colleague: 'colleague',
   partner: 'partner',
