@@ -430,7 +430,7 @@ export default function Dashboard() {
         )}
 
         {/* Shareable Link Card */}
-        <Pressable className="link-card" onClick={() => navigate('/subscribe')}>
+        <Pressable className="link-card" onClick={() => navigate(`/${profile?.username}`)}>
           <div className="link-avatar">
             {displayName ? displayName.charAt(0).toUpperCase() : 'U'}
           </div>

@@ -266,9 +266,25 @@
     display: flex;
     flex-direction: column;
     padding: var(--space-xl) var(--space-2xl);
+    padding-bottom: var(--space-3xl);
     overflow-y: auto;
     overflow-x: hidden;
     touch-action: pan-x pan-y;
+    position: relative;
+}
+
+/* Fade-up gradient at bottom of content */
+.template-boundary .sub-content::after {
+    content: '';
+    position: sticky;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 60px;
+    margin-top: -60px;
+    background: linear-gradient(to top, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0) 100%);
+    pointer-events: none;
+    flex-shrink: 0;
 }
 
 /* === VIEW CONTAINER - Centered Content === */
@@ -421,13 +437,14 @@
 }
 
 .template-boundary .sub-item-title {
-    font-size: 16px;
-    font-weight: 600;
+    font-size: 14px;
+    font-weight: 500;
     color: var(--text-primary);
 }
 
 .template-boundary .sub-item-subtitle {
-    font-size: 14px;
+    font-size: 13px;
+    font-weight: 400;
     color: var(--text-secondary);
     line-height: 1.4;
 }
