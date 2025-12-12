@@ -4,6 +4,7 @@
 import { Hono } from 'hono'
 import { env } from '../config/env.js'
 import { processRecurringBilling, processRetries } from '../jobs/billing.js'
+import { generatePayrollPeriods } from '../jobs/payroll.js'
 
 const jobs = new Hono()
 
@@ -65,11 +66,30 @@ jobs.post('/retries', async (c) => {
   }
 })
 
+// Generate payroll periods (run on 1st and 16th of month)
+jobs.post('/payroll', async (c) => {
+  console.log('[jobs] Starting payroll generation job')
+
+  try {
+    const result = await generatePayrollPeriods()
+
+    console.log(`[jobs] Payroll complete: ${result.generated} periods, ${result.pdfsGenerated} PDFs`)
+
+    return c.json({
+      success: true,
+      ...result,
+    })
+  } catch (error: any) {
+    console.error('[jobs] Payroll job failed:', error.message)
+    return c.json({ error: 'Payroll job failed', message: error.message }, 500)
+  }
+})
+
 // Health check for job system
 jobs.get('/health', async (c) => {
   return c.json({
     status: 'ok',
-    jobs: ['billing', 'retries'],
+    jobs: ['billing', 'retries', 'payroll'],
     timestamp: new Date().toISOString(),
   })
 })

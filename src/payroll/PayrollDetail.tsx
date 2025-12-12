@@ -1,6 +1,7 @@
+import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ChevronLeft, Download, CheckCircle, Clock, ExternalLink } from 'lucide-react'
-import { Pressable, Skeleton, ErrorState } from '../components'
+import { ChevronLeft, Download, CheckCircle, Clock, ExternalLink, Loader2 } from 'lucide-react'
+import { Pressable, Skeleton, ErrorState, useToast } from '../components'
 import { usePayrollPeriod, useCurrentUser } from '../api/hooks'
 import { getCurrencySymbol } from '../utils/currency'
 import './payroll.css'
@@ -29,11 +30,46 @@ export default function PayrollDetail() {
 
     const { data, isLoading, isError, refetch } = usePayrollPeriod(periodId || '')
     const period = data?.period
+    const toast = useToast()
+    const [downloading, setDownloading] = useState(false)
 
-    const handleDownloadPdf = () => {
+    const handleDownloadPdf = async () => {
         if (!periodId) return
-        // Backend generates PDF - open in new tab or trigger download
-        window.open(`/api/payroll/periods/${periodId}/pdf`, '_blank')
+
+        setDownloading(true)
+        try {
+            const response = await fetch(`/api/payroll/periods/${periodId}/pdf`)
+
+            if (response.status === 401) {
+                toast.error('Please sign in to download')
+                return
+            }
+
+            if (response.status === 404) {
+                toast.error('Pay statement not found')
+                return
+            }
+
+            if (!response.ok) {
+                toast.error('Failed to download PDF')
+                return
+            }
+
+            // Create blob and download
+            const blob = await response.blob()
+            const url = window.URL.createObjectURL(blob)
+            const a = document.createElement('a')
+            a.href = url
+            a.download = `payroll-${periodId}.pdf`
+            document.body.appendChild(a)
+            a.click()
+            window.URL.revokeObjectURL(url)
+            document.body.removeChild(a)
+        } catch {
+            toast.error('Failed to download PDF')
+        } finally {
+            setDownloading(false)
+        }
     }
 
     return (
@@ -165,9 +201,22 @@ export default function PayrollDetail() {
 
                         {/* Download Button */}
                         {period.status === 'paid' && (
-                            <Pressable className="payroll-download-btn" onClick={handleDownloadPdf}>
-                                <Download size={18} />
-                                <span>Download PDF</span>
+                            <Pressable
+                                className={`payroll-download-btn${downloading ? ' downloading' : ''}`}
+                                onClick={handleDownloadPdf}
+                                disabled={downloading}
+                            >
+                                {downloading ? (
+                                    <>
+                                        <Loader2 size={18} className="animate-spin" />
+                                        <span>Downloading...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <Download size={18} />
+                                        <span>Download PDF</span>
+                                    </>
+                                )}
                             </Pressable>
                         )}
 
