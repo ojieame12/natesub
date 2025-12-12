@@ -14,9 +14,10 @@ type ViewType = 'welcome' | 'impact' | 'perks' | 'payment'
 
 interface SubscribeBoundaryProps {
     profile: Profile
+    canceled?: boolean
 }
 
-export default function SubscribeBoundary({ profile }: SubscribeBoundaryProps) {
+export default function SubscribeBoundary({ profile, canceled }: SubscribeBoundaryProps) {
     const navigate = useNavigate()
     const { mutateAsync: createCheckout, isPending: isCheckoutLoading } = useCreateCheckout()
 
@@ -302,6 +303,12 @@ export default function SubscribeBoundary({ profile }: SubscribeBoundaryProps) {
                                     <span className="sub-payment-to">{name}</span>
                                 </div>
                             </div>
+
+                            {canceled && (
+                                <div className="sub-canceled-notice">
+                                    Payment was canceled. You can try again when you're ready.
+                                </div>
+                            )}
 
                             {checkoutError && (
                                 <div className="sub-payment-error">

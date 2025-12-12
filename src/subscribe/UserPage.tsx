@@ -1,7 +1,8 @@
-import { useParams, Navigate } from 'react-router-dom'
+import { useParams, Navigate, useSearchParams } from 'react-router-dom'
 import { isReservedUsername } from '../utils/constants'
 import { usePublicProfile } from '../api/hooks'
 import SubscribeBoundary from './SubscribeBoundary'
+import SubscriptionSuccess from './SubscriptionSuccess'
 import { Loader2 } from 'lucide-react'
 
 // This component handles vanity URLs like nate.to/username
@@ -9,6 +10,12 @@ import { Loader2 } from 'lucide-react'
 
 export default function UserPage() {
   const { username } = useParams<{ username: string }>()
+  const [searchParams] = useSearchParams()
+
+  // Check for checkout result query params
+  const isSuccess = searchParams.get('success') === 'true'
+  const isCanceled = searchParams.get('canceled') === 'true'
+  const provider = searchParams.get('provider')
 
   // If no username or it's a reserved route, redirect to onboarding
   if (!username || isReservedUsername(username)) {
@@ -42,5 +49,11 @@ export default function UserPage() {
     )
   }
 
-  return <SubscribeBoundary profile={data.profile} />
+  // Show success page after payment
+  if (isSuccess) {
+    return <SubscriptionSuccess profile={data.profile} provider={provider} />
+  }
+
+  // Pass canceled state to show a message
+  return <SubscribeBoundary profile={data.profile} canceled={isCanceled} />
 }
