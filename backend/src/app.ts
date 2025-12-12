@@ -32,9 +32,25 @@ if (process.env.NODE_ENV !== 'test') {
 app.use('*', logger())
 app.use('*', secureHeaders())
 
-// CORS
+// CORS - allow multiple origins for web and mobile
+const allowedOrigins = [
+  env.APP_URL,
+  'capacitor://localhost',      // iOS Capacitor
+  'http://localhost',           // Android Capacitor
+  'http://localhost:5173',      // Local dev
+  'http://localhost:5174',      // Local dev alt port
+]
+
 app.use('*', cors({
-  origin: env.APP_URL,
+  origin: (origin) => {
+    // Allow requests with no origin (mobile apps, Postman, etc.)
+    if (!origin) return env.APP_URL
+    // Check if origin is in allowed list
+    if (allowedOrigins.some(allowed => origin.startsWith(allowed))) {
+      return origin
+    }
+    return env.APP_URL
+  },
   credentials: true,
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization'],

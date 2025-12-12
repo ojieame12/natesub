@@ -4,11 +4,13 @@
 import crypto from 'crypto'
 import { db } from '../db/client.js'
 import type { PayrollPeriodType } from '@prisma/client'
-
-// Platform fee breakdown
-const PLATFORM_FEE_PERCENT = 8
-const PROCESSING_FEE_PERCENT = 2
-const TOTAL_FEE_PERCENT = PLATFORM_FEE_PERCENT + PROCESSING_FEE_PERCENT
+import {
+  getPlatformFeePercent,
+  getProcessingFeePercent,
+  getTotalFeePercent,
+  calculateFees,
+  type UserPurpose,
+} from './pricing.js'
 
 // ============================================
 // TYPES
@@ -20,10 +22,13 @@ export interface PayrollSummary {
   periodEnd: Date
   periodType: PayrollPeriodType
   grossCents: number
+  refundsCents: number
+  chargebacksCents: number
   platformFeeCents: number
   processingFeeCents: number
   netCents: number
   paymentCount: number
+  currency: string
   verificationCode: string
   createdAt: Date
 }
@@ -40,6 +45,7 @@ export interface PaymentItem {
 export interface PayrollDetail extends PayrollSummary {
   ytdGrossCents: number
   ytdNetCents: number
+  adjustedGrossCents: number // grossCents - refundsCents - chargebacksCents
   payoutDate: Date | null
   payoutMethod: string | null
   bankLast4: string | null
@@ -140,24 +146,38 @@ export function generateVerificationCode(userId: string, periodEnd: Date): strin
 
 /**
  * Aggregate payments for a user within a period
+ * Handles refunds and chargebacks by subtracting from gross
  */
 async function aggregatePayments(
   userId: string,
   periodStart: Date,
-  periodEnd: Date
+  periodEnd: Date,
+  currency?: string
 ): Promise<{
   grossCents: number
+  refundsCents: number
+  chargebacksCents: number
   paymentCount: number
   payments: PaymentItem[]
 }> {
-  const payments = await db.payment.findMany({
+  // Build where clause with optional currency filter
+  const whereClause: any = {
+    creatorId: userId,
+    occurredAt: {
+      gte: periodStart,
+      lte: periodEnd,
+    },
+  }
+
+  if (currency) {
+    whereClause.currency = currency
+  }
+
+  // Get successful payments
+  const successfulPayments = await db.payment.findMany({
     where: {
-      creatorId: userId,
+      ...whereClause,
       status: 'succeeded',
-      occurredAt: {
-        gte: periodStart,
-        lte: periodEnd,
-      },
     },
     include: {
       subscription: {
@@ -173,9 +193,27 @@ async function aggregatePayments(
     orderBy: { occurredAt: 'desc' },
   })
 
-  const grossCents = payments.reduce((sum, p) => sum + p.amountCents, 0)
+  // Get refunds in the same period
+  const refunds = await db.payment.findMany({
+    where: {
+      ...whereClause,
+      status: 'refunded',
+    },
+  })
 
-  const paymentItems: PaymentItem[] = payments.map((p) => ({
+  // Get chargebacks (disputes lost)
+  const chargebacks = await db.payment.findMany({
+    where: {
+      ...whereClause,
+      status: { in: ['dispute_lost', 'disputed'] },
+    },
+  })
+
+  const grossCents = successfulPayments.reduce((sum, p) => sum + p.amountCents, 0)
+  const refundsCents = refunds.reduce((sum, p) => sum + Math.abs(p.amountCents), 0)
+  const chargebacksCents = chargebacks.reduce((sum, p) => sum + Math.abs(p.amountCents), 0)
+
+  const paymentItems: PaymentItem[] = successfulPayments.map((p) => ({
     id: p.id,
     date: p.occurredAt,
     subscriberName: p.subscription?.subscriber?.email?.split('@')[0] || 'Anonymous',
@@ -186,17 +224,21 @@ async function aggregatePayments(
 
   return {
     grossCents,
-    paymentCount: payments.length,
+    refundsCents,
+    chargebacksCents,
+    paymentCount: successfulPayments.length,
     payments: paymentItems,
   }
 }
 
 /**
  * Calculate year-to-date totals
+ * Uses the user's purpose to determine fee rates
  */
 async function calculateYTD(
   userId: string,
-  asOfDate: Date
+  asOfDate: Date,
+  purpose: UserPurpose | null
 ): Promise<{ grossCents: number; netCents: number }> {
   const yearStart = new Date(asOfDate.getFullYear(), 0, 1, 0, 0, 0, 0)
 
@@ -215,7 +257,8 @@ async function calculateYTD(
   })
 
   const grossCents = result._sum.amountCents || 0
-  const netCents = Math.round(grossCents * (1 - TOTAL_FEE_PERCENT / 100))
+  const totalFeePercent = getTotalFeePercent(purpose)
+  const netCents = Math.round(grossCents * (1 - totalFeePercent / 100))
 
   return { grossCents, netCents }
 }
@@ -262,10 +305,13 @@ export async function getPayrollPeriods(userId: string): Promise<PayrollSummary[
     periodEnd: p.periodEnd,
     periodType: p.periodType,
     grossCents: p.grossCents,
+    refundsCents: p.refundsCents,
+    chargebacksCents: p.chargebacksCents,
     platformFeeCents: p.platformFeeCents,
     processingFeeCents: p.processingFeeCents,
     netCents: p.netCents,
     paymentCount: p.paymentCount,
+    currency: p.currency,
     verificationCode: p.verificationCode,
     createdAt: p.createdAt,
   }))
@@ -284,8 +330,10 @@ export async function getPayrollPeriod(
 
   if (!period) return null
 
-  // Get individual payments for this period
-  const { payments } = await aggregatePayments(userId, period.periodStart, period.periodEnd)
+  // Get individual payments for this period (filtered by same currency)
+  const { payments } = await aggregatePayments(userId, period.periodStart, period.periodEnd, period.currency)
+
+  const adjustedGrossCents = period.grossCents - period.refundsCents - period.chargebacksCents
 
   return {
     id: period.id,
@@ -293,12 +341,16 @@ export async function getPayrollPeriod(
     periodEnd: period.periodEnd,
     periodType: period.periodType,
     grossCents: period.grossCents,
+    refundsCents: period.refundsCents,
+    chargebacksCents: period.chargebacksCents,
     platformFeeCents: period.platformFeeCents,
     processingFeeCents: period.processingFeeCents,
     netCents: period.netCents,
     paymentCount: period.paymentCount,
+    currency: period.currency,
     ytdGrossCents: period.ytdGrossCents,
     ytdNetCents: period.ytdNetCents,
+    adjustedGrossCents,
     payoutDate: period.payoutDate,
     payoutMethod: period.payoutMethod,
     bankLast4: period.bankLast4,
@@ -312,18 +364,35 @@ export async function getPayrollPeriod(
 /**
  * Generate a payroll period for a user
  * This aggregates all payments in the period and creates a snapshot
+ * Uses the creator's profile currency to ensure single-currency periods
+ * Fee rates are based on the creator's purpose (personal: 10%, service: 8%)
  */
 export async function generatePayrollPeriod(
   userId: string,
   periodStart: Date,
   periodEnd: Date
 ): Promise<PayrollSummary | null> {
-  // Check if period already exists
+  // Get profile for currency and purpose (for fee calculation)
+  const profile = await db.profile.findUnique({
+    where: { userId },
+    select: {
+      currency: true,
+      paymentProvider: true,
+      purpose: true,
+    },
+  })
+
+  if (!profile) return null
+
+  const currency = profile.currency
+
+  // Check if period already exists for this currency
   const existing = await db.payrollPeriod.findFirst({
     where: {
       userId,
       periodStart,
       periodEnd,
+      currency,
     },
   })
 
@@ -334,39 +403,47 @@ export async function generatePayrollPeriod(
       periodEnd: existing.periodEnd,
       periodType: existing.periodType,
       grossCents: existing.grossCents,
+      refundsCents: existing.refundsCents,
+      chargebacksCents: existing.chargebacksCents,
       platformFeeCents: existing.platformFeeCents,
       processingFeeCents: existing.processingFeeCents,
       netCents: existing.netCents,
       paymentCount: existing.paymentCount,
+      currency: existing.currency,
       verificationCode: existing.verificationCode,
       createdAt: existing.createdAt,
     }
   }
 
-  // Aggregate payments
-  const { grossCents, paymentCount } = await aggregatePayments(userId, periodStart, periodEnd)
+  // Aggregate payments filtered by currency
+  const { grossCents, refundsCents, chargebacksCents, paymentCount } = await aggregatePayments(
+    userId,
+    periodStart,
+    periodEnd,
+    currency
+  )
 
   // Skip if no payments
   if (paymentCount === 0) {
     return null
   }
 
-  // Calculate fees
-  const platformFeeCents = Math.round(grossCents * (PLATFORM_FEE_PERCENT / 100))
-  const processingFeeCents = Math.round(grossCents * (PROCESSING_FEE_PERCENT / 100))
-  const netCents = grossCents - platformFeeCents - processingFeeCents
+  // Calculate adjusted gross (after refunds and chargebacks)
+  const adjustedGrossCents = grossCents - refundsCents - chargebacksCents
+
+  // Calculate fees on adjusted gross using user's purpose (personal: 10%, service: 8%)
+  const purpose = profile.purpose as UserPurpose
+  const {
+    platformFeeCents,
+    processingFeeCents,
+    netCents,
+  } = calculateFees(adjustedGrossCents, purpose)
 
   // Calculate YTD
-  const ytd = await calculateYTD(userId, periodEnd)
+  const ytd = await calculateYTD(userId, periodEnd, purpose)
 
   // Get bank info
   const bankLast4 = await getBankLast4(userId)
-
-  // Get payment provider
-  const profile = await db.profile.findUnique({
-    where: { userId },
-    select: { paymentProvider: true },
-  })
 
   // Generate verification code
   const verificationCode = generateVerificationCode(userId, periodEnd)
@@ -378,7 +455,10 @@ export async function generatePayrollPeriod(
       periodStart,
       periodEnd,
       periodType: 'biweekly',
+      currency,
       grossCents,
+      refundsCents,
+      chargebacksCents,
       platformFeeCents,
       processingFeeCents,
       netCents,
@@ -386,7 +466,7 @@ export async function generatePayrollPeriod(
       ytdGrossCents: ytd.grossCents,
       ytdNetCents: ytd.netCents,
       payoutDate: new Date(), // Approximate - actual payout timing varies
-      payoutMethod: profile?.paymentProvider || null,
+      payoutMethod: profile.paymentProvider || null,
       bankLast4,
       verificationCode,
     },
@@ -398,10 +478,13 @@ export async function generatePayrollPeriod(
     periodEnd: period.periodEnd,
     periodType: period.periodType,
     grossCents: period.grossCents,
+    refundsCents: period.refundsCents,
+    chargebacksCents: period.chargebacksCents,
     platformFeeCents: period.platformFeeCents,
     processingFeeCents: period.processingFeeCents,
     netCents: period.netCents,
     paymentCount: period.paymentCount,
+    currency: period.currency,
     verificationCode: period.verificationCode,
     createdAt: period.createdAt,
   }

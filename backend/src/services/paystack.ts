@@ -4,11 +4,9 @@
 import { env } from '../config/env.js'
 import { db } from '../db/client.js'
 import { maskAccountNumber, maskEmail } from '../utils/pii.js'
+import { getPlatformFeePercent, type UserPurpose } from './pricing.js'
 
 const PAYSTACK_API_URL = 'https://api.paystack.co'
-
-// Platform fee percentage (10%)
-const PLATFORM_FEE_PERCENT = 10
 
 // Supported countries for Paystack
 export const PAYSTACK_COUNTRIES = ['NG', 'KE', 'ZA'] as const
@@ -189,6 +187,7 @@ export async function createSubaccount(params: {
   accountNumber: string
   email: string
   phone?: string
+  purpose?: UserPurpose // For dynamic fee calculation
 }): Promise<{ subaccountCode: string }> {
   // Check if user already has a subaccount
   const profile = await db.profile.findUnique({ where: { userId: params.userId } })
@@ -197,8 +196,11 @@ export async function createSubaccount(params: {
     return { subaccountCode: profile.paystackSubaccountCode }
   }
 
+  // Calculate platform fee based on creator's purpose (personal: 10%, service: 8%)
+  const platformFeePercent = getPlatformFeePercent(params.purpose || profile?.purpose as UserPurpose)
+
   // Log creation attempt with masked PII
-  console.log(`[paystack] Creating subaccount for user ${params.userId}, account ${maskAccountNumber(params.accountNumber)}`)
+  console.log(`[paystack] Creating subaccount for user ${params.userId}, account ${maskAccountNumber(params.accountNumber)}, fee: ${platformFeePercent}%`)
 
   const response = await paystackFetch<Subaccount>('/subaccount', {
     method: 'POST',
@@ -206,7 +208,7 @@ export async function createSubaccount(params: {
       business_name: params.businessName,
       settlement_bank: params.bankCode,
       account_number: params.accountNumber,
-      percentage_charge: PLATFORM_FEE_PERCENT, // Platform takes 10%
+      percentage_charge: platformFeePercent, // Dynamic: personal=10%, service=8%
       primary_contact_email: params.email,
       primary_contact_phone: params.phone,
       settlement_schedule: 'auto', // T+1 settlement
@@ -243,6 +245,7 @@ export async function updateSubaccount(
     businessName?: string
     settlementBank?: string
     accountNumber?: string
+    percentageCharge?: number
   }
 ): Promise<Subaccount> {
   const response = await paystackFetch<Subaccount>(`/subaccount/${subaccountCode}`, {
@@ -251,9 +254,30 @@ export async function updateSubaccount(
       business_name: data.businessName,
       settlement_bank: data.settlementBank,
       account_number: data.accountNumber,
+      percentage_charge: data.percentageCharge,
     }),
   })
   return response.data
+}
+
+// Update subaccount fee when user's purpose changes
+export async function updateSubaccountFee(
+  userId: string,
+  purpose: UserPurpose
+): Promise<void> {
+  const profile = await db.profile.findUnique({ where: { userId } })
+
+  if (!profile?.paystackSubaccountCode) {
+    return // No Paystack account to update
+  }
+
+  const newFeePercent = getPlatformFeePercent(purpose)
+
+  console.log(`[paystack] Updating subaccount ${profile.paystackSubaccountCode} fee to ${newFeePercent}%`)
+
+  await updateSubaccount(profile.paystackSubaccountCode, {
+    percentageCharge: newFeePercent,
+  })
 }
 
 // ============================================

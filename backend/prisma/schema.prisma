@@ -410,12 +410,17 @@ model PayrollPeriod {
   periodEnd   DateTime
   periodType  PayrollPeriodType @default(biweekly)
 
+  // Currency (single currency per period)
+  currency String @default("USD")
+
   // Cached totals (snapshot at generation time)
-  grossCents      Int // Sum of all payment amounts
-  platformFeeCents Int // 8% platform fee
+  grossCents         Int // Sum of all successful payment amounts
+  refundsCents       Int @default(0) // Refunds in the period
+  chargebacksCents   Int @default(0) // Disputed/lost chargebacks
+  platformFeeCents   Int // 8% platform fee (on adjusted gross)
   processingFeeCents Int // 2% payment processor fee
-  netCents        Int // What creator received
-  paymentCount    Int // Number of transactions
+  netCents           Int // What creator received after all deductions
+  paymentCount       Int // Number of successful transactions
 
   // YTD (as of period end)
   ytdGrossCents Int

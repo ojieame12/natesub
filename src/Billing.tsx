@@ -1,10 +1,14 @@
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Sparkles, Check } from 'lucide-react'
+import { ArrowLeft, Check, FileText, Sparkles, Zap } from 'lucide-react'
 import { Pressable } from './components'
+import { useProfile } from './api/hooks'
 import './Billing.css'
 
 export default function Billing() {
     const navigate = useNavigate()
+    const { data: profileData } = useProfile()
+    const profile = profileData?.profile
+    const isService = profile?.purpose === 'service'
 
     return (
         <div className="billing-page">
@@ -18,55 +22,134 @@ export default function Billing() {
             </header>
 
             <div className="billing-content">
-                {/* Coming Soon State */}
-                <div className="billing-coming-soon">
-                    <div className="billing-coming-soon-icon">
-                        <Sparkles size={32} />
-                    </div>
-                    <h2 className="billing-coming-soon-title">Billing Coming Soon</h2>
-                    <p className="billing-coming-soon-text">
-                        Platform subscriptions and billing management will be available in a future update.
-                    </p>
-                </div>
+                {isService ? (
+                    // SERVICE BRANCH - $5/mo subscription
+                    <>
+                        <div className="billing-plan-card service">
+                            <div className="billing-plan-badge">
+                                <Sparkles size={14} />
+                                <span>Service Plan</span>
+                            </div>
+                            <div className="billing-plan-price">
+                                <span className="billing-price-amount">$5</span>
+                                <span className="billing-price-period">/month</span>
+                            </div>
+                            <p className="billing-plan-desc">
+                                Professional tools for service providers
+                            </p>
+                            <div className="billing-plan-fee">
+                                <span>Transaction fee</span>
+                                <span>8%</span>
+                            </div>
+                        </div>
 
-                {/* Current Pricing Info */}
-                <section className="fee-info">
-                    <h4 className="fee-title">How NatePay works</h4>
-                    <div className="fee-row">
-                        <span>Platform fee</span>
-                        <span>$5/month</span>
-                    </div>
-                    <div className="fee-row">
-                        <span>Transaction fee</span>
-                        <span>6% + Stripe 2%</span>
-                    </div>
-                    <p className="fee-note">
-                        You keep 92% of every payment from your subscribers.
-                    </p>
-                </section>
+                        {/* What's Included - Service */}
+                        <section className="billing-section">
+                            <h3 className="section-title">What's Included</h3>
+                            <div className="plan-features">
+                                <div className="plan-feature">
+                                    <Check size={16} />
+                                    <span>AI-generated page content</span>
+                                </div>
+                                <div className="plan-feature">
+                                    <Check size={16} />
+                                    <span>Payroll documents with PDF</span>
+                                </div>
+                                <div className="plan-feature">
+                                    <Check size={16} />
+                                    <span>Income verification for loans</span>
+                                </div>
+                                <div className="plan-feature">
+                                    <Check size={16} />
+                                    <span>Professional client management</span>
+                                </div>
+                                <div className="plan-feature">
+                                    <Check size={16} />
+                                    <span>Lower 8% transaction fees</span>
+                                </div>
+                            </div>
+                        </section>
 
-                {/* What's Included */}
-                <section className="billing-section">
-                    <h3 className="section-title">What's Included</h3>
-                    <div className="plan-features">
-                        <div className="plan-feature">
-                            <Check size={16} />
-                            <span>Unlimited subscribers</span>
+                        {/* Manage Subscription */}
+                        <Pressable className="billing-manage-btn">
+                            <span>Manage Subscription</span>
+                        </Pressable>
+
+                        <p className="billing-footer-note">
+                            Cancel anytime. Your subscription helps us build better tools for service providers.
+                        </p>
+                    </>
+                ) : (
+                    // PERSONAL BRANCH - Free
+                    <>
+                        <div className="billing-plan-card personal">
+                            <div className="billing-plan-badge free">
+                                <Zap size={14} />
+                                <span>Free Plan</span>
+                            </div>
+                            <div className="billing-plan-price">
+                                <span className="billing-price-amount">$0</span>
+                                <span className="billing-price-period">/month</span>
+                            </div>
+                            <p className="billing-plan-desc">
+                                No monthly fee. Pay only when you earn.
+                            </p>
+                            <div className="billing-plan-fee">
+                                <span>Transaction fee</span>
+                                <span>10%</span>
+                            </div>
                         </div>
-                        <div className="plan-feature">
-                            <Check size={16} />
-                            <span>Custom subscription page</span>
+
+                        {/* What's Included - Personal */}
+                        <section className="billing-section">
+                            <h3 className="section-title">What's Included</h3>
+                            <div className="plan-features">
+                                <div className="plan-feature">
+                                    <Check size={16} />
+                                    <span>Unlimited subscribers</span>
+                                </div>
+                                <div className="plan-feature">
+                                    <Check size={16} />
+                                    <span>Custom subscription page</span>
+                                </div>
+                                <div className="plan-feature">
+                                    <Check size={16} />
+                                    <span>Payment processing</span>
+                                </div>
+                                <div className="plan-feature">
+                                    <Check size={16} />
+                                    <span>Activity tracking</span>
+                                </div>
+                            </div>
+                        </section>
+
+                        {/* Upgrade CTA */}
+                        <div className="billing-upgrade-section">
+                            <h4 className="billing-upgrade-title">Want more features?</h4>
+                            <div className="billing-upgrade-card">
+                                <div className="billing-upgrade-header">
+                                    <FileText size={20} />
+                                    <div>
+                                        <span className="billing-upgrade-name">Service Plan</span>
+                                        <span className="billing-upgrade-price">$5/mo</span>
+                                    </div>
+                                </div>
+                                <ul className="billing-upgrade-perks">
+                                    <li>AI-generated page content</li>
+                                    <li>Payroll documents for loans</li>
+                                    <li>Lower 8% transaction fees</li>
+                                </ul>
+                                <Pressable className="billing-upgrade-btn">
+                                    <span>Upgrade to Service</span>
+                                </Pressable>
+                            </div>
                         </div>
-                        <div className="plan-feature">
-                            <Check size={16} />
-                            <span>Voice note requests</span>
-                        </div>
-                        <div className="plan-feature">
-                            <Check size={16} />
-                            <span>Analytics dashboard</span>
-                        </div>
-                    </div>
-                </section>
+
+                        <p className="billing-footer-note">
+                            You keep 90% of every payment. No monthly commitment.
+                        </p>
+                    </>
+                )}
             </div>
         </div>
     )

@@ -1,0 +1,86 @@
+// Pricing Service - Centralized fee calculation based on user purpose
+// Personal: Free plan, 10% transaction fee
+// Service: $5/mo subscription, 8% transaction fee
+
+export type UserPurpose = 'personal' | 'service'
+
+// Platform fee percentages by purpose
+const PLATFORM_FEES: Record<UserPurpose, number> = {
+  personal: 10, // 10% for free personal users
+  service: 8,   // 8% for paid service providers
+}
+
+// Processing fee (payment processor overhead) - same for all
+const PROCESSING_FEE_PERCENT = 2
+
+// Platform subscription price for service users (in cents)
+export const PLATFORM_SUBSCRIPTION_PRICE_CENTS = 500 // $5.00/month
+
+/**
+ * Get the platform fee percentage for a user based on their purpose
+ * @param purpose - 'personal' or 'service'
+ * @returns Platform fee percentage (8 or 10)
+ */
+export function getPlatformFeePercent(purpose: UserPurpose | null | undefined): number {
+  if (!purpose || !PLATFORM_FEES[purpose]) {
+    return PLATFORM_FEES.personal // Default to personal (10%)
+  }
+  return PLATFORM_FEES[purpose]
+}
+
+/**
+ * Get the processing fee percentage (payment processor overhead)
+ * This is the same regardless of user purpose
+ */
+export function getProcessingFeePercent(): number {
+  return PROCESSING_FEE_PERCENT
+}
+
+/**
+ * Calculate total fee percentage (platform + processing)
+ * @param purpose - 'personal' or 'service'
+ * @returns Total fee percentage (10 or 12)
+ */
+export function getTotalFeePercent(purpose: UserPurpose | null | undefined): number {
+  return getPlatformFeePercent(purpose) + PROCESSING_FEE_PERCENT
+}
+
+/**
+ * Calculate fee breakdown for a given amount
+ * @param amountCents - The gross amount in cents
+ * @param purpose - 'personal' or 'service'
+ * @returns Object with platformFeeCents, processingFeeCents, totalFeeCents, netCents
+ */
+export function calculateFees(
+  amountCents: number,
+  purpose: UserPurpose | null | undefined
+): {
+  platformFeeCents: number
+  processingFeeCents: number
+  totalFeeCents: number
+  netCents: number
+} {
+  const platformFeePercent = getPlatformFeePercent(purpose)
+  const processingFeePercent = getProcessingFeePercent()
+
+  const platformFeeCents = Math.round(amountCents * (platformFeePercent / 100))
+  const processingFeeCents = Math.round(amountCents * (processingFeePercent / 100))
+  const totalFeeCents = platformFeeCents + processingFeeCents
+  const netCents = amountCents - totalFeeCents
+
+  return {
+    platformFeeCents,
+    processingFeeCents,
+    totalFeeCents,
+    netCents,
+  }
+}
+
+/**
+ * Check if a user needs a platform subscription (service purpose)
+ * @param purpose - 'personal' or 'service'
+ * @returns true if user should have a platform subscription
+ */
+export function requiresPlatformSubscription(purpose: UserPurpose | null | undefined): boolean {
+  return purpose === 'service'
+}

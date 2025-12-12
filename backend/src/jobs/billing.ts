@@ -3,6 +3,7 @@
 
 import { db } from '../db/client.js'
 import { chargeAuthorization, generateReference } from '../services/paystack.js'
+import { calculateFees, type UserPurpose } from '../services/pricing.js'
 
 // Configuration
 const MAX_RETRY_ATTEMPTS = 3
@@ -136,9 +137,9 @@ export async function processRecurringBilling(): Promise<BillingResult> {
         },
       })
 
-      // Calculate fees
-      const feeCents = Math.round(sub.amount * 0.10)
-      const netCents = sub.amount - feeCents
+      // Calculate fees based on creator's purpose (personal: 10%, service: 8%)
+      const creatorPurpose = sub.creator.profile.purpose as UserPurpose
+      const { totalFeeCents: feeCents, netCents } = calculateFees(sub.amount, creatorPurpose)
 
       // Create successful payment record
       await db.payment.create({
@@ -305,8 +306,9 @@ export async function processRetries(): Promise<BillingResult> {
         },
       })
 
-      const feeCents = Math.round(sub.amount * 0.10)
-      const netCents = sub.amount - feeCents
+      // Calculate fees based on creator's purpose (personal: 10%, service: 8%)
+      const creatorPurpose = sub.creator?.profile?.purpose as UserPurpose
+      const { totalFeeCents: feeCents, netCents } = calculateFees(sub.amount, creatorPurpose)
 
       await db.payment.create({
         data: {

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, ChevronRight, Mail, Bell, Eye, Download, Trash2, LogOut, CreditCard, Loader2 } from 'lucide-react'
 import { Pressable, useToast, Skeleton, SkeletonList } from './components'
 import { useCurrentUser, useLogout, useDeleteAccount, useSettings, useUpdateSettings } from './api/hooks'
+import { getPricing } from './utils/pricing'
 import './Settings.css'
 
 // Toggle component
@@ -175,7 +176,9 @@ export default function Settings() {
               <CreditCard size={20} className="settings-icon" />
               <div className="settings-info">
                 <span className="settings-row-title">Billing</span>
-                <span className="settings-row-value">Manage plan</span>
+                <span className="settings-row-value">
+                  {getPricing(user?.profile?.purpose).planName} - {getPricing(user?.profile?.purpose).transactionFeeLabel} fees
+                </span>
               </div>
               <ChevronRight size={18} className="settings-chevron" />
             </Pressable>

@@ -1,13 +1,11 @@
 import Stripe from 'stripe'
 import { env } from '../config/env.js'
 import { db } from '../db/client.js'
+import { getPlatformFeePercent, type UserPurpose } from './pricing.js'
 
 export const stripe = new Stripe(env.STRIPE_SECRET_KEY, {
   apiVersion: '2025-11-17.clover',
 })
-
-// Platform fee percentage (10%)
-const PLATFORM_FEE_PERCENT = 10
 
 // Create Express account for a user
 export async function createExpressAccount(
@@ -131,7 +129,7 @@ export async function createCheckoutSession(params: {
   cancelUrl: string
   subscriberEmail?: string
 }) {
-  // Get creator's Stripe account
+  // Get creator's Stripe account and purpose for fee calculation
   const creatorProfile = await db.profile.findUnique({
     where: { userId: params.creatorId },
   })
@@ -140,8 +138,9 @@ export async function createCheckoutSession(params: {
     throw new Error('Creator has not connected payments')
   }
 
-  // Calculate platform fee
-  const applicationFeeAmount = Math.round(params.amount * (PLATFORM_FEE_PERCENT / 100))
+  // Calculate platform fee based on creator's purpose (personal: 10%, service: 8%)
+  const platformFeePercent = getPlatformFeePercent(creatorProfile.purpose as UserPurpose)
+  const applicationFeeAmount = Math.round(params.amount * (platformFeePercent / 100))
 
   // Create price
   const priceData: Stripe.Checkout.SessionCreateParams.LineItem.PriceData = {
@@ -175,7 +174,7 @@ export async function createCheckoutSession(params: {
       },
     } : undefined,
     subscription_data: params.interval === 'month' ? {
-      application_fee_percent: PLATFORM_FEE_PERCENT,
+      application_fee_percent: platformFeePercent,
       transfer_data: {
         destination: creatorProfile.stripeAccountId,
       },

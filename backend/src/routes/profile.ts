@@ -6,6 +6,13 @@ import { db } from '../db/client.js'
 import { requireAuth } from '../middleware/auth.js'
 import { sendWelcomeEmail } from '../services/email.js'
 import { RESERVED_USERNAMES } from '../utils/constants.js'
+import {
+  getPlatformFeePercent,
+  getProcessingFeePercent,
+  PLATFORM_SUBSCRIPTION_PRICE_CENTS,
+  requiresPlatformSubscription,
+  type UserPurpose,
+} from '../services/pricing.js'
 
 const profile = new Hono()
 
@@ -306,5 +313,67 @@ profile.get(
     return c.json({ available: true })
   }
 )
+
+// Get pricing info for current user
+// Returns fee schedule based on user's purpose (personal vs service)
+profile.get('/pricing', requireAuth, async (c) => {
+  const userId = c.get('userId')
+
+  const userProfile = await db.profile.findUnique({
+    where: { userId },
+    select: { purpose: true },
+  })
+
+  const purpose = userProfile?.purpose as UserPurpose | null
+  const platformFeeBps = getPlatformFeePercent(purpose) * 100 // Convert to basis points
+  const processingFeeBps = getProcessingFeePercent() * 100
+
+  return c.json({
+    plan: requiresPlatformSubscription(purpose) ? 'service' : 'personal',
+    fees: {
+      platformFeeBps, // e.g., 800 = 8%, 1000 = 10%
+      processingFeeBps, // e.g., 200 = 2%
+      totalFeeBps: platformFeeBps + processingFeeBps,
+      platformFeePercent: getPlatformFeePercent(purpose),
+      processingFeePercent: getProcessingFeePercent(),
+      totalFeePercent: getPlatformFeePercent(purpose) + getProcessingFeePercent(),
+    },
+    subscription: requiresPlatformSubscription(purpose) ? {
+      priceCents: PLATFORM_SUBSCRIPTION_PRICE_CENTS,
+      interval: 'month',
+      currency: 'USD',
+    } : null,
+  })
+})
+
+// Get pricing info for a specific plan (public endpoint for comparison)
+profile.get('/pricing/:plan', async (c) => {
+  const plan = c.req.param('plan') as 'personal' | 'service'
+
+  if (!['personal', 'service'].includes(plan)) {
+    return c.json({ error: 'Invalid plan. Must be "personal" or "service"' }, 400)
+  }
+
+  const purpose: UserPurpose = plan === 'service' ? 'service' : 'personal'
+  const platformFeeBps = getPlatformFeePercent(purpose) * 100
+  const processingFeeBps = getProcessingFeePercent() * 100
+
+  return c.json({
+    plan,
+    fees: {
+      platformFeeBps,
+      processingFeeBps,
+      totalFeeBps: platformFeeBps + processingFeeBps,
+      platformFeePercent: getPlatformFeePercent(purpose),
+      processingFeePercent: getProcessingFeePercent(),
+      totalFeePercent: getPlatformFeePercent(purpose) + getProcessingFeePercent(),
+    },
+    subscription: plan === 'service' ? {
+      priceCents: PLATFORM_SUBSCRIPTION_PRICE_CENTS,
+      interval: 'month',
+      currency: 'USD',
+    } : null,
+  })
+})
 
 export default profile

@@ -604,3 +604,217 @@
 .billing-page .header-spacer {
     width: 36px;
 }
+
+/* ===========================================
+   BRANCH-AWARE BILLING PLAN CARDS
+   =========================================== */
+
+.billing-plan-card {
+    border-radius: var(--radius-xl);
+    padding: var(--space-xl);
+    margin-bottom: var(--space-xl);
+    text-align: center;
+}
+
+.billing-plan-card.service {
+    background: var(--neutral-900);
+    color: white;
+}
+
+.billing-plan-card.personal {
+    background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+    color: var(--text-primary);
+}
+
+.billing-plan-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: 6px 12px;
+    border-radius: var(--radius-full);
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: var(--space-md);
+    background: rgba(255, 148, 26, 0.2);
+    color: var(--accent-primary);
+}
+
+.billing-plan-badge.free {
+    background: rgba(16, 185, 129, 0.2);
+    color: #10b981;
+}
+
+.billing-plan-price {
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: var(--space-xs);
+    margin-bottom: var(--space-sm);
+}
+
+.billing-price-amount {
+    font-size: 48px;
+    font-weight: 700;
+    letter-spacing: -2px;
+}
+
+.billing-price-period {
+    font-size: 18px;
+    font-weight: 400;
+    opacity: 0.7;
+}
+
+.billing-plan-desc {
+    font-size: 14px;
+    opacity: 0.8;
+    margin: 0 0 var(--space-lg);
+}
+
+.billing-plan-fee {
+    display: flex;
+    justify-content: space-between;
+    padding: var(--space-md);
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: var(--radius-lg);
+    font-size: 14px;
+}
+
+.billing-plan-card.personal .billing-plan-fee {
+    background: rgba(0, 0, 0, 0.05);
+}
+
+.billing-plan-fee span:last-child {
+    font-weight: 600;
+}
+
+/* Manage Subscription Button */
+.billing-manage-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    padding: var(--space-md) var(--space-lg);
+    background: white;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-lg);
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+    transition: all 0.15s ease;
+    margin-bottom: var(--space-lg);
+}
+
+.billing-manage-btn.pressed {
+    transform: scale(0.98);
+    background: var(--neutral-50);
+}
+
+/* Footer Note */
+.billing-footer-note {
+    font-size: 13px;
+    color: var(--text-tertiary);
+    text-align: center;
+    line-height: 1.5;
+}
+
+/* ===========================================
+   UPGRADE SECTION (Personal Branch)
+   =========================================== */
+
+.billing-upgrade-section {
+    margin-bottom: var(--space-xl);
+}
+
+.billing-upgrade-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin: 0 0 var(--space-md);
+}
+
+.billing-upgrade-card {
+    background: white;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-xl);
+    padding: var(--space-lg);
+}
+
+.billing-upgrade-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    margin-bottom: var(--space-md);
+}
+
+.billing-upgrade-header svg {
+    width: 40px;
+    height: 40px;
+    padding: 10px;
+    background: var(--neutral-100);
+    border-radius: var(--radius-lg);
+    color: var(--text-secondary);
+}
+
+.billing-upgrade-header > div {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.billing-upgrade-name {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.billing-upgrade-price {
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+.billing-upgrade-perks {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 var(--space-lg);
+}
+
+.billing-upgrade-perks li {
+    font-size: 14px;
+    color: var(--text-secondary);
+    padding: var(--space-xs) 0;
+    padding-left: var(--space-lg);
+    position: relative;
+}
+
+.billing-upgrade-perks li::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 6px;
+    height: 6px;
+    background: var(--accent-primary);
+    border-radius: 50%;
+}
+
+.billing-upgrade-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    padding: var(--space-md) var(--space-lg);
+    background: var(--neutral-900);
+    border-radius: var(--radius-lg);
+    font-size: 15px;
+    font-weight: 600;
+    color: white;
+    transition: all 0.15s ease;
+}
+
+.billing-upgrade-btn.pressed {
+    transform: scale(0.98);
+    opacity: 0.9;
+}

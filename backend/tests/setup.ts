@@ -109,6 +109,7 @@ const dbStorage = {
   requests: new Map<string, any>(),
   updates: new Map<string, any>(),
   activities: new Map<string, any>(),
+  payrollPeriods: new Map<string, any>(),
 }
 
 const generateId = () => randomUUID()
@@ -317,6 +318,7 @@ vi.mock('../src/db/client.js', () => ({
     request: createMockModel(dbStorage.requests),
     update: createMockModel(dbStorage.updates),
     activity: createMockModel(dbStorage.activities),
+    payrollPeriod: createMockModel(dbStorage.payrollPeriods),
     $connect: vi.fn(),
     $disconnect: vi.fn(),
     $executeRawUnsafe: vi.fn(async () => {

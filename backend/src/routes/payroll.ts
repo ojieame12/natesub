@@ -2,6 +2,7 @@
 // For service branch creators only
 
 import { Hono } from 'hono'
+import { Context, Next } from 'hono'
 import { requireAuth } from '../middleware/auth.js'
 import { db } from '../db/client.js'
 import { env } from '../config/env.js'
@@ -22,11 +23,37 @@ import {
 const payroll = new Hono()
 
 // ============================================
+// MIDDLEWARE
+// ============================================
+
+/**
+ * Require user to have 'service' purpose for payroll access
+ * This ensures only service providers can access pay statements
+ */
+async function requireServicePurpose(c: Context, next: Next) {
+  const userId = c.get('userId')
+
+  const profile = await db.profile.findUnique({
+    where: { userId },
+    select: { purpose: true },
+  })
+
+  if (!profile || profile.purpose !== 'service') {
+    return c.json(
+      { error: 'Payroll is only available for service providers' },
+      403
+    )
+  }
+
+  await next()
+}
+
+// ============================================
 // AUTHENTICATED ROUTES
 // ============================================
 
 // GET /payroll/periods - List all payroll periods for current user
-payroll.get('/periods', requireAuth, async (c) => {
+payroll.get('/periods', requireAuth, requireServicePurpose, async (c) => {
   const userId = c.get('userId')
 
   // First generate any missing periods
@@ -43,10 +70,13 @@ payroll.get('/periods', requireAuth, async (c) => {
       periodEnd: p.periodEnd.toISOString(),
       periodType: p.periodType,
       grossCents: p.grossCents,
+      refundsCents: p.refundsCents,
+      chargebacksCents: p.chargebacksCents,
       platformFeeCents: p.platformFeeCents,
       processingFeeCents: p.processingFeeCents,
       netCents: p.netCents,
       paymentCount: p.paymentCount,
+      currency: p.currency,
       verificationCode: p.verificationCode,
       createdAt: p.createdAt.toISOString(),
     })),
@@ -55,7 +85,7 @@ payroll.get('/periods', requireAuth, async (c) => {
 })
 
 // GET /payroll/periods/:id - Get single period with payment details
-payroll.get('/periods/:id', requireAuth, async (c) => {
+payroll.get('/periods/:id', requireAuth, requireServicePurpose, async (c) => {
   const userId = c.get('userId')
   const periodId = c.req.param('id')
 
@@ -72,10 +102,14 @@ payroll.get('/periods/:id', requireAuth, async (c) => {
       periodEnd: period.periodEnd.toISOString(),
       periodType: period.periodType,
       grossCents: period.grossCents,
+      refundsCents: period.refundsCents,
+      chargebacksCents: period.chargebacksCents,
+      adjustedGrossCents: period.adjustedGrossCents,
       platformFeeCents: period.platformFeeCents,
       processingFeeCents: period.processingFeeCents,
       netCents: period.netCents,
       paymentCount: period.paymentCount,
+      currency: period.currency,
       ytdGrossCents: period.ytdGrossCents,
       ytdNetCents: period.ytdNetCents,
       payoutDate: period.payoutDate?.toISOString() || null,
@@ -97,7 +131,7 @@ payroll.get('/periods/:id', requireAuth, async (c) => {
 })
 
 // POST /payroll/periods/:id/pdf - Generate PDF for a period
-payroll.post('/periods/:id/pdf', requireAuth, async (c) => {
+payroll.post('/periods/:id/pdf', requireAuth, requireServicePurpose, async (c) => {
   const userId = c.get('userId')
   const periodId = c.req.param('id')
 
@@ -170,7 +204,7 @@ payroll.post('/periods/:id/pdf', requireAuth, async (c) => {
 })
 
 // GET /payroll/current - Get current period info (even if incomplete)
-payroll.get('/current', requireAuth, async (c) => {
+payroll.get('/current', requireAuth, requireServicePurpose, async (c) => {
   const userId = c.get('userId')
 
   const now = new Date()
@@ -218,7 +252,7 @@ payroll.get('/current', requireAuth, async (c) => {
 })
 
 // GET /payroll/summary - Get overall payroll summary
-payroll.get('/summary', requireAuth, async (c) => {
+payroll.get('/summary', requireAuth, requireServicePurpose, async (c) => {
   const userId = c.get('userId')
 
   // Get all completed periods

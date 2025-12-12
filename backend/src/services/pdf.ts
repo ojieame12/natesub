@@ -223,7 +223,10 @@ export async function generatePayStatement(data: PayStatementData): Promise<Buff
         .font('Helvetica')
         .fillColor('#333333')
         .text('Gross Earnings', 70, rowStartY)
-        .text(`${data.paymentCount} payment${data.paymentCount !== 1 ? 's' : ''}`, 70, rowStartY + 12, { fillColor: '#666666' })
+
+      doc
+        .fillColor('#666666')
+        .text(`${data.paymentCount} payment${data.paymentCount !== 1 ? 's' : ''}`, 70, rowStartY + 12)
 
       doc
         .font('Helvetica')
