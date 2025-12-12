@@ -1,6 +1,20 @@
 // API Client for Nate Backend
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
+const AUTH_TOKEN_KEY = 'nate_auth_token'
+
+// Token storage utilities (works on web and Capacitor)
+export function getAuthToken(): string | null {
+  return localStorage.getItem(AUTH_TOKEN_KEY)
+}
+
+export function setAuthToken(token: string): void {
+  localStorage.setItem(AUTH_TOKEN_KEY, token)
+}
+
+export function clearAuthToken(): void {
+  localStorage.removeItem(AUTH_TOKEN_KEY)
+}
 
 // Types
 export interface ApiError {
@@ -128,13 +142,22 @@ async function apiFetch<T>(
 ): Promise<T> {
   const url = `${API_URL}${path}`
 
+  // Build headers with optional Authorization token
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(options.headers as Record<string, string>),
+  }
+
+  // Add Bearer token if available (for mobile apps)
+  const token = getAuthToken()
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
+
   const response = await fetch(url, {
     ...options,
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
+    credentials: 'include', // Still include cookies for web
+    headers,
   })
 
   const data = await response.json()
@@ -161,21 +184,40 @@ export const auth = {
       body: JSON.stringify({ email }),
     }),
 
-  verify: (token: string) =>
-    apiFetch<{ success: boolean; hasProfile: boolean; redirectTo: string }>(
-      `/auth/verify?token=${token}`
-    ),
+  verify: async (otp: string) => {
+    const result = await apiFetch<{
+      success: boolean
+      hasProfile: boolean
+      redirectTo: string
+      token: string  // Session token for mobile apps
+    }>(`/auth/verify?token=${otp}`)
 
-  logout: () =>
-    apiFetch<{ success: boolean }>('/auth/logout', { method: 'POST' }),
+    // Store token for mobile apps (Bearer auth)
+    if (result.token) {
+      setAuthToken(result.token)
+    }
+
+    return result
+  },
+
+  logout: async () => {
+    const result = await apiFetch<{ success: boolean }>('/auth/logout', { method: 'POST' })
+    // Clear stored token
+    clearAuthToken()
+    return result
+  },
 
   me: () => apiFetch<User>('/auth/me'),
 
-  deleteAccount: () =>
-    apiFetch<{ success: boolean; message: string }>('/auth/account', {
+  deleteAccount: async () => {
+    const result = await apiFetch<{ success: boolean; message: string }>('/auth/account', {
       method: 'DELETE',
       body: JSON.stringify({ confirmation: 'DELETE' }),
-    }),
+    })
+    // Clear token on account deletion
+    clearAuthToken()
+    return result
+  },
 }
 
 // ============================================

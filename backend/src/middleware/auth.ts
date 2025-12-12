@@ -9,9 +9,24 @@ declare module 'hono' {
   }
 }
 
+// Get session token from cookie or Authorization header
+function getSessionToken(c: Context): string | undefined {
+  // Try cookie first (web)
+  const cookieToken = getCookie(c, 'session')
+  if (cookieToken) return cookieToken
+
+  // Try Authorization header (mobile apps)
+  const authHeader = c.req.header('Authorization')
+  if (authHeader?.startsWith('Bearer ')) {
+    return authHeader.slice(7)
+  }
+
+  return undefined
+}
+
 // Auth middleware - requires valid session
 export async function requireAuth(c: Context, next: Next) {
-  const sessionToken = getCookie(c, 'session')
+  const sessionToken = getSessionToken(c)
 
   if (!sessionToken) {
     return c.json({ error: 'Unauthorized' }, 401)
@@ -30,7 +45,7 @@ export async function requireAuth(c: Context, next: Next) {
 
 // Optional auth - sets userId if logged in, but doesn't require it
 export async function optionalAuth(c: Context, next: Next) {
-  const sessionToken = getCookie(c, 'session')
+  const sessionToken = getSessionToken(c)
 
   if (sessionToken) {
     const session = await validateSession(sessionToken)

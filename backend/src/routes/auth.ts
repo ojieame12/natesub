@@ -40,7 +40,7 @@ auth.get(
     try {
       const { sessionToken, userId } = await verifyMagicLink(token)
 
-      // Set session cookie
+      // Set session cookie (for web)
       setCookie(c, 'session', sessionToken, {
         httpOnly: true,
         secure: env.NODE_ENV === 'production',
@@ -53,10 +53,12 @@ auth.get(
       const user = await getCurrentUser(userId)
       const hasProfile = !!user?.profile
 
+      // Return token in response (for mobile apps that can't use cookies)
       return c.json({
         success: true,
         hasProfile,
         redirectTo: hasProfile ? '/dashboard' : '/onboarding',
+        token: sessionToken, // Mobile apps store this and send in Authorization header
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Verification failed'
