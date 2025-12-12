@@ -206,85 +206,115 @@ function buildProfessionalPrompt(input: GeneratePageInput): string {
       bioGuidance = `Mention their background: "${input.background}".`
     }
 
-    return `You are a professional copywriter helping someone create a subscription page for their service.
+    return `You're a premium copywriter. Write EXTREMELY short copy.
 
-Their description: "${input.description}"
-Their name: ${input.name}
-Price: $${input.price}/month
+STRICT RULES:
+- Bio: MAXIMUM 10 WORDS. Count them. Not 11, not 15. TEN OR LESS.
+- No filler words: passionate, helping, transform, compelling, ensure, resonate, specialize, dedicated
+- No "Hi, I'm [name]" intros
+- First person, punchy, direct
+
+Context:
+- Description: "${input.description}"
+- Name: ${input.name}
+- Price: $${input.price}/month
 ${contextLines.join('\n')}
 
-IMPORTANT: The user has specified exactly what they offer. Use these deliverables verbatim as the perks - do NOT invent additional perks.
-
-ACTUAL DELIVERABLES (use these exactly):
+DELIVERABLES (use these exactly as perks):
 ${deliverableLines.map(d => `- ${d}`).join('\n')}
 
-Generate content for their subscription page:
-- Bio: 2-3 sentences, first person, professional but warm. ${bioGuidance}
-- Perks: Use ONLY the deliverables listed above. Rephrase them to start with action verbs if needed, but don't change the substance.
-- Impact Items: 2-3 outcomes subscribers will experience based on the service described
-- Suggested Title: A professional title/tagline (e.g., "Product Strategy Coach")
+GOOD BIOS (under 10 words):
+- "I turn confused founders into confident product leaders."
+- "Product strategy for early-stage founders."
+- "I make your content actually convert."
 
-Respond in this exact JSON format:
+BAD BIOS (too long, too generic):
+- "Hi, I'm passionate about helping people transform their ideas..." ❌
+- "I specialize in ensuring your content resonates powerfully..." ❌
+
+Generate:
+- Bio: ${bioGuidance}
+- Perks: Use the deliverables above verbatim. Start with verbs.
+- Impact Items: 2-3 punchy outcomes (max 5 words each)
+- Suggested Title: Short professional title (2-4 words)
+
 {
-  "bio": "I help...",
-  "perks": ["<deliverable 1>", "<deliverable 2>", ...],
-  "impactItems": ["<outcome 1>", "<outcome 2>", "<outcome 3>"],
-  "suggestedTitle": "Professional Title"
+  "bio": "<10 words max, punchy, no fluff>",
+  "perks": ["<deliverable 1>", "<deliverable 2>"],
+  "impactItems": ["4 word outcome", "4 word outcome"],
+  "suggestedTitle": "Short Title"
 }
 
-Only respond with valid JSON, no other text.`
+CRITICAL: Count your bio words. If over 10, rewrite shorter. JSON only.`
   }
 
   // Fallback: No structured input, let AI generate (but still be specific)
-  return `You are a professional copywriter helping someone create a subscription page for their service.
+  return `You're a premium copywriter. Write EXTREMELY short copy.
 
-Their description: "${input.description}"
-Their name: ${input.name}
-Price: $${input.price}/month
+STRICT RULES:
+- Bio: MAXIMUM 10 WORDS. Not 11. Not 15. TEN WORDS OR LESS.
+- No filler words (passionate, helping, transform, compelling, ensure, resonate)
+- No "Hi, I'm [name]" intros
+- First person, punchy, direct
 
-Generate compelling, professional content for their subscription page.
+Context:
+- Service: "${input.description}"
+- Name: ${input.name}
 
-Requirements:
-- Bio: 2-3 sentences, first person, professional but warm tone
-- Perks: 3-4 specific things subscribers get (start each with a verb). Be specific to what they described - avoid generic phrases like "exclusive content" or "community access" unless they mentioned it.
-- Impact Items: 2-3 outcomes/benefits subscribers will experience
-- Suggested Title: A professional title/tagline for them (e.g., "Product Strategy Coach")
+GOOD BIOS (under 10 words):
+- "I turn blog drafts into traffic magnets."
+- "Product strategy for early-stage founders."
+- "I make your content actually convert."
 
-Respond in this exact JSON format:
+BAD BIOS (too long, too generic):
+- "Hi, I'm passionate about helping people transform their ideas..." ❌
+- "I specialize in ensuring your content resonates powerfully..." ❌
+
+Generate JSON:
 {
-  "bio": "I help...",
-  "perks": ["Weekly 1-on-1 strategy calls", "Direct messaging access", "Resource library"],
-  "impactItems": ["Ship products faster", "Make confident decisions", "Build a clear roadmap"],
-  "suggestedTitle": "Product Strategy Coach"
+  "bio": "<10 words max, punchy, no fluff>",
+  "perks": ["<verb> + specific deliverable", "<verb> + specific deliverable"],
+  "impactItems": ["4 word outcome", "4 word outcome"],
+  "suggestedTitle": "2-3 word title"
 }
 
-Make it specific to what they described. Avoid generic phrases.
-Only respond with valid JSON, no other text.`
+CRITICAL: Count your bio words. If over 10, rewrite shorter.`
 }
 
 function buildPersonalPrompt(input: GeneratePageInput): string {
-  return `You are helping someone create a simple personal subscription page.
+  return `You're writing a personal subscription page. Warm, genuine, VERY short.
 
-Their description: "${input.description}"
-Their name: ${input.name}
-Price: $${input.price}/month
+STRICT RULES:
+- Bio: MAXIMUM 10 WORDS. Count them. TEN OR LESS.
+- No filler words: passionate, helping, transform, dedicated, journey
+- Heartfelt but not sappy
+- First person, genuine, direct
 
-This is for personal use (family support, allowance, helping a friend, etc.), so keep it warm and simple.
+Context:
+- Description: "${input.description}"
+- Name: ${input.name}
+- Price: $${input.price}/month
 
-Requirements:
-- Bio: 1-2 sentences, casual and heartfelt
-- Perks: 2-3 simple things (can be playful, e.g., "Eternal gratitude", "Updates on my journey")
-- Impact Items: 1-2 simple statements about what this support means
+GOOD BIOS (under 10 words):
+- "Your support lets me focus on what matters."
+- "Help me keep creating for you."
+- "Making my dream possible, one month at a time."
 
-Respond in this exact JSON format:
+BAD BIOS (too long):
+- "I'm so grateful for your support on this incredible journey..." ❌
+
+Generate:
+- Bio: Under 10 words, heartfelt
+- Perks: 2-3 playful/genuine items
+- Impact Items: 1-2 short statements (max 4 words)
+
 {
-  "bio": "Your support means...",
-  "perks": ["Monthly updates", "My eternal gratitude", "Knowing you're helping"],
-  "impactItems": ["Help me focus on what matters", "Be part of my journey"]
+  "bio": "<10 words max, heartfelt>",
+  "perks": ["Monthly updates", "My eternal gratitude"],
+  "impactItems": ["Keep me creating"]
 }
 
-Keep it personal and genuine.
-Only respond with valid JSON, no other text.`
+CRITICAL: Count your bio words. If over 10, rewrite shorter. JSON only.`
 }
 
 // ============================================

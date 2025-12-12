@@ -20,12 +20,19 @@
     justify-content: space-between;
     padding: var(--space-md) var(--space-lg);
     padding-top: calc(env(safe-area-inset-top, 12px) + var(--space-md));
-    background: var(--bg-elevated);
-    border-bottom: 1px solid var(--border-default);
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
     position: sticky;
     top: 0;
     z-index: 50;
     min-height: 56px;
+    transition: box-shadow 0.2s ease;
+}
+
+.subscribers-header.scrolled {
+    box-shadow: 0 1px 12px rgba(0, 0, 0, 0.08);
 }
 
 .back-btn,
@@ -186,28 +193,7 @@
     gap: var(--space-md);
     padding: var(--space-lg);
     border-bottom: 1px solid var(--border-default);
-    animation: subscriberFadeIn 0.4s ease-out both;
-}
-
-/* Staggered animation delays */
-.subscriber-row:nth-child(1) { animation-delay: 0.05s; }
-.subscriber-row:nth-child(2) { animation-delay: 0.1s; }
-.subscriber-row:nth-child(3) { animation-delay: 0.15s; }
-.subscriber-row:nth-child(4) { animation-delay: 0.2s; }
-.subscriber-row:nth-child(5) { animation-delay: 0.25s; }
-.subscriber-row:nth-child(6) { animation-delay: 0.3s; }
-.subscriber-row:nth-child(7) { animation-delay: 0.35s; }
-.subscriber-row:nth-child(8) { animation-delay: 0.4s; }
-
-@keyframes subscriberFadeIn {
-    from {
-        opacity: 0;
-        transform: translateY(8px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+    /* Animation handled by stagger-item class in transitions.css */
 }
 
 .subscriber-row:last-child {

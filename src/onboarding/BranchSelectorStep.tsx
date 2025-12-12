@@ -49,7 +49,7 @@ export default function BranchSelectorStep() {
             setPricingModel('single')
             setPurpose('support') // Default purpose for personal
         } else {
-            setPricingModel('single') // Service also defaults to single pricing
+            setPricingModel('tiers') // Service defaults to tiers (retainer packages)
             // Purpose will be 'service' - set in PaymentMethodStep
         }
     }

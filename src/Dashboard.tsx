@@ -23,10 +23,10 @@ import {
   Eye,
   TrendingUp,
 } from 'lucide-react'
-import { Pressable, useToast, Skeleton, SkeletonList, ErrorState } from './components'
+import { Pressable, useToast, Skeleton, SkeletonList, ErrorState, AnimatedCurrency, AnimatedNumber } from './components'
 import { useViewTransition } from './hooks'
 import { useMetrics, useActivity, useProfile, useAnalyticsStats } from './api/hooks'
-import { getCurrencySymbol } from './utils/currency'
+import { getCurrencySymbol, formatCompactNumber } from './utils/currency'
 import './Dashboard.css'
 
 // Menu items are built dynamically based on service vs personal branch
@@ -191,7 +191,11 @@ export default function Dashboard() {
         <div className="menu-profile">
           <div className="menu-profile-info">
             <div className="menu-avatar">
-              {displayName ? displayName.charAt(0).toUpperCase() : 'U'}
+              {profile?.avatarUrl ? (
+                <img src={profile.avatarUrl} alt="" className="menu-avatar-img" />
+              ) : (
+                displayName ? displayName.charAt(0).toUpperCase() : 'U'
+              )}
             </div>
             <div className="menu-profile-text">
               <span className="menu-profile-name">{displayName}</span>
@@ -331,18 +335,20 @@ export default function Dashboard() {
         <section className="stats-card">
           <div className="stats-primary">
             <span className="stats-label">Monthly Recurring Revenue</span>
-            <span className="stats-mrr">{currencySymbol}{metrics?.mrr ?? 0}</span>
+            <span className="stats-mrr">
+              <AnimatedCurrency value={metrics?.mrr ?? 0} symbol={currencySymbol} duration={600} />
+            </span>
           </div>
           <div className="stats-secondary-row">
             <div className="stats-metric">
               <div className="stats-metric-value">
-                <span>{metrics?.subscriberCount ?? 0}</span>
+                <AnimatedNumber value={metrics?.subscriberCount ?? 0} duration={500} />
               </div>
               <span className="stats-label">Subscribers</span>
             </div>
             <div className="stats-metric">
               <div className="stats-metric-value">
-                <span>{currencySymbol}{metrics?.totalRevenue ?? 0}</span>
+                <AnimatedCurrency value={metrics?.totalRevenue ?? 0} symbol={currencySymbol} duration={600} />
               </div>
               <span className="stats-label">Total Revenue</span>
             </div>
@@ -362,7 +368,9 @@ export default function Dashboard() {
                   <Eye size={16} />
                 </div>
                 <div className="analytics-metric-content">
-                  <span className="analytics-metric-value">{analytics.views.week}</span>
+                  <span className="analytics-metric-value">
+                    <AnimatedNumber value={analytics.views.week} duration={500} />
+                  </span>
                   <span className="analytics-metric-label">Views</span>
                 </div>
               </div>
@@ -371,7 +379,9 @@ export default function Dashboard() {
                   <UserPlus size={16} />
                 </div>
                 <div className="analytics-metric-content">
-                  <span className="analytics-metric-value">{analytics.uniqueVisitors.week}</span>
+                  <span className="analytics-metric-value">
+                    <AnimatedNumber value={analytics.uniqueVisitors.week} duration={500} />
+                  </span>
                   <span className="analytics-metric-label">Visitors</span>
                 </div>
               </div>
@@ -380,7 +390,9 @@ export default function Dashboard() {
                   <TrendingUp size={16} />
                 </div>
                 <div className="analytics-metric-content">
-                  <span className="analytics-metric-value">{analytics.rates.overall}%</span>
+                  <span className="analytics-metric-value">
+                    <AnimatedNumber value={analytics.rates.overall} duration={500} format={(n) => `${n}%`} />
+                  </span>
                   <span className="analytics-metric-label">Conversion</span>
                 </div>
               </div>
@@ -432,7 +444,11 @@ export default function Dashboard() {
         {/* Shareable Link Card */}
         <Pressable className="link-card" onClick={() => navigate(`/${profile?.username}`)}>
           <div className="link-avatar">
-            {displayName ? displayName.charAt(0).toUpperCase() : 'U'}
+            {profile?.avatarUrl ? (
+              <img src={profile.avatarUrl} alt="" className="link-avatar-img" />
+            ) : (
+              displayName ? displayName.charAt(0).toUpperCase() : 'U'
+            )}
           </div>
           <div className="link-info">
             <span className="link-label">Your subscription page</span>
@@ -491,7 +507,7 @@ export default function Dashboard() {
                     {amount > 0 && (
                       <div className="dash-activity-amount-col">
                         <span className={`dash-activity-amount ${isCanceled ? 'cancelled' : ''}`}>
-                          {isCanceled ? '-' : '+'}{currencySymbol}{amount}
+                          {isCanceled ? '-' : '+'}{currencySymbol}{formatCompactNumber(amount)}
                         </span>
                         {tier && <span className="dash-activity-tier">{tier}</span>}
                       </div>

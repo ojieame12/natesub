@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, ChevronRight, Mail, Bell, Eye, Download, Trash2, LogOut, CreditCard, Loader2 } from 'lucide-react'
-import { Pressable, useToast, Skeleton, SkeletonList } from './components'
+import { Pressable, useToast } from './components'
 import { useCurrentUser, useLogout, useDeleteAccount, useSettings, useUpdateSettings } from './api/hooks'
 import { getPricing } from './utils/pricing'
 import './Settings.css'
@@ -29,8 +29,8 @@ export default function Settings() {
   const toast = useToast()
 
   // API hooks
-  const { data: user, isLoading: userLoading } = useCurrentUser()
-  const { data: settings, isLoading: settingsLoading } = useSettings()
+  const { data: user } = useCurrentUser()
+  const { data: settings } = useSettings()
   const { mutateAsync: updateSettings } = useUpdateSettings()
   const { mutateAsync: logout } = useLogout()
   const { mutateAsync: deleteAccount, isPending: isDeleting } = useDeleteAccount()
@@ -55,7 +55,7 @@ export default function Settings() {
     }
   }, [settings])
 
-  const isLoading = userLoading || settingsLoading
+  // Don't block UI for loading - show UI immediately
 
   // Save notification preference to backend
   const handleNotificationChange = async (key: string, value: boolean) => {
@@ -141,19 +141,6 @@ export default function Settings() {
       </header>
 
       <div className="settings-content">
-        {isLoading ? (
-          <>
-            <section className="settings-section">
-              <Skeleton width={80} height={14} style={{ marginBottom: 12 }} />
-              <SkeletonList count={2} />
-            </section>
-            <section className="settings-section">
-              <Skeleton width={100} height={14} style={{ marginBottom: 12 }} />
-              <SkeletonList count={4} />
-            </section>
-          </>
-        ) : (
-          <>
         {/* Account Section */}
         <section className="settings-section">
           <h3 className="section-label">Account</h3>
@@ -265,8 +252,6 @@ export default function Settings() {
         <div className="app-info">
           <span>NatePay v1.0.0</span>
         </div>
-          </>
-        )}
       </div>
 
       {/* Delete Account Confirmation Modal */}

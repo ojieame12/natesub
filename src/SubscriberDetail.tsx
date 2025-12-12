@@ -17,6 +17,7 @@ import {
 import { Pressable, Skeleton, ErrorState } from './components'
 import { useViewTransition } from './hooks'
 import { useSubscription } from './api/hooks'
+import { getCurrencySymbol, formatCompactNumber } from './utils/currency'
 import './SubscriberDetail.css'
 
 // Format date
@@ -48,11 +49,12 @@ export default function SubscriberDetail() {
         username: subscription.subscriber?.email?.split('@')[0] || '',
         email: subscription.subscriber?.email || '',
         tier: subscription.tierName || 'Supporter',
-        amount: (subscription.amount || 0) / 100,
+        amount: subscription.amount || 0, // Backend sends dollars
+        currency: subscription.currency || 'USD',
         status: subscription.status as 'active' | 'cancelled',
         since: formatDate(subscription.startedAt),
         nextBilling: formatDate(subscription.currentPeriodEnd),
-        lifetimeValue: (subscription.ltvCents || 0) / 100,
+        lifetimeValue: (subscription.ltvCents || 0) / 100, // ltvCents is explicitly in cents
         totalPayments: payments.length,
         avatar: subscription.subscriber?.avatarUrl || null,
     } : null
@@ -118,6 +120,7 @@ export default function SubscriberDetail() {
     }
 
     const isActive = subscriber.status === 'active'
+    const currencySymbol = getCurrencySymbol(subscriber.currency || 'USD')
 
     return (
         <div className="subscriber-detail-page">
@@ -137,7 +140,7 @@ export default function SubscriberDetail() {
                 <section className="subscriber-profile-card">
                     <div
                         className="subscriber-avatar-large"
-                        style={{ viewTransitionName: `avatar-${id}` } as React.CSSProperties}
+                        style={{ viewTransitionName: 'avatar-morph' } as React.CSSProperties}
                     >
                         {subscriber.name.charAt(0)}
                     </div>
@@ -185,7 +188,7 @@ export default function SubscriberDetail() {
                             </div>
                             <div className="info-content">
                                 <span className="info-label">Amount</span>
-                                <span className="info-value">${subscriber.amount}/month</span>
+                                <span className="info-value">{currencySymbol}{formatCompactNumber(subscriber.amount)}/month</span>
                             </div>
                         </div>
                         <div className="info-row">
@@ -214,7 +217,7 @@ export default function SubscriberDetail() {
                             </div>
                             <div className="info-content">
                                 <span className="info-label">Lifetime value</span>
-                                <span className="info-value highlight">${subscriber.lifetimeValue}</span>
+                                <span className="info-value highlight">{currencySymbol}{formatCompactNumber(subscriber.lifetimeValue || 0)}</span>
                             </div>
                         </div>
                     </div>
@@ -252,7 +255,7 @@ export default function SubscriberDetail() {
                                         <span className="payment-date">{formatDate(payment.createdAt)}</span>
                                         <span className="payment-status">{payment.status}</span>
                                     </div>
-                                    <span className="payment-amount">${(payment.amount || 0) / 100}</span>
+                                    <span className="payment-amount">{currencySymbol}{formatCompactNumber((payment.amount || 0) / 100)}</span>
                                 </div>
                             ))
                         )}

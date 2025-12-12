@@ -14,7 +14,7 @@ import {
 } from 'lucide-react'
 import { Pressable, useToast, Skeleton, ErrorState } from './components'
 import { useActivityDetail, useCurrentUser } from './api/hooks'
-import { getCurrencySymbol } from './utils/currency'
+import { getCurrencySymbol, formatCompactNumber } from './utils/currency'
 import './ActivityDetail.css'
 
 // Format date
@@ -186,8 +186,7 @@ export default function ActivityDetail() {
                     {getActivityIcon(activity.type)}
                 </div>
                 <div className="detail-amount">
-                    {isNegative ? '-' : '+'}{currencySymbol}{activity.amount}
-                    <span className="cents">.00</span>
+                    {isNegative ? '-' : '+'}{currencySymbol}{formatCompactNumber(activity.amount)}
                 </div>
                 <span className="detail-badge">{getActivityTitle(activity.type, isService)}</span>
             </div>
@@ -214,7 +213,7 @@ export default function ActivityDetail() {
                     </div>
                     <div className="detail-row">
                         <span className="detail-label">Amount</span>
-                        <span className="detail-value">{currencySymbol}{activity.amount}.00/mo</span>
+                        <span className="detail-value">{currencySymbol}{formatCompactNumber(activity.amount)}/mo</span>
                     </div>
                     <div className="detail-row">
                         <span className="detail-label">Date</span>

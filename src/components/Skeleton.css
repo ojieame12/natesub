@@ -93,3 +93,29 @@
     border-radius: 50%;
     flex-shrink: 0;
 }
+
+/* === PAGE SKELETON (Suspense fallback) === */
+
+.page-skeleton {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    min-height: 100dvh;
+    background: var(--bg-primary);
+    animation: skeletonFadeIn 0.2s ease-out both;
+}
+
+.page-skeleton-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-md) var(--space-lg);
+    padding-top: calc(var(--safe-area-top, 0px) + var(--space-md));
+    background: var(--bg-primary);
+}
+
+.page-skeleton-content {
+    flex: 1;
+    padding: var(--space-lg);
+    padding-bottom: calc(var(--safe-area-bottom, 0px) + 100px);
+}

@@ -38,7 +38,15 @@ export default function PayrollDetail() {
 
         setDownloading(true)
         try {
-            const response = await fetch(`/api/payroll/periods/${periodId}/pdf`)
+            const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
+            const token = localStorage.getItem('nate_auth_token')
+
+            const response = await fetch(`${API_URL}/payroll/periods/${periodId}/pdf`, {
+                method: 'POST',
+                headers: {
+                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                },
+            })
 
             if (response.status === 401) {
                 toast.error('Please sign in to download')

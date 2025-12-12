@@ -12,7 +12,8 @@ import {
     Filter,
 } from 'lucide-react'
 import { Pressable, useToast, SkeletonList, ErrorState } from './components'
-import { useRequests } from './api/hooks'
+import { useRequests, useCurrentUser } from './api/hooks'
+import { getCurrencySymbol, formatCompactNumber } from './utils/currency'
 import './SentRequests.css'
 
 // Display status type (UI-facing)
@@ -78,6 +79,8 @@ export default function SentRequests() {
     const toast = useToast()
     const [filter, setFilter] = useState<FilterType>('all')
     const [showFilters, setShowFilters] = useState(false)
+    const { data: userData } = useCurrentUser()
+    const currencySymbol = getCurrencySymbol(userData?.profile?.currency || 'USD')
 
     // Real API hook - fetch requests based on filter
     const {
@@ -213,7 +216,7 @@ export default function SentRequests() {
                                             <div className="request-top-row">
                                                 <span className="request-recipient">{request.recipientName}</span>
                                                 <span className="request-amount">
-                                                    ${request.amount}{request.isRecurring ? '/mo' : ''}
+                                                    {currencySymbol}{formatCompactNumber(request.amount)}{request.isRecurring ? '/mo' : ''}
                                                 </span>
                                             </div>
                                             <div className="request-bottom-row">

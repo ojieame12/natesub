@@ -127,9 +127,7 @@
     width: 100%;
     max-height: 680px;
     min-height: 580px;
-    background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
+    background: #FFFFFF;
     border-radius: var(--radius-2xl);
     box-shadow:
         0 8px 32px rgba(0, 0, 0, 0.08),
@@ -184,14 +182,12 @@
     display: inline-flex;
     align-items: center;
     gap: 5px;
-    padding: 5px 10px;
-    background: white;
-    border-radius: var(--radius-full);
-    color: var(--neutral-900);
-    font-size: 11px;
-    font-weight: 600;
+    color: white;
+    font-size: 12px;
+    font-weight: 500;
     width: fit-content;
     margin-bottom: 4px;
+    opacity: 0.9;
 }
 
 /* Price Display */
@@ -203,17 +199,17 @@
 }
 
 .template-boundary .sub-hero-currency {
-    font-size: 24px;
-    font-weight: 600;
-    opacity: 0.5;
+    font-size: 20px;
+    font-weight: 500;
+    opacity: 0.6;
     margin-right: 2px;
-    margin-top: 8px;
+    margin-top: 6px;
 }
 
 .template-boundary .sub-hero-amount {
-    font-size: 56px;
-    font-weight: 700;
-    letter-spacing: -3px;
+    font-size: 48px;
+    font-weight: 600;
+    letter-spacing: -1px;
     line-height: 1;
 }
 
@@ -273,19 +269,7 @@
     position: relative;
 }
 
-/* Fade-up gradient at bottom of content */
-.template-boundary .sub-content::after {
-    content: '';
-    position: sticky;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    height: 60px;
-    margin-top: -60px;
-    background: linear-gradient(to top, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0) 100%);
-    pointer-events: none;
-    flex-shrink: 0;
-}
+/* Fade-up gradient removed from content - now on pagination */
 
 /* === VIEW CONTAINER - Centered Content === */
 .template-boundary .sub-view {
@@ -554,6 +538,113 @@
     font-variant-numeric: tabular-nums;
 }
 
+/* === TIERS VIEW === */
+.template-boundary .sub-view-tiers {
+    justify-content: flex-start;
+    padding-top: var(--space-md);
+}
+
+.template-boundary .sub-tiers-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.template-boundary .sub-tier-card {
+    display: flex;
+    flex-direction: column;
+    padding: var(--space-lg);
+    background: var(--bg-card);
+    border-radius: var(--radius-lg);
+    border: 2px solid var(--border-default);
+    transition: all 0.2s ease;
+}
+
+.template-boundary .sub-tier-card.selected {
+    border-color: var(--accent-primary);
+    background: rgba(255, 148, 26, 0.04);
+}
+
+.template-boundary .sub-tier-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--space-xs);
+}
+
+.template-boundary .sub-tier-title-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.template-boundary .sub-tier-name {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.template-boundary .sub-tier-popular {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 3px 8px;
+    background: var(--accent-primary);
+    color: white;
+    border-radius: var(--radius-full);
+}
+
+.template-boundary .sub-tier-selected-check {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--accent-primary);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.template-boundary .sub-tier-price {
+    display: flex;
+    align-items: baseline;
+    gap: 2px;
+    margin-bottom: var(--space-md);
+}
+
+.template-boundary .sub-tier-amount {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.template-boundary .sub-tier-period {
+    font-size: 14px;
+    color: var(--text-tertiary);
+}
+
+.template-boundary .sub-tier-perks {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-top: var(--space-md);
+    border-top: 1px solid var(--border-subtle);
+}
+
+.template-boundary .sub-tier-perk {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+.template-boundary .sub-tier-perk svg {
+    color: var(--status-success);
+    flex-shrink: 0;
+}
+
 /* === PAYMENT VIEW === */
 .template-boundary .sub-payment-summary {
     background: var(--bg-card);
@@ -693,7 +784,21 @@
     align-items: center;
     gap: var(--space-sm);
     padding: var(--space-md) 0;
+    padding-top: var(--space-xl);
     flex-shrink: 0;
+    position: relative;
+}
+
+/* Fade-up gradient above pagination */
+.template-boundary .sub-pagination::before {
+    content: '';
+    position: absolute;
+    top: -40px;
+    left: 0;
+    right: 0;
+    height: 60px;
+    background: linear-gradient(to top, rgba(255, 255, 255, 1) 0%, rgba(255, 255, 255, 0) 100%);
+    pointer-events: none;
 }
 
 /* Swipe Indicator - Lottie + Text */

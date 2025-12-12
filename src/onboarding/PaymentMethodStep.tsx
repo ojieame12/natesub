@@ -116,8 +116,20 @@ export default function PaymentMethodStep() {
         if (!store.name?.trim()) validationErrors.push('Name is required')
         if (!store.country?.trim()) validationErrors.push('Country is required')
         if (!store.countryCode?.trim()) validationErrors.push('Country code is required')
-        if (!store.singleAmount || store.singleAmount < MIN_AMOUNT) {
-            validationErrors.push(`Minimum subscription amount is $${MIN_AMOUNT}`)
+
+        // Validate pricing based on model type
+        if (store.pricingModel === 'tiers') {
+            // For tiers, check that at least one tier exists with valid amount
+            if (!store.tiers || store.tiers.length === 0) {
+                validationErrors.push('At least one pricing tier is required')
+            } else if (store.tiers.some(t => !t.amount || t.amount < MIN_AMOUNT)) {
+                validationErrors.push(`All tier amounts must be at least $${MIN_AMOUNT}`)
+            }
+        } else {
+            // For single pricing, validate singleAmount
+            if (!store.singleAmount || store.singleAmount < MIN_AMOUNT) {
+                validationErrors.push(`Minimum subscription amount is $${MIN_AMOUNT}`)
+            }
         }
 
         if (validationErrors.length > 0) {

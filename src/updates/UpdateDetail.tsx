@@ -5,7 +5,6 @@ import {
     Eye,
     Clock,
     CheckCheck,
-    Loader2,
 } from 'lucide-react'
 import { Pressable, Skeleton, ErrorState } from '../components'
 import { useUpdate } from '../api/hooks'
@@ -48,13 +47,13 @@ export default function UpdateDetail() {
                 </header>
                 <div className="update-detail-content">
                     <div className="update-message-container">
-                        <Skeleton width="100%" height={200} borderRadius={16} />
+                        <Skeleton width="100%" height={200} borderRadius="16px" />
                     </div>
                     <div className="update-stats-section">
                         <Skeleton width={120} height={20} style={{ marginBottom: 16 }} />
                         <div className="update-stats-grid">
-                            <Skeleton width="100%" height={80} borderRadius={12} />
-                            <Skeleton width="100%" height={80} borderRadius={12} />
+                            <Skeleton width="100%" height={80} borderRadius="12px" />
+                            <Skeleton width="100%" height={80} borderRadius="12px" />
                         </div>
                     </div>
                 </div>

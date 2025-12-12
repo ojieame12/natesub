@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { formatCompactNumber } from '../utils/currency'
 
 export type RelationshipType =
     | 'family_mom' | 'family_dad' | 'family_sibling' | 'family_spouse' | 'family_child' | 'family_grandparent' | 'family_other'
@@ -160,27 +161,28 @@ export const getSuggestedAmounts = (type: RelationshipType | null): number[] => 
 }
 
 // Helper to generate default message based on relationship
-export const getDefaultMessage = (name: string, type: RelationshipType | null, amount: number, isRecurring: boolean): string => {
+export const getDefaultMessage = (name: string, type: RelationshipType | null, amount: number, isRecurring: boolean, currencySymbol: string = '$'): string => {
     const firstName = name.split(' ')[0]
     const frequency = isRecurring ? 'monthly' : ''
+    const formattedAmount = `${currencySymbol}${formatCompactNumber(amount)}`
 
-    if (!type) return `Hey! I'd love your support with a ${frequency} $${amount} contribution.`
+    if (!type) return `Hey! I'd love your support with a ${frequency} ${formattedAmount} contribution.`
 
     if (type === 'family_mom' || type === 'family_dad') {
-        return `Hey ${type === 'family_mom' ? 'Mom' : 'Dad'}! Would really appreciate your support with a ${frequency} $${amount} contribution. It would mean the world to me!`
+        return `Hey ${type === 'family_mom' ? 'Mom' : 'Dad'}! Would really appreciate your support with a ${frequency} ${formattedAmount} contribution. It would mean the world to me!`
     }
     if (type.startsWith('family_')) {
-        return `Hey ${firstName}! Would love your support with a ${frequency} $${amount} contribution. Family support means everything!`
+        return `Hey ${firstName}! Would love your support with a ${frequency} ${formattedAmount} contribution. Family support means everything!`
     }
     if (type.startsWith('friend_')) {
-        return `Hey ${firstName}! I'm asking close friends for support - a ${frequency} $${amount} would really help me out!`
+        return `Hey ${firstName}! I'm asking close friends for support - a ${frequency} ${formattedAmount} would really help me out!`
     }
     if (type === 'client') {
-        return `Hi ${firstName}, I wanted to offer you a ${frequency} subscription at $${amount}. You'll get exclusive access and priority support.`
+        return `Hi ${firstName}, I wanted to offer you a ${frequency} subscription at ${formattedAmount}. You'll get exclusive access and priority support.`
     }
     if (type === 'fan') {
-        return `Hey ${firstName}! Thank you for being a supporter. A ${frequency} $${amount} subscription gets you exclusive perks!`
+        return `Hey ${firstName}! Thank you for being a supporter. A ${frequency} ${formattedAmount} subscription gets you exclusive perks!`
     }
 
-    return `Hey ${firstName}! I'd appreciate your support with a ${frequency} $${amount} contribution.`
+    return `Hey ${firstName}! I'd appreciate your support with a ${frequency} ${formattedAmount} contribution.`
 }

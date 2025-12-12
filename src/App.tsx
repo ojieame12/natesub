@@ -1,39 +1,44 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
-import OnboardingFlow from './onboarding'
-import PaystackConnect from './onboarding/PaystackConnect'
 import { useOnboardingStore } from './onboarding/store'
-import AppLayout from './AppLayout'
-import Dashboard from './Dashboard'
-import Activity from './Activity'
-import ActivityDetail from './ActivityDetail'
-import Subscribers from './Subscribers'
-import SubscriberDetail from './SubscriberDetail'
-import SentRequests from './SentRequests'
-import SelectRecipient from './request/SelectRecipient'
-import SelectRelationship from './request/SelectRelationship'
-import RequestDetails from './request/RequestDetails'
-import PersonalizeRequest from './request/PersonalizeRequest'
-import RequestPreview from './request/RequestPreview'
-import EditPage from './EditPage'
-import Templates from './Templates'
-import PaymentSettings from './PaymentSettings'
-import Billing from './Billing'
-import Settings from './Settings'
-import HelpSupport from './HelpSupport'
-import Profile from './Profile'
-import UserPage from './subscribe/UserPage'
-import NewUpdate from './updates/NewUpdate'
-import UpdatePreview from './updates/UpdatePreview'
-import UpdatesHistory from './updates/UpdatesHistory'
-import UpdateDetail from './updates/UpdateDetail'
-import PayrollHistory from './payroll/PayrollHistory'
-import PayrollDetail from './payroll/PayrollDetail'
-import StripeComplete from './StripeComplete'
-import StripeRefresh from './StripeRefresh'
+import { PageSkeleton, ScrollRestoration } from './components'
 import { useCurrentUser } from './api/hooks'
 import { getAuthToken, AUTH_ERROR_EVENT } from './api/client'
 import './index.css'
+
+// Critical paths - load eagerly
+import OnboardingFlow from './onboarding'
+import AppLayout from './AppLayout'
+import Dashboard from './Dashboard'
+
+// Lazy-loaded routes
+const PaystackConnect = lazy(() => import('./onboarding/PaystackConnect'))
+const Activity = lazy(() => import('./Activity'))
+const ActivityDetail = lazy(() => import('./ActivityDetail'))
+const Subscribers = lazy(() => import('./Subscribers'))
+const SubscriberDetail = lazy(() => import('./SubscriberDetail'))
+const SentRequests = lazy(() => import('./SentRequests'))
+const SelectRecipient = lazy(() => import('./request/SelectRecipient'))
+const SelectRelationship = lazy(() => import('./request/SelectRelationship'))
+const RequestDetails = lazy(() => import('./request/RequestDetails'))
+const PersonalizeRequest = lazy(() => import('./request/PersonalizeRequest'))
+const RequestPreview = lazy(() => import('./request/RequestPreview'))
+const EditPage = lazy(() => import('./EditPage'))
+const Templates = lazy(() => import('./Templates'))
+const PaymentSettings = lazy(() => import('./PaymentSettings'))
+const Billing = lazy(() => import('./Billing'))
+const Settings = lazy(() => import('./Settings'))
+const HelpSupport = lazy(() => import('./HelpSupport'))
+const Profile = lazy(() => import('./Profile'))
+const UserPage = lazy(() => import('./subscribe/UserPage'))
+const NewUpdate = lazy(() => import('./updates/NewUpdate'))
+const UpdatePreview = lazy(() => import('./updates/UpdatePreview'))
+const UpdatesHistory = lazy(() => import('./updates/UpdatesHistory'))
+const UpdateDetail = lazy(() => import('./updates/UpdateDetail'))
+const PayrollHistory = lazy(() => import('./payroll/PayrollHistory'))
+const PayrollDetail = lazy(() => import('./payroll/PayrollDetail'))
+const StripeComplete = lazy(() => import('./StripeComplete'))
+const StripeRefresh = lazy(() => import('./StripeRefresh'))
 
 // Global auth error handler - listens for 401 errors and redirects to login
 function AuthErrorHandler() {
@@ -114,74 +119,83 @@ function AuthRedirect() {
 function App() {
   return (
     <BrowserRouter>
+      <ScrollRestoration />
       <AuthRedirect />
       <AuthErrorHandler />
-      <Routes>
-        {/* Onboarding */}
-        <Route path="/onboarding" element={<OnboardingFlow />} />
-        <Route path="/onboarding/paystack" element={<PaystackConnect />} />
+      <Suspense fallback={<PageSkeleton />}>
+        <Routes>
+          {/* Onboarding - eager loaded */}
+          <Route path="/onboarding" element={<OnboardingFlow />} />
+          <Route path="/onboarding/paystack" element={<PaystackConnect />} />
 
-        {/* Main app with tab bar */}
-        <Route path="/dashboard" element={
-          <AppLayout>
-            <Dashboard />
-          </AppLayout>
-        } />
-        <Route path="/activity" element={
-          <AppLayout>
-            <Activity />
-          </AppLayout>
-        } />
-        <Route path="/subscribers" element={
-          <AppLayout>
-            <Subscribers />
-          </AppLayout>
-        } />
-        <Route path="/profile" element={
-          <AppLayout>
-            <Profile />
-          </AppLayout>
-        } />
+          {/* Main app with tab bar */}
+          <Route path="/dashboard" element={
+            <AppLayout>
+              <Dashboard />
+            </AppLayout>
+          } />
+          <Route path="/activity" element={
+            <AppLayout>
+              <Suspense fallback={<PageSkeleton variant="list" />}>
+                <Activity />
+              </Suspense>
+            </AppLayout>
+          } />
+          <Route path="/subscribers" element={
+            <AppLayout>
+              <Suspense fallback={<PageSkeleton variant="list" />}>
+                <Subscribers />
+              </Suspense>
+            </AppLayout>
+          } />
+          <Route path="/profile" element={
+            <AppLayout>
+              <Suspense fallback={<PageSkeleton variant="detail" />}>
+                <Profile />
+              </Suspense>
+            </AppLayout>
+          } />
 
-        {/* Standalone pages (no tab bar) */}
-        <Route path="/activity/:id" element={<ActivityDetail />} />
-        <Route path="/subscribers/:id" element={<SubscriberDetail />} />
-        <Route path="/requests" element={<SentRequests />} />
+          {/* Standalone pages (no tab bar) */}
+          <Route path="/activity/:id" element={<ActivityDetail />} />
+          <Route path="/subscribers/:id" element={<SubscriberDetail />} />
+          <Route path="/requests" element={<SentRequests />} />
 
-        {/* Targeted Request Flow */}
-        <Route path="/request/new" element={<SelectRecipient />} />
-        <Route path="/request/relationship" element={<SelectRelationship />} />
-        <Route path="/request/details" element={<RequestDetails />} />
-        <Route path="/request/personalize" element={<PersonalizeRequest />} />
-        <Route path="/request/preview" element={<RequestPreview />} />
-        <Route path="/new-request" element={<SelectRecipient />} />
+          {/* Targeted Request Flow */}
+          <Route path="/request/new" element={<SelectRecipient />} />
+          <Route path="/request/relationship" element={<SelectRelationship />} />
+          <Route path="/request/details" element={<RequestDetails />} />
+          <Route path="/request/personalize" element={<PersonalizeRequest />} />
+          <Route path="/request/preview" element={<RequestPreview />} />
+          <Route path="/new-request" element={<SelectRecipient />} />
 
-        <Route path="/edit-page" element={<EditPage />} />
-        <Route path="/templates" element={<Templates />} />
-        <Route path="/settings/payments" element={<PaymentSettings />} />
-        <Route path="/settings/payments/complete" element={<StripeComplete />} />
-        <Route path="/settings/payments/refresh" element={<StripeRefresh />} />
-        <Route path="/settings/billing" element={<Billing />} />
-        <Route path="/settings" element={<Settings />} />
-        <Route path="/settings/help" element={<HelpSupport />} />
+          <Route path="/edit-page" element={<EditPage />} />
+          <Route path="/templates" element={<Templates />} />
+          <Route path="/settings/payments" element={<PaymentSettings />} />
+          <Route path="/settings/payments/complete" element={<StripeComplete />} />
+          <Route path="/settings/payments/refresh" element={<StripeRefresh />} />
+          <Route path="/settings/billing" element={<Billing />} />
+          <Route path="/settings" element={<Settings />} />
+          <Route path="/settings/help" element={<HelpSupport />} />
 
-        {/* Updates */}
-        <Route path="/updates" element={<UpdatesHistory />} />
-        <Route path="/updates/new" element={<NewUpdate />} />
-        <Route path="/updates/preview" element={<UpdatePreview />} />
-        <Route path="/updates/:id" element={<UpdateDetail />} />
+          {/* Updates */}
+          <Route path="/updates" element={<UpdatesHistory />} />
+          <Route path="/updates/new" element={<NewUpdate />} />
+          <Route path="/updates/preview" element={<UpdatePreview />} />
+          <Route path="/updates/:id" element={<UpdateDetail />} />
 
-        {/* Payroll (Service providers only) */}
-        <Route path="/payroll" element={<PayrollHistory />} />
-        <Route path="/payroll/:periodId" element={<PayrollDetail />} />
+          {/* Payroll (Service providers only) */}
+          <Route path="/payroll" element={<PayrollHistory />} />
+          <Route path="/payroll/:periodId" element={<PayrollDetail />} />
 
-        {/* Vanity URLs - natepay.co/username */}
-        {/* This must be LAST before the catch-all */}
-        <Route path="/:username" element={<UserPage />} />
+          {/* Vanity URLs - natepay.co/username */}
+          {/* This must be LAST before the catch-all */}
+          <Route path="/:username" element={<UserPage />} />
 
-        {/* Default redirect */}
-        <Route path="*" element={<Navigate to="/onboarding" replace />} />
-      </Routes>
+          {/* Default redirect */}
+          <Route path="*" element={<Navigate to="/onboarding" replace />} />
+        </Routes>
+      </Suspense>
     </BrowserRouter>
   )
 }

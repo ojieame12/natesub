@@ -7,10 +7,10 @@ import moneyAnimation from './animations/money-send.json'
 import { Pressable } from '../components'
 import { useCreateCheckout, useRecordPageView, useUpdatePageView } from '../api/hooks'
 import type { Profile } from '../api/client'
-import { getCurrencySymbol } from '../utils/currency'
+import { getCurrencySymbol, formatCompactNumber, formatAmountWithSeparators } from '../utils/currency'
 import './template-one.css'
 
-type ViewType = 'welcome' | 'impact' | 'perks' | 'payment'
+type ViewType = 'welcome' | 'impact' | 'perks' | 'tiers' | 'payment'
 
 interface SubscribeBoundaryProps {
     profile: Profile
@@ -53,6 +53,12 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
     const [isSubscribed] = useState(false) // Success handled by Stripe redirect
     const [isPlaying, setIsPlaying] = useState(false)
     const [showTerms, setShowTerms] = useState(false)
+
+    // Tier selection state - default to popular tier or first tier
+    const hasTiers = isService && pricingModel === 'tiers' && tiers && tiers.length > 1
+    const [selectedTierId, setSelectedTierId] = useState<string | null>(
+        hasTiers ? (tiers.find(t => t.isPopular)?.id || tiers[0]?.id || null) : null
+    )
 
     // Analytics tracking
     const viewIdRef = useRef<string | null>(null)
@@ -97,15 +103,24 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
     const touchEndX = useRef<number>(0)
 
     const name = displayName || username || 'Someone'
-    const currentAmount = pricingModel === 'single' ? (singleAmount || 10) : (tiers?.[0]?.amount || 10)
+    const selectedTier = hasTiers ? tiers?.find(t => t.id === selectedTierId) : null
+    const currentAmount = hasTiers
+        ? (selectedTier?.amount || tiers?.[0]?.amount || 10)
+        : (singleAmount || 10)
     const validImpactItems = (profileImpactItems || []).filter(item => item.title.trim() !== '')
     const enabledPerks = (profilePerks || []).filter(perk => perk.enabled)
 
     // Fallback avatar
     const fallbackAvatar = 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&q=80'
 
-    // View sequence
-    const viewSequence: ViewType[] = ['welcome', 'impact', 'perks', 'payment']
+    // View sequence - include tiers view for service accounts with multiple tiers
+    const viewSequence: ViewType[] = ['welcome', 'impact']
+    if (hasTiers) {
+        viewSequence.push('tiers')
+    } else {
+        viewSequence.push('perks')
+    }
+    viewSequence.push('payment')
     const currentIndex = viewSequence.indexOf(currentView)
 
     const [checkoutError, setCheckoutError] = useState<string | null>(null)
@@ -193,8 +208,8 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
                     <h1 className="sub-success-title">You're in!</h1>
                     <p className="sub-success-text">
                         {isService
-                            ? `You're now subscribed to ${name}'s services at ${currencySymbol}${currentAmount}/month`
-                            : `You're now supporting ${name} at ${currencySymbol}${currentAmount}/month`
+                            ? `You're now subscribed to ${name}'s services at ${formatAmountWithSeparators(currentAmount, currency)}/month`
+                            : `You're now supporting ${name} at ${formatAmountWithSeparators(currentAmount, currency)}/month`
                         }
                     </p>
                     <Pressable className="sub-btn sub-btn-secondary" onClick={() => navigate('/dashboard')}>
@@ -282,7 +297,7 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
                             </div>
                             <div className="sub-hero-price">
                                 <span className="sub-hero-currency">{currencySymbol}</span>
-                                <span className="sub-hero-amount">{currentAmount}</span>
+                                <span className="sub-hero-amount">{formatCompactNumber(currentAmount)}</span>
                             </div>
                             <div className="sub-hero-name">{name}</div>
                         </div>
@@ -394,6 +409,54 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
                         </div>
                     )}
 
+                    {/* Tiers View - For service accounts with multiple tiers */}
+                    {currentView === 'tiers' && hasTiers && tiers && (
+                        <div className="sub-view sub-view-tiers">
+                            <h2 className="sub-section-title">Choose Your Plan</h2>
+
+                            <div className="sub-tiers-list">
+                                {tiers.map((tier) => {
+                                    const isSelected = tier.id === selectedTierId
+                                    return (
+                                        <Pressable
+                                            key={tier.id}
+                                            className={`sub-tier-card ${isSelected ? 'selected' : ''}`}
+                                            onClick={() => setSelectedTierId(tier.id)}
+                                        >
+                                            <div className="sub-tier-header">
+                                                <div className="sub-tier-title-row">
+                                                    <span className="sub-tier-name">{tier.name}</span>
+                                                    {tier.isPopular && (
+                                                        <span className="sub-tier-popular">Popular</span>
+                                                    )}
+                                                </div>
+                                                {isSelected && (
+                                                    <div className="sub-tier-selected-check">
+                                                        <Check size={16} />
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div className="sub-tier-price">
+                                                <span className="sub-tier-amount">{currencySymbol}{formatCompactNumber(tier.amount)}</span>
+                                                <span className="sub-tier-period">/mo</span>
+                                            </div>
+                                            {tier.perks && tier.perks.length > 0 && (
+                                                <div className="sub-tier-perks">
+                                                    {tier.perks.map((perk, i) => (
+                                                        <div key={i} className="sub-tier-perk">
+                                                            <Check size={12} />
+                                                            <span>{perk}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </Pressable>
+                                    )
+                                })}
+                            </div>
+                        </div>
+                    )}
+
                     {/* Payment View */}
                     {currentView === 'payment' && (
                         <div className="sub-view sub-view-payment">
@@ -401,8 +464,8 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
 
                             <div className="sub-payment-summary">
                                 <div className="sub-payment-row">
-                                    <span>Monthly subscription</span>
-                                    <span className="sub-payment-amount">{currencySymbol}{currentAmount}/mo</span>
+                                    <span>{selectedTier ? selectedTier.name : 'Monthly subscription'}</span>
+                                    <span className="sub-payment-amount">{formatAmountWithSeparators(currentAmount, currency)}/mo</span>
                                 </div>
                                 <div className="sub-payment-row">
                                     <span>To</span>
@@ -475,15 +538,16 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
                             />
                             <span className="sub-swipe-text">
                                 {currentView === 'welcome' && (isService ? 'Why Work With Me' : 'How it would help Me')}
-                                {currentView === 'impact' && (isService ? "What's Included" : 'What You would Get')}
+                                {currentView === 'impact' && (hasTiers ? 'Choose Plan' : (isService ? "What's Included" : 'What You would Get'))}
                                 {currentView === 'perks' && 'Make Payment'}
+                                {currentView === 'tiers' && 'Make Payment'}
                             </span>
                         </div>
                         <div className="sub-dots">
-                            {['welcome', 'impact', 'perks'].map((view, index) => (
+                            {viewSequence.filter(v => v !== 'payment').map((view, index) => (
                                 <button
-                                    key={index}
-                                    className={`sub-dot ${viewSequence[currentIndex] === view ? 'active' : ''}`}
+                                    key={view}
+                                    className={`sub-dot ${currentView === view ? 'active' : ''}`}
                                     onClick={() => handleDotClick(index)}
                                 />
                             ))}
@@ -491,12 +555,12 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
                     </div>
                 )}
 
-                {/* Subscribe Button */}
-                <div className="sub-button-wrapper">
-                    {currentView !== 'payment' && (
+                {/* Subscribe Button - Hidden on payment view */}
+                {currentView !== 'payment' && (
+                    <div className="sub-button-wrapper">
                         <Pressable
                             className="sub-subscribe-btn"
-                            onClick={currentView === 'perks' ? () => setCurrentView('payment') : handleNext}
+                            onClick={(currentView === 'perks' || currentView === 'tiers') ? () => setCurrentView('payment') : handleNext}
                         >
                             <span className="sub-btn-text">Subscribe Now</span>
                             <Lottie
@@ -505,8 +569,8 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
                                 className="sub-btn-lottie"
                             />
                         </Pressable>
-                    )}
-                </div>
+                    </div>
+                )}
             </div>
 
             {/* Terms & Conditions Drawer */}

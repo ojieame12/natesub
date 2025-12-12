@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { ChevronLeft, Mic, Square, Play, Pause, Trash2, Sparkles } from 'lucide-react'
 import { useRequestStore, getDefaultMessage } from './store'
 import { useCurrentUser } from '../api/hooks'
-import { getCurrencySymbol } from '../utils/currency'
+import { getCurrencySymbol, formatCompactNumber } from '../utils/currency'
 import { Pressable } from '../components'
 import './request.css'
 
@@ -38,10 +38,10 @@ export default function PersonalizeRequest() {
     // Initialize message with smart default
     useEffect(() => {
         if (!message && recipient) {
-            const defaultMsg = getDefaultMessage(recipient.name, relationship, amount, isRecurring)
+            const defaultMsg = getDefaultMessage(recipient.name, relationship, Number(amount) || 0, isRecurring, currencySymbol)
             setMessage(defaultMsg)
         }
-    }, [recipient, relationship, amount, isRecurring, message, setMessage])
+    }, [recipient, relationship, amount, isRecurring, message, setMessage, currencySymbol])
 
     if (!recipient) {
         navigate('/request/new')
@@ -154,7 +154,7 @@ export default function PersonalizeRequest() {
     }
 
     const regenerateMessage = () => {
-        const newMsg = getDefaultMessage(recipient.name, relationship, amount, isRecurring)
+        const newMsg = getDefaultMessage(recipient.name, relationship, Number(amount) || 0, isRecurring, currencySymbol)
         setMessage(newMsg)
     }
 
@@ -176,7 +176,7 @@ export default function PersonalizeRequest() {
                         {recipient.name.charAt(0).toUpperCase()}
                     </div>
                     <span className="request-recipient-badge-name">{firstName}</span>
-                    <span className="request-amount-badge">{currencySymbol}{amount}{isRecurring ? '/mo' : ''}</span>
+                    <span className="request-amount-badge">{currencySymbol}{formatCompactNumber(Number(amount) || 0)}{isRecurring ? '/mo' : ''}</span>
                 </div>
 
                 {/* Message Section */}

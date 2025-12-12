@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronLeft, Check, Send, Clock, Mail } from 'lucide-react'
-import { useOnboardingStore } from '../onboarding/store'
 import { Pressable } from '../components'
 import { EmailPreview } from '../email-templates'
+import { useCreateUpdate, useSendUpdate, useMetrics, useProfile } from '../api/hooks'
 import './UpdatePreview.css'
 
 type Tone = 'casual' | 'polished' | 'minimal'
@@ -14,9 +14,8 @@ interface PendingUpdate {
   audience: 'all' | string
 }
 
-// Mock AI enhancement function
+// Client-side tone enhancement (text transformation based on selected style)
 const enhanceCaption = (caption: string, tone: Tone): { title: string; body: string } => {
-  // In real app, this would call Gemini API
   const words = caption.split(' ')
   const firstWord = words[0] || 'Update'
 
@@ -70,16 +69,25 @@ const polishText = (caption: string): string => {
 
 export default function UpdatePreview() {
   const navigate = useNavigate()
-  const { name } = useOnboardingStore()
+
+  // API hooks
+  const { data: profileData } = useProfile()
+  const { data: metricsData } = useMetrics()
+  const createUpdate = useCreateUpdate()
+  const sendUpdate = useSendUpdate()
+
+  const name = profileData?.profile?.displayName || 'You'
+  const username = profileData?.profile?.username || 'you'
+  const subscriberCount = metricsData?.metrics?.subscriberCount ?? 0
 
   const [pendingUpdate, setPendingUpdate] = useState<PendingUpdate | null>(null)
   const [tone, setTone] = useState<Tone>('polished')
   const [enhanced, setEnhanced] = useState<{ title: string; body: string }>({ title: '', body: '' })
-  const [isSending, setIsSending] = useState(false)
   const [isSent, setIsSent] = useState(false)
+  const [sentCount, setSentCount] = useState(0)
   const [showEmailPreview, setShowEmailPreview] = useState(false)
 
-  const subscriberCount = pendingUpdate?.audience === 'all' ? 47 : 12
+  const isSending = createUpdate.isPending || sendUpdate.isPending
 
   useEffect(() => {
     const stored = sessionStorage.getItem('pending-update')
@@ -99,12 +107,27 @@ export default function UpdatePreview() {
   }, [tone, pendingUpdate])
 
   const handleSend = async () => {
-    setIsSending(true)
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1500))
-    setIsSending(false)
-    setIsSent(true)
-    sessionStorage.removeItem('pending-update')
+    if (!pendingUpdate) return
+
+    try {
+      // 1. Create the update draft
+      const createResult = await createUpdate.mutateAsync({
+        title: enhanced.title || undefined,
+        body: enhanced.body,
+        photoUrl: pendingUpdate.photoUrl || undefined,
+        audience: pendingUpdate.audience,
+      })
+
+      // 2. Send the update
+      const sendResult = await sendUpdate.mutateAsync(createResult.update.id)
+
+      // 3. Success - clear session and show confirmation
+      sessionStorage.removeItem('pending-update')
+      setSentCount(sendResult.recipientCount)
+      setIsSent(true)
+    } catch (error) {
+      console.error('Failed to send update:', error)
+    }
   }
 
   if (isSent) {
@@ -116,7 +139,7 @@ export default function UpdatePreview() {
           </div>
           <h1 className="update-success-title">Update Sent!</h1>
           <p className="update-success-text">
-            {subscriberCount} subscribers will receive your update shortly
+            {sentCount} {sentCount === 1 ? 'subscriber' : 'subscribers'} will receive your update shortly
           </p>
           <Pressable className="update-done-btn" onClick={() => navigate('/dashboard')}>
             Done
@@ -155,7 +178,7 @@ export default function UpdatePreview() {
               <h2 className="preview-title">{enhanced.title}</h2>
             )}
             <p className="preview-body">{enhanced.body}</p>
-            <span className="preview-signoff">— {name || 'You'}</span>
+            <span className="preview-signoff">— {name}</span>
           </div>
         </div>
       </div>
@@ -223,8 +246,8 @@ export default function UpdatePreview() {
       {/* Email Preview Modal */}
       {showEmailPreview && (
         <EmailPreview
-          senderName={name || 'You'}
-          senderUsername={name?.toLowerCase().replace(/\s+/g, '') || 'you'}
+          senderName={name}
+          senderUsername={username}
           message={enhanced.title ? `${enhanced.title}\n\n${enhanced.body}` : enhanced.body}
           imageUrl={pendingUpdate.photoUrl || undefined}
           onClose={() => setShowEmailPreview(false)}

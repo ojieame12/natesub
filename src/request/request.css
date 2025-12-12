@@ -9,6 +9,284 @@
     padding-bottom: env(safe-area-inset-bottom, 20px);
 }
 
+/* ============================================
+   MODERN REDESIGN
+   ============================================ */
+
+.request-page-modern {
+    background: var(--bg-base);
+}
+
+.request-header-title {
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.request-content-modern {
+    flex: 1;
+    padding: var(--space-lg);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xl);
+}
+
+/* Amount Hero */
+.request-amount-hero {
+    text-align: center;
+    padding: var(--space-xl) 0;
+}
+
+.request-amount-display-modern {
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 4px;
+    margin-bottom: var(--space-lg);
+}
+
+.request-currency-modern {
+    font-size: 28px;
+    font-weight: 500;
+    color: var(--text-tertiary);
+}
+
+.request-amount-input-modern {
+    font-size: 56px;
+    font-weight: 700;
+    color: var(--text-primary);
+    background: none;
+    border: none;
+    text-align: center;
+    width: 180px;
+    outline: none;
+    letter-spacing: -2px;
+}
+
+.request-amount-input-modern::placeholder {
+    color: var(--text-tertiary);
+}
+
+.request-quick-amounts-modern {
+    display: flex;
+    justify-content: center;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+}
+
+/* Chips */
+.request-chip {
+    padding: var(--space-sm) var(--space-md);
+    background: var(--bg-card);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-full);
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    transition: all 0.15s ease;
+}
+
+.request-chip.pressed {
+    transform: scale(0.95);
+}
+
+.request-chip.active {
+    background: var(--neutral-900);
+    border-color: var(--neutral-900);
+    color: white;
+}
+
+/* Field Groups */
+.request-field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.request-field-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.request-field-input {
+    padding: var(--space-md);
+    background: var(--bg-card);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-lg);
+    font-size: 16px;
+    color: var(--text-primary);
+    outline: none;
+    transition: border-color 0.15s ease;
+}
+
+.request-field-input:focus {
+    border-color: var(--neutral-400);
+}
+
+.request-field-input::placeholder {
+    color: var(--text-tertiary);
+}
+
+/* Recent Recipients */
+.request-recent-chips {
+    display: flex;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+    margin-top: var(--space-xs);
+}
+
+.request-recent-chip {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: var(--space-xs) var(--space-sm);
+    background: var(--neutral-100);
+    border-radius: var(--radius-full);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+    transition: all 0.15s ease;
+}
+
+.request-recent-chip.pressed {
+    background: var(--neutral-200);
+}
+
+.request-recent-avatar {
+    width: 20px;
+    height: 20px;
+    background: var(--neutral-900);
+    border-radius: var(--radius-full);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 10px;
+    font-weight: 600;
+}
+
+/* Type Toggle Modern */
+.request-type-toggle-modern {
+    display: flex;
+    gap: var(--space-sm);
+    background: var(--neutral-100);
+    padding: 4px;
+    border-radius: var(--radius-lg);
+}
+
+.request-type-btn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-xs);
+    padding: var(--space-sm) var(--space-md);
+    background: transparent;
+    border-radius: var(--radius-md);
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    transition: all 0.15s ease;
+}
+
+.request-type-btn.active {
+    background: white;
+    color: var(--text-primary);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.request-type-btn.pressed {
+    transform: scale(0.97);
+}
+
+/* Purpose Chips */
+.request-purpose-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+    align-items: center;
+}
+
+.request-purpose-input {
+    flex: 1;
+    min-width: 100px;
+    padding: var(--space-sm) var(--space-md);
+    background: transparent;
+    border: 1px dashed var(--border-default);
+    border-radius: var(--radius-full);
+    font-size: 14px;
+    color: var(--text-primary);
+    outline: none;
+}
+
+.request-purpose-input:focus {
+    border-style: solid;
+    border-color: var(--neutral-400);
+}
+
+.request-purpose-input::placeholder {
+    color: var(--text-tertiary);
+}
+
+/* Footer Modern */
+.request-footer-modern {
+    padding: var(--space-lg);
+    padding-bottom: calc(env(safe-area-inset-bottom, 20px) + var(--space-lg));
+    background: var(--bg-base);
+}
+
+.request-continue-btn-modern {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-sm);
+    width: 100%;
+    padding: var(--space-md) var(--space-xl);
+    background: var(--neutral-900);
+    color: white;
+    border-radius: var(--radius-lg);
+    font-size: 16px;
+    font-weight: 600;
+    transition: all 0.15s ease;
+}
+
+.request-continue-btn-modern.pressed {
+    transform: scale(0.98);
+    background: var(--neutral-800);
+}
+
+.request-continue-btn-modern.disabled {
+    background: var(--neutral-300);
+    color: var(--neutral-500);
+}
+
+/* Title Section (for old pages) */
+.request-title-section {
+    margin-bottom: var(--space-lg);
+}
+
+.request-page-title {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0 0 var(--space-xs);
+}
+
+.request-page-subtitle {
+    font-size: 16px;
+    color: var(--text-secondary);
+    margin: 0;
+}
+
+.request-input-hint {
+    font-size: 13px;
+    color: var(--text-tertiary);
+    margin-top: var(--space-xs);
+}
+
 /* Header */
 .request-header {
     display: flex;

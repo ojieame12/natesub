@@ -7,6 +7,14 @@ interface ViewTransitionOptions {
     type?: TransitionType
 }
 
+interface SharedElement {
+    element: HTMLElement
+    name: string
+}
+
+// Store active transition names for cleanup
+const activeTransitionNames: Map<HTMLElement, string> = new Map()
+
 /**
  * Hook that wraps React Router navigation with View Transitions API
  * Falls back to regular navigation if View Transitions not supported
@@ -60,11 +68,61 @@ export function useViewTransition() {
         transitionNavigate(path, { type: options?.type || autoType })
     }, [transitionNavigate, location.pathname])
 
+    /**
+     * Navigate with shared element transitions (morphing)
+     * Sets temporary view-transition-names on source elements,
+     * which will morph into target elements with matching names
+     */
+    const navigateWithSharedElements = useCallback((
+        to: string,
+        sharedElements: SharedElement[],
+        options?: ViewTransitionOptions
+    ) => {
+        // Set transition names on source elements
+        sharedElements.forEach(({ element, name }) => {
+            element.style.viewTransitionName = name
+            activeTransitionNames.set(element, name)
+        })
+
+        const transitionType = options?.type || detectTransitionType(location.pathname, to)
+        document.documentElement.dataset.transition = transitionType
+
+        if ('startViewTransition' in document) {
+            const transition = (document as any).startViewTransition(() => {
+                routerNavigate(to)
+                lastPathRef.current = to
+            })
+
+            // Clean up transition names after animation completes
+            transition.finished.then(() => {
+                cleanupTransitionNames()
+            }).catch(() => {
+                cleanupTransitionNames()
+            })
+        } else {
+            routerNavigate(to)
+            cleanupTransitionNames()
+        }
+    }, [routerNavigate, location.pathname])
+
     return {
         navigate: goTo,
         goBack,
-        transitionNavigate
+        transitionNavigate,
+        navigateWithSharedElements
     }
+}
+
+/**
+ * Clean up all active transition names
+ */
+function cleanupTransitionNames() {
+    activeTransitionNames.forEach((_name, element) => {
+        if (element && element.style) {
+            element.style.viewTransitionName = ''
+        }
+    })
+    activeTransitionNames.clear()
 }
 
 /**

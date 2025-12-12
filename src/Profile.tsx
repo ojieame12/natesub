@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { Pen, ExternalLink, ChevronRight, LogOut } from 'lucide-react'
 import { Pressable, Skeleton, ErrorState } from './components'
-import { useProfile, useMetrics, useLogout } from './api/hooks'
+import { useProfile, useMetrics, useLogout, useCurrentUser } from './api/hooks'
 import './Profile.css'
 
 const quickLinks = [
@@ -24,6 +24,7 @@ export default function Profile() {
   const { mutate: logout } = useLogout()
 
   // Real API hooks
+  const { data: userData } = useCurrentUser()
   const { data: profileData, isLoading: profileLoading, isError: profileError, refetch } = useProfile()
   const { data: metricsData, isLoading: metricsLoading } = useMetrics()
 
@@ -36,7 +37,7 @@ export default function Profile() {
   const stats = {
     subscribers: metrics?.subscriberCount ?? 0,
     mrr: metrics?.mrr ?? 0,
-    memberSince: formatMemberSince(profile?.id ? new Date().toISOString() : null), // TODO: Add createdAt to profile
+    memberSince: formatMemberSince(userData?.createdAt || null),
   }
 
   const isLoading = profileLoading || metricsLoading

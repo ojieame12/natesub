@@ -1,19 +1,23 @@
 import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { X, User, Phone, Mail, ChevronRight, Users, Loader2 } from 'lucide-react'
+import { X, ChevronRight, Zap, RefreshCw } from 'lucide-react'
 import { useRequestStore, type Recipient } from './store'
 import { useCurrentUser, useRequests } from '../api/hooks'
-import { Pressable, Skeleton } from '../components'
+import { getCurrencySymbol, getSuggestedAmounts, formatCompactNumber } from '../utils/currency'
+import { Pressable } from '../components'
 import './request.css'
 
 export default function SelectRecipient() {
     const navigate = useNavigate()
     const { data: userData } = useCurrentUser()
     const isService = userData?.profile?.purpose === 'service'
-    const { setRecipient, reset } = useRequestStore()
+    const currency = userData?.profile?.currency || 'USD'
+    const currencySymbol = getCurrencySymbol(currency)
+
+    const { setRecipient, setAmount, setIsRecurring, setPurpose, reset } = useRequestStore()
 
     // Fetch past requests to get recent recipients
-    const { data: requestsData, isLoading: loadingRequests } = useRequests('all')
+    const { data: requestsData } = useRequests('all')
 
     // Extract unique recent recipients from past requests
     const recentRecipients = useMemo(() => {
@@ -25,7 +29,7 @@ export default function SelectRecipient() {
 
         for (const req of allRequests) {
             const key = req.recipientEmail || req.recipientName
-            if (!seen.has(key) && recipients.length < 5) {
+            if (!seen.has(key) && recipients.length < 4) {
                 seen.add(key)
                 recipients.push({
                     id: `recent-${req.id}`,
@@ -38,25 +42,41 @@ export default function SelectRecipient() {
         return recipients
     }, [requestsData])
 
-    const [manualName, setManualName] = useState('')
-    const [manualContact, setManualContact] = useState('')
+    // Form state - all on one screen
+    const [recipientName, setRecipientName] = useState('')
+    const [amount, setLocalAmount] = useState('')
+    const [isRecurring, setLocalRecurring] = useState(false)
+    const [purpose, setLocalPurpose] = useState('')
 
-    const handleSelectRecipient = (recipient: Recipient) => {
-        setRecipient(recipient)
-        navigate('/request/relationship')
+    // Get currency-aware suggested amounts (e.g., ₦5000 for NGN vs $10 for USD)
+    const suggestedAmounts = getSuggestedAmounts(currency, isService ? 'service' : 'personal')
+    const purposeSuggestions = isService
+        ? ['Retainer', 'Project', 'Consultation', 'Services']
+        : ['Support', 'Monthly', 'Tip', 'Help']
+
+    const handleAmountSelect = (value: number) => {
+        setLocalAmount(value.toString())
     }
 
-    const handleManualSubmit = () => {
-        if (!manualName.trim()) return
+    const handleSelectRecent = (recipient: Recipient) => {
+        setRecipientName(recipient.name)
+    }
 
-        const isEmail = manualContact.includes('@')
-        const newRecipient: Recipient = {
+    const handleContinue = () => {
+        if (!recipientName.trim() || !amount) return
+
+        const recipient: Recipient = {
             id: `manual-${Date.now()}`,
-            name: manualName.trim(),
-            ...(isEmail ? { email: manualContact } : { phone: manualContact }),
+            name: recipientName.trim(),
         }
-        setRecipient(newRecipient)
-        navigate('/request/relationship')
+
+        setRecipient(recipient)
+        setAmount(parseInt(amount) || 0)
+        setIsRecurring(isRecurring)
+        setPurpose(purpose)
+
+        // Skip relationship, go straight to personalize
+        navigate('/request/personalize')
     }
 
     const handleClose = () => {
@@ -64,112 +84,136 @@ export default function SelectRecipient() {
         navigate(-1)
     }
 
-    const canContinue = manualName.trim().length > 0
+    const canContinue = recipientName.trim().length > 0 && parseInt(amount) > 0
 
     return (
-        <div className="request-page">
+        <div className="request-page request-page-modern">
             {/* Header */}
             <header className="request-header">
                 <Pressable className="request-close-btn" onClick={handleClose}>
                     <X size={20} />
                 </Pressable>
-                <img src="/logo.svg" alt="NatePay" className="header-logo" />
+                <span className="request-header-title">
+                    {isService ? 'New Invoice' : 'New Request'}
+                </span>
                 <div className="request-header-spacer" />
             </header>
 
-            <div className="request-content">
-                {/* Title */}
-                <div className="request-title-section">
-                    <h1 className="request-page-title">
-                        {isService ? 'Bill a Client' : 'Send a Request'}
-                    </h1>
-                    <p className="request-page-subtitle">
-                        {isService ? 'Who would you like to invoice?' : 'Who would you like to request from?'}
-                    </p>
+            <div className="request-content-modern">
+                {/* Amount Section - Hero */}
+                <div className="request-amount-hero">
+                    <div className="request-amount-display-modern">
+                        <span className="request-currency-modern">{currencySymbol}</span>
+                        <input
+                            type="text"
+                            inputMode="numeric"
+                            value={amount}
+                            onChange={(e) => setLocalAmount(e.target.value.replace(/[^0-9]/g, ''))}
+                            className="request-amount-input-modern"
+                            placeholder="0"
+                            autoFocus
+                        />
+                    </div>
+
+                    {/* Quick Amounts - currency aware */}
+                    <div className="request-quick-amounts-modern">
+                        {suggestedAmounts.map((value) => (
+                            <Pressable
+                                key={value}
+                                className={`request-chip ${parseInt(amount) === value ? 'active' : ''}`}
+                                onClick={() => handleAmountSelect(value)}
+                            >
+                                {currencySymbol}{formatCompactNumber(value)}
+                            </Pressable>
+                        ))}
+                    </div>
                 </div>
 
-                {/* Manual Entry Form */}
-                <div className="request-manual-form">
-                    <div className="request-input-group">
-                        <label className="request-input-label">Name *</label>
-                        <div className="request-input-wrapper">
-                            <User size={18} className="request-input-icon" />
-                            <input
-                                type="text"
-                                placeholder={isService ? "Client or company name" : "Enter name"}
-                                value={manualName}
-                                onChange={(e) => setManualName(e.target.value)}
-                                className="request-input"
-                            />
-                        </div>
-                    </div>
+                {/* Recipient Input */}
+                <div className="request-field">
+                    <label className="request-field-label">To</label>
+                    <input
+                        type="text"
+                        placeholder={isService ? "Client name" : "Recipient name"}
+                        value={recipientName}
+                        onChange={(e) => setRecipientName(e.target.value)}
+                        className="request-field-input"
+                    />
 
-                    <div className="request-input-group">
-                        <label className="request-input-label">Email or Phone</label>
-                        <div className="request-input-wrapper">
-                            {manualContact.includes('@') ? (
-                                <Mail size={18} className="request-input-icon" />
-                            ) : (
-                                <Phone size={18} className="request-input-icon" />
-                            )}
-                            <input
-                                type="text"
-                                placeholder="Email address or phone number"
-                                value={manualContact}
-                                onChange={(e) => setManualContact(e.target.value)}
-                                className="request-input"
-                            />
-                        </div>
-                        <span className="request-input-hint">
-                            Optional - you can share the link manually
-                        </span>
-                    </div>
-
-                    <Pressable
-                        className={`request-continue-btn ${canContinue ? '' : 'disabled'}`}
-                        onClick={handleManualSubmit}
-                        disabled={!canContinue}
-                    >
-                        Continue
-                    </Pressable>
-                </div>
-
-                {/* Recent Recipients */}
-                {loadingRequests ? (
-                    <div className="request-contacts-section">
-                        <Skeleton width={100} height={16} style={{ marginBottom: 12 }} />
-                        <Skeleton width="100%" height={60} borderRadius={12} />
-                        <Skeleton width="100%" height={60} borderRadius={12} style={{ marginTop: 8 }} />
-                    </div>
-                ) : recentRecipients.length > 0 && (
-                    <div className="request-contacts-section">
-                        <h3 className="request-section-title">
-                            {isService ? 'Recent Clients' : 'Recent Recipients'}
-                        </h3>
-                        <div className="request-contacts-list">
-                            {recentRecipients.map((recipient) => (
+                    {/* Recent Recipients */}
+                    {recentRecipients.length > 0 && !recipientName && (
+                        <div className="request-recent-chips">
+                            {recentRecipients.map((r) => (
                                 <Pressable
-                                    key={recipient.id}
-                                    className="request-contact-item"
-                                    onClick={() => handleSelectRecipient(recipient)}
+                                    key={r.id}
+                                    className="request-recent-chip"
+                                    onClick={() => handleSelectRecent(r)}
                                 >
-                                    <div className="request-contact-avatar">
-                                        {recipient.name.charAt(0).toUpperCase()}
-                                    </div>
-                                    <div className="request-contact-info">
-                                        <span className="request-contact-name">{recipient.name}</span>
-                                        {recipient.email && (
-                                            <span className="request-contact-detail">
-                                                {recipient.email}
-                                            </span>
-                                        )}
-                                    </div>
-                                    <ChevronRight size={18} className="request-chevron" />
+                                    <span className="request-recent-avatar">
+                                        {r.name.charAt(0).toUpperCase()}
+                                    </span>
+                                    {r.name.split(' ')[0]}
                                 </Pressable>
                             ))}
                         </div>
+                    )}
+                </div>
+
+                {/* Payment Type Toggle */}
+                <div className="request-field">
+                    <label className="request-field-label">Type</label>
+                    <div className="request-type-toggle-modern">
+                        <Pressable
+                            className={`request-type-btn ${!isRecurring ? 'active' : ''}`}
+                            onClick={() => setLocalRecurring(false)}
+                        >
+                            <Zap size={16} />
+                            One-time
+                        </Pressable>
+                        <Pressable
+                            className={`request-type-btn ${isRecurring ? 'active' : ''}`}
+                            onClick={() => setLocalRecurring(true)}
+                        >
+                            <RefreshCw size={16} />
+                            Monthly
+                        </Pressable>
                     </div>
-                )}
+                </div>
+
+                {/* Purpose */}
+                <div className="request-field">
+                    <label className="request-field-label">For</label>
+                    <div className="request-purpose-chips">
+                        {purposeSuggestions.map((p) => (
+                            <Pressable
+                                key={p}
+                                className={`request-chip ${purpose === p ? 'active' : ''}`}
+                                onClick={() => setLocalPurpose(purpose === p ? '' : p)}
+                            >
+                                {p}
+                            </Pressable>
+                        ))}
+                        <input
+                            type="text"
+                            placeholder="Custom..."
+                            value={purposeSuggestions.includes(purpose) ? '' : purpose}
+                            onChange={(e) => setLocalPurpose(e.target.value)}
+                            className="request-purpose-input"
+                        />
+                    </div>
+                </div>
+            </div>
+
+            {/* Footer */}
+            <div className="request-footer-modern">
+                <Pressable
+                    className={`request-continue-btn-modern ${canContinue ? '' : 'disabled'}`}
+                    onClick={handleContinue}
+                    disabled={!canContinue}
+                >
+                    Continue
+                    <ChevronRight size={20} />
+                </Pressable>
             </div>
         </div>
     )

@@ -228,11 +228,12 @@ export interface VerifyResponse {
 }
 
 export const auth = {
-  requestMagicLink: (email: string) =>
-    apiFetch<{ success: boolean; message: string }>('/auth/magic-link', {
+  requestMagicLink: (email: string) => {
+    return apiFetch<{ success: boolean; message: string }>('/auth/magic-link', {
       method: 'POST',
       body: JSON.stringify({ email }),
-    }),
+    })
+  },
 
   verify: async (otp: string): Promise<VerifyResponse> => {
     const result = await apiFetch<VerifyResponse>(`/auth/verify?token=${otp}`)
@@ -782,19 +783,70 @@ export interface PayPeriod {
   }[]
 }
 
+// Backend PayPeriod response shape (maps to our PayPeriod type)
+interface BackendPayPeriod {
+  id: string
+  periodStart: string
+  periodEnd: string
+  grossCents: number
+  platformFeeCents?: number
+  netCents: number
+  status: 'current' | 'pending' | 'paid'
+  payoutDate?: string
+  bankLast4?: string
+  verificationCode: string
+  payments?: {
+    id: string
+    date: string
+    subscriberName: string
+    amountCents: number
+    type: 'subscription' | 'one_time'
+  }[]
+}
+
+// Map backend payroll response to frontend PayPeriod type
+const mapPayPeriod = (backend: BackendPayPeriod): PayPeriod => ({
+  id: backend.id,
+  startDate: backend.periodStart,
+  endDate: backend.periodEnd,
+  grossAmount: backend.grossCents, // Keep in cents, frontend divides by 100
+  platformFee: backend.platformFeeCents || Math.round(backend.grossCents * 0.08),
+  netAmount: backend.netCents,
+  status: backend.status,
+  payoutDate: backend.payoutDate,
+  bankLast4: backend.bankLast4,
+  verificationCode: backend.verificationCode,
+  payments: backend.payments?.map(p => ({
+    id: p.id,
+    date: p.date,
+    clientName: p.subscriberName,
+    amount: p.amountCents,
+    type: p.type,
+  })),
+})
+
 export const payroll = {
   // Get all pay periods
-  getPeriods: () =>
-    apiFetch<{
-      periods: PayPeriod[]
-      ytdTotal: number
-    }>('/payroll/periods'),
+  getPeriods: async () => {
+    const response = await apiFetch<{
+      periods: BackendPayPeriod[]
+      ytdTotalCents: number
+    }>('/payroll/periods')
+    return {
+      periods: response.periods.map(mapPayPeriod),
+      ytdTotal: response.ytdTotalCents / 100, // Convert to dollars for display
+    }
+  },
 
   // Get single period detail
-  getPeriod: (id: string) =>
-    apiFetch<{
-      period: PayPeriod
-    }>(`/payroll/periods/${id}`),
+  getPeriod: async (id: string) => {
+    const response = await apiFetch<{
+      period: BackendPayPeriod
+    }>(`/payroll/periods/${id}`)
+    return {
+      period: mapPayPeriod(response.period),
+    }
+  },
 
   // Verify a pay statement (public endpoint)
   verify: (code: string) =>

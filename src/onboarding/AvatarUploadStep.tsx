@@ -2,6 +2,7 @@ import { useState, useRef } from 'react'
 import { ChevronLeft, Camera, User, X, RefreshCw } from 'lucide-react'
 import { useOnboardingStore } from './store'
 import { Button, Pressable } from './components'
+import { InlineError } from '../components'
 import '../Dashboard.css'
 import './onboarding.css'
 
@@ -113,9 +114,7 @@ export default function AvatarUploadStep() {
                         </Pressable>
                     )}
 
-                    {error && (
-                        <p className="input-error-text" style={{ marginTop: 16 }}>{error}</p>
-                    )}
+                    {error && <InlineError message={error} style={{ marginTop: 16 }} />}
                 </div>
 
                 <div className="step-footer">

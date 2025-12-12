@@ -12,6 +12,7 @@ const QUICK_AMOUNTS = [5, 10, 15, 25]
 export default function PersonalPricingStep() {
     const {
         pricingModel,
+        setPricingModel,
         singleAmount,
         setSingleAmount,
         tiers,
@@ -104,11 +105,29 @@ export default function PersonalPricingStep() {
 
             <div className="onboarding-content">
                 <div className="step-header">
-                    <h1>Set your {pricingModel === 'single' ? 'price' : 'prices'}</h1>
+                    <h1>Set your {pricingModel === 'single' ? 'price' : 'packages'}</h1>
                     <p>You can always change this later.</p>
                 </div>
 
                 <div className="step-body">
+                    {/* Pricing model toggle - Service only */}
+                    {branch === 'service' && (
+                        <div className="pricing-model-toggle">
+                            <Pressable
+                                className={`pricing-model-btn ${pricingModel === 'single' ? 'active' : ''}`}
+                                onClick={() => setPricingModel('single')}
+                            >
+                                Simple
+                            </Pressable>
+                            <Pressable
+                                className={`pricing-model-btn ${pricingModel === 'tiers' ? 'active' : ''}`}
+                                onClick={() => setPricingModel('tiers')}
+                            >
+                                Packages
+                            </Pressable>
+                        </div>
+                    )}
+
                     {pricingModel === 'single' ? (
                         /* Single Amount Mode */
                         <>

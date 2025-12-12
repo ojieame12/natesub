@@ -1,14 +1,17 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef } from 'react'
 import { ArrowLeft, Search, X } from 'lucide-react'
 import { Pressable, SkeletonList, ErrorState } from './components'
-import { useViewTransition } from './hooks'
+import { useViewTransition, useScrolled } from './hooks'
 import { useSubscriptions } from './api/hooks'
+import { getCurrencySymbol, formatCompactNumber } from './utils/currency'
 import './Subscribers.css'
 
 type FilterType = 'all' | 'active' | 'canceled'
 
 export default function Subscribers() {
-  const { navigate, goBack } = useViewTransition()
+  const { goBack, navigateWithSharedElements } = useViewTransition()
+  const [scrollRef, isScrolled] = useScrolled()
+  const avatarRefs = useRef<Map<string, HTMLDivElement>>(new Map())
   const [filter, setFilter] = useState<FilterType>('all')
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -49,9 +52,9 @@ export default function Subscribers() {
   }
 
   return (
-    <div className="subscribers-page">
+    <div className="subscribers-page" ref={scrollRef}>
       {/* Header */}
-      <header className="subscribers-header">
+      <header className={`subscribers-header ${isScrolled ? 'scrolled' : ''}`}>
         {searchOpen ? (
           <div className="search-bar">
             <Search size={18} className="search-icon" />
@@ -142,24 +145,39 @@ export default function Subscribers() {
           </div>
         ) : (
           <div className="subscribers-list">
-            {filteredSubscribers.map((subscription: any) => {
+            {filteredSubscribers.map((subscription: any, index: number) => {
               const subscriber = subscription.subscriber || {}
               const profile = subscriber.profile || {}
               const name = profile.displayName || subscriber.email || 'Unknown'
               const email = subscriber.email || ''
-              const amount = subscription.amount ? subscription.amount / 100 : 0
+              const amount = subscription.amount || 0 // Backend sends dollars
               const tier = subscription.tierName || 'Supporter'
               const status = subscription.status
+              const currencySymbol = getCurrencySymbol(subscription.currency || 'USD')
+
+              const handleClick = () => {
+                const avatarEl = avatarRefs.current.get(subscription.id)
+                if (avatarEl) {
+                  navigateWithSharedElements(
+                    `/subscribers/${subscription.id}`,
+                    [{ element: avatarEl, name: 'avatar-morph' }],
+                    { type: 'zoom-in' }
+                  )
+                }
+              }
 
               return (
                 <Pressable
                   key={subscription.id}
-                  className="subscriber-row"
-                  onClick={() => navigate(`/subscribers/${subscription.id}`, { type: 'zoom-in' })}
+                  className="subscriber-row stagger-item"
+                  style={{ animationDelay: `${index * 50}ms` }}
+                  onClick={handleClick}
                 >
                   <div
                     className="subscriber-avatar"
-                    style={{ viewTransitionName: `avatar-${subscription.id}` } as React.CSSProperties}
+                    ref={(el) => {
+                      if (el) avatarRefs.current.set(subscription.id, el)
+                    }}
                   >
                     {name.charAt(0).toUpperCase()}
                   </div>
@@ -171,7 +189,7 @@ export default function Subscribers() {
                     <span className={`subscriber-tier ${status === 'canceled' ? 'cancelled' : ''}`}>
                       {tier}
                     </span>
-                    <span className="subscriber-amount">${amount}/mo</span>
+                    <span className="subscriber-amount">{currencySymbol}{formatCompactNumber(amount)}/mo</span>
                   </div>
                 </Pressable>
               )

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { ChevronLeft, MessageSquare, Mail, Link2, Check, Mic, Plus, Calendar } from 'lucide-react'
 import { useRequestStore, getRelationshipLabel } from './store'
 import { useCreateRequest, useSendRequest, useCurrentUser } from '../api/hooks'
-import { getCurrencySymbol } from '../utils/currency'
+import { getCurrencySymbol, formatCompactNumber } from '../utils/currency'
 import { Pressable } from '../components'
 import './request.css'
 
@@ -158,7 +158,7 @@ export default function RequestPreview() {
                     <div className="request-success-summary">
                         <div className="request-summary-row">
                             <span>Amount</span>
-                            <span className="request-summary-value">{currencySymbol}{amount}{isRecurring ? '/mo' : ''}</span>
+                            <span className="request-summary-value">{currencySymbol}{formatCompactNumber(Number(amount) || 0)}{isRecurring ? '/mo' : ''}</span>
                         </div>
                         <div className="request-summary-row">
                             <span>To</span>
@@ -327,7 +327,7 @@ export default function RequestPreview() {
                     )}
                     <div className="request-summary-item">
                         <span className="request-summary-label">Amount</span>
-                        <span className="request-summary-value">{currencySymbol}{amount}{isRecurring ? '/month' : ' one-time'}</span>
+                        <span className="request-summary-value">{currencySymbol}{formatCompactNumber(Number(amount) || 0)}{isRecurring ? '/month' : ' one-time'}</span>
                     </div>
                 </div>
             </div>

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { X, Copy, Share2, Check } from 'lucide-react'
 import { Pressable } from './components'
 import { useCurrentUser } from './api/hooks'
-import { getCurrencySymbol } from './utils/currency'
+import { getCurrencySymbol, formatCompactNumber } from './utils/currency'
 import './NewRequest.css'
 
 const quickAmounts = [5, 10, 25, 50]
@@ -49,8 +49,8 @@ export default function NewRequest() {
     if (navigator.share) {
       try {
         await navigator.share({
-          title: `Payment Request - ${currencySymbol}${amount}`,
-          text: note || `Payment request for ${currencySymbol}${amount}`,
+          title: `Payment Request - ${currencySymbol}${formatCompactNumber(Number(amount) || 0)}`,
+          text: note || `Payment request for ${currencySymbol}${formatCompactNumber(Number(amount) || 0)}`,
           url: link,
         })
       } catch (err) {

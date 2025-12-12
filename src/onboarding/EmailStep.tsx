@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { ChevronLeft, Loader2 } from 'lucide-react'
 import { useOnboardingStore } from './store'
 import { Button, Pressable } from './components'
+import { InlineError } from '../components'
 import { useRequestMagicLink } from '../api/hooks'
 import '../Dashboard.css'
 import './onboarding.css'
@@ -62,9 +63,7 @@ export default function EmailStep() {
                         disabled={isSending}
                         onKeyDown={(e) => e.key === 'Enter' && handleContinue()}
                     />
-                    {error && (
-                        <p className="input-error-text">{error}</p>
-                    )}
+                    {error && <InlineError message={error} />}
                 </div>
 
                 <div className="step-footer">

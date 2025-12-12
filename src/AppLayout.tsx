@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Home, Users, Plus, Activity, User } from 'lucide-react'
+import { prefetchRoute } from './utils/prefetch'
 import './AppLayout.css'
 
 const NAV_ITEMS_LEFT = [
@@ -32,8 +33,12 @@ function BottomNav() {
                 onMouseDown={() => setPressedTab(item.path)}
                 onMouseUp={() => setPressedTab(null)}
                 onMouseLeave={() => setPressedTab(null)}
-                onTouchStart={() => setPressedTab(item.path)}
+                onTouchStart={() => {
+                    setPressedTab(item.path)
+                    prefetchRoute(item.path)
+                }}
                 onTouchEnd={() => setPressedTab(null)}
+                onMouseEnter={() => prefetchRoute(item.path)}
             >
                 <Icon size={24} className="tab-icon" />
             </button>
@@ -50,8 +55,12 @@ function BottomNav() {
                     onMouseDown={() => setCenterPressed(true)}
                     onMouseUp={() => setCenterPressed(false)}
                     onMouseLeave={() => setCenterPressed(false)}
-                    onTouchStart={() => setCenterPressed(true)}
+                    onTouchStart={() => {
+                        setCenterPressed(true)
+                        prefetchRoute('/request/new')
+                    }}
                     onTouchEnd={() => setCenterPressed(false)}
+                    onMouseEnter={() => prefetchRoute('/request/new')}
                 >
                     <Plus size={24} className="tab-icon" />
                 </button>

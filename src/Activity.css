@@ -12,11 +12,21 @@
     flex-direction: column;
 }
 
-/* Header - Clean left-aligned title */
+/* Header - Clean left-aligned title with glass effect */
 .activity-header {
     padding: var(--space-lg) var(--space-xl);
     padding-top: calc(env(safe-area-inset-top, 12px) + var(--space-lg));
-    background: var(--bg-base);
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    transition: box-shadow 0.2s ease;
+}
+
+.activity-header.scrolled {
+    box-shadow: 0 1px 12px rgba(0, 0, 0, 0.08);
 }
 
 .activity-page-title {
@@ -139,25 +149,7 @@
     gap: var(--space-md);
     padding: var(--space-lg);
     border-bottom: 1px solid var(--border-default);
-    animation: activityRowFadeIn 0.4s ease-out both;
-}
-
-/* Staggered animation delays */
-.activity-row:nth-child(1) { animation-delay: 0.05s; }
-.activity-row:nth-child(2) { animation-delay: 0.1s; }
-.activity-row:nth-child(3) { animation-delay: 0.15s; }
-.activity-row:nth-child(4) { animation-delay: 0.2s; }
-.activity-row:nth-child(5) { animation-delay: 0.25s; }
-
-@keyframes activityRowFadeIn {
-    from {
-        opacity: 0;
-        transform: translateX(-8px);
-    }
-    to {
-        opacity: 1;
-        transform: translateX(0);
-    }
+    /* Animation handled by stagger-item class in transitions.css */
 }
 
 .activity-row:last-child {

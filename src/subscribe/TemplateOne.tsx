@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useOnboardingStore } from '../onboarding/store'
 import { ChevronLeft, Check, Heart } from 'lucide-react'
 import { Pressable } from '../components'
+import { getCurrencySymbol, formatCompactNumber, formatAmountWithSeparators } from '../utils/currency'
 import './subscribe.css'
 
 type ViewType = 'main' | 'impact' | 'tiers' | 'payment'
@@ -18,7 +19,10 @@ export default function SubscribePage() {
         singleAmount,
         tiers,
         impactItems,
+        currency,
     } = useOnboardingStore()
+
+    const currencySymbol = getCurrencySymbol(currency)
 
     // State
     const [currentView, setCurrentView] = useState<ViewType>('main')
@@ -47,7 +51,7 @@ export default function SubscribePage() {
 
     const handleSubscribe = () => {
         if (currentView === 'payment') {
-            console.log('Subscribing at $' + currentAmount + '/month')
+            console.log('Subscribing at ' + currencySymbol + currentAmount + '/month')
             setIsSubscribed(true)
         } else {
             const nextView = viewSequence[currentIndex + 1]
@@ -74,7 +78,7 @@ export default function SubscribePage() {
                     </div>
                     <h1 className="sub-success-title">You're in!</h1>
                     <p className="sub-success-text">
-                        You're now supporting {displayName} at ${currentAmount}/month
+                        You're now supporting {displayName} at {formatAmountWithSeparators(currentAmount || 0, currency)}/month
                     </p>
                     <Pressable className="sub-btn sub-btn-secondary" onClick={() => navigate('/dashboard')}>
                         Done
@@ -123,7 +127,7 @@ export default function SubscribePage() {
                             {/* Stats Row */}
                             <div className="sub-stats-container">
                                 <div className="sub-stat">
-                                    <span className="sub-stat-value">${currentAmount}</span>
+                                    <span className="sub-stat-value">{currencySymbol}{formatCompactNumber(currentAmount || 0)}</span>
                                     <span className="sub-stat-label">Monthly</span>
                                 </div>
                                 <div className="sub-stat-divider" />
@@ -177,7 +181,7 @@ export default function SubscribePage() {
                                                 <span className="sub-tier-name">{tier.name}</span>
                                                 {tier.isPopular && <span className="sub-tier-badge">Popular</span>}
                                             </div>
-                                            <span className="sub-tier-price">${tier.amount}</span>
+                                            <span className="sub-tier-price">{currencySymbol}{formatCompactNumber(tier.amount)}</span>
                                             {isSelected && (
                                                 <div className="sub-tier-check">
                                                     <Check size={14} />
@@ -197,7 +201,7 @@ export default function SubscribePage() {
                             <div className="sub-payment-summary">
                                 <div className="sub-payment-row">
                                     <span>Monthly</span>
-                                    <span className="sub-payment-amount">${currentAmount}</span>
+                                    <span className="sub-payment-amount">{formatAmountWithSeparators(currentAmount || 0, currency)}</span>
                                 </div>
                                 {selectedTier && pricingModel === 'tiers' && (
                                     <div className="sub-payment-row">
@@ -226,7 +230,7 @@ export default function SubscribePage() {
                         className={`sub-subscribe-btn ${isLastView ? 'ready' : ''}`}
                         onClick={handleSubscribe}
                     >
-                        {isLastView ? `Subscribe · $${currentAmount}/mo` : `Continue`}
+                        {isLastView ? `Subscribe · ${currencySymbol}${formatCompactNumber(currentAmount || 0)}/mo` : `Continue`}
                     </Pressable>
                 </div>
             </div>

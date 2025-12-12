@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { useOnboardingStore } from './store'
 import { Button, Pressable } from './components'
 import { getShareableLink } from '../utils/constants'
+import { getCurrencySymbol, formatCompactNumber } from '../utils/currency'
 import { api } from '../api'
 import './onboarding.css'
 
@@ -207,13 +208,14 @@ export default function PersonalReviewStep() {
     }
 
     // Format pricing display
+    const currencySymbol = getCurrencySymbol(currency)
     const getPricingDisplay = () => {
         if (pricingModel === 'single') {
-            return `$${singleAmount}/month`
+            return `${currencySymbol}${formatCompactNumber(singleAmount || 0)}/month`
         }
         const tierCount = tiers.length
         const minPrice = Math.min(...tiers.map(t => t.amount))
-        return `${tierCount} tiers from $${minPrice}/mo`
+        return `${tierCount} tiers from ${currencySymbol}${formatCompactNumber(minPrice)}/mo`
     }
 
     return (

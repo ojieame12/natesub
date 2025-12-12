@@ -12,8 +12,9 @@ import {
     Check,
 } from 'lucide-react'
 import { Pressable, Skeleton, SkeletonList, ErrorState } from './components'
+import { useScrolled } from './hooks'
 import { useActivity, useMetrics, useCurrentUser } from './api/hooks'
-import { getCurrencySymbol } from './utils/currency'
+import { getCurrencySymbol, formatCompactNumber } from './utils/currency'
 import './Activity.css'
 
 // Activity icon helper
@@ -85,6 +86,7 @@ const formatTime = (date: Date | string) => {
 
 export default function Activity() {
     const navigate = useNavigate()
+    const [scrollRef, isScrolled] = useScrolled()
     const { data: userData } = useCurrentUser()
     const currencySymbol = getCurrencySymbol(userData?.profile?.currency || 'USD')
     const isService = userData?.profile?.purpose === 'service'
@@ -125,9 +127,9 @@ export default function Activity() {
     }
 
     return (
-        <div className="activity-page">
+        <div className="activity-page" ref={scrollRef}>
             {/* Header */}
-            <header className="activity-header">
+            <header className={`activity-header ${isScrolled ? 'scrolled' : ''}`}>
                 <h1 className="activity-page-title">Activity</h1>
             </header>
 
@@ -185,7 +187,7 @@ export default function Activity() {
 
                                 {/* Activity Group */}
                                 <div className="activity-group">
-                                    {activities.map((activity: any) => {
+                                    {activities.map((activity: any, index: number) => {
                                         const payload = activity.payload || {}
                                         const amount = payload.amount ? payload.amount / 100 : 0
                                         const name = payload.subscriberName || payload.recipientName || ''
@@ -195,7 +197,8 @@ export default function Activity() {
                                         return (
                                             <Pressable
                                                 key={activity.id}
-                                                className="activity-row"
+                                                className="activity-row stagger-item"
+                                                style={{ animationDelay: `${index * 50}ms` }}
                                                 onClick={() => navigate(`/activity/${activity.id}`)}
                                             >
                                                 <div className={getActivityIconClass(activity.type)}>
@@ -210,7 +213,7 @@ export default function Activity() {
                                                 {amount > 0 && (
                                                     <div className="activity-amount-col">
                                                         <span className={`activity-amount ${isCanceled ? 'cancelled' : ''}`}>
-                                                            {isCanceled ? '-' : '+'}{currencySymbol}{amount}
+                                                            {isCanceled ? '-' : '+'}{currencySymbol}{formatCompactNumber(amount)}
                                                         </span>
                                                         {tier && <span className="activity-tier">{tier}</span>}
                                                     </div>

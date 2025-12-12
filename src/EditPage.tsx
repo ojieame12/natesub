@@ -119,6 +119,38 @@ export default function EditPage() {
     }
   }
 
+  // Tier perk handlers
+  const handleAddTierPerk = (tierId: string) => {
+    setTiers(tiers.map(tier => {
+      if (tier.id === tierId) {
+        return { ...tier, perks: [...(tier.perks || []), ''] }
+      }
+      return tier
+    }))
+  }
+
+  const handleUpdateTierPerk = (tierId: string, perkIndex: number, value: string) => {
+    setTiers(tiers.map(tier => {
+      if (tier.id === tierId) {
+        const newPerks = [...(tier.perks || [])]
+        newPerks[perkIndex] = value
+        return { ...tier, perks: newPerks }
+      }
+      return tier
+    }))
+  }
+
+  const handleDeleteTierPerk = (tierId: string, perkIndex: number) => {
+    setTiers(tiers.map(tier => {
+      if (tier.id === tierId) {
+        const newPerks = [...(tier.perks || [])]
+        newPerks.splice(perkIndex, 1)
+        return { ...tier, perks: newPerks }
+      }
+      return tier
+    }))
+  }
+
   // Perk handlers
   const handleAddPerk = () => {
     const newPerk: Perk = {
@@ -334,37 +366,71 @@ export default function EditPage() {
             <>
               <div className="tiers-list">
                 {tiers.map((tier) => (
-                  <div key={tier.id} className="tier-card">
-                    <div className="tier-drag">
-                      <GripVertical size={16} />
-                    </div>
-                    <div className="tier-content">
-                      <div className="tier-row">
-                        <input
-                          type="text"
-                          className="tier-name-input"
-                          value={tier.name}
-                          onChange={(e) => handleUpdateTier(tier.id, 'name', e.target.value)}
-                          placeholder="Tier name"
-                        />
-                        <div className="tier-price-wrap">
-                          <span className="tier-currency">{currencySymbol}</span>
+                  <div key={tier.id} className="tier-card tier-card-expanded">
+                    <div className="tier-header-row">
+                      <div className="tier-drag">
+                        <GripVertical size={16} />
+                      </div>
+                      <div className="tier-content">
+                        <div className="tier-row">
                           <input
-                            type="number"
-                            className="tier-price-input"
-                            value={tier.amount}
-                            onChange={(e) => handleUpdateTier(tier.id, 'amount', parseInt(e.target.value) || 0)}
+                            type="text"
+                            className="tier-name-input"
+                            value={tier.name}
+                            onChange={(e) => handleUpdateTier(tier.id, 'name', e.target.value)}
+                            placeholder="Tier name"
                           />
-                          <span className="tier-period">/mo</span>
+                          <div className="tier-price-wrap">
+                            <span className="tier-currency">{currencySymbol}</span>
+                            <input
+                              type="number"
+                              className="tier-price-input"
+                              value={tier.amount}
+                              onChange={(e) => handleUpdateTier(tier.id, 'amount', parseInt(e.target.value) || 0)}
+                            />
+                            <span className="tier-period">/mo</span>
+                          </div>
                         </div>
                       </div>
+                      <Pressable
+                        className="tier-delete"
+                        onClick={() => handleDeleteTier(tier.id)}
+                      >
+                        <Trash2 size={16} />
+                      </Pressable>
                     </div>
-                    <Pressable
-                      className="tier-delete"
-                      onClick={() => handleDeleteTier(tier.id)}
-                    >
-                      <Trash2 size={16} />
-                    </Pressable>
+
+                    {/* Tier Perks */}
+                    <div className="tier-perks-section">
+                      <span className="tier-perks-label">What's included</span>
+                      <div className="tier-perks-list">
+                        {(tier.perks || []).map((perk, index) => (
+                          <div key={index} className="tier-perk-row">
+                            <Check size={14} className="tier-perk-check" />
+                            <input
+                              type="text"
+                              className="tier-perk-input"
+                              value={perk}
+                              onChange={(e) => handleUpdateTierPerk(tier.id, index, e.target.value)}
+                              placeholder="Perk description"
+                            />
+                            <Pressable
+                              className="tier-perk-delete"
+                              onClick={() => handleDeleteTierPerk(tier.id, index)}
+                            >
+                              <X size={14} />
+                            </Pressable>
+                          </div>
+                        ))}
+                      </div>
+                      <Pressable
+                        className="tier-add-perk-btn"
+                        onClick={() => handleAddTierPerk(tier.id)}
+                      >
+                        <Plus size={14} />
+                        <span>Add perk</span>
+                      </Pressable>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -376,41 +442,43 @@ export default function EditPage() {
           )}
         </section>
 
-        {/* Perks Section */}
-        <section className="edit-section">
-          <div className="section-header">
-            <h3 className="section-title">{isService ? "What's Included" : 'Subscriber Perks'}</h3>
-            <span className="item-count">{perks.filter(p => p.enabled).length} active</span>
-          </div>
+        {/* Perks Section - Hidden when service account has multiple tiers (perks are per-tier) */}
+        {!(isService && pricingModel === 'tiers') && (
+          <section className="edit-section">
+            <div className="section-header">
+              <h3 className="section-title">{isService ? "What's Included" : 'Subscriber Perks'}</h3>
+              <span className="item-count">{perks.filter(p => p.enabled).length} active</span>
+            </div>
 
-          <div className="perks-list">
-            {perks.map((perk) => (
-              <div key={perk.id} className="perk-card">
-                <Pressable
-                  className={`perk-toggle ${perk.enabled ? 'enabled' : ''}`}
-                  onClick={() => handleUpdatePerk(perk.id, 'enabled', !perk.enabled)}
-                >
-                  {perk.enabled && <Check size={12} />}
-                </Pressable>
-                <input
-                  type="text"
-                  className="perk-input"
-                  value={perk.title}
-                  onChange={(e) => handleUpdatePerk(perk.id, 'title', e.target.value)}
-                  placeholder="Perk title"
-                />
-                <Pressable className="perk-delete" onClick={() => handleDeletePerk(perk.id)}>
-                  <X size={16} />
-                </Pressable>
-              </div>
-            ))}
-          </div>
+            <div className="perks-list">
+              {perks.map((perk) => (
+                <div key={perk.id} className="perk-card">
+                  <Pressable
+                    className={`perk-toggle ${perk.enabled ? 'enabled' : ''}`}
+                    onClick={() => handleUpdatePerk(perk.id, 'enabled', !perk.enabled)}
+                  >
+                    {perk.enabled && <Check size={12} />}
+                  </Pressable>
+                  <input
+                    type="text"
+                    className="perk-input"
+                    value={perk.title}
+                    onChange={(e) => handleUpdatePerk(perk.id, 'title', e.target.value)}
+                    placeholder="Perk title"
+                  />
+                  <Pressable className="perk-delete" onClick={() => handleDeletePerk(perk.id)}>
+                    <X size={16} />
+                  </Pressable>
+                </div>
+              ))}
+            </div>
 
-          <Pressable className="add-tier-btn" onClick={handleAddPerk}>
-            <Plus size={18} />
-            <span>Add Perk</span>
-          </Pressable>
-        </section>
+            <Pressable className="add-tier-btn" onClick={handleAddPerk}>
+              <Plus size={18} />
+              <span>Add Perk</span>
+            </Pressable>
+          </section>
+        )}
 
         {/* Impact Section */}
         <section className="edit-section">

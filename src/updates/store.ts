@@ -12,32 +12,14 @@ export interface UpdateDraft {
   savedAt: number
 }
 
-export interface SentUpdate {
-  id: string
-  caption: string
-  mediaType: MediaType
-  mediaUrl?: string
-  audience: UpdateAudience
-  sentAt: number
-  views: number
-  recipients: number
-}
-
 interface UpdatesState {
   // Draft (work in progress)
   draft: UpdateDraft | null
-
-  // Sent updates history (mock for now)
-  sentUpdates: SentUpdate[]
 
   // Draft actions
   setDraft: (draft: Partial<UpdateDraft> | null) => void
   updateDraft: (updates: Partial<UpdateDraft>) => void
   clearDraft: () => void
-
-  // Sent updates actions
-  addSentUpdate: (update: Omit<SentUpdate, 'id' | 'sentAt' | 'views' | 'recipients'>) => void
-  clearHistory: () => void
 }
 
 const initialDraft: UpdateDraft = {
@@ -51,7 +33,6 @@ export const useUpdatesStore = create<UpdatesState>()(
   persist(
     (set, get) => ({
       draft: null,
-      sentUpdates: [],
 
       setDraft: (draft) => set({
         draft: draft ? {
@@ -74,30 +55,10 @@ export const useUpdatesStore = create<UpdatesState>()(
       }),
 
       clearDraft: () => set({ draft: null }),
-
-      addSentUpdate: (update) => set((state) => ({
-        sentUpdates: [
-          {
-            ...update,
-            id: `update_${Date.now()}`,
-            sentAt: Date.now(),
-            views: 0,
-            recipients: Math.floor(Math.random() * 50) + 10, // Mock
-          },
-          ...state.sentUpdates,
-        ],
-        draft: null, // Clear draft after sending
-      })),
-
-      clearHistory: () => set({ sentUpdates: [] }),
     }),
     {
       name: 'natepay-updates',
       version: 1,
-      // Only persist draft - sentUpdates would come from API in production
-      partialize: (state) => ({
-        draft: state.draft,
-      }),
     }
   )
 )

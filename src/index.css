@@ -6,7 +6,7 @@
 /* === FONT FACE === */
 @font-face {
   font-family: 'SF Compact Rounded';
-  src: url('./SF-Compact-Rounded-Regular.otf') format('opentype');
+  src: url('./SF-Compact-Rounded-Regular.woff2') format('woff2');
   font-weight: 400;
   font-style: normal;
   font-display: swap;
@@ -14,7 +14,7 @@
 
 @font-face {
   font-family: 'SF Compact Rounded';
-  src: url('./SF-Compact-Rounded-Semibold.otf') format('opentype');
+  src: url('./SF-Compact-Rounded-Semibold.woff2') format('woff2');
   font-weight: 600;
   font-style: normal;
   font-display: swap;
@@ -569,7 +569,21 @@ input {
 
 /* === SHARED ELEMENTS === */
 
-/* Avatar that morphs between views */
+/* Avatar morph transition (dynamic, set via JS) */
+::view-transition-group(avatar-morph) {
+  animation-duration: 0.35s;
+  animation-timing-function: var(--ease-spring);
+}
+
+::view-transition-old(avatar-morph),
+::view-transition-new(avatar-morph) {
+  mix-blend-mode: normal;
+  height: 100%;
+  width: 100%;
+  object-fit: cover;
+}
+
+/* Avatar that morphs between views (legacy class-based) */
 .vt-avatar {
   view-transition-name: avatar-hero;
 }
