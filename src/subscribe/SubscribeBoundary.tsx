@@ -251,7 +251,7 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
                                         <span className="sub-item-number">{index + 1}</span>
                                         <div className="sub-item-content">
                                             <span className="sub-item-title">{item.title}</span>
-                                            <span className="sub-item-subtitle">{item.subtitle}</span>
+                                            {item.subtitle && <span className="sub-item-subtitle">{item.subtitle}</span>}
                                         </div>
                                     </div>
                                 ))}
