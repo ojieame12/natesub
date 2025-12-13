@@ -1,5 +1,7 @@
 // API Client for Nate Backend
 
+import { Capacitor } from '@capacitor/core'
+
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
 const AUTH_TOKEN_KEY = 'nate_auth_token'
 
@@ -283,11 +285,29 @@ export const auth = {
   },
 
   verify: async (otp: string): Promise<VerifyResponse> => {
-    const result = await apiFetch<VerifyResponse>(`/auth/verify?token=${otp}`)
+    // Ensure stale tokens don't interfere with verification flows.
+    clearAuthToken()
 
-    // Store token for mobile apps (Bearer auth)
+    const result = await apiFetch<VerifyResponse>('/auth/verify', {
+      method: 'POST',
+      body: JSON.stringify({ token: otp }),
+    })
+
+    // Prefer HttpOnly cookie sessions on web when possible.
+    // Fall back to bearer token when cookies are unavailable (e.g., native apps or cross-site setups).
+    const isNative = Capacitor.isNativePlatform()
     if (result.token) {
-      setAuthToken(result.token)
+      if (isNative) {
+        setAuthToken(result.token)
+      } else {
+        const cookieAuthOk = await fetch(`${API_URL}/auth/me`, { credentials: 'include' })
+          .then(r => r.ok)
+          .catch(() => false)
+
+        if (!cookieAuthOk) {
+          setAuthToken(result.token)
+        }
+      }
     }
 
     return result

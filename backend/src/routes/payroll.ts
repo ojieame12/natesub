@@ -4,6 +4,7 @@
 import { Hono } from 'hono'
 import { Context, Next } from 'hono'
 import { requireAuth } from '../middleware/auth.js'
+import { publicStrictRateLimit } from '../middleware/rateLimit.js'
 import { db } from '../db/client.js'
 import { env } from '../config/env.js'
 import {
@@ -325,7 +326,7 @@ payroll.get('/summary', requireAuth, requireServicePurpose, async (c) => {
 // ============================================
 
 // GET /payroll/verify/:code - Public verification endpoint
-payroll.get('/verify/:code', async (c) => {
+payroll.get('/verify/:code', publicStrictRateLimit, async (c) => {
   const code = c.req.param('code')
 
   if (!code || code.length < 10) {

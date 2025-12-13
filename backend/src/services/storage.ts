@@ -34,6 +34,7 @@ interface SignedUploadUrl {
   publicUrl: string
   key: string
   expiresAt: Date
+  maxBytes: number
 }
 
 // Generate signed upload URL
@@ -57,7 +58,6 @@ export async function getSignedUploadUrl(
     Bucket: env.R2_BUCKET,
     Key: key,
     ContentType: mimeType,
-    ContentLength: MAX_FILE_SIZES[type],
   })
 
   const uploadUrl = await getSignedUrl(r2, command, { expiresIn: 600 })
@@ -69,6 +69,7 @@ export async function getSignedUploadUrl(
     publicUrl,
     key,
     expiresAt,
+    maxBytes: MAX_FILE_SIZES[type],
   }
 }
 

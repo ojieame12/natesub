@@ -125,19 +125,16 @@ export function getPeriodsForYear(year: number, upToDate: Date): Array<{ start: 
 
 /**
  * Generate a unique verification code
- * Format: NP-YYYY-MMM-XXXXX
+ * Format: NP-YYYY-MMM-XXXXXXXXXXXX
  */
 export function generateVerificationCode(userId: string, periodEnd: Date): string {
   const year = periodEnd.getFullYear()
   const month = periodEnd.toLocaleString('en', { month: 'short' }).toUpperCase()
-  const hash = crypto
-    .createHash('sha256')
-    .update(`${userId}-${periodEnd.toISOString()}-${Date.now()}-${Math.random()}`)
-    .digest('hex')
-    .substring(0, 5)
-    .toUpperCase()
+  // SECURITY: Use a cryptographically secure random code to prevent brute force enumeration.
+  // (The public /payroll/verify/:code endpoint makes low-entropy codes risky.)
+  const code = crypto.randomBytes(6).toString('hex').toUpperCase() // 48 bits of entropy
 
-  return `NP-${year}-${month}-${hash}`
+  return `NP-${year}-${month}-${code}`
 }
 
 // ============================================

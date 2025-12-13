@@ -17,6 +17,13 @@ import { db } from '../db/client.js'
 
 const auth = new Hono()
 
+// Auth endpoints should never be cached (they set cookies and return sensitive user/session data).
+auth.use('*', async (c, next) => {
+  c.header('Cache-Control', 'no-store')
+  c.header('Pragma', 'no-cache')
+  await next()
+})
+
 // Request magic link
 // Rate limited to prevent email enumeration and spam
 auth.post(
@@ -38,8 +45,54 @@ auth.post(
   }
 )
 
-// Verify magic link token
+async function handleVerify(c: any, token: string) {
+  try {
+    const { sessionToken, onboarding } = await verifyMagicLink(token)
+
+    // Set session cookie (for web)
+    // SECURITY: sameSite='Strict' prevents CSRF attacks
+    setCookie(c, 'session', sessionToken, {
+      httpOnly: true,
+      secure: env.NODE_ENV === 'production',
+      sameSite: 'Strict',
+      maxAge: 7 * 24 * 60 * 60, // 7 days
+      path: '/',
+    })
+
+    // Return full onboarding state for smart routing
+    return c.json({
+      success: true,
+      token: sessionToken, // Mobile apps store this and send in Authorization header
+      // Onboarding state for frontend routing
+      hasProfile: onboarding.hasProfile,
+      hasActivePayment: onboarding.hasActivePayment,
+      onboardingStep: onboarding.onboardingStep,
+      onboardingBranch: onboarding.onboardingBranch,
+      onboardingData: onboarding.onboardingData,
+      redirectTo: onboarding.redirectTo,
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Verification failed'
+    return c.json({ error: message }, 400)
+  }
+}
+
+// Verify magic link token (preferred)
 // Rate limited to prevent brute force OTP guessing
+auth.post(
+  '/verify',
+  authVerifyRateLimit,
+  zValidator('json', z.object({
+    token: z.string().min(1),
+  })),
+  async (c) => {
+    const { token } = c.req.valid('json')
+    return handleVerify(c, token)
+  }
+)
+
+// Verify magic link token (legacy: query param)
+// NOTE: Kept for backwards compatibility; POST /auth/verify avoids leaking OTPs in URLs/logs.
 auth.get(
   '/verify',
   authVerifyRateLimit,
@@ -48,42 +101,19 @@ auth.get(
   })),
   async (c) => {
     const { token } = c.req.valid('query')
-
-    try {
-      const { sessionToken, userId, onboarding } = await verifyMagicLink(token)
-
-      // Set session cookie (for web)
-      // SECURITY: sameSite='Strict' prevents CSRF attacks
-      setCookie(c, 'session', sessionToken, {
-        httpOnly: true,
-        secure: env.NODE_ENV === 'production',
-        sameSite: 'Strict',
-        maxAge: 7 * 24 * 60 * 60, // 7 days
-        path: '/',
-      })
-
-      // Return full onboarding state for smart routing
-      return c.json({
-        success: true,
-        token: sessionToken, // Mobile apps store this and send in Authorization header
-        // Onboarding state for frontend routing
-        hasProfile: onboarding.hasProfile,
-        hasActivePayment: onboarding.hasActivePayment,
-        onboardingStep: onboarding.onboardingStep,
-        onboardingBranch: onboarding.onboardingBranch,
-        onboardingData: onboarding.onboardingData,
-        redirectTo: onboarding.redirectTo,
-      })
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Verification failed'
-      return c.json({ error: message }, 400)
-    }
+    return handleVerify(c, token)
   }
 )
 
 // Logout
 auth.post('/logout', async (c) => {
-  const sessionToken = getCookie(c, 'session')
+  const cookieToken = getCookie(c, 'session')
+
+  // Mobile apps may use Bearer auth instead of cookies
+  const authHeader = c.req.header('Authorization')
+  const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : undefined
+
+  const sessionToken = cookieToken || bearerToken
 
   if (sessionToken) {
     await logout(sessionToken)

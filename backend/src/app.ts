@@ -58,26 +58,54 @@ app.use('*', secureHeaders({
 
 // CORS - allow multiple origins for web and mobile
 const allowedOrigins = [
-  ...env.APP_URL.split(',').map(o => o.trim()).filter(Boolean),
+  env.APP_URL,
   'capacitor://localhost',      // iOS Capacitor
   'http://localhost',           // Android Capacitor
   'http://localhost:5173',      // Local dev
   'http://localhost:5174',      // Local dev alt port
 ]
 
-app.use('*', cors({
-  origin: (origin) => {
-    // SECURITY: Reject requests with no origin when credentials are enabled
-    // This prevents CSRF attacks where attacker can't set Origin header
-    // Mobile apps (Capacitor) will have their own origin set
-    if (!origin) return null
-    // Check if origin is in allowed list
-    if (allowedOrigins.some(allowed => origin && origin.startsWith(allowed))) {
-      return origin
-    }
-    // Deny unknown origins
+const allowedOriginSet = new Set(
+  allowedOrigins
+    .map(o => o.trim())
+    .filter(Boolean)
+    .map((o) => {
+      try {
+        return new URL(o).origin
+      } catch {
+        return null
+      }
+    })
+    .filter((o): o is string => Boolean(o))
+)
+
+function resolveAllowedOrigin(origin: string): string | null {
+  // `hono/cors` passes an empty string when Origin is missing.
+  if (!origin) return null
+
+  let url: URL
+  try {
+    url = new URL(origin)
+  } catch {
     return null
-  },
+  }
+
+  const normalized = url.origin
+
+  // Exact origin allowlist.
+  if (allowedOriginSet.has(normalized)) return normalized
+
+  // Allow any localhost port when `http://localhost` is allowlisted.
+  // This supports Capacitor/Android and local dev without unsafe prefix matching.
+  if (url.protocol === 'http:' && url.hostname === 'localhost' && allowedOriginSet.has('http://localhost')) {
+    return normalized
+  }
+
+  return null
+}
+
+app.use('*', cors({
+  origin: (origin) => resolveAllowedOrigin(origin),
   credentials: true,
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization'],
