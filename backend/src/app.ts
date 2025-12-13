@@ -59,6 +59,8 @@ app.use('*', secureHeaders({
 // CORS - allow multiple origins for web and mobile
 const allowedOrigins = [
   env.APP_URL,
+  env.PUBLIC_PAGE_URL,          // Public subscribe pages (natepay.co)
+  'https://natepay.co',         // Production vanity domain
   'capacitor://localhost',      // iOS Capacitor
   'http://localhost',           // Android Capacitor
   'http://localhost:5173',      // Local dev
