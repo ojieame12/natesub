@@ -17,6 +17,10 @@ interface SubscribeBoundaryProps {
 export default function SubscribeBoundary({ profile, canceled }: SubscribeBoundaryProps) {
     const navigate = useNavigate()
     const [searchParams] = useSearchParams()
+
+    // Only show back button if there's browser history (not a direct link)
+    const canGoBack = typeof window !== 'undefined' && window.history.length > 1
+
     const { mutateAsync: createCheckout, isPending: isCheckoutLoading } = useCreateCheckout()
     const { mutateAsync: recordPageView } = useRecordPageView()
     const { mutateAsync: updatePageView } = useUpdatePageView()
@@ -469,9 +473,13 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
         return (
             <div className="sub-page template-boundary">
                 <div className="sub-header">
-                    <Pressable className="sub-back-btn" onClick={() => navigate('/')}>
-                        <ChevronLeft size={20} />
-                    </Pressable>
+                    {canGoBack ? (
+                        <Pressable className="sub-back-btn" onClick={() => navigate(-1)}>
+                            <ChevronLeft size={20} />
+                        </Pressable>
+                    ) : (
+                        <div className="sub-header-spacer" />
+                    )}
                     <img src="/logo.svg" alt="nate" className="sub-logo-img" />
                     <div className="sub-header-spacer" />
                 </div>
@@ -518,11 +526,15 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
 
     return (
         <div className="sub-page template-boundary">
-            {/* Header with back button */}
+            {/* Header - back button only if there's history */}
             <div className="sub-header">
-                <Pressable className="sub-back-btn" onClick={() => navigate('/')}>
-                    <ChevronLeft size={20} />
-                </Pressable>
+                {canGoBack ? (
+                    <Pressable className="sub-back-btn" onClick={() => navigate(-1)}>
+                        <ChevronLeft size={20} />
+                    </Pressable>
+                ) : (
+                    <div className="sub-header-spacer" />
+                )}
                 <img src="/logo.svg" alt="nate" className="sub-logo-img" />
                 <div className="sub-header-spacer" />
             </div>

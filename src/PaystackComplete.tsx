@@ -78,14 +78,19 @@ export default function PaystackComplete() {
     }
   }
 
+  // Check if we can go back in history
+  const canGoBack = typeof window !== 'undefined' && window.history.length > 2
+
   const handleDone = () => {
     // Navigate back to creator's page with success context (consistent with Stripe flow)
     if (verification?.creatorUsername || creatorUsername) {
       const username = verification?.creatorUsername || creatorUsername
       navigate(`/${username}?success=true&provider=paystack`)
-    } else {
-      navigate('/')
+    } else if (canGoBack) {
+      // No creator info - go back if we can
+      navigate(-1)
     }
+    // Otherwise stay on page (user can close tab)
   }
 
   return (
@@ -163,16 +168,11 @@ export default function PaystackComplete() {
             <p>{verification?.error || 'We could not verify your payment. Please try again or contact support.'}</p>
 
             <div className="cta-section" style={{ marginTop: 24 }}>
-              <Pressable className="btn-primary" onClick={() => window.history.length > 2 ? navigate(-1) : navigate('/')}>
-                Try Again
-              </Pressable>
-              <Pressable
-                className="btn-secondary"
-                onClick={() => navigate('/')}
-                style={{ marginTop: 12 }}
-              >
-                Go Home
-              </Pressable>
+              {canGoBack && (
+                <Pressable className="btn-primary" onClick={() => navigate(-1)}>
+                  Try Again
+                </Pressable>
+              )}
             </div>
           </div>
         )}

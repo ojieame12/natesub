@@ -20,6 +20,9 @@ export default function PublicRequestPage() {
   const navigate = useNavigate()
   const toast = useToast()
 
+  // Only show back button if there's browser history (not a direct link)
+  const canGoBack = typeof window !== 'undefined' && window.history.length > 1
+
   const isSuccess = window.location.pathname.endsWith('/success')
   const isCanceled = searchParams.get('canceled') === 'true'
 
@@ -62,8 +65,10 @@ export default function PublicRequestPage() {
     try {
       await declineRequest(token)
       toast.success('Request declined')
-      // Navigate to a safe landing page
-      navigate('/')
+      // Go back if possible, otherwise just stay (user can close tab)
+      if (canGoBack) {
+        navigate(-1)
+      }
     } catch (err: any) {
       toast.error(err?.error || 'Failed to decline request')
     }
@@ -83,12 +88,14 @@ export default function PublicRequestPage() {
             <p className="sub-success-message">
               Thank you for your payment. You'll receive a confirmation email shortly.
             </p>
-            <Pressable
-              className="sub-payment-btn sub-payment-stripe"
-              onClick={() => navigate('/')}
-            >
-              Done
-            </Pressable>
+            {canGoBack && (
+              <Pressable
+                className="sub-payment-btn sub-payment-stripe"
+                onClick={() => navigate(-1)}
+              >
+                Done
+              </Pressable>
+            )}
           </div>
         </div>
       </>
@@ -128,9 +135,13 @@ export default function PublicRequestPage() {
         <AmbientBackground />
         <div className="sub-page template-boundary">
           <header className="sub-header">
-            <Pressable className="sub-back-btn" onClick={() => navigate('/')}>
-              <ArrowLeft size={20} />
-            </Pressable>
+            {canGoBack ? (
+              <Pressable className="sub-back-btn" onClick={() => navigate(-1)}>
+                <ArrowLeft size={20} />
+              </Pressable>
+            ) : (
+              <div className="sub-header-spacer" />
+            )}
           </header>
           <div className="sub-content">
             <div className="sub-profile">
@@ -158,12 +169,14 @@ export default function PublicRequestPage() {
             <p className="sub-success-message">
               This request may have expired or been removed.
             </p>
-            <Pressable
-              className="sub-payment-btn sub-payment-stripe"
-              onClick={() => navigate('/')}
-            >
-              Go Home
-            </Pressable>
+            {canGoBack && (
+              <Pressable
+                className="sub-payment-btn sub-payment-stripe"
+                onClick={() => navigate(-1)}
+              >
+                Go Back
+              </Pressable>
+            )}
           </div>
         </div>
       </>
@@ -182,9 +195,13 @@ export default function PublicRequestPage() {
       <AmbientBackground />
       <div className="sub-page template-boundary">
         <header className="sub-header">
-          <Pressable className="sub-back-btn" onClick={() => navigate('/')}>
-            <ArrowLeft size={20} />
-          </Pressable>
+          {canGoBack ? (
+            <Pressable className="sub-back-btn" onClick={() => navigate(-1)}>
+              <ArrowLeft size={20} />
+            </Pressable>
+          ) : (
+            <div className="sub-header-spacer" />
+          )}
         </header>
 
         <div className="sub-content">
