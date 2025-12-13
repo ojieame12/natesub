@@ -8,6 +8,7 @@ import BranchSelectorStep from './BranchSelectorStep'
 import PersonalPricingStep from './PersonalPricingStep'
 import PersonalUsernameStep from './PersonalUsernameStep'
 import AvatarUploadStep from './AvatarUploadStep'
+import VoiceIntroStep from './VoiceIntroStep'
 import PaymentMethodStep from './PaymentMethodStep'
 import ServiceDescriptionStep from './ServiceDescriptionStep'
 import AIGeneratingStep from './AIGeneratingStep'
@@ -16,8 +17,8 @@ import './onboarding.css'
 
 // Step configuration for progress tracking
 const COMMON_STEP_COUNT = 5  // Start, Email, OTP, Identity, Branch
-const PERSONAL_STEP_COUNT = 4  // Pricing, Username, Avatar, Payment
-const SERVICE_STEP_COUNT = 7  // Description, AI Gen, AI Review, Pricing, Username, Avatar, Payment
+const PERSONAL_STEP_COUNT = 5  // Pricing, Username, Avatar, VoiceIntro, Payment
+const SERVICE_STEP_COUNT = 8  // Description, AI Gen, AI Review, Pricing, Username, Avatar, VoiceIntro, Payment
 
 export default function OnboardingFlow() {
     const { currentStep, branch } = useOnboardingStore()
@@ -70,6 +71,7 @@ export default function OnboardingFlow() {
         <PersonalPricingStep key="pricing" />,
         <PersonalUsernameStep key="username" />,
         <AvatarUploadStep key="avatar" />,
+        <VoiceIntroStep key="voice" />,
         <PaymentMethodStep key="payment" />,
     ]
 
@@ -81,6 +83,7 @@ export default function OnboardingFlow() {
         <PersonalPricingStep key="pricing" />,
         <PersonalUsernameStep key="username" />,
         <AvatarUploadStep key="avatar" />,
+        <VoiceIntroStep key="voice" />,
         <PaymentMethodStep key="payment" />,
     ]
 

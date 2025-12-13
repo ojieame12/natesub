@@ -44,6 +44,7 @@ export default function PayrollDetail() {
             const response = await fetch(`${API_URL}/payroll/periods/${periodId}/pdf`, {
                 method: 'POST',
                 headers: {
+                    'Content-Type': 'application/json',
                     ...(token ? { Authorization: `Bearer ${token}` } : {}),
                 },
             })
@@ -59,20 +60,18 @@ export default function PayrollDetail() {
             }
 
             if (!response.ok) {
-                toast.error('Failed to download PDF')
+                toast.error('Failed to generate PDF')
                 return
             }
 
-            // Create blob and download
-            const blob = await response.blob()
-            const url = window.URL.createObjectURL(blob)
-            const a = document.createElement('a')
-            a.href = url
-            a.download = `payroll-${periodId}.pdf`
-            document.body.appendChild(a)
-            a.click()
-            window.URL.revokeObjectURL(url)
-            document.body.removeChild(a)
+            // Backend returns JSON with pdfUrl - open in new tab for download
+            const data = await response.json()
+            if (data.pdfUrl) {
+                // Open PDF URL in new tab (browser will handle download/display)
+                window.open(data.pdfUrl, '_blank')
+            } else {
+                toast.error('PDF URL not available')
+            }
         } catch {
             toast.error('Failed to download PDF')
         } finally {

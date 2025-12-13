@@ -118,17 +118,27 @@ export function isReservedUsername(username: string): boolean {
   return RESERVED_ROUTES.includes(username.toLowerCase() as ReservedRoute)
 }
 
-// Public page URL helper
+// ============================================
+// DOMAIN CONFIGURATION
+// ============================================
+
+// Primary domain for public pages (creator URLs)
+export const PUBLIC_DOMAIN = import.meta.env.VITE_PUBLIC_PAGE_DOMAIN || 'natepay.co'
+
+// Full URL for public pages (with protocol)
+export const PUBLIC_PAGE_URL = import.meta.env.VITE_PUBLIC_PAGE_URL || `https://${PUBLIC_DOMAIN}`
+
+// Get full URL to a creator's public page
 export function getPublicPageUrl(username: string): string {
-  // In production, this would use the PUBLIC_PAGE_URL env var
-  // For now, we'll use a relative path that works in dev
-  const baseUrl = import.meta.env.VITE_PUBLIC_PAGE_URL || window.location.origin
-  return `${baseUrl}/${username}`
+  return `${PUBLIC_PAGE_URL}/${username}`
 }
 
-// Get shareable link (short format for display)
+// Get shareable link (short format for display, without https://)
 export function getShareableLink(username: string): string {
-  // Display format - uses the production domain
-  const domain = import.meta.env.VITE_PUBLIC_PAGE_DOMAIN || 'natepay.co'
-  return `${domain}/${username}`
+  return `${PUBLIC_DOMAIN}/${username}`
+}
+
+// Get shareable link with protocol
+export function getShareableLinkFull(username: string): string {
+  return `https://${PUBLIC_DOMAIN}/${username}`
 }

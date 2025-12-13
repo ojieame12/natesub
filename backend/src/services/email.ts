@@ -1,7 +1,19 @@
 import { Resend } from 'resend'
 import { env } from '../config/env.js'
+import { centsToDisplayAmount, isZeroDecimalCurrency } from '../utils/currency.js'
 
 const resend = new Resend(env.RESEND_API_KEY)
+
+// Format amount in cents for display in emails (handles zero-decimal currencies)
+function formatAmountForEmail(amountCents: number, currency: string): string {
+  const displayAmount = centsToDisplayAmount(amountCents, currency)
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency,
+    minimumFractionDigits: isZeroDecimalCurrency(currency) ? 0 : 2,
+    maximumFractionDigits: isZeroDecimalCurrency(currency) ? 0 : 2,
+  }).format(displayAmount)
+}
 
 export async function sendOtpEmail(to: string, otp: string): Promise<void> {
   await resend.emails.send({
@@ -43,10 +55,7 @@ export async function sendNewSubscriberEmail(
   amount: number,
   currency: string
 ): Promise<void> {
-  const formattedAmount = new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency,
-  }).format(amount / 100)
+  const formattedAmount = formatAmountForEmail(amount, currency)
 
   await resend.emails.send({
     from: env.EMAIL_FROM,
@@ -110,10 +119,7 @@ export async function sendRenewalReminderEmail(
   currency: string,
   renewalDate: Date
 ): Promise<void> {
-  const formattedAmount = new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency,
-  }).format(amount / 100)
+  const formattedAmount = formatAmountForEmail(amount, currency)
 
   const formattedDate = renewalDate.toLocaleDateString('en-US', {
     month: 'long',
@@ -144,10 +150,7 @@ export async function sendPaymentFailedEmail(
   currency: string,
   retryDate: Date | null
 ): Promise<void> {
-  const formattedAmount = new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency,
-  }).format(amount / 100)
+  const formattedAmount = formatAmountForEmail(amount, currency)
 
   const retryMessage = retryDate
     ? `We'll automatically retry charging your card on ${retryDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}.`

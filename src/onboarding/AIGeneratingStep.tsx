@@ -6,10 +6,18 @@ import { Button } from './components'
 import { useAIGenerate, blobToBase64 } from '../api/hooks'
 import './onboarding.css'
 
+// Helper to fetch audio from URL and convert to base64
+async function fetchAudioAsBase64(url: string): Promise<string> {
+    const response = await fetch(url)
+    if (!response.ok) throw new Error('Failed to fetch audio')
+    const blob = await response.blob()
+    return blobToBase64(blob)
+}
+
 export default function AIGeneratingStep() {
     const {
         serviceDescription,
-        serviceDescriptionAudio,
+        serviceDescriptionAudioUrl,
         name,
         singleAmount,
         setGeneratedContent,
@@ -27,14 +35,15 @@ export default function AIGeneratingStep() {
         setIsGenerating(true)
 
         try {
-            // Prepare input
+            // Prepare input - fetch audio from S3 URL and convert to base64
             let audioData: { data: string; mimeType: string } | undefined
 
-            if (serviceDescriptionAudio) {
-                const base64 = await blobToBase64(serviceDescriptionAudio)
+            if (serviceDescriptionAudioUrl) {
+                // Fetch the audio from S3 and convert to base64 for the AI
+                const base64 = await fetchAudioAsBase64(serviceDescriptionAudioUrl)
                 audioData = {
                     data: base64,
-                    mimeType: serviceDescriptionAudio.type || 'audio/webm',
+                    mimeType: 'audio/webm',
                 }
             }
 

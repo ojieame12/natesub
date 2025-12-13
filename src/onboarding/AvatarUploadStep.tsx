@@ -1,8 +1,9 @@
 import { useState, useRef } from 'react'
-import { ChevronLeft, Camera, User, X, RefreshCw } from 'lucide-react'
+import { ChevronLeft, Camera, User, X, RefreshCw, Loader2 } from 'lucide-react'
 import { useOnboardingStore } from './store'
 import { Button, Pressable } from './components'
 import { InlineError } from '../components'
+import { uploadFile } from '../api/hooks'
 import '../Dashboard.css'
 import './onboarding.css'
 
@@ -12,9 +13,10 @@ export default function AvatarUploadStep() {
     const { avatarUrl, setAvatarUrl, nextStep, prevStep } = useOnboardingStore()
     const [avatarPreview, setAvatarPreview] = useState<string | null>(avatarUrl)
     const [error, setError] = useState<string | null>(null)
+    const [isUploading, setIsUploading] = useState(false)
     const fileInputRef = useRef<HTMLInputElement>(null)
 
-    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0]
         if (!file) return
 
@@ -32,16 +34,26 @@ export default function AvatarUploadStep() {
             return
         }
 
-        const reader = new FileReader()
-        reader.onload = (e) => {
-            const dataUrl = e.target?.result as string
-            setAvatarPreview(dataUrl)
-            setAvatarUrl(dataUrl)
+        // Show local preview immediately for better UX
+        const localPreview = URL.createObjectURL(file)
+        setAvatarPreview(localPreview)
+        setIsUploading(true)
+
+        try {
+            // Upload to S3 and get the public URL
+            const publicUrl = await uploadFile(file, 'avatar')
+            setAvatarUrl(publicUrl)
+            // Clean up local preview URL
+            URL.revokeObjectURL(localPreview)
+        } catch (err) {
+            console.error('Avatar upload failed:', err)
+            setError('Failed to upload image. Please try again.')
+            setAvatarPreview(null)
+            setAvatarUrl(null)
+            URL.revokeObjectURL(localPreview)
+        } finally {
+            setIsUploading(false)
         }
-        reader.onerror = () => {
-            setError('Failed to read image. Please try again.')
-        }
-        reader.readAsDataURL(file)
     }
 
     const handleRemove = () => {
@@ -87,14 +99,19 @@ export default function AvatarUploadStep() {
                         /* Photo uploaded - show preview with actions */
                         <div className="avatar-uploaded">
                             <div className="avatar-preview-large">
-                                <img src={avatarPreview} alt="Avatar" />
+                                <img src={avatarPreview} alt="Avatar" style={{ opacity: isUploading ? 0.5 : 1 }} />
+                                {isUploading && (
+                                    <div className="avatar-upload-overlay">
+                                        <Loader2 size={24} className="spinning" />
+                                    </div>
+                                )}
                             </div>
                             <div className="avatar-actions">
-                                <Pressable className="avatar-action-btn" onClick={handleChangePhoto}>
+                                <Pressable className="avatar-action-btn" onClick={handleChangePhoto} disabled={isUploading}>
                                     <RefreshCw size={18} />
                                     <span>Change</span>
                                 </Pressable>
-                                <Pressable className="avatar-action-btn danger" onClick={handleRemove}>
+                                <Pressable className="avatar-action-btn danger" onClick={handleRemove} disabled={isUploading}>
                                     <X size={18} />
                                     <span>Remove</span>
                                 </Pressable>
@@ -123,8 +140,14 @@ export default function AvatarUploadStep() {
                         size="lg"
                         fullWidth
                         onClick={nextStep}
+                        disabled={isUploading}
                     >
-                        {avatarPreview ? 'Continue' : 'Skip for now'}
+                        {isUploading ? (
+                            <>
+                                <Loader2 size={18} className="spinning" style={{ marginRight: 8 }} />
+                                Uploading...
+                            </>
+                        ) : avatarPreview ? 'Continue' : 'Skip for now'}
                     </Button>
                 </div>
             </div>

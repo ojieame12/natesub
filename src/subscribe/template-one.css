@@ -54,24 +54,32 @@
 }
 
 @keyframes blobFloat1 {
-    0%, 100% {
+
+    0%,
+    100% {
         transform: translate(0, 0) scale(1);
     }
+
     33% {
         transform: translate(30px, 20px) scale(1.05);
     }
+
     66% {
         transform: translate(-20px, 30px) scale(0.95);
     }
 }
 
 @keyframes blobFloat2 {
-    0%, 100% {
+
+    0%,
+    100% {
         transform: translate(0, 0) scale(1);
     }
+
     33% {
         transform: translate(-25px, -15px) scale(0.95);
     }
+
     66% {
         transform: translate(20px, -25px) scale(1.08);
     }
@@ -236,12 +244,15 @@
 }
 
 @keyframes avatarBreathe {
-    0%, 100% {
+
+    0%,
+    100% {
         transform: scale(1);
         box-shadow:
             0 4px 20px rgba(0, 0, 0, 0.3),
             0 0 40px rgba(255, 200, 100, 0.15);
     }
+
     50% {
         transform: scale(1.03);
         box-shadow:
@@ -285,6 +296,7 @@
         opacity: 0;
         transform: translateX(16px);
     }
+
     to {
         opacity: 1;
         transform: translateX(0);
@@ -375,16 +387,28 @@
     animation: itemFadeIn 0.4s ease-out backwards;
 }
 
-.template-boundary .sub-item:nth-child(1) { animation-delay: 0.1s; }
-.template-boundary .sub-item:nth-child(2) { animation-delay: 0.2s; }
-.template-boundary .sub-item:nth-child(3) { animation-delay: 0.3s; }
-.template-boundary .sub-item:nth-child(4) { animation-delay: 0.4s; }
+.template-boundary .sub-item:nth-child(1) {
+    animation-delay: 0.1s;
+}
+
+.template-boundary .sub-item:nth-child(2) {
+    animation-delay: 0.2s;
+}
+
+.template-boundary .sub-item:nth-child(3) {
+    animation-delay: 0.3s;
+}
+
+.template-boundary .sub-item:nth-child(4) {
+    animation-delay: 0.4s;
+}
 
 @keyframes itemFadeIn {
     from {
         opacity: 0;
         transform: translateY(8px);
     }
+
     to {
         opacity: 1;
         transform: translateY(0);
@@ -509,9 +533,12 @@
 }
 
 @keyframes waveformPulse {
-    0%, 100% {
+
+    0%,
+    100% {
         transform: scaleY(1);
     }
+
     50% {
         transform: scaleY(0.6);
     }
@@ -521,12 +548,15 @@
 .template-boundary .sub-voice-bar:nth-child(odd) {
     animation-delay: 0s;
 }
+
 .template-boundary .sub-voice-bar:nth-child(even) {
     animation-delay: 0.1s;
 }
+
 .template-boundary .sub-voice-bar:nth-child(3n) {
     animation-delay: 0.2s;
 }
+
 .template-boundary .sub-voice-bar:nth-child(5n) {
     animation-delay: 0.15s;
 }
@@ -679,6 +709,38 @@
     color: var(--text-primary);
 }
 
+/* Fee breakdown styling */
+.template-boundary .sub-payment-fee {
+    font-size: 13px;
+    color: var(--text-tertiary);
+    padding: var(--space-md) var(--space-lg);
+}
+
+.template-boundary .sub-payment-fee .sub-payment-amount {
+    font-weight: 500;
+    color: var(--text-tertiary);
+}
+
+.template-boundary .sub-payment-total {
+    background: var(--bg-elevated);
+    font-size: 15px;
+    font-weight: 600;
+}
+
+.template-boundary .sub-payment-total span:first-child {
+    color: var(--text-primary);
+}
+
+.template-boundary .sub-payment-total .sub-payment-amount {
+    font-size: 16px;
+    color: var(--accent-primary);
+}
+
+.template-boundary .sub-payment-creator {
+    font-size: 13px;
+    padding: var(--space-md) var(--space-lg);
+}
+
 .template-boundary .sub-payment-methods {
     display: flex;
     flex-direction: column;
@@ -758,6 +820,44 @@
     margin-bottom: var(--space-md);
 }
 
+/* Email input for Paystack */
+.template-boundary .sub-email-input-wrapper {
+    margin-bottom: var(--space-md);
+}
+
+.template-boundary .sub-email-input {
+    width: 100%;
+    padding: var(--space-md) var(--space-lg);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-lg);
+    font-size: 16px;
+    font-family: inherit;
+    background: white;
+    color: var(--text-primary);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.template-boundary .sub-email-input:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 3px rgba(255, 148, 26, 0.1);
+}
+
+.template-boundary .sub-email-input.error {
+    border-color: var(--status-error);
+}
+
+.template-boundary .sub-email-input::placeholder {
+    color: var(--text-tertiary);
+}
+
+.template-boundary .sub-email-error {
+    display: block;
+    font-size: 13px;
+    color: var(--status-error);
+    margin-top: var(--space-xs);
+}
+
 .template-boundary .sub-payment-note {
     font-size: 13px;
     color: var(--text-tertiary);
@@ -801,7 +901,7 @@
     pointer-events: none;
 }
 
-/* Swipe Indicator - Lottie + Text */
+/* Swipe Indicator - Animated Chevrons */
 .template-boundary .sub-swipe-indicator {
     display: flex;
     flex-direction: column;
@@ -809,10 +909,47 @@
     gap: 4px;
 }
 
-.template-boundary .sub-swipe-lottie {
-    width: 24px;
-    height: 24px;
-    opacity: 0.35;
+.template-boundary .sub-swipe-arrows {
+    display: flex;
+    align-items: center;
+    gap: -4px;
+}
+
+.template-boundary .sub-swipe-chevron {
+    opacity: 0.2;
+    animation: swipeChevron 1.5s ease-in-out infinite;
+}
+
+.template-boundary .sub-swipe-chevron-1 {
+    animation-delay: 0s;
+}
+
+.template-boundary .sub-swipe-chevron-2 {
+    animation-delay: 0.15s;
+    margin-left: -8px;
+}
+
+.template-boundary .sub-swipe-chevron-3 {
+    animation-delay: 0.3s;
+    margin-left: -8px;
+}
+
+@keyframes swipeChevron {
+    0%, 100% {
+        opacity: 0.2;
+        transform: translateX(0);
+    }
+    50% {
+        opacity: 0.6;
+        transform: translateX(-4px);
+    }
+}
+
+.template-boundary .sub-swipe-static {
+    width: 20px;
+    height: 20px;
+    opacity: 0.5;
+    color: var(--text-tertiary);
 }
 
 .template-boundary .sub-swipe-text {
@@ -850,9 +987,11 @@
     0% {
         transform: scale(0.8);
     }
+
     50% {
         transform: scale(1.1);
     }
+
     100% {
         transform: scale(1);
     }
@@ -884,9 +1023,12 @@
 }
 
 @keyframes buttonGlow {
-    0%, 100% {
+
+    0%,
+    100% {
         box-shadow: 0 4px 0 var(--neutral-700), 0 0 0 0 rgba(255, 148, 26, 0);
     }
+
     50% {
         box-shadow: 0 4px 0 var(--neutral-700), 0 0 20px 4px rgba(255, 148, 26, 0.3);
     }
@@ -904,10 +1046,47 @@
     filter: brightness(0) invert(1);
 }
 
+.template-boundary .sub-btn-static {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+    color: white;
+}
+
 .template-boundary .sub-subscribe-btn.pressed {
     background: var(--neutral-800);
     box-shadow: 0 2px 0 var(--neutral-700);
     transform: translateY(2px);
+}
+
+/* Subscribe Button Arrow Animation */
+.template-boundary .sub-btn-arrow {
+    animation: arrowPulse 1.2s ease-in-out infinite;
+}
+
+@keyframes arrowPulse {
+    0%, 100% {
+        transform: translateX(0);
+        opacity: 0.8;
+    }
+    50% {
+        transform: translateX(4px);
+        opacity: 1;
+    }
+}
+
+/* Slide-to-pay Arrow Animation */
+.template-boundary .sub-slide-arrow {
+    animation: slideArrow 1s ease-in-out infinite;
+}
+
+@keyframes slideArrow {
+    0%, 100% {
+        transform: translateX(0);
+    }
+    50% {
+        transform: translateX(3px);
+    }
 }
 
 .template-boundary .sub-secure-note {
@@ -954,13 +1133,27 @@
 }
 
 @keyframes confetti1 {
-    0% { transform: translate(-50%, -50%) scale(0); opacity: 1; }
-    100% { transform: translate(-150px, -100px) scale(1) rotate(180deg); opacity: 0; }
+    0% {
+        transform: translate(-50%, -50%) scale(0);
+        opacity: 1;
+    }
+
+    100% {
+        transform: translate(-150px, -100px) scale(1) rotate(180deg);
+        opacity: 0;
+    }
 }
 
 @keyframes confetti2 {
-    0% { transform: translate(-50%, -50%) scale(0); opacity: 1; }
-    100% { transform: translate(120px, -80px) scale(1) rotate(-180deg); opacity: 0; }
+    0% {
+        transform: translate(-50%, -50%) scale(0);
+        opacity: 1;
+    }
+
+    100% {
+        transform: translate(120px, -80px) scale(1) rotate(-180deg);
+        opacity: 0;
+    }
 }
 
 .template-boundary .sub-success-icon {
@@ -978,9 +1171,19 @@
 }
 
 @keyframes successIconBounce {
-    0% { transform: scale(0); opacity: 0; }
-    60% { transform: scale(1.2); }
-    100% { transform: scale(1); opacity: 1; }
+    0% {
+        transform: scale(0);
+        opacity: 0;
+    }
+
+    60% {
+        transform: scale(1.2);
+    }
+
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
 }
 
 /* Checkmark draw animation */
@@ -991,7 +1194,15 @@
 }
 
 @keyframes drawCheck {
-    to { stroke-dashoffset: 0; }
+    to {
+        stroke-dashoffset: 0;
+    }
+}
+
+/* Error icon variant */
+.template-boundary .sub-success-icon.sub-error {
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--status-error, #EF4444);
 }
 
 .template-boundary .sub-success-title {
@@ -1007,8 +1218,15 @@
     color: var(--text-secondary);
     max-width: 260px;
     line-height: 1.5;
-    margin: 0 0 var(--space-xl);
+    margin: 0 0 var(--space-md);
     animation: fadeSlideUp 0.5s ease-out 0.35s backwards;
+}
+
+.template-boundary .sub-success-subtext {
+    font-size: 13px;
+    color: var(--text-tertiary);
+    margin: 0;
+    animation: fadeSlideUp 0.5s ease-out 0.45s backwards;
 }
 
 @keyframes fadeSlideUp {
@@ -1016,6 +1234,7 @@
         opacity: 0;
         transform: translateY(10px);
     }
+
     to {
         opacity: 1;
         transform: translateY(0);
@@ -1037,6 +1256,31 @@
     transition: all 0.15s ease;
 }
 
+.template-boundary .sub-btn-primary {
+    background: var(--neutral-900);
+    color: white;
+}
+
+/* === LOADER === */
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.spin {
+    animation: spin 1s linear infinite;
+}
+
+.template-boundary .sub-btn-primary.pressed {
+    transform: scale(0.98);
+    background: var(--neutral-800);
+}
+
 .template-boundary .sub-btn-secondary {
     background: var(--neutral-100);
     color: var(--text-primary);
@@ -1045,6 +1289,15 @@
 .template-boundary .sub-btn-secondary.pressed {
     transform: scale(0.98);
     background: var(--neutral-200);
+}
+
+.template-boundary .sub-btn-tertiary {
+    background: transparent;
+    color: var(--text-tertiary);
+}
+
+.template-boundary .sub-btn-tertiary.pressed {
+    opacity: 0.7;
 }
 
 /* === TERMS & CONDITIONS DRAWER === */
@@ -1167,14 +1420,21 @@
     color: white;
 }
 
+/* Already subscribed variant - pink/love themed */
+.template-boundary .sub-success-icon.sub-already-subscribed {
+    background: linear-gradient(135deg, #ec4899, #db2777);
+}
+
 @keyframes successPulse {
     0% {
         transform: scale(0);
         opacity: 0;
     }
+
     50% {
         transform: scale(1.1);
     }
+
     100% {
         transform: scale(1);
         opacity: 1;
@@ -1288,4 +1548,159 @@
     font-size: 14px;
     text-align: center;
     margin-bottom: var(--space-md);
+}
+
+/* === VERIFICATION SPINNER === */
+.template-boundary .sub-verifying {
+    background: var(--neutral-100);
+}
+
+.template-boundary .sub-spinner {
+    width: 24px;
+    height: 24px;
+    border: 3px solid var(--neutral-200);
+    border-top-color: var(--neutral-600);
+    border-radius: 50%;
+    animation: sub-spin 0.8s linear infinite;
+}
+
+@keyframes sub-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* === REDIRECT OVERLAY === */
+.template-boundary .sub-redirect-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.8);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    animation: fadeIn 0.2s ease;
+}
+
+.template-boundary .sub-redirect-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-md);
+    color: white;
+}
+
+.template-boundary .sub-redirect-content p {
+    font-size: 16px;
+    font-weight: 500;
+    margin: 0;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+/* === VIEW TRANSITIONS === */
+.template-boundary .sub-content {
+    transition: transform 0.25s ease-out, opacity 0.25s ease-out;
+}
+
+.template-boundary .sub-content.sub-animating {
+    opacity: 0.7;
+}
+
+.template-boundary .sub-content.sub-slide-left {
+    animation: slideInFromRight 0.25s ease-out forwards;
+}
+
+.template-boundary .sub-content.sub-slide-right {
+    animation: slideInFromLeft 0.25s ease-out forwards;
+}
+
+@keyframes slideInFromRight {
+    0% {
+        transform: translateX(30px);
+        opacity: 0.5;
+    }
+
+    100% {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+@keyframes slideInFromLeft {
+    0% {
+        transform: translateX(-30px);
+        opacity: 0.5;
+    }
+
+    100% {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+/* Reduce motion for accessibility */
+@media (prefers-reduced-motion: reduce) {
+    .template-boundary .sub-content {
+        transition: none;
+    }
+
+    .template-boundary .sub-content.sub-slide-left,
+    .template-boundary .sub-content.sub-slide-right {
+        animation: none;
+    }
+
+    /* Disable background blob animations */
+    .template-boundary.sub-page::before,
+    .template-boundary.sub-page::after {
+        animation: none;
+    }
+
+    /* Disable button glow animation */
+    .template-boundary .sub-subscribe-btn {
+        animation: none;
+    }
+
+    /* Disable dot bounce animation */
+    .template-boundary .sub-dot.active {
+        animation: none;
+    }
+
+    /* Disable spinner animations */
+    .template-boundary .spin {
+        animation: none;
+    }
+
+    /* Disable swipe chevron animation */
+    .template-boundary .sub-swipe-chevron {
+        animation: none;
+        opacity: 0.4;
+    }
+
+    /* Disable button arrow animation */
+    .template-boundary .sub-btn-arrow,
+    .template-boundary .sub-slide-arrow {
+        animation: none;
+    }
+
+    /* Disable all transitions */
+    .template-boundary .sub-dot,
+    .template-boundary .sub-subscribe-btn,
+    .template-boundary .sub-back-btn,
+    .template-boundary .sub-terms-drawer,
+    .template-boundary .sub-terms-overlay {
+        transition: none;
+    }
 }

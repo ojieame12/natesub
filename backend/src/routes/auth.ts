@@ -11,14 +11,17 @@ import {
   saveOnboardingProgress,
 } from '../services/auth.js'
 import { requireAuth } from '../middleware/auth.js'
+import { authVerifyRateLimit, authMagicLinkRateLimit } from '../middleware/rateLimit.js'
 import { env } from '../config/env.js'
 import { db } from '../db/client.js'
 
 const auth = new Hono()
 
 // Request magic link
+// Rate limited to prevent email enumeration and spam
 auth.post(
   '/magic-link',
+  authMagicLinkRateLimit,
   zValidator('json', z.object({
     email: z.string().email(),
   })),
@@ -36,8 +39,10 @@ auth.post(
 )
 
 // Verify magic link token
+// Rate limited to prevent brute force OTP guessing
 auth.get(
   '/verify',
+  authVerifyRateLimit,
   zValidator('query', z.object({
     token: z.string().min(1),
   })),
@@ -48,10 +53,11 @@ auth.get(
       const { sessionToken, userId, onboarding } = await verifyMagicLink(token)
 
       // Set session cookie (for web)
+      // SECURITY: sameSite='Strict' prevents CSRF attacks
       setCookie(c, 'session', sessionToken, {
         httpOnly: true,
         secure: env.NODE_ENV === 'production',
-        sameSite: 'Lax',
+        sameSite: 'Strict',
         maxAge: 7 * 24 * 60 * 60, // 7 days
         path: '/',
       })

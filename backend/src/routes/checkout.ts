@@ -3,8 +3,10 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { db } from '../db/client.js'
 import { redis } from '../db/redis.js'
+import { checkoutRateLimit, publicRateLimit } from '../middleware/rateLimit.js'
 import { createCheckoutSession, getAccountStatus } from '../services/stripe.js'
-import { initializeTransaction, generateReference, isPaystackSupported, type PaystackCountry } from '../services/paystack.js'
+import { initializePaystackCheckout, generateReference, isPaystackSupported, type PaystackCountry } from '../services/paystack.js'
+import { calculateServiceFee, type FeeCalculation, type FeeMode } from '../services/fees.js'
 import { env } from '../config/env.js'
 
 const checkout = new Hono()
@@ -22,15 +24,17 @@ const PAYSTACK_CURRENCIES: Record<PaystackCountry, string> = {
 // Create checkout session for subscription
 checkout.post(
   '/session',
+  checkoutRateLimit,
   zValidator('json', z.object({
     creatorUsername: z.string(),
     tierId: z.string().optional(),
-    amount: z.number().positive().max(100000), // Max $1000 in cents
+    amount: z.number().positive().max(500000000), // Max in smallest unit (e.g., ₦5M in kobo)
     interval: z.enum(['month', 'one_time']),
     subscriberEmail: z.string().email().optional(),
+    viewId: z.string().optional(), // Analytics: page view ID for conversion tracking
   })),
   async (c) => {
-    const { creatorUsername, tierId, amount, interval, subscriberEmail } = c.req.valid('json')
+    const { creatorUsername, tierId, amount, interval, subscriberEmail, viewId } = c.req.valid('json')
 
     // Find creator
     const profile = await db.profile.findUnique({
@@ -61,11 +65,14 @@ checkout.post(
         return c.json({
           error: 'This creator needs to activate their service plan to receive payments.',
           code: 'PLATFORM_SUBSCRIPTION_REQUIRED',
-        }, 402) // 402 Payment Required
+        }, 402)
       }
     }
 
     // Validate amount against creator's pricing
+    // IMPORTANT: profile.singleAmount and tier.amount are stored in CENTS in the database
+    // (see profile.ts:128 where we do Math.round(data.singleAmount * 100))
+    // The `amount` from request is also in cents (smallest unit)
     if (profile.pricingModel === 'single' && profile.singleAmount) {
       if (amount !== profile.singleAmount) {
         return c.json({ error: 'Invalid amount' }, 400)
@@ -77,6 +84,15 @@ checkout.post(
         return c.json({ error: 'Invalid tier or amount' }, 400)
       }
     }
+
+    // Calculate service fee based on creator's fee mode setting
+    // feeMode: 'absorb' = creator absorbs, 'pass_to_subscriber' = subscriber pays
+    const feeCalc = calculateServiceFee(
+      amount,
+      profile.currency,
+      profile.purpose,
+      profile.feeMode as FeeMode
+    )
 
     try {
       // Use Paystack for creators who have Paystack connected
@@ -100,7 +116,7 @@ checkout.post(
           }, 400)
         }
 
-        // Deduplication: Check for existing pending checkout (prevents double-clicks)
+        // Deduplication: Check for existing pending checkout
         const dedupeKey = `checkout:paystack:${subscriberEmail}:${profile.userId}:${tierId || amount}`
         const existingCheckout = await redis.get(dedupeKey)
 
@@ -111,66 +127,96 @@ checkout.post(
             provider: 'paystack',
             url: cached.url,
             reference: cached.reference,
+            breakdown: cached.breakdown,
             cached: true,
           })
         }
 
         const reference = generateReference('SUB')
-        const result = await initializeTransaction({
+        const result = await initializePaystackCheckout({
           email: subscriberEmail,
-          amount, // Already in smallest unit (kobo/cents)
+          creatorAmount: amount,
+          serviceFee: feeCalc.feeCents,
+          totalAmount: feeCalc.grossCents,
           currency: profile.currency,
-          subaccountCode: profile.paystackSubaccountCode,
-          callbackUrl: `${env.APP_URL}/${profile.username}?success=true&provider=paystack`,
+          callbackUrl: `${env.APP_URL}/payment/success?creator=${profile.username}`,
           reference,
           metadata: {
             creatorId: profile.userId,
             tierId: tierId || '',
             interval,
+            viewId: viewId || '', // Analytics: page view ID for conversion tracking
+            // Fee metadata for webhook processing
+            creatorAmount: feeCalc.netCents, // What creator receives
+            serviceFee: feeCalc.feeCents,
+            feeModel: feeCalc.feeModel,
+            feeMode: feeCalc.feeMode,
+            feeEffectiveRate: feeCalc.effectiveRate,
           },
         })
+
+        // Build breakdown for response
+        const breakdown = buildBreakdown(feeCalc, profile.currency)
 
         // Cache the checkout URL to prevent duplicates
         await redis.setex(dedupeKey, CHECKOUT_DEDUPE_TTL, JSON.stringify({
           url: result.authorization_url,
           reference: result.reference,
+          breakdown,
         }))
 
         return c.json({
           provider: 'paystack',
           url: result.authorization_url,
           reference: result.reference,
+          breakdown,
         })
       }
 
-      // Default to Stripe - verify account is actually active first
+      // Default to Stripe
       if (!profile.stripeAccountId) {
         return c.json({ error: 'Creator has not connected Stripe' }, 400)
       }
 
-      // Verify with Stripe that account can accept payments
+      // Verify Stripe account can accept payments and transfers
       const stripeStatus = await getAccountStatus(profile.stripeAccountId)
-      if (!stripeStatus.chargesEnabled) {
+      if (!stripeStatus.chargesEnabled || !stripeStatus.payoutsEnabled) {
+        const issue = !stripeStatus.chargesEnabled
+          ? 'cannot accept payments'
+          : 'cannot receive transfers'
         return c.json({
-          error: 'Creator payment account is not fully set up. Please ask the creator to complete their payment setup.'
+          error: `Creator payment account ${issue}. Please ask the creator to complete their payment setup.`
         }, 400)
       }
 
       const session = await createCheckoutSession({
         creatorId: profile.userId,
         tierId,
-        amount,
+        // Use calculated values from fee engine - handles both fee modes correctly
+        grossAmount: feeCalc.grossCents,   // What subscriber pays
+        netAmount: feeCalc.netCents,       // What creator receives
+        serviceFee: feeCalc.feeCents,      // Platform fee
         currency: profile.currency,
         interval,
         successUrl: `${env.APP_URL}/${profile.username}?success=true&provider=stripe`,
         cancelUrl: `${env.APP_URL}/${profile.username}?canceled=true`,
         subscriberEmail,
+        viewId, // Analytics: page view ID for conversion tracking
+        feeMetadata: {
+          feeModel: feeCalc.feeModel,
+          feeMode: feeCalc.feeMode,
+          feeEffectiveRate: feeCalc.effectiveRate,
+        },
       })
+
+      // Build breakdown for response
+      const breakdown = buildBreakdown(feeCalc, profile.currency)
 
       return c.json({
         provider: 'stripe',
         sessionId: session.id,
         url: session.url,
+        breakdown,
       })
     } catch (error) {
       console.error('Checkout error:', error)
@@ -178,5 +224,59 @@ checkout.post(
     }
   }
 )
+
+// Verify Paystack transaction (for frontend confirmation)
+checkout.get(
+  '/verify/:reference',
+  publicRateLimit,
+  async (c) => {
+    const { reference } = c.req.param()
+
+    if (!reference) {
+      return c.json({ error: 'Reference is required' }, 400)
+    }
+
+    try {
+      // Import dynamically to avoid circular deps
+      const { verifyTransaction } = await import('../services/paystack.js')
+      const transaction = await verifyTransaction(reference)
+
+      // Check if transaction was successful
+      const isSuccessful = transaction.status === 'success'
+
+      return c.json({
+        verified: isSuccessful,
+        status: transaction.status,
+        amount: transaction.amount,
+        currency: transaction.currency,
+        reference: transaction.reference,
+        paidAt: transaction.paid_at,
+        channel: transaction.channel,
+        metadata: transaction.metadata,
+      })
+    } catch (error: any) {
+      console.error('Paystack verification error:', error)
+      // Don't expose internal errors - could be invalid reference
+      return c.json({
+        verified: false,
+        error: 'Unable to verify transaction',
+      }, 400)
+    }
+  }
+)
+
+// Helper to build breakdown response
+function buildBreakdown(feeCalc: FeeCalculation, currency: string) {
+  return {
+    creatorAmount: feeCalc.netCents,      // What creator receives
+    serviceFee: feeCalc.feeCents,          // Platform fee
+    totalAmount: feeCalc.grossCents,       // What subscriber pays
+    effectiveRate: feeCalc.effectiveRate,
+    currency,
+    feeModel: feeCalc.feeModel,
+    feeMode: feeCalc.feeMode,              // Who pays the fee
+    purposeType: feeCalc.purposeType,
+  }
+}
 
 export default checkout

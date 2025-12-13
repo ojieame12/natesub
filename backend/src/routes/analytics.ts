@@ -1,9 +1,27 @@
 import { Hono } from 'hono'
+import { zValidator } from '@hono/zod-validator'
+import { z } from 'zod'
 import crypto from 'crypto'
 import { db } from '../db/client.js'
 import { requireAuth } from '../middleware/auth.js'
+import { publicRateLimit } from '../middleware/rateLimit.js'
 
 const analytics = new Hono()
+
+// Validation schemas
+const pageViewSchema = z.object({
+  profileId: z.string().uuid(),
+  referrer: z.string().url().max(2000).optional().nullable(),
+  utmSource: z.string().max(100).optional().nullable(),
+  utmMedium: z.string().max(100).optional().nullable(),
+  utmCampaign: z.string().max(100).optional().nullable(),
+})
+
+const updateViewSchema = z.object({
+  reachedPayment: z.boolean().optional(),
+  startedCheckout: z.boolean().optional(),
+  completedCheckout: z.boolean().optional(),
+})
 
 // Hash visitor info for unique counting (no PII stored)
 function hashVisitor(ip: string, userAgent: string): string {
@@ -28,16 +46,16 @@ function getDeviceType(userAgent: string): string {
 
 // ============================================
 // PUBLIC: Record page view (no auth required)
+// Rate limited and validated to prevent spam/injection
 // ============================================
 
-analytics.post('/view', async (c) => {
+analytics.post(
+  '/view',
+  publicRateLimit,
+  zValidator('json', pageViewSchema),
+  async (c) => {
   try {
-    const body = await c.req.json()
-    const { profileId, referrer, utmSource, utmMedium, utmCampaign } = body
-
-    if (!profileId) {
-      return c.json({ error: 'profileId required' }, 400)
-    }
+    const { profileId, referrer, utmSource, utmMedium, utmCampaign } = c.req.valid('json')
 
     // Get visitor info from headers
     const ip = c.req.header('x-forwarded-for')?.split(',')[0] ||
@@ -84,17 +102,23 @@ analytics.post('/view', async (c) => {
 
 // ============================================
 // PUBLIC: Update conversion progress
+// Rate limited and validated
 // ============================================
 
-analytics.patch('/view/:viewId', async (c) => {
+analytics.patch(
+  '/view/:viewId',
+  publicRateLimit,
+  zValidator('param', z.object({ viewId: z.string().uuid() })),
+  zValidator('json', updateViewSchema),
+  async (c) => {
   try {
-    const { viewId } = c.req.param()
-    const body = await c.req.json()
-    const { reachedPayment, startedCheckout } = body
+    const { viewId } = c.req.valid('param')
+    const { reachedPayment, startedCheckout, completedCheckout } = c.req.valid('json')
 
-    const updateData: { reachedPayment?: boolean; startedCheckout?: boolean } = {}
+    const updateData: { reachedPayment?: boolean; startedCheckout?: boolean; completedCheckout?: boolean } = {}
     if (reachedPayment !== undefined) updateData.reachedPayment = reachedPayment
     if (startedCheckout !== undefined) updateData.startedCheckout = startedCheckout
+    if (completedCheckout !== undefined) updateData.completedCheckout = completedCheckout
 
     await db.pageView.update({
       where: { id: viewId },
@@ -165,12 +189,15 @@ analytics.get('/stats', requireAuth, async (c) => {
     ])
 
     // Conversion funnel (last 30 days)
-    const [reachedPayment, startedCheckout] = await Promise.all([
+    const [reachedPayment, startedCheckout, completedCheckout] = await Promise.all([
       db.pageView.count({
         where: { profileId: profile.id, createdAt: { gte: thisMonth }, reachedPayment: true },
       }),
       db.pageView.count({
         where: { profileId: profile.id, createdAt: { gte: thisMonth }, startedCheckout: true },
+      }),
+      db.pageView.count({
+        where: { profileId: profile.id, createdAt: { gte: thisMonth }, completedCheckout: true },
       }),
     ])
 
@@ -232,6 +259,7 @@ analytics.get('/stats', requireAuth, async (c) => {
         views: monthViews,
         reachedPayment,
         startedCheckout,
+        completedCheckout,
         conversions,
       },
       rates: {

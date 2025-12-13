@@ -2,7 +2,7 @@ import Stripe from 'stripe'
 import crypto from 'crypto'
 import { env } from '../config/env.js'
 import { db } from '../db/client.js'
-import { getPlatformFeePercent, type UserPurpose } from './pricing.js'
+import { stripeCircuitBreaker, CircuitBreakerError } from '../utils/circuitBreaker.js'
 
 // Generate idempotency key for Stripe API calls
 // Uses 5-minute time buckets so duplicate requests within 5 minutes get same key
@@ -45,29 +45,34 @@ export async function createExpressAccount(
   const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : undefined
 
   // Create new Express account with prefilled KYC data
-  const account = await stripe.accounts.create({
-    type: 'express',
-    email,
-    country,
-    capabilities: {
-      card_payments: { requested: true },
-      transfers: { requested: true },
-    },
-    business_type: 'individual',
-    // Prefill KYC data to speed up onboarding
-    individual: {
+  // Use idempotency key to prevent duplicate accounts on retry/double-click
+  const idempotencyKey = generateIdempotencyKey('acct_create', userId, email)
+  const account = await stripe.accounts.create(
+    {
+      type: 'express',
       email,
-      first_name: firstName,
-      last_name: lastName,
-    },
-    settings: {
-      payouts: {
-        schedule: {
-          interval: 'daily',
+      country,
+      capabilities: {
+        card_payments: { requested: true },
+        transfers: { requested: true },
+      },
+      business_type: 'individual',
+      // Prefill KYC data to speed up onboarding
+      individual: {
+        email,
+        first_name: firstName,
+        last_name: lastName,
+      },
+      settings: {
+        payouts: {
+          schedule: {
+            interval: 'daily',
+          },
         },
       },
     },
-  })
+    { idempotencyKey }
+  )
 
   // Save account ID to profile
   await db.profile.update({
@@ -94,7 +99,6 @@ export async function createAccountLink(accountId: string) {
     // Collect all required fields upfront, not just minimum
     collection_options: {
       fields: 'eventually_due', // Collect all fields that will eventually be required
-      future_requirements: 'include', // Include future requirements too
     },
   })
 
@@ -164,15 +168,24 @@ export async function createExpressDashboardLink(stripeAccountId: string) {
 export async function createCheckoutSession(params: {
   creatorId: string
   tierId?: string
-  requestId?: string // For tracking request-based checkouts
-  amount: number // in cents
+  requestId?: string
+  grossAmount: number      // What subscriber pays (in smallest unit)
+  netAmount: number        // What creator receives (in smallest unit)
+  serviceFee: number       // Platform service fee (in smallest unit)
   currency: string
   interval: 'month' | 'one_time'
   successUrl: string
   cancelUrl: string
   subscriberEmail?: string
+  viewId?: string          // Analytics: page view ID for conversion tracking
+  feeMetadata?: {
+    feeModel: string
+    feeMode: string         // 'absorb' | 'pass_to_subscriber'
+    feeEffectiveRate: number
+    feeWasCapped?: boolean  // Optional - flat fee model has no caps
+  }
 }) {
-  // Get creator's Stripe account and purpose for fee calculation
+  // Get creator's Stripe account
   const creatorProfile = await db.profile.findUnique({
     where: { userId: params.creatorId },
   })
@@ -181,14 +194,19 @@ export async function createCheckoutSession(params: {
     throw new Error('Creator has not connected payments')
   }
 
-  // Calculate platform fee based on creator's purpose (personal: 10%, service: 8%)
-  const platformFeePercent = getPlatformFeePercent(creatorProfile.purpose as UserPurpose)
-  const applicationFeeAmount = Math.round(params.amount * (platformFeePercent / 100))
+  // Store validated stripeAccountId for type narrowing
+  const stripeAccountId = creatorProfile.stripeAccountId
 
-  // Create price
+  // Use pre-calculated amounts from fee engine
+  // This correctly handles both fee modes:
+  // - pass_to_subscriber: grossAmount = netAmount + fee
+  // - absorb: grossAmount = netAmount + fee (but netAmount is lower)
+  const chargeAmount = params.grossAmount  // What subscriber pays
+
+  // Create price data - subscriber sees the charge amount
   const priceData: Stripe.Checkout.SessionCreateParams.LineItem.PriceData = {
     currency: params.currency.toLowerCase(),
-    unit_amount: params.amount,
+    unit_amount: chargeAmount,
     product_data: {
       name: creatorProfile.displayName,
       description: params.tierId
@@ -201,48 +219,74 @@ export async function createCheckoutSession(params: {
     priceData.recurring = { interval: 'month' }
   }
 
-  // Generate idempotency key to prevent duplicate sessions
+  // Generate idempotency key
+  // If no email, add random suffix to prevent collision between anonymous visitors
+  const emailOrRandom = params.subscriberEmail || crypto.randomUUID()
   const idempotencyKey = generateIdempotencyKey(
     'checkout',
     params.creatorId,
-    params.subscriberEmail,
+    emailOrRandom,
     params.tierId,
-    params.amount.toString(),
+    chargeAmount.toString(),
     params.interval
   )
 
-  // Create checkout session with idempotency key
-  const session = await stripe.checkout.sessions.create(
-    {
-      mode: params.interval === 'month' ? 'subscription' : 'payment',
-      line_items: [
-        {
-          price_data: priceData,
-          quantity: 1,
-        },
-      ],
-      payment_intent_data: params.interval === 'one_time' ? {
-        application_fee_amount: applicationFeeAmount,
-        transfer_data: {
-          destination: creatorProfile.stripeAccountId,
-        },
-      } : undefined,
-      subscription_data: params.interval === 'month' ? {
-        application_fee_percent: platformFeePercent,
-        transfer_data: {
-          destination: creatorProfile.stripeAccountId,
-        },
-      } : undefined,
-      success_url: params.successUrl,
-      cancel_url: params.cancelUrl,
-      customer_email: params.subscriberEmail,
-      metadata: {
-        creatorId: params.creatorId,
-        tierId: params.tierId || '',
-        requestId: params.requestId || '',  // Track which request triggered this checkout
+  // Metadata for tracking fees through the system
+  const metadata = {
+    creatorId: params.creatorId,
+    tierId: params.tierId || '',
+    requestId: params.requestId || '',
+    viewId: params.viewId || '', // Analytics: page view ID for conversion tracking
+    // Fee tracking (flat model with creator-chosen fee mode)
+    grossAmount: params.grossAmount.toString(),   // What subscriber paid
+    netAmount: params.netAmount.toString(),       // What creator receives (was creatorAmount)
+    serviceFee: params.serviceFee.toString(),     // Platform fee
+    feeModel: params.feeMetadata?.feeModel || 'flat',
+    feeMode: params.feeMetadata?.feeMode || 'pass_to_subscriber',
+    feeEffectiveRate: params.feeMetadata?.feeEffectiveRate?.toString() || '',
+    feeWasCapped: params.feeMetadata?.feeWasCapped ? 'true' : 'false',
+  }
+
+  // Create checkout session with circuit breaker protection
+  // For both one-time and subscriptions, use application_fee_amount (fixed fee)
+  const session = await stripeCircuitBreaker(() =>
+    stripe.checkout.sessions.create(
+      {
+        mode: params.interval === 'month' ? 'subscription' : 'payment',
+        line_items: [
+          {
+            price_data: priceData,
+            quantity: 1,
+          },
+        ],
+        // One-time payments: set fee on payment intent
+        payment_intent_data: params.interval === 'one_time' ? {
+          application_fee_amount: params.serviceFee,
+          transfer_data: {
+            destination: stripeAccountId,
+          },
+        } : undefined,
+        // Subscriptions: set application_fee_percent for platform fee
+        // IMPORTANT: application_fee_percent applies to the TOTAL charge amount,
+        // not the creator's price. So we need to calculate: fee / chargeAmount * 100
+        // Example: $10 creator price + $1 fee = $11 charge → fee_percent = 1/11 = 9.09%
+        // For absorb mode: $10 charge, $1 fee → fee_percent = 1/10 = 10%
+        subscription_data: params.interval === 'month' ? {
+          application_fee_percent: chargeAmount > 0
+            ? Math.round((params.serviceFee / chargeAmount) * 10000) / 100
+            : 0,
+          transfer_data: {
+            destination: stripeAccountId,
+          },
+          metadata, // Store fee info for tracking/auditing
+        } : undefined,
+        success_url: params.successUrl,
+        cancel_url: params.cancelUrl,
+        customer_email: params.subscriberEmail,
+        metadata,
       },
-    },
-    { idempotencyKey }
+      { idempotencyKey }
+    )
   )
 
   return session
@@ -275,4 +319,59 @@ export async function getPayoutHistory(stripeAccountId: string, limit = 10) {
     arrivalDate: new Date(p.arrival_date * 1000),
     createdAt: new Date(p.created * 1000),
   }))
+}
+
+/**
+ * Set fee tracking metadata on a Stripe subscription
+ *
+ * IMPORTANT: We do NOT modify application_fee_percent here!
+ * The fee percent is set at checkout creation and must remain for all invoices.
+ * Clearing it would break fee collection on renewal invoices.
+ *
+ * This function only stores metadata for tracking/auditing purposes.
+ *
+ * @param stripeSubscriptionId - The Stripe subscription ID
+ * @param applicationFeeAmount - The expected fee amount in smallest currency unit
+ */
+export async function setSubscriptionDefaultFee(
+  stripeSubscriptionId: string,
+  applicationFeeAmount: number
+): Promise<void> {
+  try {
+    // Only update metadata - DO NOT touch application_fee_percent!
+    await stripe.subscriptions.update(stripeSubscriptionId, {
+      metadata: {
+        expected_fee_amount: applicationFeeAmount.toString(),
+      },
+    })
+    console.log(`[stripe] Set fee tracking metadata ${applicationFeeAmount} on subscription ${stripeSubscriptionId}`)
+  } catch (err) {
+    console.error(`[stripe] Failed to set fee metadata on subscription ${stripeSubscriptionId}:`, err)
+    throw err
+  }
+}
+
+/**
+ * Verify and update invoice fee if needed
+ *
+ * Called from invoice.paid to verify the fee was correctly applied.
+ * If the invoice's application_fee differs from expected, log a warning.
+ */
+export async function verifyInvoiceFee(
+  invoiceId: string,
+  expectedFee: number
+): Promise<{ actualFee: number; matched: boolean }> {
+  try {
+    const invoice = await stripe.invoices.retrieve(invoiceId)
+    const actualFee = (invoice as any).application_fee_amount || 0
+
+    if (actualFee !== expectedFee) {
+      console.warn(`[stripe] Fee mismatch on invoice ${invoiceId}: expected ${expectedFee}, got ${actualFee}`)
+    }
+
+    return { actualFee, matched: actualFee === expectedFee }
+  } catch (err) {
+    console.error(`[stripe] Failed to verify invoice fee ${invoiceId}:`, err)
+    return { actualFee: 0, matched: false }
+  }
 }

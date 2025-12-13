@@ -8,12 +8,35 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)" />
+    <!-- Preload start screen hero image -->
+    <link rel="preload" href="https://res.cloudinary.com/subframe/image/upload/v1764688418/uploads/13740/qnujqsgnfu917a1ntav4.png" as="image" />
     <title>NatePay</title>
     <style>
       /* Prevent overscroll bounce on iOS */
       html, body {
         overscroll-behavior: none;
         -webkit-overflow-scrolling: touch;
+      }
+      /* Initial loading state - prevents white flash */
+      #root:empty {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        min-height: 100dvh;
+        background: #F5F5F4;
+      }
+      #root:empty::after {
+        content: '';
+        width: 24px;
+        height: 24px;
+        border: 2px solid #E7E5E4;
+        border-top-color: #1C1917;
+        border-radius: 50%;
+        animation: initial-spin 0.8s linear infinite;
+      }
+      @keyframes initial-spin {
+        to { transform: rotate(360deg); }
       }
     </style>
   </head>

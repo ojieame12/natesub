@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronLeft, ChevronDown, Check, Loader2, AlertCircle, Building2 } from 'lucide-react'
 import { useOnboardingStore } from './store'
 import { Button, Pressable } from './components'
-import { usePaystackBanks, usePaystackResolveAccount, usePaystackConnect } from '../api/hooks'
+import { usePaystackBanks, usePaystackResolveAccount, usePaystackConnect, useProfile } from '../api/hooks'
 import './onboarding.css'
 
 interface Bank {
@@ -15,7 +15,14 @@ interface Bank {
 export default function PaystackConnect() {
     const navigate = useNavigate()
     const store = useOnboardingStore()
-    const { countryCode, reset } = store
+    const { data: profileData } = useProfile()
+
+    // Use onboarding store countryCode, fallback to profile (for Settings → Paystack flow)
+    const countryCode = store.countryCode || profileData?.profile?.countryCode || ''
+
+    // Refs
+    const dropdownRef = useRef<HTMLDivElement>(null)
+    const listRef = useRef<HTMLDivElement>(null)
 
     // Form state
     const [selectedBank, setSelectedBank] = useState<Bank | null>(null)
@@ -24,6 +31,66 @@ export default function PaystackConnect() {
     const [showBankDropdown, setShowBankDropdown] = useState(false)
     const [bankSearchQuery, setBankSearchQuery] = useState('')
     const [connectError, setConnectError] = useState<string | null>(null)
+    const [highlightedIndex, setHighlightedIndex] = useState(-1)
+
+    // Close dropdown when clicking outside
+    useEffect(() => {
+        function handleClickOutside(event: MouseEvent) {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+                setShowBankDropdown(false)
+                setHighlightedIndex(-1)
+            }
+        }
+
+        if (showBankDropdown) {
+            document.addEventListener('mousedown', handleClickOutside)
+            return () => document.removeEventListener('mousedown', handleClickOutside)
+        }
+    }, [showBankDropdown])
+
+    // Reset highlighted index when search query changes
+    useEffect(() => {
+        setHighlightedIndex(-1)
+    }, [bankSearchQuery])
+
+    // Keyboard navigation for dropdown
+    const handleDropdownKeyDown = (e: React.KeyboardEvent) => {
+        if (!showBankDropdown) return
+
+        switch (e.key) {
+            case 'ArrowDown':
+                e.preventDefault()
+                setHighlightedIndex(prev =>
+                    prev < filteredBanks.length - 1 ? prev + 1 : prev
+                )
+                break
+            case 'ArrowUp':
+                e.preventDefault()
+                setHighlightedIndex(prev => prev > 0 ? prev - 1 : 0)
+                break
+            case 'Enter':
+                e.preventDefault()
+                if (highlightedIndex >= 0 && highlightedIndex < filteredBanks.length) {
+                    handleSelectBank(filteredBanks[highlightedIndex])
+                }
+                break
+            case 'Escape':
+                e.preventDefault()
+                setShowBankDropdown(false)
+                setHighlightedIndex(-1)
+                break
+        }
+    }
+
+    // Scroll highlighted item into view
+    useEffect(() => {
+        if (highlightedIndex >= 0 && listRef.current) {
+            const items = listRef.current.querySelectorAll('.paystack-dropdown-item')
+            if (items[highlightedIndex]) {
+                items[highlightedIndex].scrollIntoView({ block: 'nearest' })
+            }
+        }
+    }, [highlightedIndex])
 
     // API hooks
     const { data: banksData, isLoading: loadingBanks, isError: banksError } = usePaystackBanks(countryCode || '')
@@ -33,6 +100,9 @@ export default function PaystackConnect() {
     // Verification state
     const [verifiedName, setVerifiedName] = useState<string | null>(null)
     const [verifyError, setVerifyError] = useState<string | null>(null)
+    const [isTyping, setIsTyping] = useState(false)
+    const [verificationSkipped, setVerificationSkipped] = useState(false)
+    const [manualAccountName, setManualAccountName] = useState('')
 
     const banks = banksData?.banks || []
     const isSouthAfrica = countryCode?.toUpperCase() === 'ZA'
@@ -54,7 +124,14 @@ export default function PaystackConnect() {
 
     // Auto-verify account when account number meets minimum length
     useEffect(() => {
+        // Show typing indicator during debounce if we have enough characters
+        if (selectedBank && accountNumber.length >= minAccountLength) {
+            setIsTyping(true)
+        }
+
         const verifyAccount = async () => {
+            setIsTyping(false)
+
             if (!selectedBank || accountNumber.length < minAccountLength) {
                 setVerifiedName(null)
                 setVerifyError(null)
@@ -70,18 +147,29 @@ export default function PaystackConnect() {
                 if (result.verified && result.accountName) {
                     setVerifiedName(result.accountName)
                     setVerifyError(null)
+                    setVerificationSkipped(false)
+                } else if (result.verificationSkipped) {
+                    // Kenya: verification not available, allow manual name entry
+                    setVerifiedName(null)
+                    setVerifyError(null)
+                    setVerificationSkipped(true)
                 } else {
                     setVerifiedName(null)
                     setVerifyError(result.error || 'Could not verify account. Please check the details.')
+                    setVerificationSkipped(false)
                 }
             } catch (err: any) {
                 setVerifiedName(null)
                 setVerifyError(err?.error || 'Could not verify account. Please check the details.')
+                setVerificationSkipped(false)
             }
         }
 
         const debounce = setTimeout(verifyAccount, 500)
-        return () => clearTimeout(debounce)
+        return () => {
+            clearTimeout(debounce)
+            setIsTyping(false)
+        }
     }, [accountNumber, selectedBank, idNumber, isSouthAfrica, minAccountLength])
 
     const handleSelectBank = (bank: Bank) => {
@@ -92,26 +180,35 @@ export default function PaystackConnect() {
         setVerifiedName(null)
         setVerifyError(null)
         setConnectError(null)
+        setVerificationSkipped(false)
+        setManualAccountName('')
     }
 
-    const canSubmit = selectedBank && accountNumber.length >= minAccountLength && verifiedName && !resolveAccount.isPending
+    // Allow submission if verified OR if verification was skipped (Kenya) with manual name
+    const effectiveAccountName = verifiedName || (verificationSkipped && manualAccountName.trim().length >= 2 ? manualAccountName.trim() : null)
+    const canSubmit = selectedBank && accountNumber.length >= minAccountLength && effectiveAccountName && !resolveAccount.isPending
         && (!isSouthAfrica || idNumber.length >= 13)
 
     const handleSubmit = async () => {
-        if (!canSubmit || !selectedBank || !verifiedName) return
+        if (!canSubmit || !selectedBank || !effectiveAccountName) return
+
+        // Check for network connection
+        if (!navigator.onLine) {
+            setConnectError("You're offline. Please check your internet connection and try again.")
+            return
+        }
 
         setConnectError(null)
         try {
             await connectPaystack.mutateAsync({
                 bankCode: selectedBank.code,
                 accountNumber,
-                accountName: verifiedName,
+                accountName: effectiveAccountName,
                 ...(isSouthAfrica && { idNumber }),
             })
 
-            // Success - go to dashboard
-            reset()
-            navigate('/dashboard')
+            // Success - go to success page (don't reset here, success page will do it)
+            navigate('/onboarding/paystack/complete')
         } catch (err: any) {
             setConnectError(err?.error || 'Failed to connect bank account. Please try again.')
         }
@@ -181,7 +278,7 @@ export default function PaystackConnect() {
                     )}
 
                     {/* Bank Selection */}
-                    <div className="paystack-field">
+                    <div className="paystack-field" ref={dropdownRef}>
                         <label className="paystack-label">Select your bank</label>
                         <Pressable
                             className={`paystack-dropdown-trigger ${showBankDropdown ? 'open' : ''}`}
@@ -199,22 +296,24 @@ export default function PaystackConnect() {
                         </Pressable>
 
                         {showBankDropdown && (
-                            <div className="paystack-dropdown">
+                            <div className="paystack-dropdown" onKeyDown={handleDropdownKeyDown}>
                                 <input
                                     type="text"
                                     className="paystack-dropdown-search"
                                     placeholder="Search banks..."
                                     value={bankSearchQuery}
                                     onChange={(e) => setBankSearchQuery(e.target.value)}
-                                    autoFocus={false}
+                                    onKeyDown={handleDropdownKeyDown}
+                                    autoFocus
                                 />
-                                <div className="paystack-dropdown-list">
+                                <div className="paystack-dropdown-list" ref={listRef}>
                                     {filteredBanks.length > 0 ? (
-                                        filteredBanks.map(bank => (
+                                        filteredBanks.map((bank, index) => (
                                             <Pressable
                                                 key={bank.code}
-                                                className={`paystack-dropdown-item ${selectedBank?.code === bank.code ? 'selected' : ''}`}
+                                                className={`paystack-dropdown-item ${selectedBank?.code === bank.code ? 'selected' : ''} ${highlightedIndex === index ? 'highlighted' : ''}`}
                                                 onClick={() => handleSelectBank(bank)}
+                                                onMouseEnter={() => setHighlightedIndex(index)}
                                             >
                                                 <span>{bank.name}</span>
                                                 {selectedBank?.code === bank.code && <Check size={16} />}
@@ -238,12 +337,24 @@ export default function PaystackConnect() {
                             placeholder="Enter account number"
                             value={accountNumber}
                             onChange={(e) => setAccountNumber(e.target.value.replace(/\D/g, ''))}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter' && canSubmit) {
+                                    e.preventDefault()
+                                    handleSubmit()
+                                }
+                            }}
                             maxLength={15}
                         />
                         <span className="paystack-hint">{accountHint}</span>
                     </div>
 
                     {/* Verification Status */}
+                    {isTyping && !resolveAccount.isPending && (
+                        <div className="paystack-typing">
+                            <span>Will verify when you stop typing...</span>
+                        </div>
+                    )}
+
                     {resolveAccount.isPending && (
                         <div className="paystack-verifying">
                             <Loader2 size={16} className="spin" />
@@ -251,10 +362,34 @@ export default function PaystackConnect() {
                         </div>
                     )}
 
-                    {verifiedName && (
+                    {verifiedName && !isTyping && !resolveAccount.isPending && (
                         <div className="paystack-verified">
                             <Check size={16} />
                             <span>{verifiedName}</span>
+                        </div>
+                    )}
+
+                    {/* Kenya: Manual account name entry (verification not available) */}
+                    {verificationSkipped && !isTyping && !resolveAccount.isPending && (
+                        <div className="paystack-field">
+                            <label className="paystack-label">Account holder name</label>
+                            <input
+                                type="text"
+                                className="paystack-input"
+                                placeholder="Enter the name on this account"
+                                value={manualAccountName}
+                                onChange={(e) => setManualAccountName(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && canSubmit) {
+                                        e.preventDefault()
+                                        handleSubmit()
+                                    }
+                                }}
+                                maxLength={100}
+                            />
+                            <span className="paystack-hint">
+                                Account verification is not available in Kenya. Please enter the exact name on your bank account.
+                            </span>
                         </div>
                     )}
 
@@ -269,6 +404,12 @@ export default function PaystackConnect() {
                                 placeholder="Enter your SA ID number"
                                 value={idNumber}
                                 onChange={(e) => setIdNumber(e.target.value.replace(/\D/g, ''))}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && canSubmit) {
+                                        e.preventDefault()
+                                        handleSubmit()
+                                    }
+                                }}
                                 maxLength={13}
                             />
                             <span className="paystack-hint">Required for South African bank accounts</span>
@@ -295,7 +436,7 @@ export default function PaystackConnect() {
                                 Connecting...
                             </>
                         ) : (
-                            'Connect Bank Account'
+                            'Connect Payment Method'
                         )}
                     </Button>
                 </div>

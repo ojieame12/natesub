@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { persist, createJSONStorage } from 'zustand/middleware'
 
 // === Types ===
 
@@ -19,8 +19,11 @@ export type SubscriptionPurpose =
 // Pricing model - single amount or tiered
 export type PricingModel = 'single' | 'tiers'
 
+// Fee mode - who pays the platform fee
+export type FeeMode = 'absorb' | 'pass_to_subscriber'
+
 // Payment provider selection
-export type PaymentProvider = 'stripe' | 'flutterwave' | 'bank' | null
+export type PaymentProvider = 'stripe' | 'paystack' | 'flutterwave' | null
 
 // Tier with perks
 export interface SubscriptionTier {
@@ -66,7 +69,8 @@ interface OnboardingStore {
 
     // Service description (for service branch)
     serviceDescription: string
-    serviceDescriptionAudio: Blob | null
+    serviceDescriptionAudio: Blob | null // In-memory blob (not persisted)
+    serviceDescriptionAudioUrl: string | null // Persisted URL after upload
 
     // Structured service inputs (for better AI generation)
     serviceDeliverables: ServiceDeliverable[]
@@ -118,10 +122,14 @@ interface OnboardingStore {
     // Payment provider
     paymentProvider: PaymentProvider
 
+    // Fee mode - who pays the platform fee
+    feeMode: FeeMode
+
     // Actions
     setBranch: (branch: BranchType) => void
     setServiceDescription: (description: string) => void
     setServiceDescriptionAudio: (audio: Blob | null) => void
+    setServiceDescriptionAudioUrl: (url: string | null) => void
     setServiceDeliverables: (deliverables: ServiceDeliverable[]) => void
     toggleServiceDeliverable: (id: string) => void
     updateServiceDeliverable: (id: string, updates: Partial<ServiceDeliverable>) => void
@@ -153,6 +161,7 @@ interface OnboardingStore {
     setUsername: (username: string) => void
     setAvatarUrl: (url: string | null) => void
     setPaymentProvider: (provider: PaymentProvider) => void
+    setFeeMode: (mode: FeeMode) => void
     nextStep: () => void
     prevStep: () => void
     goToStep: (step: number) => void
@@ -199,6 +208,7 @@ const initialState = {
     branch: null as BranchType,
     serviceDescription: '',
     serviceDescriptionAudio: null as Blob | null,
+    serviceDescriptionAudioUrl: null as string | null,
     serviceDeliverables: defaultServiceDeliverables,
     serviceCredential: '',
     generatedBio: '',
@@ -223,6 +233,7 @@ const initialState = {
     username: '',
     avatarUrl: null as string | null,
     paymentProvider: null as PaymentProvider,
+    feeMode: 'absorb' as FeeMode, // Default: creator absorbs the fee
 }
 
 // === Store ===
@@ -236,6 +247,7 @@ export const useOnboardingStore = create<OnboardingStore>()(
             setBranch: (branch) => set({ branch }),
             setServiceDescription: (serviceDescription) => set({ serviceDescription }),
             setServiceDescriptionAudio: (serviceDescriptionAudio) => set({ serviceDescriptionAudio }),
+            setServiceDescriptionAudioUrl: (serviceDescriptionAudioUrl) => set({ serviceDescriptionAudioUrl }),
             setServiceDeliverables: (serviceDeliverables) => set({ serviceDeliverables }),
             toggleServiceDeliverable: (id) => set((state) => ({
                 serviceDeliverables: state.serviceDeliverables.map((d) =>
@@ -320,6 +332,9 @@ export const useOnboardingStore = create<OnboardingStore>()(
             // Payment provider
             setPaymentProvider: (paymentProvider) => set({ paymentProvider }),
 
+            // Fee mode
+            setFeeMode: (feeMode) => set({ feeMode }),
+
             // Navigation
             nextStep: () => set((state) => ({ currentStep: state.currentStep + 1 })),
             prevStep: () => set((state) => ({ currentStep: Math.max(0, state.currentStep - 1) })),
@@ -368,6 +383,7 @@ export const useOnboardingStore = create<OnboardingStore>()(
                     if (d.generatedImpact) updates.generatedImpact = d.generatedImpact
                     // Payment
                     if (d.paymentProvider) updates.paymentProvider = d.paymentProvider
+                    if (d.feeMode) updates.feeMode = d.feeMode
                 }
 
                 return updates
@@ -375,12 +391,19 @@ export const useOnboardingStore = create<OnboardingStore>()(
         }),
         {
             name: 'natepay-onboarding',
+            version: 1,
+            // Use sessionStorage instead of localStorage to prevent stale state across sessions
+            // This means onboarding progress is lost when the tab closes, but prevents
+            // the "teleporting" bug where users are sent to random onboarding steps
+            storage: createJSONStorage(() => sessionStorage),
             partialize: (state) => ({
-                // Persist key state for resume (except audio blob and isGenerating)
+                // Persist key state for resume
+                // Note: serviceDescriptionAudio (Blob) is NOT persisted - only the URL after upload
+                // Note: isGenerating excluded as it's transient
                 currentStep: state.currentStep,
                 branch: state.branch,
                 serviceDescription: state.serviceDescription,
-                // Note: serviceDescriptionAudio is NOT persisted (Blob not serializable)
+                serviceDescriptionAudioUrl: state.serviceDescriptionAudioUrl,
                 serviceDeliverables: state.serviceDeliverables,
                 serviceCredential: state.serviceCredential,
                 generatedBio: state.generatedBio,
@@ -403,7 +426,45 @@ export const useOnboardingStore = create<OnboardingStore>()(
                 username: state.username,
                 avatarUrl: state.avatarUrl,
                 paymentProvider: state.paymentProvider,
+                feeMode: state.feeMode,
+                // Track when state was last updated for TTL
+                _lastUpdated: Date.now(),
             }),
+            // Handle storage errors and stale state gracefully
+            onRehydrateStorage: () => (state, error) => {
+                if (error) {
+                    console.error('[onboarding] Failed to rehydrate state:', error)
+                    // Clear corrupted storage
+                    try {
+                        sessionStorage.removeItem('natepay-onboarding')
+                    } catch (e) {
+                        // Ignore
+                    }
+                    return
+                }
+
+                // Check for stale state (older than 24 hours)
+                // Only auto-reset if user hasn't completed authentication (step 3+)
+                if (state) {
+                    const lastUpdated = (state as any)._lastUpdated
+                    const twentyFourHours = 24 * 60 * 60 * 1000
+                    const isStale = lastUpdated && (Date.now() - lastUpdated > twentyFourHours)
+                    const hasNotAuthenticated = state.currentStep < 3 // Before OTP verification
+
+                    if (isStale && hasNotAuthenticated) {
+                        console.log('[onboarding] Resetting stale state (>24h, not authenticated)')
+                        try {
+                            sessionStorage.removeItem('natepay-onboarding')
+                        } catch (e) {
+                            // Ignore
+                        }
+                        // Reset to initial state
+                        useOnboardingStore.setState({
+                            ...initialState
+                        })
+                    }
+                }
+            },
         }
     )
 )

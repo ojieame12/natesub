@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Mic, Square, Play, Pause, X, RefreshCw } from 'lucide-react'
+import { Mic, Square, Play, Pause, X, RefreshCw, Loader2 } from 'lucide-react'
 import Pressable from './Pressable'
 import './VoiceRecorder.css'
 
@@ -7,18 +7,24 @@ interface VoiceRecorderProps {
     onRecorded: (blob: Blob, duration: number) => void
     onRemove: () => void
     audioBlob?: Blob | null
+    /** URL to existing audio (for persisted recordings) */
+    existingAudioUrl?: string | null
     maxDuration?: number // seconds, default 60
     label?: string
     hint?: string
+    /** Show uploading state */
+    isUploading?: boolean
 }
 
 export function VoiceRecorder({
     onRecorded,
     onRemove,
     audioBlob,
+    existingAudioUrl,
     maxDuration = 60,
     label = 'Record a voice message',
     hint,
+    isUploading = false,
 }: VoiceRecorderProps) {
     const [isRecording, setIsRecording] = useState(false)
     const [recordingTime, setRecordingTime] = useState(0)
@@ -33,7 +39,7 @@ export function VoiceRecorder({
     const audioRef = useRef<HTMLAudioElement | null>(null)
     const timerRef = useRef<number | null>(null)
 
-    // Create audio URL from blob
+    // Create audio URL from blob or use existing URL
     useEffect(() => {
         if (audioBlob) {
             const url = URL.createObjectURL(audioBlob)
@@ -46,11 +52,19 @@ export function VoiceRecorder({
             }
 
             return () => URL.revokeObjectURL(url)
+        } else if (existingAudioUrl) {
+            setAudioUrl(existingAudioUrl)
+
+            // Get duration from existing URL
+            const audio = new Audio(existingAudioUrl)
+            audio.onloadedmetadata = () => {
+                setDuration(Math.ceil(audio.duration))
+            }
         } else {
             setAudioUrl(null)
             setDuration(0)
         }
-    }, [audioBlob])
+    }, [audioBlob, existingAudioUrl])
 
     const startRecording = async () => {
         setMicError(null)
@@ -167,14 +181,20 @@ export function VoiceRecorder({
         }
     }, [])
 
-    // Has recording
-    if (audioUrl && !isRecording) {
+    // Has recording (or is uploading)
+    if ((audioUrl || isUploading) && !isRecording) {
         return (
             <div className="voice-recorder">
                 {label && <label className="voice-recorder-label">{label}</label>}
-                <div className="voice-recorder-playback">
-                    <Pressable className="voice-play-btn" onClick={togglePlayback}>
-                        {isPlaying ? <Pause size={20} /> : <Play size={20} />}
+                <div className={`voice-recorder-playback ${isUploading ? 'uploading' : ''}`}>
+                    <Pressable className="voice-play-btn" onClick={togglePlayback} disabled={isUploading}>
+                        {isUploading ? (
+                            <Loader2 size={20} className="spinning" />
+                        ) : isPlaying ? (
+                            <Pause size={20} />
+                        ) : (
+                            <Play size={20} />
+                        )}
                     </Pressable>
                     <div className="voice-progress">
                         <div className="voice-progress-bar">
@@ -184,14 +204,14 @@ export function VoiceRecorder({
                             />
                         </div>
                         <span className="voice-time">
-                            {formatTime(playbackTime)} / {formatTime(duration)}
+                            {isUploading ? 'Uploading...' : `${formatTime(playbackTime)} / ${formatTime(duration)}`}
                         </span>
                     </div>
                     <div className="voice-actions">
-                        <Pressable className="voice-action-btn" onClick={handleRemove}>
+                        <Pressable className="voice-action-btn" onClick={handleRemove} disabled={isUploading}>
                             <X size={18} />
                         </Pressable>
-                        <Pressable className="voice-action-btn" onClick={() => { handleRemove(); startRecording(); }}>
+                        <Pressable className="voice-action-btn" onClick={() => { handleRemove(); startRecording(); }} disabled={isUploading}>
                             <RefreshCw size={18} />
                         </Pressable>
                     </div>

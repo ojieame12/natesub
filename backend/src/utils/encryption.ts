@@ -14,6 +14,24 @@ function isEncryptionEnabled(): boolean {
   return !!env.ENCRYPTION_KEY && env.ENCRYPTION_KEY.length >= 32
 }
 
+/**
+ * Validate encryption configuration at startup
+ * Throws if ENCRYPTION_KEY is missing or too short in production
+ */
+export function validateEncryptionConfig(): void {
+  if (env.NODE_ENV === 'production') {
+    if (!env.ENCRYPTION_KEY) {
+      throw new Error('[FATAL] ENCRYPTION_KEY environment variable is required in production')
+    }
+    if (env.ENCRYPTION_KEY.length < 32) {
+      throw new Error('[FATAL] ENCRYPTION_KEY must be at least 32 characters in production')
+    }
+    console.log('✅ Encryption configuration validated')
+  } else if (!isEncryptionEnabled()) {
+    console.warn('⚠️ ENCRYPTION_KEY not set - PII will be stored unencrypted (acceptable for development)')
+  }
+}
+
 // Derive a key from the encryption secret
 function getKey(): Buffer {
   const secret = env.ENCRYPTION_KEY

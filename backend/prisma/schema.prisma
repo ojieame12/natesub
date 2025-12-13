@@ -25,6 +25,7 @@ enum SubscriptionInterval {
 
 enum PaymentStatus {
   pending
+  otp_pending   // Transfer requires OTP finalization (Paystack)
   succeeded
   failed
   refunded
@@ -38,6 +39,7 @@ enum PaymentType {
   one_time
   refund        // Refund transaction (negative amount)
   dispute       // Dispute-related transaction
+  payout        // Creator payout transfer (progressive fee model)
 }
 
 enum RequestStatus {
@@ -95,7 +97,6 @@ enum PaymentProvider {
   stripe
   paystack
   flutterwave
-  bank
 }
 
 enum PayrollPeriodType {
@@ -107,6 +108,11 @@ enum PayrollPeriodType {
 enum OnboardingBranch {
   personal
   service
+}
+
+enum FeeMode {
+  absorb            // Creator absorbs fee, subscriber pays exact price
+  pass_to_subscriber // Fee added on top, creator keeps full amount
 }
 
 // ============================================
@@ -161,6 +167,7 @@ model Profile {
   pricingModel PricingModel
   singleAmount Int? // in cents
   tiers        Json? // array of tier objects
+  feeMode      FeeMode @default(pass_to_subscriber) // Who pays the platform fee
 
   // Perks & Impact
   perks       Json? // array of perk objects
@@ -260,8 +267,18 @@ model Subscription {
   paystackAuthorizationCode String?  // Authorization for recurring charges
   paystackCustomerCode      String?  // Paystack customer ID
 
+  // Async payment follow-up (for bank transfers, SEPA, etc.)
+  // These are set during checkout.session.completed for async payments
+  // and used by invoice.paid to complete conversion tracking and request acceptance
+  asyncViewId    String?  // PageView ID to mark as converted
+  asyncRequestId String?  // Request ID to mark as accepted
+
   // Metrics
   ltvCents Int @default(0)
+
+  // Fee tracking (locked at subscription creation for consistent renewals)
+  feeModel String? // 'flat' for new, null for legacy
+  feeMode  String? // 'absorb' | 'pass_to_subscriber' - who pays the platform fee
 
   // Timestamps
   startedAt  DateTime  @default(now())
@@ -285,11 +302,17 @@ model Payment {
   creatorId      String
   subscriberId   String?
 
-  // Amount
-  amountCents Int
+  // Amount (subscriber-pays model)
+  grossCents  Int?           // Total subscriber paid (amount + fee) - new model
+  amountCents Int            // Creator's price (legacy: total paid, new: same as netCents)
   currency    String
-  feeCents    Int @default(0)
-  netCents    Int
+  feeCents    Int @default(0) // Service fee taken by platform
+  netCents    Int             // What creator receives
+
+  // Fee metadata (for auditing)
+  feeModel         String?   // 'progressive_v1', 'legacy_percent', null for old
+  feeEffectiveRate Float?    // 0.0575 for 5.75%
+  feeWasCapped     Boolean @default(false)
 
   // Type & Status
   type   PaymentType
@@ -304,6 +327,7 @@ model Payment {
   // Paystack (paystack_event_id for webhook idempotency)
   paystackEventId        String? @unique
   paystackTransactionRef String? @unique
+  paystackTransferCode   String?  // Transfer code for OTP finalization
 
   // Timestamps
   occurredAt DateTime @default(now())
@@ -436,8 +460,9 @@ model PageView {
   country       String?  // From IP geolocation
 
   // Conversion tracking
-  reachedPayment Boolean @default(false)  // Did they swipe to payment screen?
-  startedCheckout Boolean @default(false) // Did they click subscribe?
+  reachedPayment Boolean @default(false)    // Did they swipe to payment screen?
+  startedCheckout Boolean @default(false)   // Did they click subscribe?
+  completedCheckout Boolean @default(false) // Did payment succeed? (redirect with ?success=true)
 
   createdAt DateTime @default(now())
 
@@ -512,4 +537,44 @@ model PayrollPeriod {
   @@index([userId, periodStart])
   @@index([verificationCode])
   @@map("payroll_periods")
+}
+
+// ============================================
+// WEBHOOK EVENTS (Audit Trail)
+// ============================================
+
+model WebhookEvent {
+  id String @id @default(uuid())
+
+  // Event identification
+  provider   String // 'stripe' | 'paystack'
+  eventId    String @unique // External event ID (evt_xxx or paystack event ID)
+  eventType  String // 'checkout.session.completed', 'charge.success', etc.
+
+  // Processing status
+  status     String @default("received") // 'received' | 'processing' | 'processed' | 'failed' | 'skipped'
+  error      String? // Error message if failed
+
+  // Payload (for debugging/replay)
+  payload    Json? // Full event payload (optional, can be large)
+
+  // Related entities (optional - populated during processing)
+  subscriptionId String?
+  paymentId      String?
+  userId         String? // Creator or relevant user
+
+  // Processing metadata
+  processingTimeMs Int? // How long processing took
+  retryCount       Int  @default(0)
+
+  // Timestamps
+  receivedAt  DateTime @default(now())
+  processedAt DateTime?
+  createdAt   DateTime @default(now())
+
+  @@index([provider, eventType])
+  @@index([status])
+  @@index([receivedAt])
+  @@index([userId])
+  @@map("webhook_events")
 }

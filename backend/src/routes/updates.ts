@@ -36,17 +36,28 @@ updates.post(
   }
 )
 
-// Get my updates
+// Get my updates (with pagination)
 updates.get('/', requireAuth, async (c) => {
   const userId = c.get('userId')
+  const cursor = c.req.query('cursor')
+  const limit = Math.min(parseInt(c.req.query('limit') || '20'), 100) // Max 100
 
   const upds = await db.update.findMany({
     where: { creatorId: userId },
     orderBy: { createdAt: 'desc' },
+    take: limit + 1, // Fetch one extra to check if there's a next page
+    ...(cursor && {
+      cursor: { id: cursor },
+      skip: 1, // Skip the cursor item itself
+    }),
   })
 
+  const hasMore = upds.length > limit
+  const items = hasMore ? upds.slice(0, -1) : upds
+  const nextCursor = hasMore ? items[items.length - 1]?.id : null
+
   return c.json({
-    updates: upds.map(u => ({
+    updates: items.map(u => ({
       id: u.id,
       title: u.title,
       body: u.body.substring(0, 200) + (u.body.length > 200 ? '...' : ''),
@@ -58,6 +69,8 @@ updates.get('/', requireAuth, async (c) => {
       sentAt: u.sentAt,
       createdAt: u.createdAt,
     })),
+    nextCursor,
+    hasMore,
   })
 })
 

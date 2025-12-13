@@ -1,3 +1,56 @@
+// Zero-decimal currencies (from Stripe's documentation)
+// These currencies don't use cents - the smallest unit is the main currency unit
+// https://stripe.com/docs/currencies#zero-decimal
+export const ZERO_DECIMAL_CURRENCIES = [
+    'BIF', // Burundi Franc
+    'CLP', // Chilean Peso
+    'DJF', // Djiboutian Franc
+    'GNF', // Guinean Franc
+    'JPY', // Japanese Yen
+    'KMF', // Comorian Franc
+    'KRW', // South Korean Won
+    'MGA', // Malagasy Ariary
+    'PYG', // Paraguayan Guarani
+    'RWF', // Rwandan Franc
+    'UGX', // Ugandan Shilling
+    'VND', // Vietnamese Dong
+    'VUV', // Vanuatu Vatu
+    'XAF', // Central African CFA Franc
+    'XOF', // West African CFA Franc
+    'XPF', // CFP Franc
+] as const
+
+/**
+ * Check if a currency is zero-decimal (no cents)
+ */
+export function isZeroDecimalCurrency(currencyCode: string): boolean {
+    return ZERO_DECIMAL_CURRENCIES.includes(currencyCode?.toUpperCase() as any)
+}
+
+/**
+ * Convert cents to display amount, accounting for zero-decimal currencies
+ * For most currencies: 1000 cents → 10.00
+ * For zero-decimal (JPY, KRW, etc): 1000 → 1000 (no conversion)
+ */
+export function centsToDisplayAmount(cents: number, currencyCode: string): number {
+    if (isZeroDecimalCurrency(currencyCode)) {
+        return cents // Already in main unit
+    }
+    return cents / 100
+}
+
+/**
+ * Convert display amount to cents, accounting for zero-decimal currencies
+ * For most currencies: 10.00 → 1000 cents
+ * For zero-decimal (JPY, KRW, etc): 1000 → 1000 (no conversion)
+ */
+export function displayAmountToCents(amount: number, currencyCode: string): number {
+    if (isZeroDecimalCurrency(currencyCode)) {
+        return Math.round(amount) // Already in smallest unit
+    }
+    return Math.round(amount * 100)
+}
+
 // Currency symbol mapping for supported currencies
 const currencySymbols: Record<string, string> = {
     // Americas
@@ -79,13 +132,16 @@ export function formatCurrency(
 }
 
 /**
- * Format amount from cents
+ * Format amount from cents, handling zero-decimal currencies correctly
+ * For most currencies: 1000 cents → $10.00
+ * For zero-decimal (JPY, KRW, etc): 1000 → ¥1,000
  */
 export function formatCurrencyFromCents(
     amountCents: number,
     currencyCode: string = 'USD'
 ): string {
-    return formatCurrency(amountCents / 100, currencyCode)
+    const displayAmount = centsToDisplayAmount(amountCents, currencyCode)
+    return formatCurrency(displayAmount, currencyCode)
 }
 
 /**
@@ -333,4 +389,75 @@ export function getMinimumAmount(currencyCode: string): number {
  */
 export function isReasonableAmount(amount: number, currencyCode: string): boolean {
     return amount >= getMinimumAmount(currencyCode)
+}
+
+// ============================================
+// FEE CALCULATION (mirrors backend/services/fees.ts)
+// ============================================
+
+// Simple flat rates - no caps, no floors
+const FEE_RATES = {
+    personal: 0.10,  // 10% for personal (tips, allowances, support)
+    service: 0.08,   // 8% for service (freelancers, businesses)
+}
+
+export interface FeePreview {
+    creatorReceives: number    // What creator gets (in dollars)
+    subscriberPays: number     // Total subscriber pays (in dollars)
+    serviceFee: number         // Platform fee (in dollars)
+    effectiveRate: number      // Fee percentage (0.10 = 10%)
+    effectiveRatePercent: string // Formatted as "10%"
+}
+
+/**
+ * Calculate fee preview for subscriber display
+ * Simple flat rate: 10% for personal, 8% for service
+ *
+ * @param amountDollars - Creator's price in dollars
+ * @param currency - Currency code (unused, kept for API compatibility)
+ * @param purpose - Creator's purpose (service or personal)
+ * @param feeMode - Who pays the fee: 'absorb' (creator) or 'pass_to_subscriber'
+ */
+export function calculateFeePreview(
+    amountDollars: number,
+    _currency: string,
+    purpose?: string | null,
+    feeMode?: 'absorb' | 'pass_to_subscriber' | null
+): FeePreview {
+    const isService = purpose === 'service'
+    const rate = isService ? FEE_RATES.service : FEE_RATES.personal
+    const creatorAbsorbsFee = feeMode === 'absorb'
+
+    if (amountDollars === 0) {
+        return {
+            creatorReceives: 0,
+            subscriberPays: 0,
+            serviceFee: 0,
+            effectiveRate: 0,
+            effectiveRatePercent: '0%',
+        }
+    }
+
+    // Calculate fee based on feeMode
+    const serviceFee = amountDollars * rate
+
+    if (creatorAbsorbsFee) {
+        // Creator absorbs fee - subscriber pays base price, creator receives less
+        return {
+            creatorReceives: amountDollars - serviceFee,
+            subscriberPays: amountDollars,
+            serviceFee: 0, // Don't show fee to subscriber when creator absorbs
+            effectiveRate: 0,
+            effectiveRatePercent: '0%',
+        }
+    }
+
+    // Pass fee to subscriber - subscriber pays more
+    return {
+        creatorReceives: amountDollars,
+        subscriberPays: amountDollars + serviceFee,
+        serviceFee,
+        effectiveRate: rate,
+        effectiveRatePercent: `${(rate * 100).toFixed(0)}%`,
+    }
 }

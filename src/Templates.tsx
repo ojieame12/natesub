@@ -6,7 +6,7 @@ import { useProfile, useUpdateProfile } from './api/hooks'
 import './Templates.css'
 
 interface Template {
-  id: 'boundary' | 'minimal' | 'editorial'
+  id: 'boundary' | 'liquid' | 'minimal' | 'editorial'
   name: string
   description: string
   preview: string
@@ -19,6 +19,13 @@ const templates: Template[] = [
     name: 'Boundary',
     description: 'Modern card with swipeable content views',
     preview: '/templates/boundary-preview.png',
+    available: true,
+  },
+  {
+    id: 'liquid',
+    name: 'Liquid Glass',
+    description: 'Premium ethereal design with slide-to-pay',
+    preview: '/templates/liquid-preview.png',
     available: true,
   },
   {
@@ -45,13 +52,13 @@ export default function Templates() {
   const profile = profileData?.profile
 
   // Get saved template from profile or default to boundary
-  const savedTemplate = (profile?.template || 'boundary') as 'boundary' | 'minimal' | 'editorial'
-  const [selectedTemplate, setSelectedTemplate] = useState<'boundary' | 'minimal' | 'editorial'>(savedTemplate)
+  const savedTemplate = (profile?.template || 'boundary') as 'boundary' | 'liquid' | 'minimal' | 'editorial'
+  const [selectedTemplate, setSelectedTemplate] = useState<'boundary' | 'liquid' | 'minimal' | 'editorial'>(savedTemplate)
 
   // Sync selected template when profile loads
   useEffect(() => {
     if (profile?.template) {
-      setSelectedTemplate(profile.template)
+      setSelectedTemplate(profile.template as any)
     }
   }, [profile?.template])
 
@@ -59,8 +66,25 @@ export default function Templates() {
     if (!profile) return
 
     try {
+      // IMPORTANT: Only send template field, not the whole profile
+      // Spreading ...profile would re-submit cents as dollars → corruption
       await updateProfile({
-        ...profile,
+        username: profile.username,
+        displayName: profile.displayName,
+        bio: profile.bio,
+        avatarUrl: profile.avatarUrl,
+        voiceIntroUrl: profile.voiceIntroUrl,
+        country: profile.country,
+        countryCode: profile.countryCode,
+        currency: profile.currency,
+        purpose: profile.purpose,
+        pricingModel: profile.pricingModel,
+        // Convert cents back to dollars for the API (it expects dollars)
+        singleAmount: profile.singleAmount ? profile.singleAmount / 100 : null,
+        tiers: profile.tiers?.map(t => ({ ...t, amount: t.amount / 100 })) || null,
+        perks: profile.perks,
+        impactItems: profile.impactItems,
+        feeMode: profile.feeMode,
         template: selectedTemplate,
       })
       toast.success('Template applied')

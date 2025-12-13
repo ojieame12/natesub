@@ -47,12 +47,13 @@ export default function PersonalUsernameStep() {
 
                 <div className="step-body">
                     <div className="username-wrapper">
-                        <span className="username-prefix">nate.to/</span>
+                        <span className="username-prefix">natepay.co/</span>
                         <input
                             className="input"
                             value={username}
-                            onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+                            onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20))}
                             placeholder="yourname"
+                            maxLength={20}
                             autoFocus
                         />
                     </div>
@@ -69,12 +70,12 @@ export default function PersonalUsernameStep() {
                     )}
                     {isFormatValid && !isChecking && isAvailable && (
                         <p style={{ fontSize: 14, color: 'var(--status-success)', marginTop: 8 }}>
-                            nate.to/{username} is available
+                            natepay.co/{username} is available
                         </p>
                     )}
                     {isFormatValid && !isChecking && isTaken && (
                         <p style={{ fontSize: 14, color: 'var(--status-error)', marginTop: 8 }}>
-                            nate.to/{username} is already taken
+                            natepay.co/{username} is already taken
                         </p>
                     )}
                 </div>

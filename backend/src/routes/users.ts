@@ -2,22 +2,31 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { db } from '../db/client.js'
+import { optionalAuth } from '../middleware/auth.js'
+import { publicRateLimit } from '../middleware/rateLimit.js'
+import { centsToDisplayAmount } from '../utils/currency.js'
 
 const users = new Hono()
 
 // Get public profile by username (for vanity URLs)
+// Optionally includes viewer's subscription status if authenticated
 users.get(
   '/:username',
+  publicRateLimit,
+  optionalAuth,
   zValidator('param', z.object({
     username: z.string().min(3).max(20),
   })),
   async (c) => {
     const { username } = c.req.valid('param')
     const normalizedUsername = username.toLowerCase()
+    const viewerId = c.get('userId') // Optional - set by optionalAuth if logged in
 
     const profile = await db.profile.findUnique({
       where: { username: normalizedUsername },
       select: {
+        id: true, // Profile ID for analytics
+        userId: true, // Need this to check subscriptions
         username: true,
         displayName: true,
         bio: true,
@@ -32,6 +41,8 @@ users.get(
         currency: true,
         shareUrl: true,
         paymentProvider: true,
+        template: true, // For rendering correct template
+        feeMode: true, // For fee breakdown display
         // Check payment readiness without exposing IDs
         stripeAccountId: true,
         paystackSubaccountCode: true,
@@ -49,9 +60,51 @@ users.get(
       (profile.paymentProvider === 'paystack' && profile.paystackSubaccountCode)
     const paymentsReady = hasPaymentProvider && profile.payoutStatus === 'active'
 
-    // Convert cents back to dollars for frontend
-    // Don't expose sensitive IDs - only the computed paymentsReady flag
+    // Check if viewer is subscribed to this creator (if logged in)
+    let viewerSubscription: {
+      isActive: boolean
+      tierName: string | null
+      amount: number
+      currency: string
+      since: string
+      currentPeriodEnd: string | null
+    } | null = null
+
+    if (viewerId && viewerId !== profile.userId) {
+      // Don't check if viewing own profile
+      const subscription = await db.subscription.findFirst({
+        where: {
+          subscriberId: viewerId,
+          creatorId: profile.userId,
+          status: 'active',
+        },
+        select: {
+          tierName: true,
+          amount: true,
+          currency: true,
+          createdAt: true,
+          currentPeriodEnd: true,
+        },
+        orderBy: { createdAt: 'desc' },
+      })
+
+      if (subscription) {
+        viewerSubscription = {
+          isActive: true,
+          tierName: subscription.tierName,
+          amount: centsToDisplayAmount(subscription.amount, subscription.currency),
+          currency: subscription.currency,
+          since: subscription.createdAt.toISOString(),
+          currentPeriodEnd: subscription.currentPeriodEnd?.toISOString() || null,
+        }
+      }
+    }
+
+    // Convert cents to display amount, handling zero-decimal currencies
+    // Include profile ID for analytics, template for rendering, feeMode for fee display
+    const currency = profile.currency || 'USD'
     const publicProfile = {
+      id: profile.id, // For analytics tracking
       username: profile.username,
       displayName: profile.displayName,
       bio: profile.bio,
@@ -59,20 +112,25 @@ users.get(
       voiceIntroUrl: profile.voiceIntroUrl,
       purpose: profile.purpose,
       pricingModel: profile.pricingModel,
-      singleAmount: profile.singleAmount ? profile.singleAmount / 100 : null,
+      singleAmount: profile.singleAmount ? centsToDisplayAmount(profile.singleAmount, currency) : null,
       tiers: profile.tiers ? (profile.tiers as any[]).map(t => ({
         ...t,
-        amount: t.amount / 100,
+        amount: centsToDisplayAmount(t.amount, currency),
       })) : null,
       perks: profile.perks,
       impactItems: profile.impactItems,
-      currency: profile.currency,
+      currency: currency,
       shareUrl: profile.shareUrl,
       paymentProvider: profile.paymentProvider,
+      template: profile.template || 'boundary', // Default to boundary
+      feeMode: profile.feeMode || 'pass_to_subscriber', // Default behavior
       paymentsReady,
     }
 
-    return c.json({ profile: publicProfile })
+    return c.json({
+      profile: publicProfile,
+      viewerSubscription, // null if not logged in or not subscribed
+    })
   }
 )
 

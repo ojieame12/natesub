@@ -6,6 +6,7 @@ const envSchema = z.object({
   PORT: z.string().default('3001'),
   APP_URL: z.string().url(),
   API_URL: z.string().url(),
+  PUBLIC_PAGE_URL: z.string().url().default('https://natepay.co'), // Public creator pages
 
   // Database
   DATABASE_URL: z.string(),

@@ -1,4 +1,6 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import { api } from './api/client'
 import {
   Menu,
   Bell,
@@ -99,9 +101,17 @@ const formatRelativeTime = (date: Date | string) => {
   return then.toLocaleDateString()
 }
 
+// Pre-load subscription page components to avoid serial waterfall
+const preloadSubscriptionPage = () => {
+  // These will be cached by the browser after first load
+  import('./subscribe/SubscribeBoundary')
+  import('./subscribe/SubscriptionLiquid')
+}
+
 export default function Dashboard() {
   const { navigate } = useViewTransition()
   const toast = useToast()
+  const queryClient = useQueryClient()
   const [menuOpen, setMenuOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -125,12 +135,24 @@ export default function Dashboard() {
   const isLoading = profileLoading || metricsLoading || activityLoading
   const hasError = metricsError || activityError
 
-  const loadData = () => {
+  const loadData = useCallback(() => {
     refetchMetrics()
     refetchActivity()
-  }
+  }, [refetchMetrics, refetchActivity])
 
-  const pageUrl = `nate.to/${profile?.username || 'yourname'}`
+  // Memoized handlers to prevent unnecessary re-renders
+  const openMenu = useCallback(() => setMenuOpen(true), [])
+  const closeMenu = useCallback(() => setMenuOpen(false), [])
+  const openNotifications = useCallback(() => setNotificationsOpen(true), [])
+  const closeNotifications = useCallback(() => setNotificationsOpen(false), [])
+
+  // Menu navigation handler - navigate immediately, menu closes via CSS
+  const handleMenuNavigate = useCallback((path: string) => {
+    setMenuOpen(false)
+    navigate(path) // Navigate instantly - no delay
+  }, [navigate])
+
+  const pageUrl = `natepay.co/${profile?.username || 'yourname'}`
 
   const handleCopyLink = async () => {
     try {
@@ -167,18 +189,31 @@ export default function Dashboard() {
   const displayName = profile?.displayName || 'Your Name'
   const username = profile?.username || 'username'
 
+  // Prefetch subscription page data + components on hover/touch
+  const prefetchSubscriptionPage = useCallback(() => {
+    if (!username) return
+    // Prefetch the API data
+    queryClient.prefetchQuery({
+      queryKey: ['publicProfile', username],
+      queryFn: () => api.users.getByUsername(username),
+      staleTime: 60 * 1000,
+    })
+    // Preload the lazy component chunks
+    preloadSubscriptionPage()
+  }, [username, queryClient])
+
   return (
     <div className="dashboard">
       {/* Header */}
-      <header className="header">
+      <header className="header glass-header">
         <div className="header-left">
-          <Pressable className="header-icon-btn" onClick={() => setMenuOpen(true)}>
+          <Pressable className="header-icon-btn" onClick={openMenu}>
             <Menu size={20} />
           </Pressable>
         </div>
         <img src="/logo.svg" alt="Logo" className="header-logo" />
         <div className="header-right">
-          <Pressable className="header-icon-btn" onClick={() => setNotificationsOpen(true)}>
+          <Pressable className="header-icon-btn" onClick={openNotifications}>
             <Bell size={20} />
             {notifications.some(n => !n.read) && <span className="notification-dot" />}
           </Pressable>
@@ -186,7 +221,7 @@ export default function Dashboard() {
       </header>
 
       {/* Slide-out Menu */}
-      <div className={`menu-overlay ${menuOpen ? 'open' : ''}`} onClick={() => setMenuOpen(false)} />
+      <div className={`menu-overlay ${menuOpen ? 'open' : ''}`} onClick={closeMenu} />
       <div className={`menu-panel ${menuOpen ? 'open' : ''}`}>
         <div className="menu-profile">
           <div className="menu-profile-info">
@@ -202,7 +237,7 @@ export default function Dashboard() {
               <span className="menu-profile-username">@{username}</span>
             </div>
           </div>
-          <Pressable className="menu-close" onClick={() => setMenuOpen(false)}>
+          <Pressable className="menu-close" onClick={closeMenu}>
             <X size={20} />
           </Pressable>
         </div>
@@ -211,10 +246,7 @@ export default function Dashboard() {
             <Pressable
               key={item.id}
               className="menu-item"
-              onClick={() => {
-                setMenuOpen(false)
-                navigate(item.path)
-              }}
+              onClick={() => handleMenuNavigate(item.path)}
             >
               <item.icon size={20} className="menu-item-icon" />
               <div className="menu-item-content">
@@ -229,10 +261,7 @@ export default function Dashboard() {
             <Pressable
               key={item.id}
               className="menu-item"
-              onClick={() => {
-                setMenuOpen(false)
-                navigate(item.path)
-              }}
+              onClick={() => handleMenuNavigate(item.path)}
             >
               <item.icon size={20} className="menu-item-icon" />
               <div className="menu-item-content">
@@ -247,11 +276,11 @@ export default function Dashboard() {
       {/* Notifications Panel */}
       {notificationsOpen && (
         <>
-          <div className="menu-overlay" onClick={() => setNotificationsOpen(false)} />
+          <div className="menu-overlay" onClick={closeNotifications} />
           <div className="notifications-panel">
             <div className="notifications-header">
               <span className="notifications-title">Notifications</span>
-              <Pressable className="menu-close" onClick={() => setNotificationsOpen(false)}>
+              <Pressable className="menu-close" onClick={closeNotifications}>
                 <X size={24} />
               </Pressable>
             </div>
@@ -331,193 +360,186 @@ export default function Dashboard() {
           </>
         ) : (
           <>
-        {/* Stats Card */}
-        <section className="stats-card">
-          <div className="stats-primary">
-            <span className="stats-label">Monthly Recurring Revenue</span>
-            <span className="stats-mrr">
-              <AnimatedCurrency value={metrics?.mrr ?? 0} symbol={currencySymbol} duration={600} />
-            </span>
-          </div>
-          <div className="stats-secondary-row">
-            <div className="stats-metric">
-              <div className="stats-metric-value">
-                <AnimatedNumber value={metrics?.subscriberCount ?? 0} duration={500} />
+            {/* Stats Card */}
+            <section className="stats-card">
+              <div className="stats-primary">
+                <span className="stats-label">Monthly Recurring Revenue</span>
+                <span className="stats-mrr">
+                  <AnimatedCurrency value={metrics?.mrr ?? 0} symbol={currencySymbol} duration={600} />
+                </span>
               </div>
-              <span className="stats-label">Subscribers</span>
-            </div>
-            <div className="stats-metric">
-              <div className="stats-metric-value">
-                <AnimatedCurrency value={metrics?.totalRevenue ?? 0} symbol={currencySymbol} duration={600} />
+              <div className="stats-secondary-row">
+                <div className="stats-metric">
+                  <div className="stats-metric-value">
+                    <AnimatedNumber value={metrics?.subscriberCount ?? 0} duration={500} />
+                  </div>
+                  <span className="stats-label">Subscribers</span>
+                </div>
+                <div className="stats-metric">
+                  <div className="stats-metric-value">
+                    <AnimatedCurrency value={metrics?.totalRevenue ?? 0} symbol={currencySymbol} duration={600} />
+                  </div>
+                  <span className="stats-label">Total Revenue</span>
+                </div>
               </div>
-              <span className="stats-label">Total Revenue</span>
-            </div>
-          </div>
-        </section>
+            </section>
 
-        {/* Analytics Card */}
-        {analytics && (analytics.views.week > 0 || analytics.funnel.conversions > 0) && (
-          <section className="analytics-card">
-            <div className="analytics-header">
-              <span className="analytics-title">Page Analytics</span>
-              <span className="analytics-period">Last 7 days</span>
-            </div>
-            <div className="analytics-metrics">
-              <div className="analytics-metric">
-                <div className="analytics-metric-icon">
-                  <Eye size={16} />
+            {/* Analytics Card */}
+            {analytics && (analytics.views.week > 0 || analytics.funnel.conversions > 0) && (
+              <section className="analytics-card">
+                <div className="analytics-header">
+                  <span className="analytics-title">Page Analytics</span>
+                  <span className="analytics-period">Last 7 days</span>
                 </div>
-                <div className="analytics-metric-content">
-                  <span className="analytics-metric-value">
-                    <AnimatedNumber value={analytics.views.week} duration={500} />
-                  </span>
-                  <span className="analytics-metric-label">Views</span>
+                <div className="analytics-metrics">
+                  <div className="analytics-metric">
+                    <div className="analytics-metric-icon">
+                      <Eye size={16} />
+                    </div>
+                    <div className="analytics-metric-content">
+                      <span className="analytics-metric-value">
+                        <AnimatedNumber value={analytics.views.week} duration={500} />
+                      </span>
+                      <span className="analytics-metric-label">Views</span>
+                    </div>
+                  </div>
+                  <div className="analytics-metric">
+                    <div className="analytics-metric-icon">
+                      <UserPlus size={16} />
+                    </div>
+                    <div className="analytics-metric-content">
+                      <span className="analytics-metric-value">
+                        <AnimatedNumber value={analytics.uniqueVisitors.week} duration={500} />
+                      </span>
+                      <span className="analytics-metric-label">Visitors</span>
+                    </div>
+                  </div>
+                  <div className="analytics-metric">
+                    <div className="analytics-metric-icon">
+                      <TrendingUp size={16} />
+                    </div>
+                    <div className="analytics-metric-content">
+                      <span className="analytics-metric-value">
+                        <AnimatedNumber value={analytics.rates.overall} duration={500} format={(n) => `${n}%`} />
+                      </span>
+                      <span className="analytics-metric-label">Conversion</span>
+                    </div>
+                  </div>
                 </div>
-              </div>
-              <div className="analytics-metric">
-                <div className="analytics-metric-icon">
-                  <UserPlus size={16} />
-                </div>
-                <div className="analytics-metric-content">
-                  <span className="analytics-metric-value">
-                    <AnimatedNumber value={analytics.uniqueVisitors.week} duration={500} />
-                  </span>
-                  <span className="analytics-metric-label">Visitors</span>
-                </div>
-              </div>
-              <div className="analytics-metric">
-                <div className="analytics-metric-icon">
-                  <TrendingUp size={16} />
-                </div>
-                <div className="analytics-metric-content">
-                  <span className="analytics-metric-value">
-                    <AnimatedNumber value={analytics.rates.overall} duration={500} format={(n) => `${n}%`} />
-                  </span>
-                  <span className="analytics-metric-label">Conversion</span>
-                </div>
-              </div>
-            </div>
-          </section>
-        )}
-
-        {/* Payment Status Banner */}
-        {profile?.paymentProvider === 'bank' && (
-          <Pressable
-            className="payment-status-banner manual"
-            onClick={() => navigate('/settings/payments')}
-          >
-            <CreditCard size={18} />
-            <div className="payment-status-content">
-              <span className="payment-status-title">Manual Payouts</span>
-              <span className="payment-status-desc">Funds are held until you request withdrawal</span>
-            </div>
-            <ChevronRight size={18} />
-          </Pressable>
-        )}
-        {profile?.payoutStatus === 'pending' && profile?.paymentProvider !== 'bank' && (
-          <Pressable
-            className="payment-status-banner pending"
-            onClick={() => navigate('/settings/payments')}
-          >
-            <CreditCard size={18} />
-            <div className="payment-status-content">
-              <span className="payment-status-title">Complete Payment Setup</span>
-              <span className="payment-status-desc">Finish connecting your payment account</span>
-            </div>
-            <ChevronRight size={18} />
-          </Pressable>
-        )}
-        {profile?.payoutStatus === 'restricted' && (
-          <Pressable
-            className="payment-status-banner restricted"
-            onClick={() => navigate('/settings/payments')}
-          >
-            <CreditCard size={18} />
-            <div className="payment-status-content">
-              <span className="payment-status-title">Action Required</span>
-              <span className="payment-status-desc">Your payment account needs attention</span>
-            </div>
-            <ChevronRight size={18} />
-          </Pressable>
-        )}
-
-        {/* Shareable Link Card */}
-        <Pressable className="link-card" onClick={() => navigate(`/${profile?.username}`)}>
-          <div className="link-avatar">
-            {profile?.avatarUrl ? (
-              <img src={profile.avatarUrl} alt="" className="link-avatar-img" />
-            ) : (
-              displayName ? displayName.charAt(0).toUpperCase() : 'U'
+              </section>
             )}
-          </div>
-          <div className="link-info">
-            <span className="link-label">Your subscription page</span>
-            <span className="link-url">{pageUrl}</span>
-          </div>
-          <Pressable className="link-btn link-btn-copy" onClick={(e) => { e?.stopPropagation(); handleCopyLink(); }}>
-            {copied ? <Check size={20} /> : <Copy size={20} />}
-          </Pressable>
-          <Pressable className="link-btn link-btn-share" onClick={(e) => { e?.stopPropagation(); handleShare(); }}>
-            <Share2 size={20} />
-          </Pressable>
-        </Pressable>
 
-        {/* Activity Section */}
-        <section className="dash-activity-card">
-          <div className="dash-activity-header">
-            <span className="dash-activity-title">Activity</span>
-            <Pressable className="dash-activity-view-all" onClick={() => navigate('/activity')}>
-              View All
+            {/* Payment Status Banner */}
+            {profile?.payoutStatus === 'pending' && (
+              <Pressable
+                className="payment-status-banner pending"
+                onClick={() => navigate('/settings/payments')}
+              >
+                <CreditCard size={18} />
+                <div className="payment-status-content">
+                  <span className="payment-status-title">Complete Payment Setup</span>
+                  <span className="payment-status-desc">Finish connecting your payment account</span>
+                </div>
+                <ChevronRight size={18} />
+              </Pressable>
+            )}
+            {profile?.payoutStatus === 'restricted' && (
+              <Pressable
+                className="payment-status-banner restricted"
+                onClick={() => navigate('/settings/payments')}
+              >
+                <CreditCard size={18} />
+                <div className="payment-status-content">
+                  <span className="payment-status-title">Action Required</span>
+                  <span className="payment-status-desc">Your payment account needs attention</span>
+                </div>
+                <ChevronRight size={18} />
+              </Pressable>
+            )}
+
+            {/* Shareable Link Card - prefetch on hover for instant navigation */}
+            <Pressable
+              className="link-card"
+              onClick={() => profile?.username && navigate(`/${profile.username}`)}
+              onMouseEnter={prefetchSubscriptionPage}
+              onTouchStart={prefetchSubscriptionPage}
+            >
+              <div className="link-avatar">
+                {profile?.avatarUrl ? (
+                  <img src={profile.avatarUrl} alt="" className="link-avatar-img" />
+                ) : (
+                  displayName ? displayName.charAt(0).toUpperCase() : 'U'
+                )}
+              </div>
+              <div className="link-info">
+                <span className="link-label">Your subscription page</span>
+                <span className="link-url">{pageUrl}</span>
+              </div>
+              <Pressable className="link-btn link-btn-copy" onClick={(e) => { e?.stopPropagation(); handleCopyLink(); }}>
+                {copied ? <Check size={20} /> : <Copy size={20} />}
+              </Pressable>
+              <Pressable className="link-btn link-btn-share" onClick={(e) => { e?.stopPropagation(); handleShare(); }}>
+                <Share2 size={20} />
+              </Pressable>
             </Pressable>
-          </div>
-          <div className="dash-activity-list">
-            {activities.length === 0 ? (
-              <div className="dash-activity-empty">
-                <div className="dash-activity-empty-icon">
-                  <Activity size={24} />
-                </div>
-                <p className="dash-activity-empty-title">No activity yet</p>
-                <p className="dash-activity-empty-desc">
-                  Share your page to get your first subscriber
-                </p>
-              </div>
-            ) : (
-              activities.map((activity: any) => {
-                const payload = activity.payload || {}
-                const amount = payload.amount ? payload.amount / 100 : 0
-                const name = payload.subscriberName || payload.recipientName || ''
-                const tier = payload.tierName || ''
-                const isCanceled = activity.type === 'subscription_canceled'
 
-                return (
-                  <Pressable
-                    key={activity.id}
-                    className="dash-activity-item"
-                    onClick={() => navigate(`/activity/${activity.id}`)}
-                  >
-                    <div className="dash-activity-icon">
-                      {getActivityIcon(activity.type)}
+            {/* Activity Section */}
+            <section className="dash-activity-card">
+              <div className="dash-activity-header">
+                <span className="dash-activity-title">Activity</span>
+                <Pressable className="dash-activity-view-all" onClick={() => navigate('/activity')}>
+                  View All
+                </Pressable>
+              </div>
+              <div className="dash-activity-list">
+                {activities.length === 0 ? (
+                  <div className="dash-activity-empty">
+                    <div className="dash-activity-empty-icon">
+                      <Activity size={24} />
                     </div>
-                    <div className="dash-activity-info">
-                      <div className="dash-activity-item-title">{getActivityTitle(activity.type)}</div>
-                      <div className="dash-activity-item-meta">
-                        {formatRelativeTime(activity.createdAt)}{name ? ` - ${name}` : ''}
-                      </div>
-                    </div>
-                    {amount > 0 && (
-                      <div className="dash-activity-amount-col">
-                        <span className={`dash-activity-amount ${isCanceled ? 'cancelled' : ''}`}>
-                          {isCanceled ? '-' : '+'}{currencySymbol}{formatCompactNumber(amount)}
-                        </span>
-                        {tier && <span className="dash-activity-tier">{tier}</span>}
-                      </div>
-                    )}
-                  </Pressable>
-                )
-              })
-            )}
-          </div>
-        </section>
+                    <p className="dash-activity-empty-title">No activity yet</p>
+                    <p className="dash-activity-empty-desc">
+                      Share your page to get your first subscriber
+                    </p>
+                  </div>
+                ) : (
+                  activities.map((activity: any, index: number) => {
+                    const payload = activity.payload || {}
+                    const amount = payload.amount ? payload.amount / 100 : 0
+                    const name = payload.subscriberName || payload.recipientName || ''
+                    const tier = payload.tierName || ''
+                    const isCanceled = activity.type === 'subscription_canceled'
+
+                    return (
+                      <Pressable
+                        key={activity.id}
+                        className="dash-activity-item animate-fade-in-up"
+                        style={{ animationDelay: `${index * 0.05}s`, animationFillMode: 'both' }}
+                        onClick={() => navigate(`/activity/${activity.id}`)}
+                      >
+                        <div className="dash-activity-icon">
+                          {getActivityIcon(activity.type)}
+                        </div>
+                        <div className="dash-activity-info">
+                          <div className="dash-activity-item-title">{getActivityTitle(activity.type)}</div>
+                          <div className="dash-activity-item-meta">
+                            {formatRelativeTime(activity.createdAt)}{name ? ` - ${name}` : ''}
+                          </div>
+                        </div>
+                        {amount > 0 && (
+                          <div className="dash-activity-amount-col">
+                            <span className={`dash-activity-amount ${isCanceled ? 'cancelled' : ''}`}>
+                              {isCanceled ? '-' : '+'}{currencySymbol}{formatCompactNumber(amount)}
+                            </span>
+                            {tier && <span className="dash-activity-tier">{tier}</span>}
+                          </div>
+                        )}
+                      </Pressable>
+                    )
+                  })
+                )}
+              </div>
+            </section>
           </>
         )}
       </main>

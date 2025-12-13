@@ -1,11 +1,40 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { CheckCircle, AlertCircle, Loader2, Building2, Calendar, Copy, Share2, ExternalLink, ArrowRight } from 'lucide-react'
+import { useQueryClient } from '@tanstack/react-query'
+import { CheckCircle, AlertCircle, Loader2, Building2, Calendar, Copy, Share2, ExternalLink, ArrowRight, ArrowLeft } from 'lucide-react'
 import { api } from './api'
 import { useProfile } from './api/hooks'
 import { useOnboardingStore } from './onboarding/store'
+import { setPaymentConfirmed } from './App'
 import { Pressable } from './components'
 import './StripeComplete.css'
+
+// Format Stripe requirement keys into readable text
+function formatRequirement(key: string): string {
+  const map: Record<string, string> = {
+    'individual.address.city': 'City',
+    'individual.address.line1': 'Street address',
+    'individual.address.postal_code': 'Postal code',
+    'individual.address.state': 'State/Province',
+    'individual.dob.day': 'Date of birth',
+    'individual.dob.month': 'Date of birth',
+    'individual.dob.year': 'Date of birth',
+    'individual.email': 'Email address',
+    'individual.first_name': 'First name',
+    'individual.last_name': 'Last name',
+    'individual.phone': 'Phone number',
+    'individual.id_number': 'ID number (SSN/Tax ID)',
+    'individual.ssn_last_4': 'Last 4 digits of SSN',
+    'individual.verification.document': 'Identity document',
+    'individual.verification.additional_document': 'Additional document',
+    'business_profile.url': 'Business website',
+    'business_profile.mcc': 'Business category',
+    'external_account': 'Bank account',
+    'tos_acceptance.date': 'Terms of service acceptance',
+    'tos_acceptance.ip': 'Terms of service acceptance',
+  }
+  return map[key] || key.replace(/[._]/g, ' ').replace(/individual /i, '')
+}
 
 interface StripeDetails {
   detailsSubmitted: boolean
@@ -20,8 +49,11 @@ interface StripeDetails {
   }
 }
 
+type FlowSource = 'onboarding' | 'settings' | 'unknown'
+
 export default function StripeComplete() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const { data: profileData } = useProfile()
   const profile = profileData?.profile
   const { reset: resetOnboarding } = useOnboardingStore()
@@ -29,65 +61,36 @@ export default function StripeComplete() {
   const [status, setStatus] = useState<'loading' | 'success' | 'pending' | 'error'>('loading')
   const [details, setDetails] = useState<StripeDetails | null>(null)
   const [copied, setCopied] = useState(false)
-  const [redirectCountdown, setRedirectCountdown] = useState(5)
+  const [isNavigating, setIsNavigating] = useState(false)
+  const [isRetrying, setIsRetrying] = useState(false)
+  const [retryError, setRetryError] = useState<string | null>(null)
+  const [pollAttempts, setPollAttempts] = useState(0)
+  const [pollTimedOut, setPollTimedOut] = useState(false)
 
+  // Track where the user came from
+  const [source, setSource] = useState<FlowSource>('unknown')
+
+  // Prevent duplicate processing
+  const hasProcessedSuccess = useRef(false)
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // Read source from sessionStorage on mount
   useEffect(() => {
-    checkStatus()
+    const storedSource = sessionStorage.getItem('stripe_onboarding_source') as FlowSource | null
+    setSource(storedSource || 'unknown')
+    // Clear it so we don't reuse stale state
+    sessionStorage.removeItem('stripe_onboarding_source')
   }, [])
 
-  // Clear onboarding state when payment is successfully connected
+  // Cleanup intervals on unmount
   useEffect(() => {
-    if (status === 'success') {
-      resetOnboarding()
+    return () => {
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current)
     }
-  }, [status, resetOnboarding])
+  }, [])
 
-  // Auto-redirect to dashboard after success
-  useEffect(() => {
-    if (status === 'success') {
-      const timer = setInterval(() => {
-        setRedirectCountdown((prev) => {
-          if (prev <= 1) {
-            clearInterval(timer)
-            navigate('/dashboard', { replace: true })
-            return 0
-          }
-          return prev - 1
-        })
-      }, 1000)
-      return () => clearInterval(timer)
-    }
-  }, [status, navigate])
-
-  // Auto-poll when pending (every 5 seconds, max 12 attempts = 1 minute)
-  useEffect(() => {
-    if (status === 'pending') {
-      let attempts = 0
-      const pollInterval = setInterval(async () => {
-        attempts++
-        if (attempts > 12) {
-          clearInterval(pollInterval)
-          return
-        }
-        try {
-          const result = await api.stripe.getStatus()
-          setDetails(result.details || null)
-          if (result.status === 'active') {
-            setStatus('success')
-            clearInterval(pollInterval)
-          } else if (result.status === 'restricted') {
-            setStatus('error')
-            clearInterval(pollInterval)
-          }
-        } catch {
-          // Continue polling on error
-        }
-      }, 5000)
-      return () => clearInterval(pollInterval)
-    }
-  }, [status])
-
-  async function checkStatus() {
+  // Check Stripe status
+  const checkStatus = useCallback(async () => {
     try {
       const result = await api.stripe.getStatus()
       setDetails(result.details || null)
@@ -104,7 +107,91 @@ export default function StripeComplete() {
     } catch (err) {
       setStatus('error')
     }
-  }
+  }, [])
+
+  // Initial status check
+  useEffect(() => {
+    checkStatus()
+  }, [checkStatus])
+
+  // Handle success state - optimistic cache update to prevent webhook race condition
+  useEffect(() => {
+    if (status === 'success' && !hasProcessedSuccess.current) {
+      hasProcessedSuccess.current = true
+
+      // Only reset onboarding store if user came from onboarding flow
+      if (source === 'onboarding') {
+        resetOnboarding()
+      }
+
+      // Set flag so AuthRedirect knows payment is active (even if webhook hasn't arrived)
+      // This survives page refreshes and prevents yo-yo redirects
+      setPaymentConfirmed()
+
+      // CRITICAL: Optimistic cache update to prevent AuthRedirect bounce
+      // This "tricks" the frontend into knowing payments are active before webhook arrives
+      queryClient.setQueryData(['currentUser'], (oldData: any) => {
+        if (!oldData) return oldData
+        return {
+          ...oldData,
+          onboarding: {
+            ...oldData.onboarding,
+            hasActivePayment: true,
+          },
+        }
+      })
+
+      // Also update profile cache
+      queryClient.setQueryData(['profile'], (oldData: any) => {
+        if (!oldData?.profile) return oldData
+        return {
+          ...oldData,
+          profile: {
+            ...oldData.profile,
+            payoutStatus: 'active',
+          },
+        }
+      })
+    }
+  }, [status, source, resetOnboarding, queryClient])
+
+  // Auto-poll when pending (but don't auto-redirect)
+  useEffect(() => {
+    if (status === 'pending') {
+      setPollAttempts(0)
+      setPollTimedOut(false)
+
+      pollIntervalRef.current = setInterval(async () => {
+        setPollAttempts(prev => {
+          const newAttempts = prev + 1
+          if (newAttempts > 12) { // Max 1 minute of polling
+            if (pollIntervalRef.current) clearInterval(pollIntervalRef.current)
+            setPollTimedOut(true)
+            return prev
+          }
+          return newAttempts
+        })
+
+        try {
+          const result = await api.stripe.getStatus()
+          setDetails(result.details || null)
+          if (result.status === 'active') {
+            setStatus('success')
+            if (pollIntervalRef.current) clearInterval(pollIntervalRef.current)
+          } else if (result.status === 'restricted') {
+            setStatus('error')
+            if (pollIntervalRef.current) clearInterval(pollIntervalRef.current)
+          }
+        } catch {
+          // Continue polling on error
+        }
+      }, 5000)
+
+      return () => {
+        if (pollIntervalRef.current) clearInterval(pollIntervalRef.current)
+      }
+    }
+  }, [status])
 
   const shareUrl = profile?.username ? `natepay.co/${profile.username}` : null
   const fullShareUrl = shareUrl ? `https://${shareUrl}` : null
@@ -113,7 +200,7 @@ export default function StripeComplete() {
     if (fullShareUrl) {
       await navigator.clipboard.writeText(fullShareUrl)
       setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
+      setTimeout(() => setCopied(false), 3000) // 3 seconds for better visibility
     }
   }
 
@@ -129,6 +216,54 @@ export default function StripeComplete() {
       }
     }
   }
+
+  // Manual continue - trust the optimistic update, don't refetch
+  // Refetching would overwrite optimistic cache with stale DB data (webhook race)
+  const handleContinue = () => {
+    setIsNavigating(true)
+    const destination = source === 'settings' ? '/settings/payments' : '/dashboard'
+    navigate(destination, { replace: true })
+  }
+
+  // Allow user to proceed to dashboard even while pending
+  const handleProceedAnyway = async () => {
+    setIsNavigating(true)
+    // Set optimistic state so they don't get bounced
+    queryClient.setQueryData(['currentUser'], (oldData: any) => {
+      if (!oldData) return oldData
+      return {
+        ...oldData,
+        onboarding: {
+          ...oldData.onboarding,
+          hasActivePayment: true, // Optimistic - webhook will confirm
+        },
+      }
+    })
+    navigate('/dashboard', { replace: true })
+  }
+
+  const handleRetrySetup = async () => {
+    setIsRetrying(true)
+    setRetryError(null)
+    try {
+      const result = await api.stripe.refreshOnboarding()
+      if (result.onboardingUrl) {
+        // Preserve the source for when they return
+        sessionStorage.setItem('stripe_onboarding_source', source)
+        window.location.href = result.onboardingUrl
+      } else {
+        setRetryError('Unable to get onboarding link. Please try again.')
+        setIsRetrying(false)
+      }
+    } catch (err: any) {
+      setRetryError(err?.error || 'Failed to connect to Stripe. Please try again.')
+      setIsRetrying(false)
+    }
+  }
+
+  // Destination text based on source
+  const destinationText = source === 'settings' ? 'Payment Settings' : 'Dashboard'
+  const backDestination = source === 'settings' ? '/settings/payments' : '/dashboard'
 
   return (
     <div className="stripe-complete-page">
@@ -182,29 +317,39 @@ export default function StripeComplete() {
               </div>
             </div>
 
-            {/* Fee Breakdown */}
-            <div className="fee-breakdown">
-              <div className="fee-header">How you earn</div>
-              <div className="fee-flow">
-                <div className="fee-step">
-                  <span className="fee-amount">$10</span>
-                  <span className="fee-label">Subscriber pays</span>
+            {/* Fee Breakdown - only show if from onboarding (first time) */}
+            {source === 'onboarding' && (() => {
+              // Fee rate varies by purpose: 8% for service, 10% for personal
+              const feeRate = profile?.purpose === 'service' ? 8 : 10
+              const examplePrice = 10
+              const exampleFee = examplePrice * feeRate / 100
+              const exampleTotal = examplePrice + exampleFee
+              return (
+                <div className="fee-breakdown">
+                  <div className="fee-header">How pricing works</div>
+                  <div className="fee-flow">
+                    <div className="fee-step highlight">
+                      <span className="fee-amount">${examplePrice}</span>
+                      <span className="fee-label">You set</span>
+                    </div>
+                    <ArrowRight size={16} className="fee-arrow" />
+                    <div className="fee-step">
+                      <span className="fee-amount addition">+${exampleFee.toFixed(2).replace(/\.00$/, '')}</span>
+                      <span className="fee-label">{feeRate}% fee added</span>
+                    </div>
+                    <ArrowRight size={16} className="fee-arrow" />
+                    <div className="fee-step">
+                      <span className="fee-amount">${exampleTotal.toFixed(2).replace(/\.00$/, '')}</span>
+                      <span className="fee-label">Subscriber pays</span>
+                    </div>
+                  </div>
+                  <p className="fee-note">You receive your full price. Service fee is added at checkout.</p>
                 </div>
-                <ArrowRight size={16} className="fee-arrow" />
-                <div className="fee-step">
-                  <span className="fee-amount deduction">-$1</span>
-                  <span className="fee-label">10% platform</span>
-                </div>
-                <ArrowRight size={16} className="fee-arrow" />
-                <div className="fee-step highlight">
-                  <span className="fee-amount">$9</span>
-                  <span className="fee-label">You receive</span>
-                </div>
-              </div>
-            </div>
+              )
+            })()}
 
-            {/* Share Your Page */}
-            {shareUrl && (
+            {/* Share Your Page - only show if from onboarding */}
+            {source === 'onboarding' && shareUrl && (
               <div className="share-section">
                 <div className="share-header">Share your page</div>
                 <div className="share-url-box">
@@ -221,10 +366,21 @@ export default function StripeComplete() {
               </div>
             )}
 
-            {/* CTAs */}
+            {/* CTAs - NO auto-redirect, user must click */}
             <div className="cta-section">
-              <Pressable className="btn-primary" onClick={() => navigate('/dashboard', { replace: true })}>
-                Go to Dashboard {redirectCountdown > 0 && `(${redirectCountdown}s)`}
+              <Pressable
+                className="btn-primary"
+                onClick={handleContinue}
+                disabled={isNavigating}
+              >
+                {isNavigating ? (
+                  <>
+                    <Loader2 size={18} className="spin" style={{ marginRight: 8 }} />
+                    Loading...
+                  </>
+                ) : (
+                  `Continue to ${destinationText}`
+                )}
               </Pressable>
               <Pressable
                 className="btn-secondary"
@@ -239,9 +395,6 @@ export default function StripeComplete() {
                 <ExternalLink size={16} />
               </Pressable>
             </div>
-            <p style={{ fontSize: 13, color: 'var(--text-tertiary)', textAlign: 'center', marginTop: 12 }}>
-              Redirecting to dashboard in {redirectCountdown}s...
-            </p>
           </>
         )}
 
@@ -250,19 +403,44 @@ export default function StripeComplete() {
             <div className="status-icon pending">
               <Loader2 size={32} className="spin" />
             </div>
-            <h2>Almost there!</h2>
-            <p>Your account is being verified. This usually takes a few minutes.</p>
-            <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 8 }}>
-              Checking automatically every few seconds...
-            </p>
+            <h2>Verification in Progress</h2>
+            <p>Stripe is reviewing your details. This usually takes a few minutes but can take up to 24 hours for some accounts.</p>
+
+            {!pollTimedOut ? (
+              <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 8 }}>
+                Checking automatically... (attempt {pollAttempts + 1} of 12)
+              </p>
+            ) : (
+              <div style={{
+                padding: '12px 16px',
+                background: 'rgba(245, 158, 11, 0.1)',
+                borderRadius: 12,
+                marginTop: 16,
+              }}>
+                <p style={{ fontSize: 14, color: 'var(--warning)', margin: 0 }}>
+                  Verification is taking longer than expected. You can continue to the dashboard and we'll notify you when it's complete.
+                </p>
+              </div>
+            )}
 
             <div className="cta-section">
-              <Pressable className="btn-secondary" onClick={() => checkStatus()}>
-                Check Now
+              <Pressable
+                className="btn-primary"
+                onClick={handleProceedAnyway}
+                disabled={isNavigating}
+              >
+                {isNavigating ? (
+                  <>
+                    <Loader2 size={18} className="spin" style={{ marginRight: 8 }} />
+                    Loading...
+                  </>
+                ) : (
+                  'Continue to Dashboard'
+                )}
               </Pressable>
-              <Pressable className="btn-text" onClick={() => navigate('/dashboard')}>
-                Continue to Dashboard
-              </Pressable>
+              <p style={{ fontSize: 12, color: 'var(--text-tertiary)', textAlign: 'center', marginTop: 8 }}>
+                You can use the app while verification completes. We'll notify you when you're ready to accept payments.
+              </p>
             </div>
           </div>
         )}
@@ -279,32 +457,50 @@ export default function StripeComplete() {
               <div className="requirements-list">
                 <span className="requirements-label">Missing information:</span>
                 <ul>
-                  {details.requirements.currentlyDue.slice(0, 3).map((req, i) => (
-                    <li key={i}>{req.replace(/[._]/g, ' ').replace(/individual /i, '')}</li>
+                  {/* Deduplicate requirements (e.g., dob.day/month/year all become "Date of birth") */}
+                  {[...new Set(details.requirements.currentlyDue.slice(0, 5).map(formatRequirement))].map((req, i) => (
+                    <li key={i}>{req}</li>
                   ))}
-                  {details.requirements.currentlyDue.length > 3 && (
-                    <li>+{details.requirements.currentlyDue.length - 3} more</li>
+                  {details.requirements.currentlyDue.length > 5 && (
+                    <li>+{details.requirements.currentlyDue.length - 5} more</li>
                   )}
                 </ul>
+              </div>
+            )}
+
+            {retryError && (
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '12px 16px',
+                background: 'rgba(239, 68, 68, 0.1)',
+                borderRadius: 12,
+                marginBottom: 16,
+              }}>
+                <AlertCircle size={18} color="var(--error)" />
+                <span style={{ fontSize: 14, color: 'var(--error)' }}>{retryError}</span>
               </div>
             )}
 
             <div className="cta-section">
               <Pressable
                 className="btn-primary"
-                onClick={async () => {
-                  try {
-                    const result = await api.stripe.refreshOnboarding()
-                    if (result.onboardingUrl) {
-                      window.location.href = result.onboardingUrl
-                    }
-                  } catch {}
-                }}
+                onClick={handleRetrySetup}
+                disabled={isRetrying}
               >
-                Complete Setup
+                {isRetrying ? (
+                  <>
+                    <Loader2 size={18} className="spin" style={{ marginRight: 8 }} />
+                    Connecting...
+                  </>
+                ) : (
+                  'Complete Setup'
+                )}
               </Pressable>
-              <Pressable className="btn-text" onClick={() => navigate('/settings/payments')}>
-                Back to Settings
+              <Pressable className="btn-text" onClick={() => navigate(backDestination)}>
+                <ArrowLeft size={16} />
+                <span>Back to {destinationText}</span>
               </Pressable>
             </div>
           </div>

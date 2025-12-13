@@ -62,24 +62,45 @@ payroll.get('/periods', requireAuth, requireServicePurpose, async (c) => {
   // Then fetch all periods
   const periods = await getPayrollPeriods(userId)
 
+  // Calculate YTD total (current year)
+  const currentYear = new Date().getFullYear()
+  const ytdTotalCents = periods
+    .filter((p) => p.periodStart.getFullYear() === currentYear)
+    .reduce((sum, p) => sum + p.netCents, 0)
+
+  // Determine status for each period based on payout info
+  const now = new Date()
+
   // Return with pagination-ready structure
   return c.json({
-    periods: periods.map((p) => ({
-      id: p.id,
-      periodStart: p.periodStart.toISOString(),
-      periodEnd: p.periodEnd.toISOString(),
-      periodType: p.periodType,
-      grossCents: p.grossCents,
-      refundsCents: p.refundsCents,
-      chargebacksCents: p.chargebacksCents,
-      platformFeeCents: p.platformFeeCents,
-      processingFeeCents: p.processingFeeCents,
-      netCents: p.netCents,
-      paymentCount: p.paymentCount,
-      currency: p.currency,
-      verificationCode: p.verificationCode,
-      createdAt: p.createdAt.toISOString(),
-    })),
+    periods: periods.map((p) => {
+      // Determine status: current (ongoing), pending (completed but not paid), paid
+      const isPeriodComplete = p.periodEnd < now
+      let status: 'current' | 'pending' | 'paid' = 'current'
+      if (isPeriodComplete) {
+        // Check if there's payout info (would be set by Stripe/Paystack webhook)
+        status = p.netCents > 0 ? 'pending' : 'paid' // For now, mark as pending until payout tracking is added
+      }
+
+      return {
+        id: p.id,
+        periodStart: p.periodStart.toISOString(),
+        periodEnd: p.periodEnd.toISOString(),
+        periodType: p.periodType,
+        grossCents: p.grossCents,
+        refundsCents: p.refundsCents,
+        chargebacksCents: p.chargebacksCents,
+        platformFeeCents: p.platformFeeCents,
+        processingFeeCents: p.processingFeeCents,
+        netCents: p.netCents,
+        paymentCount: p.paymentCount,
+        currency: p.currency,
+        status,
+        verificationCode: p.verificationCode,
+        createdAt: p.createdAt.toISOString(),
+      }
+    }),
+    ytdTotalCents,
     total: periods.length,
   })
 })
@@ -93,6 +114,15 @@ payroll.get('/periods/:id', requireAuth, requireServicePurpose, async (c) => {
 
   if (!period) {
     return c.json({ error: 'Period not found' }, 404)
+  }
+
+  // Determine status based on period completion and payout
+  const now = new Date()
+  const isPeriodComplete = period.periodEnd < now
+  let status: 'current' | 'pending' | 'paid' = 'current'
+  if (isPeriodComplete) {
+    // If payoutDate exists, it's paid; otherwise pending
+    status = period.payoutDate ? 'paid' : 'pending'
   }
 
   return c.json({
@@ -110,6 +140,7 @@ payroll.get('/periods/:id', requireAuth, requireServicePurpose, async (c) => {
       netCents: period.netCents,
       paymentCount: period.paymentCount,
       currency: period.currency,
+      status,
       ytdGrossCents: period.ytdGrossCents,
       ytdNetCents: period.ytdNetCents,
       payoutDate: period.payoutDate?.toISOString() || null,
@@ -123,7 +154,7 @@ payroll.get('/periods/:id', requireAuth, requireServicePurpose, async (c) => {
         date: p.date.toISOString(),
         subscriberName: p.subscriberName,
         subscriberEmail: p.subscriberEmail,
-        amount: p.amount,
+        amountCents: p.amount,
         type: p.type,
       })),
     },

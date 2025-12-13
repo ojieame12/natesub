@@ -5,6 +5,7 @@ import { useOnboardingStore } from './store'
 import { Button, Pressable } from './components'
 import { getShareableLink } from '../utils/constants'
 import { getCurrencySymbol, formatCompactNumber } from '../utils/currency'
+import { calculateFeePreview, getPricing } from '../utils/pricing'
 import { api } from '../api'
 import './onboarding.css'
 
@@ -123,6 +124,7 @@ export default function PersonalReviewStep() {
         username,
         bio,
         purpose,
+        branch,
         pricingModel,
         singleAmount,
         tiers,
@@ -134,9 +136,11 @@ export default function PersonalReviewStep() {
         avatarUrl,
         voiceIntroUrl,
         paymentProvider,
+        feeMode,
         setName,
         setBio,
         setUsername,
+        setFeeMode,
         goToStep,
         prevStep,
         reset
@@ -163,6 +167,7 @@ export default function PersonalReviewStep() {
                 tiers: pricingModel === 'tiers' ? tiers : undefined,
                 perks: perks.filter(p => p.enabled),
                 impactItems,
+                feeMode,
             }
 
             await api.profile.update(profileData)
@@ -180,9 +185,11 @@ export default function PersonalReviewStep() {
                         // Wait a bit then continue anyway
                         await new Promise(resolve => setTimeout(resolve, 2000))
                     } else if (stripeResult.onboardingUrl) {
+                        // Mark source for when we return from Stripe
+                        sessionStorage.setItem('stripe_onboarding_source', 'onboarding')
                         // Redirect to Stripe for onboarding
                         window.location.href = stripeResult.onboardingUrl
-                        return // Don't navigate to dashboard yet
+                        return // Don't navigate to dashboard yet - return early!
                     } else if (stripeResult.alreadyOnboarded) {
                         console.log('Stripe already connected')
                     }
@@ -277,6 +284,47 @@ export default function PersonalReviewStep() {
                             value={getPricingDisplay()}
                             onNavigate={() => goToStep(4)} // Navigate to pricing step
                         />
+                    </div>
+
+                    {/* Fee Mode Toggle */}
+                    <div className="fee-mode-section">
+                        <div className="fee-mode-header">
+                            <span className="fee-mode-title">Platform fee ({getPricing(branch === 'service' ? 'service' : 'personal').transactionFeeLabel})</span>
+                        </div>
+
+                        <div className="fee-mode-toggle">
+                            <Pressable
+                                className={`fee-mode-option ${feeMode === 'absorb' ? 'active' : ''}`}
+                                onClick={() => setFeeMode('absorb')}
+                            >
+                                I absorb
+                            </Pressable>
+                            <Pressable
+                                className={`fee-mode-option ${feeMode === 'pass_to_subscriber' ? 'active' : ''}`}
+                                onClick={() => setFeeMode('pass_to_subscriber')}
+                            >
+                                Subscriber pays
+                            </Pressable>
+                        </div>
+
+                        {(() => {
+                            const baseAmount = pricingModel === 'single'
+                                ? (singleAmount || 0) * 100  // Convert to cents
+                                : (tiers[0]?.amount || 0) * 100
+                            const preview = calculateFeePreview(baseAmount, branch === 'service' ? 'service' : 'personal', feeMode)
+                            return (
+                                <div className="fee-mode-preview">
+                                    <div className="fee-preview-row">
+                                        <span>Subscribers pay</span>
+                                        <span className="fee-preview-amount">{currencySymbol}{formatCompactNumber(preview.subscriberPays / 100)}</span>
+                                    </div>
+                                    <div className="fee-preview-row">
+                                        <span>You receive</span>
+                                        <span className="fee-preview-amount">{currencySymbol}{formatCompactNumber(preview.creatorReceives / 100)}</span>
+                                    </div>
+                                </div>
+                            )
+                        })()}
                     </div>
                 </div>
 

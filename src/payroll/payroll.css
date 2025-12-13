@@ -9,7 +9,7 @@
     min-height: 100dvh;
     max-width: 430px;
     margin: 0 auto;
-    background: var(--bg-base);
+    background: transparent;
     display: flex;
     flex-direction: column;
 }
@@ -21,7 +21,7 @@
     justify-content: space-between;
     padding: var(--space-md) var(--space-lg);
     padding-top: calc(env(safe-area-inset-top, 12px) + var(--space-md));
-    background: var(--bg-base);
+    background: transparent;
 }
 
 .payroll-logo {
@@ -31,6 +31,7 @@
 /* === PAGE TITLE === */
 .payroll-page-title {
     padding: var(--space-sm) var(--space-xl) var(--space-md);
+    background: transparent;
 }
 
 .payroll-page-title h1 {
@@ -471,4 +472,126 @@
     padding: var(--space-md);
     background: var(--neutral-50);
     border-radius: var(--radius-md);
+}
+
+/* ===========================================
+   PAYROLL VERIFY PAGE STYLES
+   Public verification page for third parties
+   =========================================== */
+
+.payroll-verify-page .payroll-header {
+    justify-content: center;
+}
+
+.payroll-verify-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-xl);
+    text-align: center;
+    min-height: 400px;
+}
+
+.payroll-verify-icon {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: var(--space-lg);
+}
+
+.payroll-verify-icon.loading {
+    background: var(--neutral-100);
+    color: var(--text-tertiary);
+}
+
+.payroll-verify-icon.success {
+    background: rgba(16, 185, 129, 0.1);
+    color: #10b981;
+}
+
+.payroll-verify-icon.error {
+    background: rgba(239, 68, 68, 0.1);
+    color: #ef4444;
+}
+
+.payroll-verify-icon .spin {
+    animation: spin 1s linear infinite;
+}
+
+.payroll-verify-title {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0 0 var(--space-sm);
+    letter-spacing: -0.5px;
+}
+
+.payroll-verify-message {
+    font-size: 15px;
+    color: var(--text-secondary);
+    margin: 0 0 var(--space-xl);
+    max-width: 280px;
+    line-height: 1.5;
+}
+
+.payroll-verify-details {
+    width: 100%;
+    max-width: 320px;
+    background: white;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-xl);
+    overflow: hidden;
+    margin-bottom: var(--space-lg);
+}
+
+.payroll-verify-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--space-md) var(--space-lg);
+    border-bottom: 1px solid var(--border-default);
+}
+
+.payroll-verify-row:last-child {
+    border-bottom: none;
+}
+
+.payroll-verify-label {
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+.payroll-verify-value {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.payroll-verify-value.highlight {
+    color: #10b981;
+}
+
+.payroll-verify-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: var(--space-sm) var(--space-md);
+    background: var(--neutral-100);
+    border-radius: var(--radius-lg);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: var(--space-lg);
+}
+
+.payroll-verify-disclaimer {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    max-width: 280px;
+    line-height: 1.5;
 }

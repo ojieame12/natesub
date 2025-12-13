@@ -8,6 +8,7 @@ import { redis } from '../db/redis.js'
 import { requireAuth } from '../middleware/auth.js'
 import { sendRequestEmail } from '../services/email.js'
 import { createCheckoutSession } from '../services/stripe.js'
+import { calculateServiceFee, type FeeMode } from '../services/fees.js'
 import { env } from '../config/env.js'
 
 const requests = new Hono()
@@ -130,16 +131,31 @@ requests.post(
     }
 
     try {
+      // Calculate service fee based on creator's fee mode setting
+      const feeCalc = calculateServiceFee(
+        request.amountCents,
+        request.currency,
+        request.creator.profile?.purpose,
+        request.creator.profile?.feeMode as FeeMode
+      )
+
       // Create checkout session with request tracking
       const session = await createCheckoutSession({
         creatorId: request.creatorId,
         requestId: request.id,  // Track which request this checkout is for
-        amount: request.amountCents,
+        grossAmount: feeCalc.grossCents,  // What subscriber pays
+        netAmount: feeCalc.netCents,      // What creator receives
+        serviceFee: feeCalc.feeCents,
         currency: request.currency,
         interval: request.isRecurring ? 'month' : 'one_time',
         successUrl: `${env.APP_URL}/r/${token}/success`,
         cancelUrl: `${env.APP_URL}/r/${token}?canceled=true`,
         subscriberEmail: email,
+        feeMetadata: {
+          feeModel: feeCalc.feeModel,
+          feeMode: feeCalc.feeMode,
+          feeEffectiveRate: feeCalc.effectiveRate,
+        },
       })
 
       // Update request to pending_payment status
@@ -222,14 +238,15 @@ requests.post(
   zValidator('json', z.object({
     recipientName: z.string().min(1).max(100),
     recipientEmail: z.string().email().optional(),
-    recipientPhone: z.string().optional(),
+    // Phone validation: E.164 format recommended, allow 10-20 digits with optional +
+    recipientPhone: z.string().regex(/^\+?[0-9]{10,20}$/, 'Invalid phone format').optional(),
     relationship: z.enum(['family', 'friend', 'client', 'fan', 'colleague', 'partner', 'other']),
     amountCents: z.number().int().positive().max(10000000), // Max $100k
     currency: z.string().length(3).default('USD'),
     isRecurring: z.boolean().default(false),
     message: z.string().max(1000).optional(),
     voiceUrl: z.string().url().optional(),
-    customPerks: z.array(z.string()).optional(),
+    customPerks: z.array(z.string().max(100)).max(10).optional(),
     dueDate: z.string().datetime().optional(), // ISO date string for invoices
   })),
   async (c) => {

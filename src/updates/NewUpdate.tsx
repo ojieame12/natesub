@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { X, Camera, Image, Sparkles } from 'lucide-react'
-import { useMetrics } from '../api/hooks'
+import { X, Camera, Image, Sparkles, Loader2 } from 'lucide-react'
+import { useMetrics, uploadFile } from '../api/hooks'
 import { Pressable } from '../components'
 import './NewUpdate.css'
 
@@ -14,18 +14,36 @@ export default function NewUpdate() {
   const { data: metricsData } = useMetrics()
 
   const [photoUrl, setPhotoUrl] = useState<string | null>(null)
+  const [isUploading, setIsUploading] = useState(false)
   const [caption, setCaption] = useState('')
   const [audience, setAudience] = useState<'all' | string>('all')
 
-  const isValid = caption.trim().length > 0
+  const isValid = caption.trim().length > 0 && !isUploading
   const subscriberCount = metricsData?.metrics?.subscriberCount ?? 0
   const vipCount = 0 // VIP tier count would need a separate API call
 
-  const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
-      const url = URL.createObjectURL(file)
-      setPhotoUrl(url)
+      // 1. Optimistic preview
+      const localUrl = URL.createObjectURL(file)
+      setPhotoUrl(localUrl)
+
+      // 2. Upload to S3
+      setIsUploading(true)
+      try {
+        const s3Url = await uploadFile(file, 'photo') // type='photo'
+        setPhotoUrl(s3Url) // Replace local blob with S3 URL
+      } catch (err) {
+        console.error('Failed to upload photo:', err)
+        // Reset on failure
+        setPhotoUrl(null)
+        if (fileInputRef.current) {
+          fileInputRef.current.value = ''
+        }
+      } finally {
+        setIsUploading(false)
+      }
     }
   }
 
@@ -69,8 +87,13 @@ export default function NewUpdate() {
 
         {photoUrl ? (
           <div className="photo-preview-container">
-            <img src={photoUrl} alt="Update" className="photo-preview" />
-            <Pressable className="photo-remove-btn" onClick={handleRemovePhoto}>
+            <img src={photoUrl} alt="Update" className={`photo-preview ${isUploading ? 'uploading' : ''}`} />
+            {isUploading && (
+              <div className="photo-uploading-overlay">
+                <Loader2 size={24} className="spin text-white" />
+              </div>
+            )}
+            <Pressable className="photo-remove-btn" onClick={handleRemovePhoto} disabled={isUploading}>
               <X size={16} />
             </Pressable>
           </div>
@@ -148,7 +171,7 @@ export default function NewUpdate() {
           disabled={!isValid}
         >
           <Sparkles size={20} />
-          <span>Preview with AI</span>
+          <span>{isUploading ? 'Uploading...' : 'Preview with AI'}</span>
         </Pressable>
       </div>
     </div>

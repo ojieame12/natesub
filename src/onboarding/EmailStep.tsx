@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useCallback, useMemo, useRef } from 'react'
 import { ChevronLeft, Loader2 } from 'lucide-react'
 import { useOnboardingStore } from './store'
 import { Button, Pressable } from './components'
@@ -7,18 +7,29 @@ import { useRequestMagicLink } from '../api/hooks'
 import '../Dashboard.css'
 import './onboarding.css'
 
+// Email regex - defined outside component to avoid recreation
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
 export default function EmailStep() {
-    const { email, setEmail, nextStep, prevStep } = useOnboardingStore()
+    // Use selectors to prevent unnecessary re-renders
+    const email = useOnboardingStore((s) => s.email)
+    const setEmail = useOnboardingStore((s) => s.setEmail)
+    const nextStep = useOnboardingStore((s) => s.nextStep)
+    const prevStep = useOnboardingStore((s) => s.prevStep)
+
     const [isSending, setIsSending] = useState(false)
     const [error, setError] = useState<string | null>(null)
+    const isSubmitting = useRef(false) // Prevent double-submit
 
     const { mutateAsync: sendMagicLink } = useRequestMagicLink()
 
-    const isValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+    // Memoize validation
+    const isValidEmail = useMemo(() => EMAIL_REGEX.test(email), [email])
 
-    const handleContinue = async () => {
-        if (!isValidEmail || isSending) return
+    const handleContinue = useCallback(async () => {
+        if (!isValidEmail || isSending || isSubmitting.current) return
 
+        isSubmitting.current = true
         setIsSending(true)
         setError(null)
 
@@ -29,8 +40,9 @@ export default function EmailStep() {
             setError(err?.error || 'Failed to send code. Please try again.')
         } finally {
             setIsSending(false)
+            isSubmitting.current = false
         }
-    }
+    }, [isValidEmail, isSending, email, sendMagicLink, nextStep])
 
     return (
         <div className="onboarding">
@@ -54,14 +66,16 @@ export default function EmailStep() {
                         className={`input ${error ? 'input-error' : ''}`}
                         type="email"
                         value={email}
-                        onChange={(e) => {
+                        onChange={useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
                             setEmail(e.target.value)
                             setError(null)
-                        }}
+                        }, [setEmail])}
                         placeholder="email@example.com"
                         autoFocus
                         disabled={isSending}
-                        onKeyDown={(e) => e.key === 'Enter' && handleContinue()}
+                        onKeyDown={useCallback((e: React.KeyboardEvent) => {
+                            if (e.key === 'Enter') handleContinue()
+                        }, [handleContinue])}
                     />
                     {error && <InlineError message={error} />}
                 </div>

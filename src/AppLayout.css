@@ -9,7 +9,8 @@
     flex-direction: column;
     max-width: 430px;
     margin: 0 auto;
-    background: var(--bg-base);
+    /* Transparent to let AmbientBackground show through */
+    background: transparent;
 }
 
 .app-content {

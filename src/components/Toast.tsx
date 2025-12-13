@@ -1,5 +1,6 @@
-import { useState, createContext, useContext, type ReactNode } from 'react'
+import { useState, createContext, useContext, useEffect, type ReactNode } from 'react'
 import { Check, X, AlertCircle, Info } from 'lucide-react'
+import { useHaptics } from '../hooks'
 import './Toast.css'
 
 type ToastType = 'success' | 'error' | 'warning' | 'info'
@@ -97,6 +98,20 @@ function ToastItem({ toast, onRemove }: ToastItemProps) {
             onRemove(toast.id)
         }, 200)
     }
+
+    const { success, error, warning, notification } = useHaptics()
+
+    // Trigger semantic haptics on mount
+    useEffect(() => {
+        switch (toast.type) {
+            case 'success': success(); break
+            case 'error': error(); break
+            case 'warning': warning(); break
+            case 'info': notification('success'); break // Use light success for info
+        }
+    }, [toast.type, success, error, warning, notification])
+
+    // ... existing remove logic ...
 
     const getIcon = () => {
         switch (toast.type) {

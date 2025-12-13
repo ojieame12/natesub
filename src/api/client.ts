@@ -58,8 +58,9 @@ export interface Profile {
   paymentProvider: string | null
   payoutStatus: 'pending' | 'active' | 'restricted'
   shareUrl: string | null
-  template?: 'boundary' | 'minimal' | 'editorial' // Subscribe page template
+  template?: 'boundary' | 'liquid' | 'minimal' | 'editorial' // Subscribe page template
   paymentsReady?: boolean // For public profiles - indicates if checkout will work
+  feeMode?: 'absorb' | 'pass_to_subscriber' // Who pays the platform fee
 }
 
 export interface Tier {
@@ -80,6 +81,16 @@ export interface ImpactItem {
   id: string
   title: string
   subtitle: string
+}
+
+// Viewer's subscription to a creator (returned from public profile endpoint)
+export interface ViewerSubscription {
+  isActive: boolean
+  tierName: string | null
+  amount: number
+  currency: string
+  since: string
+  currentPeriodEnd: string | null
 }
 
 export interface Subscription {
@@ -154,12 +165,23 @@ function dispatchAuthError() {
   window.dispatchEvent(new CustomEvent(AUTH_ERROR_EVENT))
 }
 
+// Default timeout for API requests (15 seconds)
+const API_TIMEOUT_MS = 15000
+
+// Auth endpoints that should clear token on 401
+// Other 401s might just mean "needs auth" on public pages - don't clear token
+const AUTH_ENDPOINTS = ['/auth/me', '/auth/verify', '/auth/logout']
+
 // Base fetch wrapper
 async function apiFetch<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
   const url = `${API_URL}${path}`
+
+  // Create abort controller for timeout
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT_MS)
 
   // Build headers with optional Authorization token
   const headers: Record<string, string> = {
@@ -179,14 +201,25 @@ async function apiFetch<T>(
       ...options,
       credentials: 'include', // Still include cookies for web
       headers,
+      signal: controller.signal,
     })
-  } catch (networkError) {
+  } catch (networkError: any) {
+    clearTimeout(timeoutId)
+    // Check if it was a timeout abort
+    if (networkError?.name === 'AbortError') {
+      throw {
+        error: 'Request timed out. Please try again.',
+        status: 0,
+      } as ApiError
+    }
     // Network error (offline, CORS, DNS failure) - don't clear auth
     throw {
       error: 'Network error. Please check your connection.',
       status: 0,
     } as ApiError
   }
+
+  clearTimeout(timeoutId)
 
   let data: any
   try {
@@ -196,14 +229,28 @@ async function apiFetch<T>(
   }
 
   if (!response.ok) {
-    // Only clear auth on confirmed 401 from server (not network issues)
+    // Only clear auth on 401 from auth-specific endpoints
+    // Other 401s (e.g., on public pages) shouldn't log out the user
     if (response.status === 401) {
-      clearAuthToken()
-      dispatchAuthError()
+      const isAuthEndpoint = AUTH_ENDPOINTS.some(ep => path.startsWith(ep))
+      if (isAuthEndpoint) {
+        clearAuthToken()
+        dispatchAuthError()
+      }
+    }
+
+    // Ensure error is always a string (backend might return Zod error object)
+    let errorMessage = 'Request failed'
+    if (typeof data.error === 'string') {
+      errorMessage = data.error
+    } else if (data.error?.message) {
+      errorMessage = data.error.message
+    } else if (data.message) {
+      errorMessage = data.message
     }
 
     const error: ApiError = {
-      error: data.error || 'Request failed',
+      error: errorMessage,
       status: response.status,
     }
     throw error
@@ -354,7 +401,7 @@ export const profile = {
 
 export const users = {
   getByUsername: (username: string) =>
-    apiFetch<{ profile: Profile }>(`/users/${username}`),
+    apiFetch<{ profile: Profile; viewerSubscription: ViewerSubscription | null }>(`/users/${username}`),
 }
 
 // ============================================
@@ -457,6 +504,8 @@ export const paystack = {
       accountNumber: string
       bankCode: string
       error?: string
+      verificationSkipped?: boolean
+      message?: string
     }>('/paystack/resolve-account', {
       method: 'POST',
       body: JSON.stringify(data),
@@ -486,11 +535,33 @@ export const paystack = {
     apiFetch<{ success: boolean; message: string }>('/paystack/disconnect', {
       method: 'POST',
     }),
+
+  verifyTransaction: (reference: string) =>
+    apiFetch<{
+      verified: boolean
+      status: string
+      amount?: number
+      currency?: string
+      creatorUsername?: string
+      customerEmail?: string
+      paidAt?: string
+      error?: string
+    }>(`/paystack/verify/${reference}`),
 }
 
 // ============================================
 // CHECKOUT
 // ============================================
+
+export interface CheckoutBreakdown {
+  creatorAmount: number      // What creator receives (cents)
+  serviceFee: number         // Platform fee (cents)
+  totalAmount: number        // What subscriber pays (cents)
+  effectiveRate: number      // Fee percentage (0.10 = 10%, 0.08 = 8%)
+  currency: string
+  feeModel: string
+  purposeType: 'service' | 'personal'
+}
 
 export const checkout = {
   createSession: (data: {
@@ -499,16 +570,31 @@ export const checkout = {
     amount: number
     interval: 'month' | 'one_time'
     subscriberEmail?: string
+    viewId?: string  // Analytics: page view ID for conversion tracking
   }) =>
     apiFetch<{
       provider: 'stripe' | 'paystack'
       sessionId?: string  // Stripe
       reference?: string  // Paystack
       url: string
+      breakdown?: CheckoutBreakdown
     }>('/checkout/session', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+
+  // Verify Paystack transaction (called on redirect with ?reference=xxx)
+  verifyPaystack: (reference: string) =>
+    apiFetch<{
+      verified: boolean
+      status: string
+      amount?: number
+      currency?: string
+      reference?: string
+      paidAt?: string
+      channel?: string
+      error?: string
+    }>(`/checkout/verify/${reference}`),
 }
 
 // ============================================
@@ -531,6 +617,11 @@ export const subscriptions = {
     apiFetch<{ subscription: Subscription & { payments: any[] } }>(
       `/subscriptions/${id}`
     ),
+
+  cancel: (id: string) =>
+    apiFetch<{ success: boolean; subscription: Subscription }>(`/subscriptions/${id}`, {
+      method: 'DELETE',
+    }),
 }
 
 // ============================================
@@ -851,13 +942,16 @@ export const payroll = {
   // Verify a pay statement (public endpoint)
   verify: (code: string) =>
     apiFetch<{
-      valid: boolean
-      period?: {
-        startDate: string
-        endDate: string
-        netAmount: number
-        payoutDate: string
-        recipientName: string
+      verified: boolean
+      document?: {
+        creatorName: string
+        periodStart: string
+        periodEnd: string
+        grossCents: number
+        netCents: number
+        currency: string
+        createdAt: string
+        verificationCode: string
       }
     }>(`/payroll/verify/${code}`),
 }
@@ -913,6 +1007,7 @@ export interface AnalyticsStats {
     views: number
     reachedPayment: number
     startedCheckout: number
+    completedCheckout: number
     conversions: number
   }
   rates: {
@@ -941,7 +1036,7 @@ export const analytics = {
     }),
 
   // Update conversion progress (public, no auth)
-  updateView: (viewId: string, data: { reachedPayment?: boolean; startedCheckout?: boolean }) =>
+  updateView: (viewId: string, data: { reachedPayment?: boolean; startedCheckout?: boolean; completedCheckout?: boolean }) =>
     apiFetch<{ success: boolean }>(`/analytics/view/${viewId}`, {
       method: 'PATCH',
       body: JSON.stringify(data),

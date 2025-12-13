@@ -1,0 +1,122 @@
+/* ===========================================
+   NOT FOUND PAGE (404)
+   Using Liquid Glass Design System
+   =========================================== */
+
+.not-found-page {
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-xl);
+    background: var(--bg-base);
+}
+
+.not-found-content {
+    max-width: 360px;
+    width: 100%;
+    text-align: center;
+    animation: notFoundFadeIn 0.4s var(--ease-out) both;
+}
+
+@keyframes notFoundFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(12px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.not-found-code {
+    font-size: 80px;
+    font-weight: 600;
+    color: var(--neutral-200);
+    line-height: 1;
+    margin-bottom: var(--space-lg);
+    animation: notFoundCodePulse 0.6s var(--ease-spring) both;
+}
+
+@keyframes notFoundCodePulse {
+    0% {
+        opacity: 0;
+        transform: scale(0.8);
+    }
+
+    50% {
+        transform: scale(1.05);
+    }
+
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.not-found-title {
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0 0 var(--space-md) 0;
+}
+
+.not-found-message {
+    font-size: 15px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    margin: 0 0 var(--space-2xl) 0;
+}
+
+.not-found-actions {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.not-found-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-sm);
+    padding: var(--space-lg) var(--space-xl);
+    border-radius: var(--radius-lg);
+    font-size: 16px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    border: none;
+    font-family: inherit;
+}
+
+.not-found-btn:active {
+    transform: scale(0.98);
+}
+
+.not-found-btn.primary {
+    background: var(--accent-primary);
+    color: white;
+    box-shadow: var(--shadow-sm);
+}
+
+.not-found-btn.primary:hover {
+    background: var(--accent-primary-hover);
+}
+
+.not-found-btn.primary:active {
+    box-shadow: 0 2px 0 var(--accent-primary-shadow);
+    transform: translateY(2px);
+}
+
+.not-found-btn.secondary {
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+    border: 1px solid var(--border-default);
+}
+
+.not-found-btn.secondary:hover {
+    background: var(--neutral-50);
+}

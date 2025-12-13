@@ -1,13 +1,10 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Check, Play, Banknote, Briefcase, X, ChevronLeft } from 'lucide-react'
-import Lottie from 'lottie-react'
-import swipeAnimation from './animations/swipe-left.json'
-import moneyAnimation from './animations/money-send.json'
+import { Check, Play, Pause, Banknote, Briefcase, X, ChevronLeft, Loader2, ArrowRight } from 'lucide-react'
 import { Pressable } from '../components'
-import { useCreateCheckout, useRecordPageView, useUpdatePageView } from '../api/hooks'
+import { useCreateCheckout, useRecordPageView, useUpdatePageView, useVerifyPaystackPayment } from '../api/hooks'
 import type { Profile } from '../api/client'
-import { getCurrencySymbol, formatCompactNumber, formatAmountWithSeparators } from '../utils/currency'
+import { getCurrencySymbol, formatCompactNumber, formatAmountWithSeparators, calculateFeePreview } from '../utils/currency'
 import './template-one.css'
 
 type ViewType = 'welcome' | 'impact' | 'perks' | 'tiers' | 'payment'
@@ -23,6 +20,7 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
     const { mutateAsync: createCheckout, isPending: isCheckoutLoading } = useCreateCheckout()
     const { mutateAsync: recordPageView } = useRecordPageView()
     const { mutateAsync: updatePageView } = useUpdatePageView()
+    const { mutateAsync: verifyPaystack } = useVerifyPaystackPayment()
 
     // Extract profile data
     const {
@@ -41,6 +39,7 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
         currency,
         paymentProvider,
         paymentsReady,
+        feeMode,
     } = profile
 
     // Determine if this is a service page vs personal
@@ -50,12 +49,26 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
 
     // State
     const [currentView, setCurrentView] = useState<ViewType>('welcome')
-    const [isSubscribed] = useState(false) // Success handled by Stripe redirect
+    const [slideDirection, setSlideDirection] = useState<'left' | 'right' | null>(null)
+    const [isAnimating, setIsAnimating] = useState(false)
+    const [isSubscribed, setIsSubscribed] = useState(false)
+    const [isVerifying, setIsVerifying] = useState(false)
+    const [verificationFailed, setVerificationFailed] = useState(false)
     const [isPlaying, setIsPlaying] = useState(false)
+    const [audioDuration, setAudioDuration] = useState(0)
+    const [audioCurrentTime, setAudioCurrentTime] = useState(0)
+    const audioRef = useRef<HTMLAudioElement>(null)
     const [showTerms, setShowTerms] = useState(false)
+    const [subscriberEmail, setSubscriberEmail] = useState('')
+    const [emailError, setEmailError] = useState<string | null>(null)
+    const [isRedirecting, setIsRedirecting] = useState(false)
+    const [isRetrying, setIsRetrying] = useState(false)
 
     // Tier selection state - default to popular tier or first tier
+    // Show tier selection UI if there are multiple tiers, otherwise use single tier pricing
     const hasTiers = isService && pricingModel === 'tiers' && tiers && tiers.length > 1
+    // For pricing, use tier amount if pricingModel is 'tiers' (even with 1 tier)
+    const useTierPricing = pricingModel === 'tiers' && tiers && tiers.length >= 1
     const [selectedTierId, setSelectedTierId] = useState<string | null>(
         hasTiers ? (tiers.find(t => t.isPopular)?.id || tiers[0]?.id || null) : null
     )
@@ -64,7 +77,57 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
     const viewIdRef = useRef<string | null>(null)
     const hasTrackedPayment = useRef(false)
 
-    // Record page view on mount
+    // Extract stable search param values to avoid re-running effect on every render
+    const successParam = searchParams.get('success')
+    const providerParam = searchParams.get('provider')
+    const referenceParam = searchParams.get('reference') || searchParams.get('trxref')
+    const hasHandledSuccess = useRef(false)
+
+    // Handle success redirect from Stripe/Paystack (runs once on mount if success=true)
+    useEffect(() => {
+        if (successParam !== 'true' || hasHandledSuccess.current) return
+        hasHandledSuccess.current = true
+
+        const handleSuccess = async () => {
+            // For Paystack, verify the transaction reference
+            if (providerParam === 'paystack' && referenceParam) {
+                setIsVerifying(true)
+                try {
+                    const result = await verifyPaystack(referenceParam)
+                    if (!result.verified) {
+                        console.error('[subscribe] Paystack verification failed:', result.status)
+                        setIsVerifying(false)
+                        setVerificationFailed(true)
+                        return // Don't show success if verification failed
+                    }
+                    console.log(`[subscribe] Paystack payment verified: ${referenceParam}`)
+                } catch (err) {
+                    console.error('[subscribe] Paystack verification error:', err)
+                    // Still show success on verification error - webhook will handle actual status
+                }
+                setIsVerifying(false)
+                setVerificationFailed(false)
+            }
+
+            setIsSubscribed(true)
+
+            // Track successful conversion (viewIdRef may be set by page view effect)
+            setTimeout(() => {
+                if (viewIdRef.current) {
+                    updatePageView({
+                        viewId: viewIdRef.current,
+                        data: { completedCheckout: true },
+                    }).catch(() => {})
+                }
+            }, 100)
+
+            console.log(`[subscribe] Payment successful via ${providerParam || 'unknown'}`)
+        }
+
+        handleSuccess()
+    }, [successParam, providerParam, referenceParam, verifyPaystack, updatePageView])
+
+    // Record page view on mount (analytics only - success handling is in separate effect)
     useEffect(() => {
         if (!profileId) return
 
@@ -85,7 +148,7 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
         }
 
         trackView()
-    }, [profileId])
+    }, [profileId, recordPageView, searchParams])
 
     // Track when user reaches payment screen
     useEffect(() => {
@@ -104,9 +167,16 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
 
     const name = displayName || username || 'Someone'
     const selectedTier = hasTiers ? tiers?.find(t => t.id === selectedTierId) : null
-    const currentAmount = hasTiers
-        ? (selectedTier?.amount || tiers?.[0]?.amount || 10)
-        : (singleAmount || 10)
+
+    // Calculate amount - track if we have valid pricing
+    // Use tier pricing if pricingModel is 'tiers' (even with just 1 tier)
+    const hasValidPricing = useTierPricing
+        ? (selectedTier?.amount != null || (tiers && tiers.length > 0 && tiers[0]?.amount != null))
+        : (singleAmount != null && singleAmount > 0)
+
+    const currentAmount = useTierPricing
+        ? (selectedTier?.amount || tiers?.[0]?.amount || 0)
+        : (singleAmount || 0)
     const validImpactItems = (profileImpactItems || []).filter(item => item.title.trim() !== '')
     const enabledPerks = (profilePerks || []).filter(perk => perk.enabled)
 
@@ -125,8 +195,52 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
 
     const [checkoutError, setCheckoutError] = useState<string | null>(null)
 
+    // Audio player controls
+    const toggleAudio = () => {
+        if (!audioRef.current) return
+        if (isPlaying) {
+            audioRef.current.pause()
+        } else {
+            audioRef.current.play()
+        }
+        setIsPlaying(!isPlaying)
+    }
+
+    const formatTime = (seconds: number) => {
+        const mins = Math.floor(seconds / 60)
+        const secs = Math.floor(seconds % 60)
+        return `${mins}:${secs.toString().padStart(2, '0')}`
+    }
+
     const handleSubscribe = async () => {
         setCheckoutError(null)
+        setEmailError(null)
+
+        // Check for network connection
+        if (!navigator.onLine) {
+            setCheckoutError("You're offline. Please check your internet connection and try again.")
+            return
+        }
+
+        // Validate pricing is configured
+        if (!hasValidPricing || currentAmount <= 0) {
+            setCheckoutError('This subscription is not properly configured. Please contact the creator.')
+            return
+        }
+
+        // Validate email for Paystack (required)
+        if (isPaystack) {
+            if (!subscriberEmail.trim()) {
+                setEmailError('Email is required to proceed')
+                return
+            }
+            // Basic email validation
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+            if (!emailRegex.test(subscriberEmail.trim())) {
+                setEmailError('Please enter a valid email address')
+                return
+            }
+        }
 
         // Track checkout start
         if (viewIdRef.current) {
@@ -143,33 +257,64 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
                 creatorUsername: username,
                 amount: amountInCents,
                 interval: 'month',
+                // Pass tierId for tier-based pricing (even with just 1 tier)
+                ...(useTierPricing && tiers && tiers.length > 0 ? { tierId: selectedTierId || tiers[0].id } : {}),
+                // Pass email for Paystack (required) or Stripe (optional)
+                ...(subscriberEmail.trim() ? { subscriberEmail: subscriberEmail.trim() } : {}),
+                // Analytics: pass viewId for accurate conversion tracking
+                ...(viewIdRef.current ? { viewId: viewIdRef.current } : {}),
             })
             // Redirect to checkout (Stripe or Paystack based on creator's provider)
             if (result.url) {
+                setIsRedirecting(true)
                 window.location.href = result.url
             } else {
                 setCheckoutError('Unable to create checkout session. Please try again.')
             }
         } catch (error: any) {
             console.error('Checkout failed:', error)
-            setCheckoutError(error?.error || 'Payment failed. Please try again.')
+            // Ensure we always set a string, not an object
+            const errorMsg = typeof error?.error === 'string'
+                ? error.error
+                : error?.message || 'Payment failed. Please try again.'
+            setCheckoutError(errorMsg)
             // DO NOT grant access on failure
         }
     }
 
+    // Animated view transition
+    const changeView = (newView: ViewType, direction: 'left' | 'right') => {
+        if (isAnimating || newView === currentView) return
+        setSlideDirection(direction)
+        setIsAnimating(true)
+
+        // Short delay for exit animation, then switch view
+        setTimeout(() => {
+            setCurrentView(newView)
+            // Reset animation state after enter animation
+            setTimeout(() => {
+                setIsAnimating(false)
+                setSlideDirection(null)
+            }, 250)
+        }, 50)
+    }
+
     const handleDotClick = (index: number) => {
-        setCurrentView(viewSequence[index])
+        const targetView = viewSequence[index]
+        const targetIndex = viewSequence.indexOf(targetView)
+        const direction = targetIndex > currentIndex ? 'left' : 'right'
+        changeView(targetView, direction)
     }
 
     const handleNext = () => {
         if (currentIndex < viewSequence.length - 1) {
-            setCurrentView(viewSequence[currentIndex + 1])
+            changeView(viewSequence[currentIndex + 1], 'left')
         }
     }
 
     const handlePrev = () => {
         if (currentIndex > 0) {
-            setCurrentView(viewSequence[currentIndex - 1])
+            changeView(viewSequence[currentIndex - 1], 'right')
         }
     }
 
@@ -197,6 +342,105 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
         }
     }
 
+    // Verification loading state
+    if (isVerifying) {
+        return (
+            <div className="sub-page template-boundary">
+                <div className="sub-success">
+                    <div className="sub-success-icon sub-verifying">
+                        <div className="sub-spinner" />
+                    </div>
+                    <h1 className="sub-success-title">Verifying payment...</h1>
+                    <p className="sub-success-text">
+                        Please wait while we confirm your payment.
+                    </p>
+                </div>
+            </div>
+        )
+    }
+
+    // Retry verification function
+    const handleRetryVerification = async () => {
+        const reference = searchParams.get('reference') || searchParams.get('trxref')
+        if (!reference) {
+            // No reference to retry with - go back to start
+            setVerificationFailed(false)
+            navigate(`/${username}`, { replace: true })
+            return
+        }
+
+        setIsRetrying(true)
+        try {
+            const result = await verifyPaystack(reference)
+            if (result.verified) {
+                setVerificationFailed(false)
+                setIsSubscribed(true)
+                // Track successful conversion
+                if (viewIdRef.current) {
+                    updatePageView({
+                        viewId: viewIdRef.current,
+                        data: { completedCheckout: true },
+                    }).catch(() => {})
+                }
+            } else {
+                // Still failed - keep showing error
+                console.error('[subscribe] Retry verification failed:', result.status)
+            }
+        } catch (err) {
+            console.error('[subscribe] Retry verification error:', err)
+            // Keep showing error state
+        }
+        setIsRetrying(false)
+    }
+
+    // Verification failed state
+    if (verificationFailed) {
+        return (
+            <div className="sub-page template-boundary">
+                <div className="sub-success">
+                    <div className="sub-success-icon sub-error">
+                        {isRetrying ? <Loader2 size={32} className="spin" /> : <X size={32} />}
+                    </div>
+                    <h1 className="sub-success-title">
+                        {isRetrying ? 'Retrying...' : 'Payment Issue'}
+                    </h1>
+                    <p className="sub-success-text">
+                        {isRetrying
+                            ? 'Checking your payment status again...'
+                            : "We couldn't verify your payment. If you were charged, please contact support and we'll resolve this."
+                        }
+                    </p>
+                    {!isRetrying && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                            <Pressable
+                                className="sub-btn sub-btn-primary"
+                                onClick={handleRetryVerification}
+                            >
+                                Try Again
+                            </Pressable>
+                            <a
+                                href="mailto:support@natepay.com?subject=Payment%20Verification%20Issue"
+                                className="sub-btn sub-btn-secondary"
+                                style={{ textDecoration: 'none', textAlign: 'center' }}
+                            >
+                                Contact Support
+                            </a>
+                            <Pressable
+                                className="sub-btn sub-btn-tertiary"
+                                onClick={() => {
+                                    setVerificationFailed(false)
+                                    navigate(`/${username}`, { replace: true })
+                                }}
+                            >
+                                Start Over
+                            </Pressable>
+                        </div>
+                    )}
+                </div>
+            </div>
+        )
+    }
+
     // Success state
     if (isSubscribed) {
         return (
@@ -212,20 +456,20 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
                             : `You're now supporting ${name} at ${formatAmountWithSeparators(currentAmount, currency)}/month`
                         }
                     </p>
-                    <Pressable className="sub-btn sub-btn-secondary" onClick={() => navigate('/dashboard')}>
-                        Done
-                    </Pressable>
+                    <p className="sub-success-subtext">
+                        You'll receive a confirmation email shortly.
+                    </p>
                 </div>
             </div>
         )
     }
 
-    // Payments not ready - show coming soon state
-    if (!paymentsReady) {
+    // Payments not ready or pricing not configured - show coming soon state
+    if (!paymentsReady || !hasValidPricing) {
         return (
             <div className="sub-page template-boundary">
                 <div className="sub-header">
-                    <Pressable className="sub-back-btn" onClick={() => navigate(-1)}>
+                    <Pressable className="sub-back-btn" onClick={() => navigate('/')}>
                         <ChevronLeft size={20} />
                     </Pressable>
                     <img src="/logo.svg" alt="nate" className="sub-logo-img" />
@@ -276,7 +520,7 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
         <div className="sub-page template-boundary">
             {/* Header with back button */}
             <div className="sub-header">
-                <Pressable className="sub-back-btn" onClick={() => navigate(-1)}>
+                <Pressable className="sub-back-btn" onClick={() => navigate('/')}>
                     <ChevronLeft size={20} />
                 </Pressable>
                 <img src="/logo.svg" alt="nate" className="sub-logo-img" />
@@ -316,7 +560,7 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
 
                 {/* Content Area - Swipeable */}
                 <div
-                    className="sub-content"
+                    className={`sub-content ${isAnimating ? `sub-animating sub-slide-${slideDirection}` : ''}`}
                     onTouchStart={handleTouchStart}
                     onTouchMove={handleTouchMove}
                     onTouchEnd={handleTouchEnd}
@@ -342,15 +586,32 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
                                 {/* Voice Message - only show if voiceIntroUrl exists */}
                                 {voiceIntroUrl && (
                                     <div className="sub-voice-card-mini">
+                                        <audio
+                                            ref={audioRef}
+                                            src={voiceIntroUrl}
+                                            onLoadedMetadata={() => {
+                                                if (audioRef.current) {
+                                                    setAudioDuration(audioRef.current.duration)
+                                                }
+                                            }}
+                                            onTimeUpdate={() => {
+                                                if (audioRef.current) {
+                                                    setAudioCurrentTime(audioRef.current.currentTime)
+                                                }
+                                            }}
+                                            onEnded={() => setIsPlaying(false)}
+                                        />
                                         <Pressable
-                                            className="sub-voice-play"
-                                            onClick={() => setIsPlaying(!isPlaying)}
+                                            className={`sub-voice-play ${isPlaying ? 'playing' : ''}`}
+                                            onClick={toggleAudio}
                                         >
-                                            <Play size={16} fill={isPlaying ? 'transparent' : 'white'} />
+                                            {isPlaying ? <Pause size={16} /> : <Play size={16} fill="white" />}
                                         </Pressable>
                                         <div className="sub-voice-info">
                                             <span className="sub-voice-label-mini">Hear From {name.split(' ')[0]}</span>
-                                            <span className="sub-voice-time">0:12 / 0:50</span>
+                                            <span className="sub-voice-time">
+                                                {formatTime(audioCurrentTime)} / {formatTime(audioDuration || 0)}
+                                            </span>
                                         </div>
                                     </div>
                                 )}
@@ -458,18 +719,30 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
                     )}
 
                     {/* Payment View */}
-                    {currentView === 'payment' && (
+                    {currentView === 'payment' && (() => {
+                        // Calculate fee preview for display (respects creator's feeMode)
+                        const feePreview = calculateFeePreview(currentAmount, currency, purpose, feeMode)
+
+                        return (
                         <div className="sub-view sub-view-payment">
                             <h2 className="sub-section-title">Complete Subscription</h2>
 
                             <div className="sub-payment-summary">
                                 <div className="sub-payment-row">
                                     <span>{selectedTier ? selectedTier.name : 'Monthly subscription'}</span>
-                                    <span className="sub-payment-amount">{formatAmountWithSeparators(currentAmount, currency)}/mo</span>
+                                    <span className="sub-payment-amount">{formatAmountWithSeparators(currentAmount, currency)}</span>
                                 </div>
-                                <div className="sub-payment-row">
-                                    <span>To</span>
-                                    <span className="sub-payment-to">{name}</span>
+                                <div className="sub-payment-row sub-payment-fee">
+                                    <span>Service fee</span>
+                                    <span className="sub-payment-amount">{formatAmountWithSeparators(feePreview.serviceFee, currency)}</span>
+                                </div>
+                                <div className="sub-payment-row sub-payment-total">
+                                    <span>Total per month</span>
+                                    <span className="sub-payment-amount">{formatAmountWithSeparators(feePreview.subscriberPays, currency)}</span>
+                                </div>
+                                <div className="sub-payment-row sub-payment-creator">
+                                    <span>To {name}</span>
+                                    <span className="sub-payment-to">{formatAmountWithSeparators(feePreview.creatorReceives, currency)}</span>
                                 </div>
                             </div>
 
@@ -485,33 +758,65 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
                                 </div>
                             )}
 
+                            {/* Email input for Paystack (required) */}
+                            {isPaystack && (
+                                <div className="sub-email-input-wrapper">
+                                    <input
+                                        type="email"
+                                        className={`sub-email-input ${emailError ? 'error' : ''}`}
+                                        placeholder="Enter your email"
+                                        value={subscriberEmail}
+                                        onChange={(e) => {
+                                            setSubscriberEmail(e.target.value)
+                                            if (emailError) setEmailError(null)
+                                        }}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter' && subscriberEmail.trim() && !isCheckoutLoading && !isRedirecting) {
+                                                e.preventDefault()
+                                                handleSubscribe()
+                                            }
+                                        }}
+                                    />
+                                    {emailError && (
+                                        <span className="sub-email-error">{emailError}</span>
+                                    )}
+                                </div>
+                            )}
+
                             <div className="sub-payment-methods">
                                 {isPaystack ? (
                                     <Pressable
                                         className="sub-payment-btn sub-payment-paystack"
                                         onClick={handleSubscribe}
-                                        disabled={isCheckoutLoading}
+                                        disabled={isCheckoutLoading || isRedirecting || !subscriberEmail.trim()}
                                     >
-                                        <span>{isCheckoutLoading ? 'Loading...' : 'Pay with Card or Bank'}</span>
+                                        {(isCheckoutLoading || isRedirecting) ? (
+                                            <>
+                                                <Loader2 size={18} className="spin" />
+                                                <span>{isRedirecting ? 'Redirecting...' : 'Processing...'}</span>
+                                            </>
+                                        ) : (
+                                            <span>Pay with Card or Bank</span>
+                                        )}
                                     </Pressable>
                                 ) : (
                                     <>
                                         <Pressable
                                             className="sub-payment-btn sub-payment-stripe"
                                             onClick={handleSubscribe}
-                                            disabled={isCheckoutLoading}
+                                            disabled={isCheckoutLoading || isRedirecting}
                                         >
-                                            <img src="/stripe-logo.svg" alt="Stripe" className="sub-payment-logo" />
-                                            <span>{isCheckoutLoading ? 'Loading...' : 'Pay with Stripe'}</span>
-                                        </Pressable>
-
-                                        <Pressable
-                                            className="sub-payment-btn sub-payment-apple"
-                                            onClick={handleSubscribe}
-                                            disabled={isCheckoutLoading}
-                                        >
-                                            <img src="/apple-logo.svg" alt="Apple" className="sub-payment-logo-apple" />
-                                            <span>Pay</span>
+                                            {(isCheckoutLoading || isRedirecting) ? (
+                                                <>
+                                                    <Loader2 size={18} className="spin" />
+                                                    <span>{isRedirecting ? 'Redirecting...' : 'Processing...'}</span>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <img src="/stripe-logo.svg" alt="Stripe" className="sub-payment-logo" />
+                                                    <span>Pay with Stripe</span>
+                                                </>
+                                            )}
                                         </Pressable>
                                     </>
                                 )}
@@ -524,18 +829,19 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
                                 </button>
                             </p>
                         </div>
-                    )}
+                        )
+                    })()}
                 </div>
 
                 {/* Swipe Indicator + Pagination Dots */}
                 {currentView !== 'payment' && (
                     <div className="sub-pagination">
                         <div className="sub-swipe-indicator">
-                            <Lottie
-                                animationData={swipeAnimation}
-                                loop={true}
-                                className="sub-swipe-lottie"
-                            />
+                            <div className="sub-swipe-arrows">
+                                <ChevronLeft size={16} className="sub-swipe-chevron sub-swipe-chevron-1" />
+                                <ChevronLeft size={16} className="sub-swipe-chevron sub-swipe-chevron-2" />
+                                <ChevronLeft size={16} className="sub-swipe-chevron sub-swipe-chevron-3" />
+                            </div>
                             <span className="sub-swipe-text">
                                 {currentView === 'welcome' && (isService ? 'Why Work With Me' : 'How it would help Me')}
                                 {currentView === 'impact' && (hasTiers ? 'Choose Plan' : (isService ? "What's Included" : 'What You would Get'))}
@@ -563,15 +869,21 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
                             onClick={(currentView === 'perks' || currentView === 'tiers') ? () => setCurrentView('payment') : handleNext}
                         >
                             <span className="sub-btn-text">Subscribe Now</span>
-                            <Lottie
-                                animationData={moneyAnimation}
-                                loop={true}
-                                className="sub-btn-lottie"
-                            />
+                            <ArrowRight size={20} className="sub-btn-arrow" />
                         </Pressable>
                     </div>
                 )}
             </div>
+
+            {/* Redirect Loading Overlay */}
+            {isRedirecting && (
+                <div className="sub-redirect-overlay">
+                    <div className="sub-redirect-content">
+                        <Loader2 size={32} className="spin" />
+                        <p>Redirecting to payment...</p>
+                    </div>
+                </div>
+            )}
 
             {/* Terms & Conditions Drawer */}
             <div className={`sub-terms-overlay ${showTerms ? 'open' : ''}`} onClick={() => setShowTerms(false)} />
@@ -593,7 +905,7 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
                     <p>You may cancel your subscription at any time. Cancellation will take effect at the end of your current billing period. No refunds will be provided for partial months.</p>
 
                     <h4>3. Payment Processing</h4>
-                    <p>Payments are securely processed through Stripe. Your payment information is encrypted and never stored on our servers.</p>
+                    <p>Payments are securely processed through {isPaystack ? 'Paystack' : 'Stripe'}. Your payment information is encrypted and never stored on our servers.</p>
 
                     <h4>4. Content & Benefits</h4>
                     <p>Subscription benefits are provided at the discretion of the person you are subscribing to. Benefits may change over time.</p>
@@ -602,7 +914,7 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
                     <p>Your personal information will be handled in accordance with our Privacy Policy. We do not sell your data to third parties.</p>
 
                     <h4>6. Contact</h4>
-                    <p>For questions about your subscription, please contact support@natepay.com</p>
+                    <p>For questions about your subscription, please contact <a href="mailto:support@natepay.com">support@natepay.com</a></p>
                 </div>
             </div>
         </div>

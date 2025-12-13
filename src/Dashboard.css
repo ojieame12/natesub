@@ -11,7 +11,8 @@
     margin: 0 auto;
     position: relative;
     padding-bottom: 100px;
-    background: var(--neutral-100);
+    /* Transparent to let global AmbientBackground show through */
+    background: transparent;
     overflow-x: hidden;
 }
 
@@ -32,6 +33,20 @@
     animation: meshMove 20s ease-in-out infinite;
     pointer-events: none;
     z-index: 0;
+}
+
+/* Disable animation on mobile/iOS for battery life - use static gradient instead */
+@media (max-width: 768px), (hover: none) {
+    .dashboard::before {
+        animation: none;
+    }
+}
+
+/* Respect user's motion preferences */
+@media (prefers-reduced-motion: reduce) {
+    .dashboard::before {
+        animation: none;
+    }
 }
 
 @keyframes meshMove {
@@ -70,9 +85,9 @@
     justify-content: space-between;
     padding: var(--space-md) var(--space-lg);
     padding-top: calc(env(safe-area-inset-top, 12px) + var(--space-md));
-    background: rgba(245, 245, 244, 0.8);
-    backdrop-filter: blur(20px) saturate(180%);
-    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    background: rgba(245, 245, 244, 0.92);
+    backdrop-filter: blur(10px) saturate(150%);
+    -webkit-backdrop-filter: blur(10px) saturate(150%);
     border-bottom: 1px solid var(--border-subtle);
     position: fixed;
     top: 0;
@@ -585,29 +600,8 @@
     align-items: center;
     gap: var(--space-md);
     padding: var(--space-md) var(--space-lg);
-    opacity: 0;
-    transform: translateX(-20px);
-}
-
-.menu-panel.open .menu-item {
-    animation: menuItemSlide 0.3s ease-out forwards;
-}
-
-.menu-panel.open .menu-items .menu-item:nth-child(1) { animation-delay: 0.1s; }
-.menu-panel.open .menu-items .menu-item:nth-child(2) { animation-delay: 0.15s; }
-.menu-panel.open .menu-items .menu-item:nth-child(3) { animation-delay: 0.2s; }
-.menu-panel.open .menu-items .menu-item:nth-child(4) { animation-delay: 0.25s; }
-.menu-panel.open .menu-items .menu-item:nth-child(5) { animation-delay: 0.3s; }
-.menu-panel.open .menu-items .menu-item:nth-child(6) { animation-delay: 0.35s; }
-
-.menu-panel.open .menu-footer .menu-item:nth-child(1) { animation-delay: 0.4s; }
-.menu-panel.open .menu-footer .menu-item:nth-child(2) { animation-delay: 0.45s; }
-
-@keyframes menuItemSlide {
-    to {
-        opacity: 1;
-        transform: translateX(0);
-    }
+    /* Simple transition instead of staggered animation - prevents flicker */
+    transition: background 0.15s ease;
 }
 
 .menu-item.pressed {
@@ -845,12 +839,6 @@
 .payment-status-banner:active {
     transform: scale(0.98);
     opacity: 0.9;
-}
-
-.payment-status-banner.manual {
-    background: var(--neutral-100);
-    border: 1px solid var(--border-default);
-    color: var(--text-secondary);
 }
 
 .payment-status-banner.pending {

@@ -1,12 +1,46 @@
+import { lazy, Suspense, type ReactNode } from 'react'
 import { useParams, Navigate, useSearchParams } from 'react-router-dom'
 import { isReservedUsername } from '../utils/constants'
 import { usePublicProfile } from '../api/hooks'
-import SubscribeBoundary from './SubscribeBoundary'
-import SubscriptionSuccess from './SubscriptionSuccess'
-import { Loader2 } from 'lucide-react'
+import { Skeleton, SkeletonAvatar } from '../components'
 
-// This component handles vanity URLs like nate.to/username
+// This component handles vanity URLs like natepay.co/username
 // It checks if the username is valid and renders the subscribe page
+
+const SubscribeBoundary = lazy(() => import('./SubscribeBoundary'))
+const SubscriptionLiquid = lazy(() => import('./SubscriptionLiquid'))
+const SubscriptionSuccess = lazy(() => import('./SubscriptionSuccess'))
+const AlreadySubscribed = lazy(() => import('./AlreadySubscribed'))
+
+/**
+ * SubscriptionPageSkeleton - Matches exact layout of subscription card
+ * Prevents layout shift (CLS) by reserving the correct space
+ */
+function SubscriptionPageSkeleton() {
+  return (
+    <div className="sub-page template-boundary">
+      <div className="sub-skeleton">
+        {/* Avatar area */}
+        <div className="sub-skeleton-avatar">
+          <SkeletonAvatar size={80} />
+        </div>
+        {/* Name */}
+        <Skeleton width={160} height={24} style={{ marginTop: 16 }} />
+        {/* Username */}
+        <Skeleton width={100} height={14} style={{ marginTop: 8 }} />
+        {/* Bio area */}
+        <div className="sub-skeleton-bio">
+          <Skeleton width="90%" height={14} />
+          <Skeleton width="70%" height={14} style={{ marginTop: 8 }} />
+        </div>
+        {/* Card area placeholder */}
+        <div className="sub-skeleton-card">
+          <Skeleton width="100%" height={200} borderRadius="var(--radius-xl)" />
+        </div>
+      </div>
+    </div>
+  )
+}
 
 export default function UserPage() {
   const { username } = useParams<{ username: string }>()
@@ -22,19 +56,12 @@ export default function UserPage() {
     return <Navigate to="/onboarding" replace />
   }
 
-  // Fetch real profile data from API
+  // Fetch real profile data from API (includes viewerSubscription if logged in)
   const { data, isLoading, error } = usePublicProfile(username)
 
-  // Loading state
+  // Loading state - use skeleton that matches final layout
   if (isLoading) {
-    return (
-      <div className="sub-page template-boundary">
-        <div className="sub-loading">
-          <Loader2 className="sub-loading-spinner" size={32} />
-          <p>Loading...</p>
-        </div>
-      </div>
-    )
+    return <SubscriptionPageSkeleton />
   }
 
   // Error or not found
@@ -49,11 +76,30 @@ export default function UserPage() {
     )
   }
 
+  let content: ReactNode
+
   // Show success page after payment
   if (isSuccess) {
-    return <SubscriptionSuccess profile={data.profile} provider={provider} />
+    content = <SubscriptionSuccess profile={data.profile} provider={provider} />
+  } else if (data.viewerSubscription?.isActive) {
+    // Show "Already Subscribed" if viewer has active subscription
+    content = (
+      <AlreadySubscribed
+        profile={data.profile}
+        subscription={data.viewerSubscription}
+      />
+    )
+  } else {
+    // Use the profile's saved template preference (default to 'boundary')
+    const templateToUse = data.profile.template || 'boundary'
+    content = templateToUse === 'liquid'
+      ? <SubscriptionLiquid profile={data.profile} canceled={isCanceled} />
+      : <SubscribeBoundary profile={data.profile} canceled={isCanceled} />
   }
 
-  // Pass canceled state to show a message
-  return <SubscribeBoundary profile={data.profile} canceled={isCanceled} />
+  return (
+    <Suspense fallback={<SubscriptionPageSkeleton />}>
+      {content}
+    </Suspense>
+  )
 }

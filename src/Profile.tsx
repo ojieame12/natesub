@@ -1,7 +1,8 @@
 import { useNavigate } from 'react-router-dom'
-import { Pen, ExternalLink, ChevronRight, LogOut } from 'lucide-react'
-import { Pressable, Skeleton, ErrorState } from './components'
+import { Pen, ExternalLink, ChevronRight, LogOut, Copy } from 'lucide-react'
+import { Pressable, Skeleton, ErrorState, useToast } from './components'
 import { useProfile, useMetrics, useLogout, useCurrentUser } from './api/hooks'
+import { useOnboardingStore } from './onboarding/store'
 import './Profile.css'
 
 const quickLinks = [
@@ -22,6 +23,8 @@ const formatMemberSince = (date: string | null) => {
 export default function Profile() {
   const navigate = useNavigate()
   const { mutate: logout } = useLogout()
+  const toast = useToast()
+  const resetOnboarding = useOnboardingStore((s) => s.reset)
 
   // Real API hooks
   const { data: userData } = useCurrentUser()
@@ -43,12 +46,24 @@ export default function Profile() {
   const isLoading = profileLoading || metricsLoading
 
   const handleViewPage = () => {
-    window.open(`https://nate.to/${username}`, '_blank')
+    window.open(`https://natepay.co/${username}`, '_blank')
+  }
+
+  const handleCopyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(`https://natepay.co/${username}`)
+      toast.success('Link copied!')
+    } catch {
+      toast.error('Failed to copy')
+    }
   }
 
   const handleLogout = () => {
     logout(undefined, {
-      onSuccess: () => navigate('/onboarding'),
+      onSuccess: () => {
+        resetOnboarding()
+        navigate('/onboarding')
+      },
     })
   }
 
@@ -96,10 +111,15 @@ export default function Profile() {
               </div>
               <h2 className="profile-name">{name}</h2>
               <p className="profile-username">@{username}</p>
-              <Pressable className="view-page-btn" onClick={handleViewPage}>
-                <span>nate.to/{username}</span>
-                <ExternalLink size={14} />
-              </Pressable>
+              <div className="profile-link-actions">
+                <Pressable className="view-page-btn" onClick={handleViewPage}>
+                  <span>natepay.co/{username}</span>
+                  <ExternalLink size={14} />
+                </Pressable>
+                <Pressable className="copy-link-btn" onClick={handleCopyLink}>
+                  <Copy size={16} />
+                </Pressable>
+              </div>
             </>
           )}
         </section>

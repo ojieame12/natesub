@@ -201,13 +201,17 @@ export default function SentRequests() {
                     </div>
                 ) : (
                     <div className="requests-list">
-                        {allRequests.map((request: any) => {
+                        {allRequests.map((request: any, index: number) => {
                             const displayStatus = mapApiStatusToDisplay(request.status)
                             const sentDate = request.sentAt ? formatDate(request.sentAt) : formatDate(request.createdAt)
                             const sentVia = request.sendMethod || 'link'
 
                             return (
-                                <div key={request.id} className="request-card">
+                                <div
+                                    key={request.id}
+                                    className="request-card animate-fade-in-up"
+                                    style={{ animationDelay: `${index * 0.05}s`, animationFillMode: 'both' }}
+                                >
                                     <Pressable className="request-card-main">
                                         <div className="request-avatar">
                                             {request.recipientName.charAt(0).toUpperCase()}

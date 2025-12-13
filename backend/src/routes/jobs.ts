@@ -10,8 +10,9 @@ import { sendRenewalReminders, sendDunningEmails, sendCancellationEmails } from 
 const jobs = new Hono()
 
 // Simple API key auth for job endpoints
+// SECURITY: Only accept API key via header (not query params) to prevent key leakage in logs
 const requireJobsAuth = async (c: any, next: () => Promise<void>) => {
-  const apiKey = c.req.header('x-jobs-api-key') || c.req.query('key')
+  const apiKey = c.req.header('x-jobs-api-key')
   const expectedKey = env.JOBS_API_KEY
 
   if (!expectedKey) {
@@ -19,7 +20,7 @@ const requireJobsAuth = async (c: any, next: () => Promise<void>) => {
     return c.json({ error: 'Jobs endpoint not configured' }, 503)
   }
 
-  if (apiKey !== expectedKey) {
+  if (!apiKey || apiKey !== expectedKey) {
     return c.json({ error: 'Unauthorized' }, 401)
   }
 

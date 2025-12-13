@@ -3,28 +3,52 @@ import { ChevronLeft, Mic } from 'lucide-react'
 import { useOnboardingStore } from './store'
 import { Button, Pressable } from './components'
 import { VoiceRecorder } from '../components'
+import { uploadBlob } from '../api/hooks'
 import './onboarding.css'
 
 export default function ServiceDescriptionStep() {
     const {
         serviceDescription,
         serviceDescriptionAudio,
+        serviceDescriptionAudioUrl,
         setServiceDescription,
         setServiceDescriptionAudio,
+        setServiceDescriptionAudioUrl,
         nextStep,
         prevStep,
     } = useOnboardingStore()
 
-    const [showVoice, setShowVoice] = useState(!!serviceDescriptionAudio)
+    const [showVoice, setShowVoice] = useState(!!serviceDescriptionAudio || !!serviceDescriptionAudioUrl)
+    const [isUploading, setIsUploading] = useState(false)
+    const [uploadError, setUploadError] = useState<string | null>(null)
 
-    const hasDescription = serviceDescription.trim().length > 0 || serviceDescriptionAudio !== null
+    const hasDescription = serviceDescription.trim().length > 0 || serviceDescriptionAudioUrl !== null || serviceDescriptionAudio !== null
 
-    const handleRecorded = (blob: Blob, _duration: number) => {
+    const handleRecorded = async (blob: Blob, _duration: number) => {
+        // Store blob locally for immediate playback
         setServiceDescriptionAudio(blob)
+        setUploadError(null)
+        setIsUploading(true)
+
+        try {
+            // Upload to S3 and get URL
+            const publicUrl = await uploadBlob(blob, 'voice', 'audio/webm')
+            setServiceDescriptionAudioUrl(publicUrl)
+            // Clear the blob after successful upload (URL is now persisted)
+            setServiceDescriptionAudio(null)
+        } catch (err) {
+            console.error('Audio upload failed:', err)
+            setUploadError('Failed to save recording. Please try again.')
+            // Keep the blob so user can try again
+        } finally {
+            setIsUploading(false)
+        }
     }
 
     const handleRemoveAudio = () => {
         setServiceDescriptionAudio(null)
+        setServiceDescriptionAudioUrl(null)
+        setUploadError(null)
     }
 
     return (
@@ -60,14 +84,23 @@ export default function ServiceDescriptionStep() {
                         </div>
 
                         {/* Voice alternative */}
-                        {showVoice || serviceDescriptionAudio ? (
-                            <VoiceRecorder
-                                onRecorded={handleRecorded}
-                                onRemove={handleRemoveAudio}
-                                audioBlob={serviceDescriptionAudio}
-                                maxDuration={60}
-                                label=""
-                            />
+                        {showVoice || serviceDescriptionAudio || serviceDescriptionAudioUrl ? (
+                            <>
+                                <VoiceRecorder
+                                    onRecorded={handleRecorded}
+                                    onRemove={handleRemoveAudio}
+                                    audioBlob={serviceDescriptionAudio}
+                                    existingAudioUrl={serviceDescriptionAudioUrl}
+                                    maxDuration={60}
+                                    label=""
+                                    isUploading={isUploading}
+                                />
+                                {uploadError && (
+                                    <p className="voice-recorder-error" style={{ color: 'var(--status-error)', fontSize: 13, marginTop: 8 }}>
+                                        {uploadError}
+                                    </p>
+                                )}
+                            </>
                         ) : (
                             <Pressable
                                 className="service-voice-trigger-small"
@@ -86,11 +119,11 @@ export default function ServiceDescriptionStep() {
                         size="lg"
                         fullWidth
                         onClick={nextStep}
-                        disabled={!hasDescription}
+                        disabled={!hasDescription || isUploading}
                     >
-                        Continue
+                        {isUploading ? 'Saving recording...' : 'Continue'}
                     </Button>
-                    {!hasDescription && (
+                    {!hasDescription && !isUploading && (
                         <p className="step-hint">Describe what you offer</p>
                     )}
                 </div>

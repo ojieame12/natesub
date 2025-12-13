@@ -3,6 +3,7 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { db } from '../db/client.js'
 import { requireAuth } from '../middleware/auth.js'
+import { paymentRateLimit } from '../middleware/rateLimit.js'
 import {
   listBanks,
   resolveAccount,
@@ -66,10 +67,12 @@ paystackRoutes.get('/banks/:country', requireAuth, async (c) => {
 paystackRoutes.post(
   '/resolve-account',
   requireAuth,
+  paymentRateLimit,
   zValidator(
     'json',
     z.object({
-      accountNumber: z.string().min(10).max(20),
+      // Min 9 for South Africa (9-11 digits), min 10 for Nigeria/Kenya
+      accountNumber: z.string().min(9).max(20),
       bankCode: z.string(),
       // For South Africa, requires ID verification
       idNumber: z.string().optional(),
@@ -117,7 +120,21 @@ paystackRoutes.post(
         })
       }
 
-      // Nigeria and Kenya use standard resolve
+      // Nigeria and Ghana use standard resolve API
+      // Kenya does NOT support bank/resolve - skip verification
+      if (countryCode === 'KE') {
+        // Kenya: Paystack doesn't support account resolution
+        // Return unverified status - account will be validated on first transfer
+        return c.json({
+          verified: false,
+          verificationSkipped: true,
+          message: 'Account verification not available for Kenya. Account will be validated on first payout.',
+          accountNumber: data.accountNumber,
+          bankCode: data.bankCode,
+        })
+      }
+
+      // Nigeria (NG) and Ghana (GH) - use standard resolve
       const result = await resolveAccount(data.accountNumber, data.bankCode)
 
       return c.json({
@@ -127,10 +144,11 @@ paystackRoutes.post(
         bankCode: data.bankCode,
       })
     } catch (error: any) {
-      // Log without exposing full account number
+      // Log internal error but don't expose to client
       console.error(`[paystack] Resolve account error for ${maskAccountNumber(data.accountNumber)}:`, error.message)
+      // Return generic message - don't expose Paystack API error details
       return c.json({
-        error: error.message || 'Failed to verify bank account',
+        error: 'Failed to verify bank account. Please check your details and try again.',
         verified: false,
       }, 400)
     }
@@ -141,12 +159,14 @@ paystackRoutes.post(
 paystackRoutes.post(
   '/connect',
   requireAuth,
+  paymentRateLimit,
   zValidator(
     'json',
     z.object({
       bankCode: z.string(),
-      accountNumber: z.string().min(10).max(20),
-      accountName: z.string().min(2), // Verified name from resolve
+      // Min 9 for South Africa (9-11 digits), min 10 for Nigeria/Kenya
+      accountNumber: z.string().min(9).max(20),
+      accountName: z.string().min(2), // Verified name from resolve (or manual for Kenya)
       // For South Africa
       idNumber: z.string().optional(),
     })
@@ -216,8 +236,9 @@ paystackRoutes.post(
       })
     } catch (error: any) {
       console.error('Paystack Connect error:', error)
+      // Return generic message - don't expose Paystack API error details
       return c.json({
-        error: error.message || 'Failed to create payment account',
+        error: 'Failed to create payment account. Please try again or contact support.',
       }, 500)
     }
   }
@@ -289,5 +310,197 @@ paystackRoutes.post('/disconnect', requireAuth, async (c) => {
     return c.json({ error: 'Failed to disconnect account' }, 500)
   }
 })
+
+// Verify a transaction (for callback verification)
+paystackRoutes.get('/verify/:reference', async (c) => {
+  const reference = c.req.param('reference')
+
+  if (!reference) {
+    return c.json({ error: 'Reference is required' }, 400)
+  }
+
+  try {
+    // Import verifyTransaction from service
+    const { verifyTransaction } = await import('../services/paystack.js')
+    const transaction = await verifyTransaction(reference)
+
+    // Check if payment was successful
+    if (transaction.status !== 'success') {
+      return c.json({
+        verified: false,
+        status: transaction.status,
+        error: 'Payment was not successful',
+      })
+    }
+
+    // Get creator info from metadata
+    const creatorId = transaction.metadata?.creatorId
+    let creatorUsername: string | null = null
+
+    if (creatorId) {
+      const profile = await db.profile.findUnique({
+        where: { userId: creatorId },
+        select: { username: true, displayName: true },
+      })
+      creatorUsername = profile?.username || null
+    }
+
+    return c.json({
+      verified: true,
+      status: 'success',
+      amount: transaction.amount,
+      currency: transaction.currency,
+      creatorUsername,
+      customerEmail: transaction.customer?.email,
+      paidAt: transaction.paid_at,
+    })
+  } catch (error: any) {
+    console.error('Transaction verify error:', error)
+    // Return generic message - don't expose Paystack API error details
+    return c.json({
+      verified: false,
+      error: 'Failed to verify transaction',
+    }, 400)
+  }
+})
+
+// Get pending OTP transfers (admin/system use)
+paystackRoutes.get('/transfers/otp-pending', requireAuth, async (c) => {
+  const userId = c.get('userId')
+
+  // Find all payouts for this creator that need OTP
+  const pendingTransfers = await db.payment.findMany({
+    where: {
+      creatorId: userId,
+      type: 'payout',
+      status: 'otp_pending',
+      paystackTransferCode: { not: null },
+    },
+    select: {
+      id: true,
+      amountCents: true,
+      currency: true,
+      paystackTransactionRef: true,
+      paystackTransferCode: true,
+      createdAt: true,
+    },
+    orderBy: { createdAt: 'desc' },
+  })
+
+  return c.json({
+    transfers: pendingTransfers,
+    count: pendingTransfers.length,
+  })
+})
+
+// Finalize transfer with OTP (admin/system use)
+paystackRoutes.post(
+  '/transfers/finalize',
+  requireAuth,
+  paymentRateLimit,
+  zValidator(
+    'json',
+    z.object({
+      transferCode: z.string(),
+      otp: z.string().length(6),
+    })
+  ),
+  async (c) => {
+    const userId = c.get('userId')
+    const { transferCode, otp } = c.req.valid('json')
+
+    // Verify this transfer belongs to the user
+    const payout = await db.payment.findFirst({
+      where: {
+        creatorId: userId,
+        type: 'payout',
+        paystackTransferCode: transferCode,
+        status: 'otp_pending',
+      },
+    })
+
+    if (!payout) {
+      return c.json({ error: 'Transfer not found or not pending OTP' }, 404)
+    }
+
+    try {
+      // Import finalize function
+      const { finalizeTransfer } = await import('../services/paystack.js')
+      const result = await finalizeTransfer({ transferCode, otp })
+
+      // Update payout status based on result
+      // Note: The actual success/failure will come via webhook
+      // but we can update to pending if finalization was accepted
+      if (result.status === 'success' || result.status === 'pending') {
+        await db.payment.update({
+          where: { id: payout.id },
+          data: { status: 'pending' }, // Will be updated by transfer.success webhook
+        })
+      }
+
+      return c.json({
+        success: true,
+        status: result.status,
+        reference: result.reference,
+        message: 'Transfer finalization submitted. Status will be updated via webhook.',
+      })
+    } catch (error: any) {
+      console.error('Transfer finalize error:', error)
+      // Return generic message - don't expose Paystack API error details
+      return c.json({
+        success: false,
+        error: 'Failed to finalize transfer. Please check the OTP and try again.',
+      }, 400)
+    }
+  }
+)
+
+// Resend transfer OTP
+paystackRoutes.post(
+  '/transfers/resend-otp',
+  requireAuth,
+  paymentRateLimit,
+  zValidator(
+    'json',
+    z.object({
+      transferCode: z.string(),
+    })
+  ),
+  async (c) => {
+    const userId = c.get('userId')
+    const { transferCode } = c.req.valid('json')
+
+    // Verify this transfer belongs to the user
+    const payout = await db.payment.findFirst({
+      where: {
+        creatorId: userId,
+        type: 'payout',
+        paystackTransferCode: transferCode,
+        status: 'otp_pending',
+      },
+    })
+
+    if (!payout) {
+      return c.json({ error: 'Transfer not found or not pending OTP' }, 404)
+    }
+
+    try {
+      const { resendTransferOtp } = await import('../services/paystack.js')
+      await resendTransferOtp({ transferCode })
+
+      return c.json({
+        success: true,
+        message: 'OTP resent successfully',
+      })
+    } catch (error: any) {
+      console.error('Resend OTP error:', error)
+      // Return generic message - don't expose Paystack API error details
+      return c.json({
+        success: false,
+        error: 'Failed to resend OTP. Please try again.',
+      }, 400)
+    }
+  }
+)
 
 export default paystackRoutes

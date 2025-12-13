@@ -6,6 +6,7 @@ import { db } from '../db/client.js'
 import { maskAccountNumber, maskEmail } from '../utils/pii.js'
 import { encryptAccountNumber, decryptAccountNumber } from '../utils/encryption.js'
 import { getPlatformFeePercent, type UserPurpose } from './pricing.js'
+import { paystackCircuitBreaker, CircuitBreakerError } from '../utils/circuitBreaker.js'
 
 const PAYSTACK_API_URL = 'https://api.paystack.co'
 
@@ -88,7 +89,7 @@ interface TransactionData {
   metadata: Record<string, any>
 }
 
-// Base fetch wrapper
+// Base fetch wrapper with circuit breaker protection
 async function paystackFetch<T>(
   path: string,
   options: RequestInit = {}
@@ -99,24 +100,27 @@ async function paystackFetch<T>(
     throw new Error('Paystack is not configured')
   }
 
-  const response = await fetch(`${PAYSTACK_API_URL}${path}`, {
-    ...options,
-    headers: {
-      Authorization: `Bearer ${secretKey}`,
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
+  // Wrap API call in circuit breaker for resilience
+  return paystackCircuitBreaker(async () => {
+    const response = await fetch(`${PAYSTACK_API_URL}${path}`, {
+      ...options,
+      headers: {
+        Authorization: `Bearer ${secretKey}`,
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+    })
+
+    const data = await response.json()
+
+    if (!response.ok || !data.status) {
+      // Log error without exposing request body (may contain PII)
+      console.error(`[paystack] API error on ${path}: ${data.message || 'Unknown error'}`)
+      throw new Error(data.message || 'Paystack API error')
+    }
+
+    return data
   })
-
-  const data = await response.json()
-
-  if (!response.ok || !data.status) {
-    // Log error without exposing request body (may contain PII)
-    console.error(`[paystack] API error on ${path}: ${data.message || 'Unknown error'}`)
-    throw new Error(data.message || 'Paystack API error')
-  }
-
-  return data
 }
 
 // ============================================
@@ -285,7 +289,55 @@ export async function updateSubaccountFee(
 // TRANSACTIONS (Checkout)
 // ============================================
 
-// Initialize transaction with split to creator
+/**
+ * Initialize checkout with subscriber-pays fee model
+ *
+ * New model: Platform receives full payment, then transfers to creator
+ * This allows for progressive fees with caps that can't be expressed as percentages
+ */
+export async function initializePaystackCheckout(params: {
+  email: string
+  creatorAmount: number   // What creator will receive
+  serviceFee: number      // Platform fee (flat: 10% personal, 8% service)
+  totalAmount: number     // What subscriber pays (creatorAmount + serviceFee)
+  currency: string
+  callbackUrl: string
+  reference: string
+  metadata: {
+    creatorId: string
+    tierId?: string
+    interval: string
+    viewId?: string         // Analytics: page view ID for conversion tracking
+    creatorAmount: number
+    serviceFee: number
+    feeModel: string
+    feeMode: string         // 'absorb' | 'pass_to_subscriber'
+    feeEffectiveRate: number
+    feeWasCapped?: boolean  // Optional - flat fee model has no caps
+  }
+}): Promise<TransactionInit> {
+  // Platform receives full payment (no subaccount split)
+  // Creator payout will be handled via transfer after webhook confirmation
+  const response = await paystackFetch<TransactionInit>('/transaction/initialize', {
+    method: 'POST',
+    body: JSON.stringify({
+      email: params.email,
+      amount: params.totalAmount, // Subscriber pays total (creator amount + fee)
+      currency: params.currency.toUpperCase(),
+      // No subaccount - platform receives full amount
+      callback_url: params.callbackUrl,
+      metadata: params.metadata,
+      reference: params.reference,
+    }),
+  })
+
+  return response.data
+}
+
+/**
+ * Legacy: Initialize transaction with subaccount split
+ * Used for existing subscriptions with percentage-based fees
+ */
 export async function initializeTransaction(params: {
   email: string
   amount: number // in smallest unit (kobo/cents)
@@ -330,30 +382,67 @@ export async function chargeAuthorization(params: {
   email: string
   amount: number // in smallest unit
   currency: string
-  subaccountCode: string
+  subaccountCode?: string // Optional - omit for new fee model
   metadata: Record<string, any>
   reference?: string
 }): Promise<TransactionData> {
+  // Build request body, only include subaccount if provided
+  const requestBody: Record<string, any> = {
+    authorization_code: params.authorizationCode,
+    email: params.email,
+    amount: params.amount,
+    currency: params.currency.toUpperCase(),
+    metadata: params.metadata,
+    reference: params.reference,
+  }
+
+  // Only add subaccount fields if subaccountCode is provided (legacy model)
+  if (params.subaccountCode) {
+    requestBody.subaccount = params.subaccountCode
+    requestBody.bearer = 'account' // Platform bears Paystack fees
+  }
+
   const response = await paystackFetch<TransactionData>('/transaction/charge_authorization', {
     method: 'POST',
-    body: JSON.stringify({
-      authorization_code: params.authorizationCode,
-      email: params.email,
-      amount: params.amount,
-      currency: params.currency.toUpperCase(),
-      subaccount: params.subaccountCode,
-      bearer: 'account', // Platform bears fees
-      metadata: params.metadata,
-      reference: params.reference,
-    }),
+    body: JSON.stringify(requestBody),
   })
 
   return response.data
 }
 
 // ============================================
-// TRANSFERS (Manual Payouts - if needed)
+// TRANSFERS (Paystack Payout API)
+// Used to transfer creator's earnings to their bank via Paystack
 // ============================================
+
+// Get recipient type based on currency/country and account details
+function getRecipientType(currency: string, bankCode?: string, accountNumber?: string): string {
+  // Paystack requires different recipient types per country
+  // NG: nuban (Nigerian Uniform Bank Account Number)
+  // KE: mobile_money (M-PESA) or authorization (bank)
+  // ZA: basa (Bank Account South Africa)
+  switch (currency.toUpperCase()) {
+    case 'NGN':
+      return 'nuban'
+    case 'KES':
+      // Kenya supports both mobile money (M-PESA) and bank transfers
+      // Mobile money accounts typically have phone number format (9-10 digits starting with 0 or 7)
+      // Bank accounts typically have 10+ digits
+      // M-PESA bank code is typically 'MPESA' or similar
+      if (bankCode?.toLowerCase().includes('mpesa') ||
+          bankCode?.toLowerCase().includes('safaricom') ||
+          (accountNumber && /^0?7\d{8}$/.test(accountNumber))) {
+        return 'mobile_money'
+      }
+      // For bank accounts in Kenya, use 'authorization' type
+      // (Paystack Kenya bank transfers require pre-authorized recipients)
+      return 'authorization'
+    case 'ZAR':
+      return 'basa'
+    default:
+      return 'nuban' // Fallback
+  }
+}
 
 // Create transfer recipient
 export async function createTransferRecipient(params: {
@@ -362,10 +451,13 @@ export async function createTransferRecipient(params: {
   bankCode: string
   currency: string
 }): Promise<{ recipientCode: string }> {
+  // Get recipient type based on currency and account details
+  const recipientType = getRecipientType(params.currency, params.bankCode, params.accountNumber)
+
   const response = await paystackFetch<{ recipient_code: string }>('/transferrecipient', {
     method: 'POST',
     body: JSON.stringify({
-      type: 'nuban', // For Nigerian banks
+      type: recipientType,
       name: params.name,
       account_number: params.accountNumber,
       bank_code: params.bankCode,
@@ -382,8 +474,8 @@ export async function initiateTransfer(params: {
   recipientCode: string
   reason: string
   reference?: string
-}): Promise<{ transferCode: string; reference: string }> {
-  const response = await paystackFetch<{ transfer_code: string; reference: string }>(
+}): Promise<{ transferCode: string; reference: string; status: string }> {
+  const response = await paystackFetch<{ transfer_code: string; reference: string; status: string }>(
     '/transfer',
     {
       method: 'POST',
@@ -400,7 +492,50 @@ export async function initiateTransfer(params: {
   return {
     transferCode: response.data.transfer_code,
     reference: response.data.reference,
+    status: response.data.status, // 'otp' if OTP required, 'pending'/'success' otherwise
   }
+}
+
+// Finalize transfer with OTP (when transfer requires OTP verification)
+// Paystack sends transfer.requires_otp webhook when OTP is needed
+export async function finalizeTransfer(params: {
+  transferCode: string
+  otp: string
+}): Promise<{ status: string; reference: string }> {
+  const response = await paystackFetch<{ status: string; reference: string }>(
+    '/transfer/finalize_transfer',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        transfer_code: params.transferCode,
+        otp: params.otp,
+      }),
+    }
+  )
+
+  return {
+    status: response.data.status,
+    reference: response.data.reference,
+  }
+}
+
+// Resend OTP for transfer finalization
+export async function resendTransferOtp(params: {
+  transferCode: string
+  reason?: 'resend_otp' | 'transfer'
+}): Promise<{ status: boolean; message: string }> {
+  const response = await paystackFetch<{ status: boolean; message: string }>(
+    '/transfer/resend_otp',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        transfer_code: params.transferCode,
+        reason: params.reason || 'resend_otp',
+      }),
+    }
+  )
+
+  return response.data
 }
 
 // ============================================
@@ -421,18 +556,25 @@ export async function getBalance(): Promise<{
 // ============================================
 
 // Generate unique reference
+// Paystack only allows alphanumeric characters and hyphens (no underscores)
 export function generateReference(prefix = 'TX'): string {
   const timestamp = Date.now().toString(36)
   const random = Math.random().toString(36).substring(2, 8)
-  return `${prefix}_${timestamp}_${random}`.toUpperCase()
+  return `${prefix}-${timestamp}-${random}`.toUpperCase()
 }
 
-// Convert amount to display format
+// Convert amount to display format (handles zero-decimal currencies)
 export function formatPaystackAmount(amount: number, currency: string): string {
-  const displayAmount = amount / 100
+  // Import dynamically to avoid circular deps - or inline the logic
+  const ZERO_DECIMAL = ['BIF', 'CLP', 'DJF', 'GNF', 'JPY', 'KMF', 'KRW', 'MGA', 'PYG', 'RWF', 'UGX', 'VND', 'VUV', 'XAF', 'XOF', 'XPF']
+  const isZeroDecimal = ZERO_DECIMAL.includes(currency.toUpperCase())
+  const displayAmount = isZeroDecimal ? amount : amount / 100
+
   const formatter = new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: currency,
+    minimumFractionDigits: isZeroDecimal ? 0 : 2,
+    maximumFractionDigits: isZeroDecimal ? 0 : 2,
   })
   return formatter.format(displayAmount)
 }

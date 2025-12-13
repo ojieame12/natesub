@@ -62,12 +62,13 @@ export function getStatusMessage(status: number): string {
 // AUTH HOOKS
 // ============================================
 
-export function useCurrentUser() {
+export function useCurrentUser(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ['currentUser'],
     queryFn: api.auth.me,
     retry: false,
     staleTime: 5 * 60 * 1000, // 5 minutes
+    enabled: options?.enabled ?? true,
   })
 }
 
@@ -277,6 +278,12 @@ export function useCreateCheckout() {
   })
 }
 
+export function useVerifyPaystackPayment() {
+  return useMutation({
+    mutationFn: api.checkout.verifyPaystack,
+  })
+}
+
 // ============================================
 // SUBSCRIPTION HOOKS
 // ============================================
@@ -287,7 +294,7 @@ export function useSubscriptions(status: 'all' | 'active' | 'canceled' | 'past_d
     queryFn: ({ pageParam }) => api.subscriptions.list({ cursor: pageParam, status }),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor || undefined,
-    staleTime: 30 * 1000,
+    staleTime: 2 * 60 * 1000, // 2 minutes - reduces refetches on tab switches
   })
 }
 
@@ -296,7 +303,7 @@ export function useSubscriptionsSummary() {
   return useQuery({
     queryKey: ['subscriptions', 'summary'],
     queryFn: () => api.subscriptions.list({ limit: 10, status: 'active' }),
-    staleTime: 30 * 1000,
+    staleTime: 2 * 60 * 1000, // 2 minutes
   })
 }
 
@@ -305,6 +312,20 @@ export function useSubscription(id: string) {
     queryKey: ['subscription', id],
     queryFn: () => api.subscriptions.get(id),
     enabled: !!id,
+  })
+}
+
+export function useCancelSubscription() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: api.subscriptions.cancel,
+    onSuccess: (data) => {
+      // Invalidate specific subscription and list
+      queryClient.invalidateQueries({ queryKey: ['subscription', data.subscription.id] })
+      queryClient.invalidateQueries({ queryKey: ['subscriptions'] })
+      queryClient.invalidateQueries({ queryKey: ['metrics'] })
+    },
   })
 }
 
@@ -318,7 +339,7 @@ export function useActivity(limit = 20) {
     queryFn: ({ pageParam }) => api.activity.list(pageParam, limit),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor || undefined,
-    staleTime: 30 * 1000,
+    staleTime: 2 * 60 * 1000, // 2 minutes - reduces refetches on tab switches
   })
 }
 
@@ -514,6 +535,33 @@ export async function uploadFile(
   return publicUrl
 }
 
+// Helper to upload blob (e.g., audio recording) to S3
+export async function uploadBlob(
+  blob: Blob,
+  type: 'avatar' | 'photo' | 'voice',
+  mimeType?: string
+): Promise<string> {
+  const contentType = mimeType || blob.type || 'application/octet-stream'
+
+  // Get signed URL
+  const { uploadUrl, publicUrl } = await api.media.getUploadUrl(type, contentType)
+
+  // Upload to S3
+  const response = await fetch(uploadUrl, {
+    method: 'PUT',
+    body: blob,
+    headers: {
+      'Content-Type': contentType,
+    },
+  })
+
+  if (!response.ok) {
+    throw new Error(`Upload failed: ${response.status}`)
+  }
+
+  return publicUrl
+}
+
 // ============================================
 // MUTATION HELPER WITH TOAST
 // ============================================
@@ -619,7 +667,7 @@ export function useRecordPageView() {
 
 export function useUpdatePageView() {
   return useMutation({
-    mutationFn: ({ viewId, data }: { viewId: string; data: { reachedPayment?: boolean; startedCheckout?: boolean } }) =>
+    mutationFn: ({ viewId, data }: { viewId: string; data: { reachedPayment?: boolean; startedCheckout?: boolean; completedCheckout?: boolean } }) =>
       api.analytics.updateView(viewId, data),
   })
 }

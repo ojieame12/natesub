@@ -3,7 +3,9 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { Prisma } from '@prisma/client'
 import { db } from '../db/client.js'
+import { env } from '../config/env.js'
 import { requireAuth } from '../middleware/auth.js'
+import { publicStrictRateLimit, publicRateLimit } from '../middleware/rateLimit.js'
 import { sendWelcomeEmail } from '../services/email.js'
 import { RESERVED_USERNAMES } from '../utils/constants.js'
 import {
@@ -18,10 +20,10 @@ const profile = new Hono()
 
 // Tier schema
 const tierSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  amount: z.number().positive(),
-  perks: z.array(z.string()),
+  id: z.string().max(50),
+  name: z.string().min(1).max(50),
+  amount: z.number().positive().max(100000), // Max $100k per tier
+  perks: z.array(z.string().max(200)).max(20),
   isPopular: z.boolean().optional(),
 })
 
@@ -39,24 +41,42 @@ const impactItemSchema = z.object({
   subtitle: z.string(),
 })
 
+// Custom URL validator that accepts http(s) URLs and data URLs
+const urlOrDataUrl = z.string().refine(
+  (val) => {
+    if (!val) return true
+    // Accept data URLs (base64 images)
+    if (val.startsWith('data:')) return true
+    // Accept http(s) URLs
+    try {
+      const url = new URL(val)
+      return url.protocol === 'http:' || url.protocol === 'https:'
+    } catch {
+      return false
+    }
+  },
+  { message: 'Must be a valid URL or data URL' }
+)
+
 // Profile create/update schema
 const profileSchema = z.object({
   username: z.string().min(3).max(20).regex(/^[a-z0-9_]+$/),
   displayName: z.string().min(2).max(50),
-  bio: z.string().max(500).optional(),
-  avatarUrl: z.string().url().optional().nullable(),
-  voiceIntroUrl: z.string().url().optional().nullable(),
+  bio: z.string().max(500).optional().nullable(),
+  avatarUrl: urlOrDataUrl.optional().nullable(),
+  voiceIntroUrl: urlOrDataUrl.optional().nullable(),
   country: z.string(),
   countryCode: z.string().length(2),
   currency: z.string().length(3).default('USD'),
   purpose: z.enum(['tips', 'support', 'allowance', 'fan_club', 'exclusive_content', 'service', 'other']),
   pricingModel: z.enum(['single', 'tiers']),
-  singleAmount: z.number().positive().optional().nullable(),
+  singleAmount: z.number().positive().max(100000).optional().nullable(), // Max $100k
   tiers: z.array(tierSchema).optional().nullable(),
   perks: z.array(perkSchema).optional().nullable(),
   impactItems: z.array(impactItemSchema).optional().nullable(),
-  paymentProvider: z.enum(['stripe', 'flutterwave', 'bank']).optional().nullable(),
-  template: z.enum(['boundary', 'minimal', 'editorial']).optional(),
+  paymentProvider: z.enum(['stripe', 'paystack', 'flutterwave']).optional().nullable(),
+  template: z.enum(['boundary', 'liquid', 'minimal', 'editorial']).optional(),
+  feeMode: z.enum(['absorb', 'pass_to_subscriber']).optional(),
 })
 
 // Get own profile
@@ -130,7 +150,8 @@ profile.put(
       impactItems: impactItemsData,
       paymentProvider: data.paymentProvider || null,
       template: data.template || 'boundary',
-      shareUrl: `https://natepay.co/${data.username.toLowerCase()}`,
+      feeMode: data.feeMode || 'pass_to_subscriber', // Default: subscriber pays fee
+      shareUrl: `${env.PUBLIC_PAGE_URL || 'https://natepay.co'}/${data.username.toLowerCase()}`,
     }
 
     // Upsert profile
@@ -174,6 +195,7 @@ profile.get('/onboarding-status', requireAuth, async (c) => {
       },
     },
     payments: {
+      // Payment setup is complete only when Stripe/Paystack is active
       completed: userProfile?.payoutStatus === 'active',
       status: userProfile?.payoutStatus || 'not_started',
       stripeAccountId: userProfile?.stripeAccountId || null,
@@ -187,6 +209,9 @@ profile.get('/onboarding-status', requireAuth, async (c) => {
 
   const overallProgress = (profileProgress * 0.6) + (paymentsProgress * 0.4) // 60% profile, 40% payments
 
+  // Bank users are "complete" with onboarding but can't actually accept payments
+  const canAcceptPayments = userProfile?.payoutStatus === 'active'
+
   return c.json({
     steps,
     progress: {
@@ -195,7 +220,7 @@ profile.get('/onboarding-status', requireAuth, async (c) => {
       overall: Math.round(overallProgress * 100),
     },
     isComplete: steps.profile.completed && steps.payments.completed,
-    canAcceptPayments: steps.payments.completed,
+    canAcceptPayments,
     nextStep: !steps.profile.completed
       ? 'profile'
       : !steps.payments.completed
@@ -286,6 +311,7 @@ profile.get('/settings', requireAuth, async (c) => {
 // Check username availability
 profile.get(
   '/check-username/:username',
+  publicStrictRateLimit,
   zValidator('param', z.object({
     username: z.string().min(3).max(20),
   })),
@@ -349,7 +375,7 @@ profile.get('/pricing', requireAuth, async (c) => {
 })
 
 // Get pricing info for a specific plan (public endpoint for comparison)
-profile.get('/pricing/:plan', async (c) => {
+profile.get('/pricing/:plan', publicRateLimit, async (c) => {
   const plan = c.req.param('plan') as 'personal' | 'service'
 
   if (!['personal', 'service'].includes(plan)) {

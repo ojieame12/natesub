@@ -3,6 +3,7 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { db } from '../db/client.js'
 import { requireAuth } from '../middleware/auth.js'
+import { paymentRateLimit } from '../middleware/rateLimit.js'
 import {
   createExpressAccount,
   createAccountLink,
@@ -24,7 +25,7 @@ stripeRoutes.get('/supported-countries', async (c) => {
 })
 
 // Start Connect onboarding
-stripeRoutes.post('/connect', requireAuth, async (c) => {
+stripeRoutes.post('/connect', requireAuth, paymentRateLimit, async (c) => {
   const userId = c.get('userId')
 
   // Get user and profile
@@ -75,7 +76,7 @@ stripeRoutes.post('/connect', requireAuth, async (c) => {
 })
 
 // Get new onboarding link (if previous expired)
-stripeRoutes.post('/connect/refresh', requireAuth, async (c) => {
+stripeRoutes.post('/connect/refresh', requireAuth, paymentRateLimit, async (c) => {
   const userId = c.get('userId')
 
   const profile = await db.profile.findUnique({ where: { userId } })

@@ -6,12 +6,12 @@ import { requireAuth } from '../middleware/auth.js'
 
 const activity = new Hono()
 
-// Get activity feed
+// Get activity feed (with pagination, max 100 per page)
 activity.get(
   '/',
   requireAuth,
   zValidator('query', z.object({
-    limit: z.string().optional().transform(v => parseInt(v || '20')),
+    limit: z.string().optional().transform(v => Math.min(parseInt(v || '20') || 20, 100)),
     cursor: z.string().optional(),
   })),
   async (c) => {

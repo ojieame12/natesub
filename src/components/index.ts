@@ -11,9 +11,12 @@ export {
   SkeletonListItem,
   PageSkeleton,
 } from './Skeleton'
+export { SplashScreen } from './SplashScreen'
 export { default as ErrorState } from './ErrorState'
+export { ErrorBoundary } from './ErrorBoundary'
 export { InlineError } from './InlineError'
 export { VoiceRecorder } from './VoiceRecorder'
+export { AmbientBackground } from './AmbientBackground'
 export { EditableList } from './EditableList'
 export { ScrollRestoration } from './ScrollRestoration'
 export { AnimatedNumber, AnimatedCurrency } from './AnimatedNumber'

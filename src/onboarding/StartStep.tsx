@@ -1,11 +1,28 @@
-import { Mail, Apple } from 'lucide-react'
+import { useState } from 'react'
+import { Mail, RefreshCw } from 'lucide-react'
 import { useOnboardingStore } from './store'
 import { Button } from './components'
 import '../Dashboard.css'
 import './onboarding.css'
 
+const HERO_IMAGE_URL = 'https://res.cloudinary.com/subframe/image/upload/v1764688418/uploads/13740/qnujqsgnfu917a1ntav4.png'
+
 export default function StartStep() {
-    const { nextStep } = useOnboardingStore()
+    // Use selector to prevent re-renders when other state changes
+    const nextStep = useOnboardingStore((s) => s.nextStep)
+    const reset = useOnboardingStore((s) => s.reset)
+    const email = useOnboardingStore((s) => s.email)
+    const name = useOnboardingStore((s) => s.name)
+    const [imageLoaded, setImageLoaded] = useState(false)
+
+    // Check if there's existing progress from a previous session
+    const hasExistingProgress = Boolean(email || name)
+
+    const handleStartOver = () => {
+        reset()
+        // Small delay to ensure state is cleared before proceeding
+        setTimeout(nextStep, 50)
+    }
 
     return (
         <div className="onboarding">
@@ -15,11 +32,16 @@ export default function StartStep() {
             <div className="onboarding-content">
                 <div className="start-step">
 
-                    {/* Hero Image */}
+                    {/* Hero Image with loading state */}
                     <div className="start-hero">
+                        {!imageLoaded && (
+                            <div className="start-hero-placeholder" aria-hidden="true" />
+                        )}
                         <img
-                            src="https://res.cloudinary.com/subframe/image/upload/v1764688418/uploads/13740/qnujqsgnfu917a1ntav4.png"
+                            src={HERO_IMAGE_URL}
                             alt="Hero"
+                            onLoad={() => setImageLoaded(true)}
+                            style={{ opacity: imageLoaded ? 1 : 0, transition: 'opacity 0.3s ease' }}
                         />
                     </div>
 
@@ -40,15 +62,18 @@ export default function StartStep() {
                             >
                                 Continue with email
                             </Button>
-                            <Button
-                                variant="secondary"
-                                size="lg"
-                                icon={<Apple size={20} />}
-                                fullWidth
-                                onClick={() => console.log('Apple Sign In')}
-                            >
-                                Continue with Apple
-                            </Button>
+
+                            {/* Show Start Over option if there's existing progress */}
+                            {hasExistingProgress && (
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    icon={<RefreshCw size={16} />}
+                                    onClick={handleStartOver}
+                                >
+                                    Start over
+                                </Button>
+                            )}
                         </div>
 
                         {/* Subtle legal text */}

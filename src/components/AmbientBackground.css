@@ -1,0 +1,126 @@
+/* Global Ambient Background Layer */
+.ambient-background {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: -1;
+    /* Behind everything */
+    background-color: var(--neutral-50, #F9FAFB);
+    overflow: hidden;
+    pointer-events: none;
+    /* Brand accent color (orange/gold) */
+    --accent-color: var(--accent-primary, #FF941A);
+    /* Performance: isolate compositing layer */
+    contain: paint;
+    transform: translateZ(0);
+}
+
+/* Texture Overlay (Micro-noise) */
+.ambient-overlay {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.03'/%3E%3C/svg%3E");
+    opacity: 0.6;
+    mix-blend-mode: overlay;
+}
+
+/* Common Orb Styles */
+.ambient-orb {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(60px);
+    /* Reduced blur for better performance */
+    opacity: 0.4;
+    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    animation-iteration-count: infinite;
+    /* Performance: use GPU compositing */
+    will-change: transform;
+    transform: translateZ(0);
+    backface-visibility: hidden;
+}
+
+/* Primary Orb (Top Left - Warm/Accent) */
+.orb-1 {
+    top: -10%;
+    left: -10%;
+    width: 50vw;
+    height: 50vw;
+    background: var(--accent-color);
+    animation: float-1 30s infinite alternate;
+    /* Slower animation reduces visual noise */
+    opacity: 0.12;
+}
+
+/* Secondary Orb (Bottom Right - Warm complement) */
+.orb-2 {
+    bottom: -10%;
+    right: -10%;
+    width: 60vw;
+    height: 60vw;
+    background: #FFF3E0;
+    /* Warm peach/light orange - brand complement */
+    animation: float-2 35s infinite alternate-reverse;
+    /* Slower animation */
+    opacity: 0.18;
+}
+
+/* Tertiary Orb (Moving Center - Highlight) */
+.orb-3 {
+    top: 40%;
+    left: 30%;
+    width: 40vw;
+    height: 40vw;
+    background: #FFFFFF;
+    animation: float-3 28s infinite alternate;
+    /* Slower animation */
+    opacity: 0.5;
+    mix-blend-mode: soft-light;
+}
+
+/* Gentle Floating Animations */
+@keyframes float-1 {
+    0% {
+        transform: translate(0, 0) scale(1);
+    }
+
+    100% {
+        transform: translate(10%, 10%) scale(1.1);
+    }
+}
+
+@keyframes float-2 {
+    0% {
+        transform: translate(0, 0) scale(1);
+    }
+
+    100% {
+        transform: translate(-10%, -5%) scale(1.1);
+    }
+}
+
+@keyframes float-3 {
+    0% {
+        transform: translate(0, 0) rotate(0deg);
+    }
+
+    50% {
+        transform: translate(5%, 15%) rotate(10deg);
+    }
+
+    100% {
+        transform: translate(-5%, 5%) rotate(-10deg);
+    }
+}
+
+/* Reduce motion preference */
+@media (prefers-reduced-motion: reduce) {
+    .ambient-orb {
+        animation: none;
+        display: none;
+        /* Or just static */
+    }
+}

@@ -103,8 +103,8 @@ export default function PaymentMethodStep() {
     const isCurrencyAligned = !expectedPaystackCurrency || currency?.toUpperCase() === expectedPaystackCurrency
     const canUsePaystack = isPaystackCountry && isCurrencyAligned
 
-    // Default recommendation - Paystack for NG/KE/ZA with aligned currency, Stripe for supported countries, else bank
-    const recommendedMethod = canUsePaystack ? 'paystack' : isStripeCountry ? 'stripe' : 'bank'
+    // Default recommendation - Paystack for NG/KE/ZA with aligned currency, otherwise Stripe
+    const recommendedMethod = canUsePaystack ? 'paystack' : 'stripe'
 
     const handleContinue = async () => {
         if (!selectedMethod) return
@@ -180,6 +180,8 @@ export default function PaymentMethodStep() {
                     const result = await api.stripe.connect()
 
                     if (result.onboardingUrl) {
+                        // Store source for redirect handling when user returns from Stripe
+                        sessionStorage.setItem('stripe_onboarding_source', 'onboarding')
                         // Profile is saved - redirect to Stripe onboarding
                         // Don't reset() here - AuthRedirect will route properly when user returns
                         window.location.href = result.onboardingUrl
@@ -214,7 +216,7 @@ export default function PaymentMethodStep() {
                 return
             }
 
-            // For other payment methods (flutterwave, bank), go to dashboard
+            // For flutterwave (when available), go to dashboard
             reset() // Clear local store since we're done
             navigate('/dashboard')
 
@@ -374,16 +376,6 @@ export default function PaymentMethodStep() {
                         />
                     )}
 
-                    {/* Manual/Bank transfer option always available */}
-                    <PaymentMethodCard
-                        name="Manual Payouts"
-                        description="We'll hold funds until you request withdrawal"
-                        selected={selectedMethod === 'bank'}
-                        onSelect={() => {
-                            setSelectedMethod('bank')
-                            setError(null)
-                        }}
-                    />
 
                     {country && (
                         <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 16, textAlign: 'center' }}>
@@ -408,7 +400,7 @@ export default function PaymentMethodStep() {
                         ) : selectedMethod === 'stripe' ? (
                             'Connect with Stripe'
                         ) : selectedMethod === 'paystack' ? (
-                            'Connect Bank Account'
+                            'Connect Payment Method'
                         ) : (
                             'Complete Setup'
                         )}

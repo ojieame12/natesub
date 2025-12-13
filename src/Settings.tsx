@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, ChevronRight, Mail, Bell, Eye, Download, Trash2, LogOut, CreditCard, Loader2 } from 'lucide-react'
 import { Pressable, useToast } from './components'
 import { useCurrentUser, useLogout, useDeleteAccount, useSettings, useUpdateSettings, useBillingStatus } from './api/hooks'
+import { useOnboardingStore } from './onboarding/store'
 import { getPricing } from './utils/pricing'
 
 import './Settings.css'
@@ -121,6 +122,8 @@ export default function Settings() {
   const handleLogout = async () => {
     try {
       await logout()
+      // Reset Zustand store in-memory state (localStorage removal alone doesn't clear it)
+      useOnboardingStore.getState().reset()
       localStorage.removeItem('natepay-onboarding')
       localStorage.removeItem('natepay-request')
       navigate('/onboarding')

@@ -1,7 +1,7 @@
 // Re-exports shared components from main components
 // This ensures onboarding uses the same design system
 
-import { useState } from 'react'
+import { useState, useCallback, useMemo, memo } from 'react'
 
 // Re-export Pressable from shared components
 export { default as Pressable } from '../components/Pressable'
@@ -17,7 +17,7 @@ interface ButtonProps {
     onClick?: () => void
 }
 
-export function Button({
+export const Button = memo(function Button({
     children,
     variant = 'primary',
     size = 'md',
@@ -28,20 +28,48 @@ export function Button({
 }: ButtonProps) {
     const [pressed, setPressed] = useState(false)
 
+    const handleMouseDown = useCallback(() => {
+        if (!disabled) setPressed(true)
+    }, [disabled])
+
+    const handleMouseUp = useCallback(() => setPressed(false), [])
+    const handleMouseLeave = useCallback(() => setPressed(false), [])
+
+    const handleTouchStart = useCallback(() => {
+        if (!disabled) setPressed(true)
+    }, [disabled])
+
+    const handleTouchEnd = useCallback(() => setPressed(false), [])
+
+    const handleClick = useCallback(() => {
+        if (!disabled && onClick) onClick()
+    }, [disabled, onClick])
+
+    const className = useMemo(() => {
+        const classes = ['btn', `btn-${variant}`, `btn-${size}`]
+        if (fullWidth) classes.push('btn-full')
+        if (pressed) classes.push('pressed')
+        return classes.join(' ')
+    }, [variant, size, fullWidth, pressed])
+
+    const style = useMemo(() => ({
+        opacity: disabled ? 0.5 : 1
+    }), [disabled])
+
     return (
         <button
-            className={`btn btn-${variant} btn-${size} ${fullWidth ? 'btn-full' : ''} ${pressed ? 'pressed' : ''}`}
-            onClick={disabled ? undefined : onClick}
-            onMouseDown={() => !disabled && setPressed(true)}
-            onMouseUp={() => setPressed(false)}
-            onMouseLeave={() => setPressed(false)}
-            onTouchStart={() => !disabled && setPressed(true)}
-            onTouchEnd={() => setPressed(false)}
+            className={className}
+            onClick={handleClick}
+            onMouseDown={handleMouseDown}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseLeave}
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
             disabled={disabled}
-            style={{ opacity: disabled ? 0.5 : 1 }}
+            style={style}
         >
             {icon && <span className="btn-icon">{icon}</span>}
             {children}
         </button>
     )
-}
+})

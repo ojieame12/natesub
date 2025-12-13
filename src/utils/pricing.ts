@@ -42,3 +42,40 @@ export function calculateFee(grossCents: number, purpose: string | undefined): n
   const pricing = getPricing(purpose)
   return Math.round(grossCents * pricing.transactionFee)
 }
+
+// Calculate fee preview based on fee mode
+export function calculateFeePreview(
+  amountCents: number,
+  purpose: string | undefined,
+  feeMode: 'absorb' | 'pass_to_subscriber'
+): {
+  subscriberPays: number
+  creatorReceives: number
+  feeAmount: number
+  feePercent: number
+} {
+  const pricing = getPricing(purpose)
+  const feePercent = pricing.transactionFee
+
+  if (feeMode === 'absorb') {
+    // Creator absorbs fee: subscriber pays exact amount, creator gets less
+    const feeAmount = Math.round(amountCents * feePercent)
+    return {
+      subscriberPays: amountCents,
+      creatorReceives: amountCents - feeAmount,
+      feeAmount,
+      feePercent: feePercent * 100,
+    }
+  } else {
+    // Pass to subscriber: subscriber pays more, creator gets full amount
+    // To ensure creator gets exactly amountCents after fee: subscriberPays = amount / (1 - feePercent)
+    const subscriberPays = Math.round(amountCents / (1 - feePercent))
+    const feeAmount = subscriberPays - amountCents
+    return {
+      subscriberPays,
+      creatorReceives: amountCents,
+      feeAmount,
+      feePercent: feePercent * 100,
+    }
+  }
+}

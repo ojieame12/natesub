@@ -187,6 +187,20 @@
     overflow: hidden;
 }
 
+/* Virtuoso list needs explicit height */
+.subscribers-list.virtuoso-list {
+    flex: 1;
+    min-height: 300px;
+    max-height: calc(100vh - 280px);
+}
+
+.load-more-loading {
+    padding: var(--space-lg);
+    text-align: center;
+    color: var(--text-tertiary);
+    font-size: 14px;
+}
+
 .subscriber-row {
     display: flex;
     align-items: center;

@@ -1,0 +1,167 @@
+/**
+ * Webhook Payload Validation
+ * Validates critical user-controlled fields in webhook payloads
+ * Provider signature verification happens first, this validates data integrity
+ */
+
+import { z } from 'zod'
+
+// ============================================
+// STRIPE WEBHOOK METADATA SCHEMAS
+// ============================================
+
+/**
+ * Checkout session metadata schema
+ * Validates user-controlled metadata fields from checkout sessions
+ */
+export const stripeCheckoutMetadataSchema = z.object({
+  creatorId: z.string().uuid('Invalid creatorId format'),
+  tierId: z.string().optional(),
+  requestId: z.string().optional(),
+  viewId: z.string().optional(),
+  // Fee tracking fields
+  grossAmount: z.string().regex(/^\d+$/, 'grossAmount must be numeric string').optional(),
+  netAmount: z.string().regex(/^\d+$/, 'netAmount must be numeric string').optional(),
+  serviceFee: z.string().regex(/^\d+$/, 'serviceFee must be numeric string').optional(),
+  feeModel: z.enum(['flat', 'progressive', 'percentage']).optional(),
+  feeMode: z.enum(['absorb', 'pass_to_subscriber']).optional(),
+  feeEffectiveRate: z.string().optional(),
+  feeWasCapped: z.enum(['true', 'false']).optional(),
+})
+
+/**
+ * Subscription metadata schema
+ */
+export const stripeSubscriptionMetadataSchema = z.object({
+  creatorId: z.string().uuid('Invalid creatorId format').optional(),
+  tierId: z.string().optional(),
+  expected_fee_amount: z.string().regex(/^\d+$/).optional(),
+})
+
+/**
+ * Validate Stripe checkout session metadata
+ */
+export function validateCheckoutMetadata(metadata: Record<string, string> | null | undefined): {
+  valid: boolean
+  data?: z.infer<typeof stripeCheckoutMetadataSchema>
+  error?: string
+} {
+  if (!metadata) {
+    return { valid: false, error: 'Missing metadata' }
+  }
+
+  const result = stripeCheckoutMetadataSchema.safeParse(metadata)
+
+  if (!result.success) {
+    const errors = result.error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')
+    console.error('[webhook-validation] Checkout metadata validation failed:', errors)
+    return { valid: false, error: errors }
+  }
+
+  return { valid: true, data: result.data }
+}
+
+// ============================================
+// PAYSTACK WEBHOOK SCHEMAS
+// ============================================
+
+/**
+ * Paystack transaction metadata schema
+ */
+export const paystackTransactionMetadataSchema = z.object({
+  creatorId: z.string().uuid('Invalid creatorId format'),
+  tierId: z.string().optional(),
+  interval: z.enum(['month', 'one_time']),
+  viewId: z.string().optional(),
+  // Fee tracking
+  creatorAmount: z.number().int().min(0).optional(),
+  serviceFee: z.number().int().min(0).optional(),
+  feeModel: z.string().optional(),
+  feeMode: z.enum(['absorb', 'pass_to_subscriber']).optional(),
+  feeEffectiveRate: z.number().min(0).max(100).optional(),
+  feeWasCapped: z.boolean().optional(),
+})
+
+/**
+ * Paystack charge event data schema
+ */
+export const paystackChargeEventSchema = z.object({
+  event: z.literal('charge.success'),
+  data: z.object({
+    id: z.number(),
+    reference: z.string().min(1),
+    amount: z.number().int().min(0),
+    currency: z.string().length(3),
+    status: z.literal('success'),
+    channel: z.string(),
+    customer: z.object({
+      id: z.number(),
+      email: z.string().email(),
+      customer_code: z.string(),
+    }),
+    authorization: z.object({
+      authorization_code: z.string(),
+      card_type: z.string().optional(),
+      last4: z.string().optional(),
+      exp_month: z.string().optional(),
+      exp_year: z.string().optional(),
+      reusable: z.boolean(),
+    }).optional(),
+    metadata: paystackTransactionMetadataSchema.optional(),
+  }),
+})
+
+/**
+ * Validate Paystack transaction metadata
+ */
+export function validatePaystackMetadata(metadata: Record<string, any> | null | undefined): {
+  valid: boolean
+  data?: z.infer<typeof paystackTransactionMetadataSchema>
+  error?: string
+} {
+  if (!metadata) {
+    return { valid: false, error: 'Missing metadata' }
+  }
+
+  const result = paystackTransactionMetadataSchema.safeParse(metadata)
+
+  if (!result.success) {
+    const errors = result.error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')
+    console.error('[webhook-validation] Paystack metadata validation failed:', errors)
+    return { valid: false, error: errors }
+  }
+
+  return { valid: true, data: result.data }
+}
+
+// ============================================
+// GENERIC HELPERS
+// ============================================
+
+/**
+ * Safe parse amount from metadata (string or number)
+ */
+export function parseMetadataAmount(value: string | number | undefined): number {
+  if (value === undefined || value === null || value === '') return 0
+  const parsed = typeof value === 'number' ? value : parseInt(value, 10)
+  return isNaN(parsed) ? 0 : Math.max(0, parsed)
+}
+
+/**
+ * Validate UUID format
+ */
+export function isValidUUID(value: string | undefined | null): boolean {
+  if (!value) return false
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+  return uuidRegex.test(value)
+}
+
+/**
+ * Sanitize string for logging (remove potential injection characters)
+ */
+export function sanitizeForLog(value: string | undefined | null, maxLength = 100): string {
+  if (!value) return ''
+  return value
+    .replace(/[\x00-\x1F\x7F]/g, '') // Remove control characters
+    .substring(0, maxLength)
+}

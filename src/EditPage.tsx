@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Camera, Plus, GripVertical, Trash2, ExternalLink, Check, X, Loader2 } from 'lucide-react'
-import { Pressable, useToast, Skeleton } from './components'
-import { useProfile, useUpdateProfile, uploadFile } from './api/hooks'
-import { getCurrencySymbol } from './utils/currency'
+import { Pressable, useToast, Skeleton, VoiceRecorder } from './components'
+import { useProfile, useUpdateProfile, uploadFile, uploadBlob } from './api/hooks'
+import { getCurrencySymbol, formatCompactNumber } from './utils/currency'
+import { calculateFeePreview, getPricing } from './utils/pricing'
+import { centsToDollars } from './api/mappers'
 import type { Tier, Perk, ImpactItem } from './api/client'
 import './EditPage.css'
 
@@ -20,44 +22,64 @@ export default function EditPage() {
   const [displayName, setDisplayName] = useState('')
   const [bio, setBio] = useState('')
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+  const [voiceIntroUrl, setVoiceIntroUrl] = useState<string | null>(null)
   const [pricingModel, setPricingModel] = useState<'single' | 'tiers'>('single')
   const [singleAmount, setSingleAmount] = useState<number>(10)
   const [tiers, setTiers] = useState<Tier[]>([])
   const [perks, setPerks] = useState<Perk[]>([])
   const [impactItems, setImpactItems] = useState<ImpactItem[]>([])
+  const [feeMode, setFeeMode] = useState<'absorb' | 'pass_to_subscriber'>('pass_to_subscriber')
   const [hasChanges, setHasChanges] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
+  const [isVoiceUploading, setIsVoiceUploading] = useState(false)
+  const [voiceBlob, setVoiceBlob] = useState<Blob | null>(null)
 
   // Hydrate local state from profile
+  // IMPORTANT: Backend returns amounts in CENTS, convert to dollars for display
   useEffect(() => {
     if (profile) {
       setDisplayName(profile.displayName || '')
       setBio(profile.bio || '')
       setAvatarUrl(profile.avatarUrl)
+      setVoiceIntroUrl(profile.voiceIntroUrl || null)
       setPricingModel(profile.pricingModel || 'single')
-      setSingleAmount(profile.singleAmount || 10)
-      setTiers(profile.tiers || [])
+      // Convert cents to dollars for display
+      setSingleAmount(profile.singleAmount ? centsToDollars(profile.singleAmount) : 10)
+      // Convert tier amounts from cents to dollars
+      setTiers((profile.tiers || []).map(t => ({
+        ...t,
+        amount: centsToDollars(t.amount)
+      })))
       setPerks(profile.perks || [])
       setImpactItems(profile.impactItems || [])
+      setFeeMode(profile.feeMode || 'pass_to_subscriber')
     }
   }, [profile])
 
   const currencySymbol = getCurrencySymbol(profile?.currency || 'USD')
 
   // Track changes
+  // Note: Compare with converted values (profile stores cents, local state is dollars)
   useEffect(() => {
     if (!profile) return
+    const profileAmountDollars = profile.singleAmount ? centsToDollars(profile.singleAmount) : 10
+    const profileTiersDollars = (profile.tiers || []).map(t => ({
+      ...t,
+      amount: centsToDollars(t.amount)
+    }))
     const changed =
       displayName !== (profile.displayName || '') ||
       bio !== (profile.bio || '') ||
       avatarUrl !== (profile.avatarUrl || null) ||
+      voiceIntroUrl !== (profile.voiceIntroUrl || null) ||
       pricingModel !== profile.pricingModel ||
-      singleAmount !== (profile.singleAmount || 10) ||
-      JSON.stringify(tiers) !== JSON.stringify(profile.tiers || []) ||
+      singleAmount !== profileAmountDollars ||
+      JSON.stringify(tiers) !== JSON.stringify(profileTiersDollars) ||
       JSON.stringify(perks) !== JSON.stringify(profile.perks || []) ||
-      JSON.stringify(impactItems) !== JSON.stringify(profile.impactItems || [])
+      JSON.stringify(impactItems) !== JSON.stringify(profile.impactItems || []) ||
+      feeMode !== (profile.feeMode || 'pass_to_subscriber')
     setHasChanges(changed)
-  }, [displayName, bio, avatarUrl, pricingModel, singleAmount, tiers, perks, impactItems, profile])
+  }, [displayName, bio, avatarUrl, voiceIntroUrl, pricingModel, singleAmount, tiers, perks, impactItems, feeMode, profile])
 
   // Avatar upload handler
   const handleAvatarClick = () => {
@@ -94,6 +116,28 @@ export default function EditPage() {
         fileInputRef.current.value = ''
       }
     }
+  }
+
+  // Voice intro handlers
+  const handleVoiceRecorded = async (blob: Blob, _duration: number) => {
+    setVoiceBlob(blob)
+    setIsVoiceUploading(true)
+    try {
+      const url = await uploadBlob(blob, 'voice', 'audio/webm')
+      setVoiceIntroUrl(url)
+      setVoiceBlob(null)
+      toast.success('Voice intro saved')
+    } catch (err: any) {
+      toast.error(err?.error || 'Failed to upload voice intro')
+      setVoiceBlob(null)
+    } finally {
+      setIsVoiceUploading(false)
+    }
+  }
+
+  const handleVoiceRemove = () => {
+    setVoiceBlob(null)
+    setVoiceIntroUrl(null)
   }
 
   // Tier handlers
@@ -206,11 +250,13 @@ export default function EditPage() {
         displayName,
         bio,
         avatarUrl,
+        voiceIntroUrl,
         pricingModel,
         singleAmount: pricingModel === 'single' ? singleAmount : null,
         tiers: pricingModel === 'tiers' ? tiers : null,
         perks,
         impactItems,
+        feeMode,
       })
       toast.success('Changes saved')
       setHasChanges(false)
@@ -331,6 +377,22 @@ export default function EditPage() {
           </div>
         </section>
 
+        {/* Voice Intro Section */}
+        <section className="edit-section">
+          <h3 className="section-title">Voice Intro</h3>
+          <p className="section-hint">Let subscribers hear from you directly</p>
+          <VoiceRecorder
+            onRecorded={handleVoiceRecorded}
+            onRemove={handleVoiceRemove}
+            audioBlob={voiceBlob}
+            existingAudioUrl={voiceIntroUrl}
+            maxDuration={60}
+            label=""
+            hint="Up to 60 seconds"
+            isUploading={isVoiceUploading}
+          />
+        </section>
+
         {/* Pricing Section */}
         <section className="edit-section">
           <h3 className="section-title">Pricing</h3>
@@ -440,6 +502,45 @@ export default function EditPage() {
               </Pressable>
             </>
           )}
+        </section>
+
+        {/* Fee Mode Section */}
+        <section className="edit-section">
+          <h3 className="section-title">Platform Fee ({getPricing(profile.purpose).transactionFeeLabel})</h3>
+
+          <div className="fee-mode-toggle">
+            <Pressable
+              className={`toggle-option ${feeMode === 'absorb' ? 'active' : ''}`}
+              onClick={() => setFeeMode('absorb')}
+            >
+              I absorb
+            </Pressable>
+            <Pressable
+              className={`toggle-option ${feeMode === 'pass_to_subscriber' ? 'active' : ''}`}
+              onClick={() => setFeeMode('pass_to_subscriber')}
+            >
+              Subscriber pays
+            </Pressable>
+          </div>
+
+          {(() => {
+            const baseAmount = pricingModel === 'single'
+              ? (singleAmount || 0) * 100  // Convert to cents
+              : (tiers[0]?.amount || 0) * 100
+            const preview = calculateFeePreview(baseAmount, profile.purpose, feeMode)
+            return (
+              <div className="fee-mode-preview">
+                <div className="fee-preview-row">
+                  <span>Subscribers pay</span>
+                  <span className="fee-preview-amount">{currencySymbol}{formatCompactNumber(preview.subscriberPays / 100)}</span>
+                </div>
+                <div className="fee-preview-row">
+                  <span>You receive</span>
+                  <span className="fee-preview-amount">{currencySymbol}{formatCompactNumber(preview.creatorReceives / 100)}</span>
+                </div>
+              </div>
+            )
+          })()}
         </section>
 
         {/* Perks Section - Hidden when service account has multiple tiers (perks are per-tier) */}

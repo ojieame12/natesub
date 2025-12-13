@@ -1,5 +1,6 @@
-import { useState, useMemo, useRef } from 'react'
+import { useState, useMemo, useCallback, memo } from 'react'
 import { ArrowLeft, Search, X } from 'lucide-react'
+import { Virtuoso } from 'react-virtuoso'
 import { Pressable, SkeletonList, ErrorState } from './components'
 import { useViewTransition, useScrolled } from './hooks'
 import { useSubscriptions } from './api/hooks'
@@ -8,10 +9,46 @@ import './Subscribers.css'
 
 type FilterType = 'all' | 'active' | 'canceled'
 
+// Memoized subscriber row for virtualization performance
+interface SubscriberRowProps {
+  subscription: any
+  onNavigate: (id: string) => void
+}
+
+const SubscriberRow = memo(function SubscriberRow({ subscription, onNavigate }: SubscriberRowProps) {
+  const subscriber = subscription.subscriber || {}
+  const name = subscriber.displayName || subscriber.email || 'Unknown'
+  const email = subscriber.email || ''
+  const amount = subscription.amount || 0
+  const tier = subscription.tierName || 'Supporter'
+  const status = subscription.status
+  const currencySymbol = getCurrencySymbol(subscription.currency || 'USD')
+
+  return (
+    <Pressable
+      className="subscriber-row"
+      onClick={() => onNavigate(subscription.id)}
+    >
+      <div className="subscriber-avatar">
+        {name.charAt(0).toUpperCase()}
+      </div>
+      <div className="subscriber-info">
+        <span className="subscriber-name">{name}</span>
+        <span className="subscriber-username">{email}</span>
+      </div>
+      <div className="subscriber-meta">
+        <span className={`subscriber-tier ${status === 'canceled' ? 'cancelled' : ''}`}>
+          {tier}
+        </span>
+        <span className="subscriber-amount">{currencySymbol}{formatCompactNumber(amount)}/mo</span>
+      </div>
+    </Pressable>
+  )
+})
+
 export default function Subscribers() {
   const { goBack, navigateWithSharedElements } = useViewTransition()
   const [scrollRef, isScrolled] = useScrolled()
-  const avatarRefs = useRef<Map<string, HTMLDivElement>>(new Map())
   const [filter, setFilter] = useState<FilterType>('all')
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -37,7 +74,7 @@ export default function Subscribers() {
     if (!searchQuery) return allSubscriptions
     const query = searchQuery.toLowerCase()
     return allSubscriptions.filter((sub: any) => {
-      const name = sub.subscriber?.profile?.displayName || sub.subscriber?.email || ''
+      const name = sub.subscriber?.displayName || sub.subscriber?.email || ''
       const email = sub.subscriber?.email || ''
       return name.toLowerCase().includes(query) || email.toLowerCase().includes(query)
     })
@@ -50,6 +87,18 @@ export default function Subscribers() {
   const loadData = () => {
     refetch()
   }
+
+  // Memoized navigation handler for virtualized list
+  const handleNavigate = useCallback((id: string) => {
+    navigateWithSharedElements(`/subscribers/${id}`)
+  }, [navigateWithSharedElements])
+
+  // Load more when reaching end of list
+  const handleEndReached = useCallback(() => {
+    if (hasNextPage && !isFetchingNextPage) {
+      fetchNextPage()
+    }
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage])
 
   return (
     <div className="subscribers-page" ref={scrollRef}>
@@ -144,68 +193,24 @@ export default function Subscribers() {
             </p>
           </div>
         ) : (
-          <div className="subscribers-list">
-            {filteredSubscribers.map((subscription: any, index: number) => {
-              const subscriber = subscription.subscriber || {}
-              const profile = subscriber.profile || {}
-              const name = profile.displayName || subscriber.email || 'Unknown'
-              const email = subscriber.email || ''
-              const amount = subscription.amount || 0 // Backend sends dollars
-              const tier = subscription.tierName || 'Supporter'
-              const status = subscription.status
-              const currencySymbol = getCurrencySymbol(subscription.currency || 'USD')
-
-              const handleClick = () => {
-                const avatarEl = avatarRefs.current.get(subscription.id)
-                if (avatarEl) {
-                  navigateWithSharedElements(
-                    `/subscribers/${subscription.id}`,
-                    [{ element: avatarEl, name: 'avatar-morph' }],
-                    { type: 'zoom-in' }
-                  )
-                }
-              }
-
-              return (
-                <Pressable
-                  key={subscription.id}
-                  className="subscriber-row stagger-item"
-                  style={{ animationDelay: `${index * 50}ms` }}
-                  onClick={handleClick}
-                >
-                  <div
-                    className="subscriber-avatar"
-                    ref={(el) => {
-                      if (el) avatarRefs.current.set(subscription.id, el)
-                    }}
-                  >
-                    {name.charAt(0).toUpperCase()}
-                  </div>
-                  <div className="subscriber-info">
-                    <span className="subscriber-name">{name}</span>
-                    <span className="subscriber-username">{email}</span>
-                  </div>
-                  <div className="subscriber-meta">
-                    <span className={`subscriber-tier ${status === 'canceled' ? 'cancelled' : ''}`}>
-                      {tier}
-                    </span>
-                    <span className="subscriber-amount">{currencySymbol}{formatCompactNumber(amount)}/mo</span>
-                  </div>
-                </Pressable>
-              )
-            })}
-
-            {/* Load More */}
-            {hasNextPage && (
-              <Pressable
-                className="load-more-btn"
-                onClick={() => fetchNextPage()}
-                disabled={isFetchingNextPage}
-              >
-                {isFetchingNextPage ? 'Loading...' : 'Load More'}
-              </Pressable>
+          <Virtuoso
+            className="subscribers-list virtuoso-list"
+            data={filteredSubscribers}
+            endReached={handleEndReached}
+            overscan={200}
+            itemContent={(_, subscription) => (
+              <SubscriberRow
+                key={subscription.id}
+                subscription={subscription}
+                onNavigate={handleNavigate}
+              />
             )}
-          </div>
+            components={{
+              Footer: () => isFetchingNextPage ? (
+                <div className="load-more-loading">Loading...</div>
+              ) : null
+            }}
+          />
         )}
       </div>
     </div>

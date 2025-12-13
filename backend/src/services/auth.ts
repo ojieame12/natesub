@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'crypto'
+import { createHash, createHmac, randomBytes } from 'crypto'
 import { nanoid } from 'nanoid'
 import { Prisma } from '@prisma/client'
 import { db } from '../db/client.js'
@@ -9,6 +9,8 @@ import type { OnboardingBranch } from '@prisma/client'
 
 const OTP_EXPIRES_MS = parseInt(env.MAGIC_LINK_EXPIRES_MINUTES) * 60 * 1000
 const SESSION_EXPIRES_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
+const MAX_OTP_ATTEMPTS = 5
+const OTP_LOCKOUT_MS = 15 * 60 * 1000 // 15 minutes
 
 // Onboarding state returned to frontend
 export interface OnboardingState {
@@ -21,8 +23,9 @@ export interface OnboardingState {
 }
 
 // Hash token for storage (never store raw tokens)
+// SECURITY: Uses HMAC with SESSION_SECRET to prevent offline hash cracking
 function hashToken(token: string): string {
-  return createHash('sha256').update(token).digest('hex')
+  return createHmac('sha256', env.SESSION_SECRET).update(token).digest('hex')
 }
 
 // Generate a secure session token
@@ -31,10 +34,11 @@ function generateToken(): string {
 }
 
 // Generate a 6-digit OTP code
+// SECURITY: Combined with rate limiting (5 attempts/15min), brute force is mitigated
 function generateOtp(): string {
   // Generate cryptographically secure random 6-digit number
-  const bytes = randomBytes(3)
-  const num = (bytes[0] << 16 | bytes[1] << 8 | bytes[2]) % 1000000
+  const bytes = randomBytes(4)
+  const num = bytes.readUInt32BE(0) % 1000000
   return num.toString().padStart(6, '0')
 }
 
@@ -95,6 +99,7 @@ export function computeOnboardingState(user: {
   } | null
 }): OnboardingState {
   const hasProfile = !!user.profile
+  // Payment is only "active" when Stripe/Paystack is fully connected
   const hasActivePayment = user.profile?.payoutStatus === 'active'
 
   let redirectTo: string
@@ -123,7 +128,7 @@ export function computeOnboardingState(user: {
   }
 }
 
-// Verify OTP code
+// Verify OTP code with brute force protection
 export async function verifyMagicLink(token: string): Promise<{
   sessionToken: string
   userId: string
@@ -137,16 +142,42 @@ export async function verifyMagicLink(token: string): Promise<{
   })
 
   if (!magicLinkToken) {
+    // Track failed attempt for brute force protection
+    // Rate limit key is global since we don't know the email yet
+    const globalAttemptKey = `otp_global_attempt:${Date.now()}`
+    await redis.incr(globalAttemptKey)
+    await redis.expire(globalAttemptKey, 60) // 1 minute window
     throw new Error('Invalid code')
   }
 
+  // Brute force protection: Track failed attempts per email
+  const attemptKey = `otp_attempts:${magicLinkToken.email}`
+  const lockoutKey = `otp_lockout:${magicLinkToken.email}`
+
+  // Check if account is locked out
+  const isLockedOut = await redis.get(lockoutKey)
+  if (isLockedOut) {
+    const ttl = await redis.ttl(lockoutKey)
+    throw new Error(`Too many failed attempts. Please wait ${Math.ceil(ttl / 60)} minutes before trying again.`)
+  }
+
   if (magicLinkToken.usedAt) {
+    // Increment failed attempts for used codes (possible replay attack)
+    await redis.incr(attemptKey)
+    const attempts = parseInt(await redis.get(attemptKey) || '0')
+    if (attempts >= MAX_OTP_ATTEMPTS) {
+      await redis.set(lockoutKey, '1', 'PX', OTP_LOCKOUT_MS)
+      await redis.del(attemptKey)
+    }
     throw new Error('This code has already been used')
   }
 
   if (magicLinkToken.expiresAt < new Date()) {
     throw new Error('This code has expired')
   }
+
+  // Success - clear any failed attempts
+  await redis.del(attemptKey)
 
   // Mark token as used
   await db.magicLinkToken.update({

@@ -34,7 +34,7 @@ export default function NewRequest() {
   }
 
   const handleCopyLink = async () => {
-    const link = `https://nate.to/pay?amount=${amount}&recurring=${isRecurring}`
+    const link = `https://natepay.co/pay?amount=${amount}&recurring=${isRecurring}`
     try {
       await navigator.clipboard.writeText(link)
       setCopied(true)
@@ -45,7 +45,7 @@ export default function NewRequest() {
   }
 
   const handleShare = async () => {
-    const link = `https://nate.to/pay?amount=${amount}&recurring=${isRecurring}`
+    const link = `https://natepay.co/pay?amount=${amount}&recurring=${isRecurring}`
     if (navigator.share) {
       try {
         await navigator.share({

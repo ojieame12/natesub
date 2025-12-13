@@ -20,13 +20,14 @@ export default function OtpStep() {
     const { mutateAsync: verifyCode } = useVerifyMagicLink()
     const { mutateAsync: resendCode } = useRequestMagicLink()
 
-    const digits = otp.split('').concat(Array(6 - otp.length).fill(''))
-    const canVerify = otp.length === 6 && !isVerifying
+    const OTP_LENGTH = 6
+    const digits = otp.split('').concat(Array(OTP_LENGTH - otp.length).fill(''))
+    const canVerify = otp.length === OTP_LENGTH && !isVerifying
     const hasAttemptedRef = useRef(false)
 
-    // Auto-verify when 6 digits entered
+    // Auto-verify when all digits entered
     useEffect(() => {
-        if (otp.length === 6 && !isVerifying && !hasAttemptedRef.current) {
+        if (otp.length === OTP_LENGTH && !isVerifying && !hasAttemptedRef.current) {
             hasAttemptedRef.current = true
             verifyOtp()
         }
@@ -34,7 +35,7 @@ export default function OtpStep() {
 
     // Reset attempt flag when OTP changes (user clearing/retyping)
     useEffect(() => {
-        if (otp.length < 6) {
+        if (otp.length < OTP_LENGTH) {
             hasAttemptedRef.current = false
         }
     }, [otp])
@@ -122,8 +123,8 @@ export default function OtpStep() {
         if (success) setSuccess(null)
         const newOtp = otp.split('')
         newOtp[index] = value.slice(-1)
-        setOtp(newOtp.join('').slice(0, 6))
-        if (value && index < 5) inputRefs.current[index + 1]?.focus()
+        setOtp(newOtp.join('').slice(0, OTP_LENGTH))
+        if (value && index < OTP_LENGTH - 1) inputRefs.current[index + 1]?.focus()
     }
 
     const handleKeyDown = (index: number, e: React.KeyboardEvent) => {
@@ -132,14 +133,14 @@ export default function OtpStep() {
         }
     }
 
-    // Handle paste - fill all 6 digits at once
+    // Handle paste - fill all digits at once
     const handlePaste = (e: React.ClipboardEvent) => {
         e.preventDefault()
-        const pastedData = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6)
+        const pastedData = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, OTP_LENGTH)
         if (pastedData.length > 0) {
             setOtp(pastedData)
             // Focus the last filled input or the next empty one
-            const focusIndex = Math.min(pastedData.length, 5)
+            const focusIndex = Math.min(pastedData.length, OTP_LENGTH - 1)
             inputRefs.current[focusIndex]?.focus()
         }
     }

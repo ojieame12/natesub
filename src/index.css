@@ -108,17 +108,20 @@
   /* Button shadow (for 3D effect) */
   --accent-primary-shadow: #cc7615;
 
-  /* Shadows - soft and diffused */
-  --shadow-sm: 0 2px 8px rgba(28, 25, 23, 0.03), 0 1px 2px rgba(28, 25, 23, 0.02);
-  --shadow-md: 0 4px 16px rgba(28, 25, 23, 0.04), 0 2px 4px rgba(28, 25, 23, 0.02);
-  --shadow-lg: 0 8px 32px rgba(28, 25, 23, 0.06), 0 4px 8px rgba(28, 25, 23, 0.02);
-  --shadow-card: 0 1px 3px rgba(28, 25, 23, 0.02), 0 4px 12px rgba(28, 25, 23, 0.03);
+  /* Ambient Colored Shadows (Warmth) */
+  --shadow-color-ambient: rgba(255, 148, 26, 0.06);
+  --shadow-color-key: rgba(28, 25, 23, 0.04);
 
-  /* Animations */
-  --ease-out: cubic-bezier(0.25, 0.1, 0.25, 1);
+  --shadow-sm: 0 2px 8px var(--shadow-color-ambient), 0 1px 2px var(--shadow-color-key);
+  --shadow-md: 0 4px 16px var(--shadow-color-ambient), 0 2px 4px var(--shadow-color-key);
+  --shadow-lg: 0 8px 32px var(--shadow-color-ambient), 0 4px 8px var(--shadow-color-key);
+  --shadow-card: 0 1px 3px var(--shadow-color-key), 0 4px 12px var(--shadow-color-ambient), inset 0 0 0 1px rgba(255, 255, 255, 0.5);
+
+  /* Animations - Spring Physics */
+  --ease-out: cubic-bezier(0.34, 1.56, 0.64, 1);
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
-  --duration-fast: 120ms;
-  --duration-normal: 200ms;
+  --duration-fast: 300ms;
+  --duration-normal: 400ms;
 }
 
 /* Dark mode removed - using light mode only */
@@ -142,9 +145,27 @@ body {
   font-family: var(--font-primary);
   background: #FFFFFF;
   color: var(--text-primary);
-  line-height: 1.4;
+  line-height: 1.5;
+  /* Increased for readability */
   min-height: 100vh;
   min-height: 100dvh;
+  position: relative;
+  /* Tabular numbers for price stability */
+  font-variant-numeric: tabular-nums;
+}
+
+/* Micro-Noise Texture Overlay */
+body::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
 }
 
 button {
@@ -160,6 +181,17 @@ input {
   border: none;
   outline: none;
   background: none;
+}
+
+/* === UTILITIES === */
+
+/* Crystal Glassmorphism */
+.glass-crystal {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.4),
+    0 4px 20px -2px rgba(0, 0, 0, 0.05);
 }
 
 /* === PRESSABLE === */
@@ -187,17 +219,32 @@ input {
 .pressable-card {
   transition: transform var(--duration-fast) var(--ease-spring),
     box-shadow var(--duration-normal) ease;
+  /* Crystal card effect by default */
+  background: #FFFFFF;
+  box-shadow: var(--shadow-card);
 }
 
 .pressable-card.pressed {
   transform: scale(0.98);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
 }
 
 /* Icon buttons - more responsive */
 .pressable-icon {
   transition: transform 80ms var(--ease-out),
     opacity var(--duration-fast) ease;
+  /* Expand hit area */
+  position: relative;
+}
+
+/* Hit area expansion for touch */
+.pressable-icon::after {
+  content: '';
+  position: absolute;
+  top: -8px;
+  bottom: -8px;
+  left: -8px;
+  right: -8px;
 }
 
 .pressable-icon.pressed {
@@ -208,6 +255,9 @@ input {
 /* === TYPOGRAPHY === */
 .text-xs {
   font-size: 11px;
+  /* Optical tracking for small text/eyebrows */
+  letter-spacing: 0.03em;
+  font-weight: 500;
 }
 
 .text-sm {
@@ -267,8 +317,13 @@ input {
 
 /* Fade animations */
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes fadeInUp {
@@ -276,6 +331,7 @@ input {
     opacity: 0;
     transform: translateY(12px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -287,6 +343,7 @@ input {
     opacity: 0;
     transform: translateY(-12px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -298,6 +355,7 @@ input {
     opacity: 0;
     transform: scale(0.95);
   }
+
   to {
     opacity: 1;
     transform: scale(1);
@@ -310,12 +368,15 @@ input {
     opacity: 0;
     transform: scale(0.3);
   }
+
   50% {
     transform: scale(1.05);
   }
+
   70% {
     transform: scale(0.95);
   }
+
   100% {
     opacity: 1;
     transform: scale(1);
@@ -323,14 +384,38 @@ input {
 }
 
 @keyframes shake {
-  0%, 100% { transform: translateX(0); }
-  10%, 30%, 50%, 70%, 90% { transform: translateX(-4px); }
-  20%, 40%, 60%, 80% { transform: translateX(4px); }
+
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  10%,
+  30%,
+  50%,
+  70%,
+  90% {
+    transform: translateX(-4px);
+  }
+
+  20%,
+  40%,
+  60%,
+  80% {
+    transform: translateX(4px);
+  }
 }
 
 @keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.5;
+  }
 }
 
 @keyframes slideInRight {
@@ -338,6 +423,7 @@ input {
     opacity: 0;
     transform: translateX(20px);
   }
+
   to {
     opacity: 1;
     transform: translateX(0);
@@ -349,6 +435,7 @@ input {
     opacity: 0;
     transform: translateX(-20px);
   }
+
   to {
     opacity: 1;
     transform: translateX(0);
@@ -394,14 +481,37 @@ input {
 }
 
 /* Stagger delay utilities */
-.stagger-1 { animation-delay: 0.05s; }
-.stagger-2 { animation-delay: 0.1s; }
-.stagger-3 { animation-delay: 0.15s; }
-.stagger-4 { animation-delay: 0.2s; }
-.stagger-5 { animation-delay: 0.25s; }
-.stagger-6 { animation-delay: 0.3s; }
-.stagger-7 { animation-delay: 0.35s; }
-.stagger-8 { animation-delay: 0.4s; }
+.stagger-1 {
+  animation-delay: 0.05s;
+}
+
+.stagger-2 {
+  animation-delay: 0.1s;
+}
+
+.stagger-3 {
+  animation-delay: 0.15s;
+}
+
+.stagger-4 {
+  animation-delay: 0.2s;
+}
+
+.stagger-5 {
+  animation-delay: 0.25s;
+}
+
+.stagger-6 {
+  animation-delay: 0.3s;
+}
+
+.stagger-7 {
+  animation-delay: 0.35s;
+}
+
+.stagger-8 {
+  animation-delay: 0.4s;
+}
 
 /* View transition (for page-level animations) */
 .view-enter {
@@ -414,12 +524,12 @@ input {
 
 /* ===========================================
    VIEW TRANSITIONS API
-   Native page transitions with CSS
+   DISABLED - Was causing flickering and glitchy behavior
    =========================================== */
 
-/* Enable view transitions */
+/* Disable automatic view transitions - they cause flicker on iOS */
 @view-transition {
-  navigation: auto;
+  navigation: none;
 }
 
 /* === DEFAULT TRANSITION (Fade) === */
@@ -639,6 +749,7 @@ input {
    =========================================== */
 
 @media (prefers-reduced-motion: reduce) {
+
   /* Disable all view transitions */
   ::view-transition-group(*),
   ::view-transition-old(*),

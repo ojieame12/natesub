@@ -63,8 +63,21 @@ export function rateLimit(options: Partial<RateLimitOptions> = {}) {
 
       await next()
     } catch (error) {
-      // If Redis fails, allow the request (fail open)
+      // If Redis fails, log and fail CLOSED for security-critical endpoints
+      // This prevents abuse during Redis outages
       console.error('Rate limit error:', error)
+
+      // Check if this is a security-critical endpoint that should fail closed
+      const criticalPrefixes = ['auth_verify', 'auth_magic', 'payment', 'checkout']
+      const isCritical = criticalPrefixes.some(p => config.keyPrefix.startsWith(p))
+
+      if (isCritical) {
+        return c.json({
+          error: 'Service temporarily unavailable. Please try again in a moment.',
+        }, 503)
+      }
+
+      // Non-critical endpoints fail open (allow request)
       await next()
     }
   }
@@ -109,4 +122,106 @@ export const webhookRateLimit = rateLimit({
     return `webhook_ratelimit:${ip}`
   },
   message: 'Too many webhook requests. Please contact support if this persists.',
+})
+
+/**
+ * Magic link request rate limiter - IP + email based
+ * Prevents email enumeration and spam
+ * 5 requests per 10 minutes per IP
+ */
+export const authMagicLinkRateLimit = rateLimit({
+  windowMs: 10 * 60 * 1000,  // 10 minutes
+  maxRequests: 5,
+  keyPrefix: 'auth_magic_ratelimit',
+  keyGenerator: (c) => {
+    const ip = c.req.header('x-forwarded-for')?.split(',')[0]?.trim()
+      || c.req.header('x-real-ip')
+      || 'unknown'
+    return `auth_magic_ratelimit:${ip}`
+  },
+  message: 'Too many login attempts. Please wait 10 minutes before trying again.',
+})
+
+/**
+ * Auth verify rate limiter - IP-based
+ * Prevents brute force OTP guessing
+ * 5 attempts per 15 minutes per IP
+ */
+export const authVerifyRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,  // 15 minutes
+  maxRequests: 5,
+  keyPrefix: 'auth_verify_ratelimit',
+  keyGenerator: (c) => {
+    const ip = c.req.header('x-forwarded-for')?.split(',')[0]?.trim()
+      || c.req.header('x-real-ip')
+      || 'unknown'
+    return `auth_verify_ratelimit:${ip}`
+  },
+  message: 'Too many verification attempts. Please wait 15 minutes before trying again.',
+})
+
+/**
+ * Payment endpoint rate limiter - User-based
+ * Prevents abuse of payment provider APIs
+ * 10 requests per hour per user
+ */
+export const paymentRateLimit = rateLimit({
+  windowMs: 60 * 60 * 1000,  // 1 hour
+  maxRequests: 10,
+  keyPrefix: 'payment_ratelimit',
+  message: 'Too many payment requests. Please try again later.',
+})
+
+/**
+ * Checkout rate limiter - IP-based
+ * Prevents checkout spam
+ * 20 requests per hour per IP
+ */
+export const checkoutRateLimit = rateLimit({
+  windowMs: 60 * 60 * 1000,  // 1 hour
+  maxRequests: 20,
+  keyPrefix: 'checkout_ratelimit',
+  keyGenerator: (c) => {
+    const ip = c.req.header('x-forwarded-for')?.split(',')[0]?.trim()
+      || c.req.header('x-real-ip')
+      || 'unknown'
+    return `checkout_ratelimit:${ip}`
+  },
+  message: 'Too many checkout requests. Please try again later.',
+})
+
+/**
+ * Public endpoint rate limiter - IP-based
+ * Prevents enumeration and DoS on public endpoints
+ * 100 requests per hour per IP
+ */
+export const publicRateLimit = rateLimit({
+  windowMs: 60 * 60 * 1000,  // 1 hour
+  maxRequests: 100,
+  keyPrefix: 'public_ratelimit',
+  keyGenerator: (c) => {
+    const ip = c.req.header('x-forwarded-for')?.split(',')[0]?.trim()
+      || c.req.header('x-real-ip')
+      || 'unknown'
+    return `public_ratelimit:${ip}`
+  },
+  message: 'Too many requests. Please try again later.',
+})
+
+/**
+ * Stricter public rate limiter - IP-based
+ * For sensitive public endpoints like username check
+ * 30 requests per hour per IP
+ */
+export const publicStrictRateLimit = rateLimit({
+  windowMs: 60 * 60 * 1000,  // 1 hour
+  maxRequests: 30,
+  keyPrefix: 'public_strict_ratelimit',
+  keyGenerator: (c) => {
+    const ip = c.req.header('x-forwarded-for')?.split(',')[0]?.trim()
+      || c.req.header('x-real-ip')
+      || 'unknown'
+    return `public_strict_ratelimit:${ip}`
+  },
+  message: 'Too many requests. Please try again later.',
 })

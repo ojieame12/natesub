@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronLeft, Mic, Square, Play, Pause, Trash2, Sparkles } from 'lucide-react'
 import { useRequestStore, getDefaultMessage } from './store'
-import { useCurrentUser } from '../api/hooks'
+import { useCurrentUser, uploadBlob } from '../api/hooks'
 import { getCurrencySymbol, formatCompactNumber } from '../utils/currency'
 import { Pressable } from '../components'
 import './request.css'
@@ -25,6 +25,7 @@ export default function PersonalizeRequest() {
     } = useRequestStore()
 
     const [isRecording, setIsRecording] = useState(false)
+    const [isUploading, setIsUploading] = useState(false)
     const [recordingTime, setRecordingTime] = useState(0)
     const [isPlaying, setIsPlaying] = useState(false)
     const [playbackTime, setPlaybackTime] = useState(0)
@@ -68,10 +69,29 @@ export default function PersonalizeRequest() {
                 audioChunksRef.current.push(event.data)
             }
 
-            mediaRecorderRef.current.onstop = () => {
-                const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' })
-                const audioUrl = URL.createObjectURL(audioBlob)
-                setVoiceNote(audioUrl, recordingTime)
+            mediaRecorderRef.current.onstop = async () => {
+                const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' })
+
+                // 1. Optimistic local preview
+                const localUrl = URL.createObjectURL(audioBlob)
+                setVoiceNote(localUrl, recordingTime)
+
+                // 2. Upload to S3
+                setIsUploading(true)
+                try {
+                    const s3Url = await uploadBlob(audioBlob, 'voice', 'audio/webm')
+                    // Update store with the REAL public URL
+                    // Note: We keep the duration from the recording session
+                    setVoiceNote(s3Url, recordingTime)
+                } catch (e) {
+                    console.error('Failed to upload voice note:', e)
+                    setMicError('Failed to upload voice note. Please try again.')
+                    // Revert local state if upload fails
+                    setVoiceNote(null, 0)
+                } finally {
+                    setIsUploading(false)
+                }
+
                 stream.getTracks().forEach(track => track.stop())
             }
 
@@ -251,12 +271,22 @@ export default function PersonalizeRequest() {
                             )}
                         </>
                     )}
+                    {isUploading && (
+                        <div className="request-voice-uploading">
+                            <span className="request-voice-uploading-spinner" />
+                            <span>Uploading voice note...</span>
+                        </div>
+                    )}
                 </div>
             </div>
 
             {/* Continue Button */}
             <div className="request-footer">
-                <Pressable className="request-continue-btn" onClick={handleContinue}>
+                <Pressable
+                    className={`request-continue-btn ${isUploading ? 'disabled' : ''}`}
+                    onClick={handleContinue}
+                    disabled={isUploading}
+                >
                     {isService ? 'Preview Invoice' : 'Preview Request'}
                 </Pressable>
             </div>

@@ -528,6 +528,7 @@
     from {
         transform: translateY(100%);
     }
+
     to {
         transform: translateY(0);
     }
@@ -570,7 +571,7 @@
 .modal-btn.secondary {
     background: var(--neutral-900);
     color: white;
-    box-shadow: 0 4px 0 var(--neutral-700);
+    box-shadow: var(--shadow-sm);
 }
 
 .modal-btn.secondary.pressed {
@@ -690,6 +691,17 @@
     font-weight: 600;
 }
 
+.billing-fee-note {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.5);
+    margin: var(--space-sm) 0 0;
+    text-align: center;
+}
+
+.billing-plan-card.personal .billing-fee-note {
+    color: var(--text-tertiary);
+}
+
 /* Manage Subscription Button */
 .billing-manage-btn {
     display: flex;
@@ -758,7 +770,7 @@
     color: var(--text-secondary);
 }
 
-.billing-upgrade-header > div {
+.billing-upgrade-header>div {
     display: flex;
     flex-direction: column;
     gap: var(--space-xs);
@@ -969,7 +981,7 @@
     font-weight: 600;
     color: white;
     margin-bottom: var(--space-lg);
-    box-shadow: 0 4px 0 var(--neutral-700);
+    box-shadow: var(--shadow-sm);
     transition: all 0.1s ease;
 }
 

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Building2, Check, Loader2, AlertCircle, CreditCard, ExternalLink } from 'lucide-react'
 import { Pressable } from './components'
+import { Skeleton } from './components/Skeleton'
 import { api } from './api'
 import type { PaystackConnectionStatus } from './api/client'
 import { useProfile } from './api/hooks'
@@ -55,6 +56,7 @@ export default function PaymentSettings() {
   const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
   const [connecting, setConnecting] = useState(false)
+  const [completingSetup, setCompletingSetup] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   // Get profile to know which provider they use
@@ -73,43 +75,65 @@ export default function PaymentSettings() {
   const [payoutHistory, setPayoutHistory] = useState<Payout[]>([])
 
   useEffect(() => {
-    loadPaymentData()
-  }, [paymentProvider])
+    // AbortController to prevent race conditions when paymentProvider changes
+    // or component unmounts while API calls are in flight
+    const abortController = new AbortController()
+    let isCancelled = false
 
-  async function loadPaymentData() {
-    setLoading(true)
-    setError(null)
+    async function loadPaymentData() {
+      setLoading(true)
+      setError(null)
 
-    try {
-      // Check status based on payment provider
-      if (paymentProvider === 'paystack') {
-        const status = await api.paystack.getStatus()
-        setPaystackStatus(status)
-      } else {
-        // Default to Stripe
-        const status = await api.stripe.getStatus()
-        setStripeStatus(status)
+      try {
+        // Check status based on payment provider
+        if (paymentProvider === 'paystack') {
+          const status = await api.paystack.getStatus()
+          // Check if request was cancelled before updating state
+          if (isCancelled) return
+          setPaystackStatus(status)
+        } else {
+          // Default to Stripe
+          const status = await api.stripe.getStatus()
+          // Check if request was cancelled before updating state
+          if (isCancelled) return
+          setStripeStatus(status)
 
-        if (status.connected && status.status === 'active') {
-          // Fetch balance and payouts
-          const [balanceResult, payoutsResult] = await Promise.all([
-            api.stripe.getBalance().catch(() => ({ balance: { available: 0, pending: 0 } })),
-            api.stripe.getPayouts().catch(() => ({ payouts: [] })),
-          ])
-          setBalance(balanceResult.balance)
-          setPayoutHistory(payoutsResult.payouts)
+          if (status.connected && status.status === 'active') {
+            // Fetch balance and payouts
+            const [balanceResult, payoutsResult] = await Promise.all([
+              api.stripe.getBalance().catch(() => ({ balance: { available: 0, pending: 0 } })),
+              api.stripe.getPayouts().catch(() => ({ payouts: [] })),
+            ])
+            // Check again before updating state
+            if (isCancelled) return
+            setBalance(balanceResult.balance)
+            setPayoutHistory(payoutsResult.payouts)
+          }
+        }
+      } catch (err: any) {
+        // Don't update state if cancelled
+        if (isCancelled) return
+        console.error('Failed to load payment data:', err)
+        // Don't show error for unconnected accounts
+        if (err?.status !== 404) {
+          setError(err?.error || 'Failed to load payment data')
+        }
+      } finally {
+        // Don't update state if cancelled
+        if (!isCancelled) {
+          setLoading(false)
         }
       }
-    } catch (err: any) {
-      console.error('Failed to load payment data:', err)
-      // Don't show error for unconnected accounts
-      if (err?.status !== 404) {
-        setError(err?.error || 'Failed to load payment data')
-      }
-    } finally {
-      setLoading(false)
     }
-  }
+
+    loadPaymentData()
+
+    // Cleanup: cancel pending operations when effect re-runs or component unmounts
+    return () => {
+      isCancelled = true
+      abortController.abort()
+    }
+  }, [paymentProvider])
 
   async function handleConnectStripe() {
     setConnecting(true)
@@ -124,10 +148,12 @@ export default function PaymentSettings() {
           setError(`${result.error}. ${result.suggestion}`)
         }
       } else if (result.onboardingUrl) {
+        // Store source for redirect handling when user returns from Stripe
+        sessionStorage.setItem('stripe_onboarding_source', 'settings')
         window.location.href = result.onboardingUrl
       } else if (result.alreadyOnboarded) {
-        // Refresh status
-        loadPaymentData()
+        // Refresh status by reloading
+        window.location.reload()
       }
     } catch (err: any) {
       setError(err?.error || 'Failed to connect Stripe')
@@ -146,16 +172,46 @@ export default function PaymentSettings() {
           <img src="/logo.svg" alt="NatePay" className="header-logo" />
           <div className="header-spacer" />
         </header>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
-          <Loader2 size={32} className="spin" />
+        <div className="payment-settings-content">
+          {/* Balance Card Skeleton */}
+          <section className="balance-card" style={{ opacity: 0.6 }}>
+            <div className="balance-row">
+              <div className="balance-item">
+                <Skeleton width={60} height={14} borderRadius="var(--radius-sm)" />
+                <Skeleton width={100} height={28} borderRadius="var(--radius-sm)" style={{ marginTop: 4 }} />
+              </div>
+              <div className="balance-item">
+                <Skeleton width={60} height={14} borderRadius="var(--radius-sm)" />
+                <Skeleton width={80} height={28} borderRadius="var(--radius-sm)" style={{ marginTop: 4 }} />
+              </div>
+            </div>
+            <Skeleton height={44} borderRadius="var(--radius-md)" style={{ marginTop: 16 }} />
+          </section>
+
+          {/* Status Skeleton */}
+          <section className="settings-section">
+            <Skeleton height={48} borderRadius="var(--radius-md)" />
+          </section>
+
+          {/* Payout Method Skeleton */}
+          <section className="settings-section">
+            <Skeleton width={120} height={16} borderRadius="var(--radius-sm)" style={{ marginBottom: 12 }} />
+            <Skeleton height={72} borderRadius="var(--radius-lg)" />
+          </section>
+
+          {/* Payout Schedule Skeleton */}
+          <section className="settings-section">
+            <Skeleton width={140} height={16} borderRadius="var(--radius-sm)" style={{ marginBottom: 12 }} />
+            <Skeleton height={200} borderRadius="var(--radius-lg)" />
+          </section>
         </div>
       </div>
     )
   }
 
-  // Show Paystack not connected or pending
-  if (paymentProvider === 'paystack' && (!paystackStatus?.connected || paystackStatus.status === 'pending')) {
-    const isPending = paystackStatus?.status === 'pending'
+  // Show Paystack not connected or inactive
+  if (paymentProvider === 'paystack' && (!paystackStatus?.connected || paystackStatus.status === 'not_started' || paystackStatus.status === 'inactive')) {
+    const isInactive = paystackStatus?.status === 'inactive'
     return (
       <div className="payment-settings-page">
         <header className="payment-settings-header">
@@ -178,21 +234,21 @@ export default function PaymentSettings() {
               width: 64,
               height: 64,
               borderRadius: '50%',
-              background: isPending ? 'linear-gradient(135deg, #f59e0b, #d97706)' : 'linear-gradient(135deg, #00C3F7, #0AA5C2)',
+              background: isInactive ? 'linear-gradient(135deg, #f59e0b, #d97706)' : 'linear-gradient(135deg, #00C3F7, #0AA5C2)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               margin: '0 auto 16px',
             }}>
-              {isPending ? <AlertCircle size={28} color="white" /> : <Building2 size={28} color="white" />}
+              {isInactive ? <AlertCircle size={28} color="white" /> : <Building2 size={28} color="white" />}
             </div>
             <h2 style={{ fontSize: 20, fontWeight: 600, marginBottom: 8 }}>
-              {isPending ? 'Verification Pending' : 'Connect Bank Account'}
+              {isInactive ? 'Account Inactive' : 'Connect Payment Method'}
             </h2>
             <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 24 }}>
-              {isPending
-                ? 'Your bank account is being verified. This usually takes a few minutes.'
-                : 'Connect your bank account via Paystack to receive payments directly.'}
+              {isInactive
+                ? 'Your payment account has been deactivated. Please reconnect to receive payments.'
+                : 'Connect your bank or mobile money via Paystack to receive payments.'}
             </p>
 
             {error && (
@@ -211,9 +267,8 @@ export default function PaymentSettings() {
               </div>
             )}
 
-            {!isPending && (
-              <Pressable
-                onClick={() => navigate('/onboarding/paystack')}
+            <Pressable
+              onClick={() => navigate('/onboarding/paystack')}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -228,13 +283,12 @@ export default function PaymentSettings() {
                   fontSize: 16,
                 }}
               >
-                Connect Bank Account
+                {isInactive ? 'Reconnect Payment Method' : 'Connect Payment Method'}
               </Pressable>
-            )}
           </section>
 
           <p style={{ fontSize: 13, color: 'var(--text-tertiary)', textAlign: 'center', padding: '0 16px' }}>
-            Paystack is available in Nigeria, Kenya, and South Africa.
+            Paystack supports banks and mobile money in Nigeria, Kenya, and South Africa.
           </p>
         </div>
       </div>
@@ -303,10 +357,10 @@ export default function PaymentSettings() {
               borderRadius: 12,
             }}>
               <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 8 }}>
-                Paystack automatically settles funds to your bank account. Settlement times vary by country:
+                When you receive a payment, we'll transfer your earnings to your bank account. Transfer times vary by country:
               </p>
               <ul style={{ fontSize: 13, color: 'var(--text-tertiary)', paddingLeft: 20, margin: 0 }}>
-                <li>Nigeria: Next business day</li>
+                <li>Nigeria: Same day or next business day</li>
                 <li>Kenya: T+1 to T+2 business days</li>
                 <li>South Africa: T+2 business days</li>
               </ul>
@@ -341,7 +395,7 @@ export default function PaymentSettings() {
               width: 64,
               height: 64,
               borderRadius: '50%',
-              background: 'linear-gradient(135deg, #635bff, #7c3aed)',
+              background: 'linear-gradient(135deg, #1a1a1a, #2d2d2d)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -381,7 +435,7 @@ export default function PaymentSettings() {
                 gap: 8,
                 width: '100%',
                 padding: '14px 24px',
-                background: 'linear-gradient(135deg, #635bff, #7c3aed)',
+                background: 'linear-gradient(135deg, #1a1a1a, #2d2d2d)',
                 color: 'white',
                 borderRadius: 12,
                 fontWeight: 600,
@@ -483,27 +537,60 @@ export default function PaymentSettings() {
               </div>
             )}
 
+            {/* Error message */}
+            {error && (
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '12px 16px',
+                background: 'rgba(239, 68, 68, 0.1)',
+                borderRadius: 12,
+                marginBottom: 16,
+              }}>
+                <AlertCircle size={18} color="var(--error)" />
+                <span style={{ fontSize: 14, color: 'var(--error)' }}>{error}</span>
+              </div>
+            )}
+
             <Pressable
               className="action-btn"
               onClick={async () => {
+                setCompletingSetup(true)
+                setError(null)
                 try {
                   const result = await api.stripe.refreshOnboarding()
                   if (result.onboardingUrl) {
+                    // Store source for redirect handling when user returns from Stripe
+                    sessionStorage.setItem('stripe_onboarding_source', 'settings')
                     window.location.href = result.onboardingUrl
+                  } else {
+                    setError('Unable to get onboarding link. Please try again.')
+                    setCompletingSetup(false)
                   }
-                } catch (err) {
-                  setError('Failed to get onboarding link')
+                } catch (err: any) {
+                  setError(err?.error || 'Failed to get onboarding link')
+                  setCompletingSetup(false)
                 }
               }}
+              disabled={completingSetup}
               style={{
                 padding: '12px 24px',
                 background: 'var(--primary)',
                 color: 'white',
                 borderRadius: 12,
                 fontWeight: 600,
+                opacity: completingSetup ? 0.7 : 1,
               }}
             >
-              {stripeStatus.status === 'pending' ? 'Check Status' : 'Complete Setup'}
+              {completingSetup ? (
+                <>
+                  <Loader2 size={18} className="spin" style={{ marginRight: 8, display: 'inline' }} />
+                  Connecting...
+                </>
+              ) : (
+                stripeStatus.status === 'pending' ? 'Check Status' : 'Complete Setup'
+              )}
             </Pressable>
           </section>
         </div>
@@ -671,7 +758,7 @@ export default function PaymentSettings() {
               </p>
             ) : (
               payoutHistory.map((payout) => (
-                <Pressable key={payout.id} className="history-row">
+                <div key={payout.id} className="history-row">
                   <div className="history-info">
                     <span className="history-amount">
                       {getCurrencySymbol(payout.currency || 'USD')}{formatNumberWithSeparators(payout.amount / 100, true)}
@@ -685,7 +772,7 @@ export default function PaymentSettings() {
                     </span>
                   </div>
                   <span className={`history-status ${payout.status}`}>{payout.status}</span>
-                </Pressable>
+                </div>
               ))
             )}
           </div>

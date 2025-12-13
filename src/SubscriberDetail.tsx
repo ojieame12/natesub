@@ -14,9 +14,9 @@ import {
     Gift,
     ChevronRight,
 } from 'lucide-react'
-import { Pressable, Skeleton, ErrorState } from './components'
+import { Pressable, Skeleton, ErrorState, useToast } from './components'
 import { useViewTransition } from './hooks'
-import { useSubscription } from './api/hooks'
+import { useSubscription, useCancelSubscription } from './api/hooks'
 import { getCurrencySymbol, formatCompactNumber } from './utils/currency'
 import './SubscriberDetail.css'
 
@@ -33,14 +33,28 @@ const formatDate = (date: string | null) => {
 export default function SubscriberDetail() {
     const { navigate, goBack } = useViewTransition()
     const { id } = useParams()
+    const toast = useToast()
     const [showActions, setShowActions] = useState(false)
     const [showCancelConfirm, setShowCancelConfirm] = useState(false)
 
     // Fetch subscription from API
     const { data, isLoading, isError, refetch } = useSubscription(id || '')
+    const { mutateAsync: cancelSubscription, isPending: isCancelling } = useCancelSubscription()
 
     const subscription = data?.subscription
     const payments = subscription?.payments || []
+
+    const handleCancel = async () => {
+        try {
+            await cancelSubscription(id || '')
+            toast.success('Subscription cancelled')
+            setShowCancelConfirm(false)
+            setShowActions(false)
+        } catch (err) {
+            toast.error('Failed to cancel subscription')
+            console.error(err)
+        }
+    }
 
     // Map API data to UI format
     const subscriber = subscription ? {
@@ -64,7 +78,7 @@ export default function SubscriberDetail() {
         return (
             <div className="subscriber-detail-page">
                 <header className="subscriber-detail-header">
-                    <Pressable className="back-btn" onClick={() => goBack({ type: 'zoom-out' })}>
+                    <Pressable className="back-btn" onClick={() => goBack()}>
                         <ArrowLeft size={20} />
                     </Pressable>
                     <img src="/logo.svg" alt="NatePay" className="header-logo" />
@@ -86,7 +100,7 @@ export default function SubscriberDetail() {
         return (
             <div className="subscriber-detail-page">
                 <header className="subscriber-detail-header">
-                    <Pressable className="back-btn" onClick={() => goBack({ type: 'zoom-out' })}>
+                    <Pressable className="back-btn" onClick={() => goBack()}>
                         <ArrowLeft size={20} />
                     </Pressable>
                     <img src="/logo.svg" alt="NatePay" className="header-logo" />
@@ -106,7 +120,7 @@ export default function SubscriberDetail() {
         return (
             <div className="subscriber-detail-page">
                 <header className="subscriber-detail-header">
-                    <Pressable className="back-btn" onClick={() => goBack({ type: 'zoom-out' })}>
+                    <Pressable className="back-btn" onClick={() => goBack()}>
                         <ArrowLeft size={20} />
                     </Pressable>
                     <img src="/logo.svg" alt="NatePay" className="header-logo" />
@@ -126,7 +140,7 @@ export default function SubscriberDetail() {
         <div className="subscriber-detail-page">
             {/* Header */}
             <header className="subscriber-detail-header">
-                <Pressable className="back-btn" onClick={() => goBack({ type: 'zoom-out' })}>
+                <Pressable className="back-btn" onClick={() => goBack()}>
                     <ArrowLeft size={20} />
                 </Pressable>
                 <img src="/logo.svg" alt="NatePay" className="header-logo" />
@@ -252,10 +266,12 @@ export default function SubscriberDetail() {
                             payments.slice(0, 5).map((payment: any, index: number) => (
                                 <div key={payment.id} className={`payment-row ${index < Math.min(payments.length, 5) - 1 ? 'has-border' : ''}`}>
                                     <div className="payment-info">
-                                        <span className="payment-date">{formatDate(payment.createdAt)}</span>
+                                        {/* Backend returns occurredAt (not createdAt) */}
+                                        <span className="payment-date">{formatDate(payment.occurredAt)}</span>
                                         <span className="payment-status">{payment.status}</span>
                                     </div>
-                                    <span className="payment-amount">{currencySymbol}{formatCompactNumber((payment.amount || 0) / 100)}</span>
+                                    {/* Backend returns amount already in dollars */}
+                                    <span className="payment-amount">{currencySymbol}{formatCompactNumber(payment.amount || 0)}</span>
                                 </div>
                             ))
                         )}
@@ -322,7 +338,7 @@ export default function SubscriberDetail() {
             {/* Cancel Confirmation Modal */}
             {showCancelConfirm && (
                 <>
-                    <div className="modal-overlay" onClick={() => setShowCancelConfirm(false)} />
+                    <div className="modal-overlay" onClick={() => !isCancelling && setShowCancelConfirm(false)} />
                     <div className="confirm-modal">
                         <h3 className="modal-title">Cancel Subscription?</h3>
                         <p className="modal-text">
@@ -333,11 +349,16 @@ export default function SubscriberDetail() {
                             <Pressable
                                 className="modal-btn secondary"
                                 onClick={() => setShowCancelConfirm(false)}
+                                disabled={isCancelling}
                             >
                                 Keep Active
                             </Pressable>
-                            <Pressable className="modal-btn danger">
-                                Cancel Subscription
+                            <Pressable
+                                className="modal-btn danger"
+                                onClick={handleCancel}
+                                disabled={isCancelling}
+                            >
+                                {isCancelling ? 'Cancelling...' : 'Cancel Subscription'}
                             </Pressable>
                         </div>
                     </div>
