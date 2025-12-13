@@ -72,7 +72,46 @@ function loadEnv() {
     process.exit(1)
   }
 
-  return parsed.data
+  const data = parsed.data
+
+  // Production-only validations
+  if (data.NODE_ENV === 'production') {
+    // Stripe: Must use live keys in production
+    if (!data.STRIPE_SECRET_KEY.startsWith('sk_live_')) {
+      console.error('❌ FATAL: STRIPE_SECRET_KEY must be a live key (sk_live_*) in production')
+      console.error('   Current key starts with:', data.STRIPE_SECRET_KEY.slice(0, 10) + '...')
+      process.exit(1)
+    }
+
+    // Paystack: Must use live keys if enabled
+    if (data.ENABLE_PAYSTACK && data.PAYSTACK_SECRET_KEY) {
+      if (!data.PAYSTACK_SECRET_KEY.startsWith('sk_live_')) {
+        console.error('❌ FATAL: PAYSTACK_SECRET_KEY must be a live key (sk_live_*) in production')
+        process.exit(1)
+      }
+    }
+
+    // Encryption key: Required in production for PII protection
+    if (!data.ENCRYPTION_KEY) {
+      console.error('❌ FATAL: ENCRYPTION_KEY is required in production for PII encryption')
+      console.error('   Generate one with: openssl rand -hex 32')
+      process.exit(1)
+    }
+
+    // URLs: Must be HTTPS in production
+    if (!data.APP_URL.startsWith('https://')) {
+      console.error('❌ FATAL: APP_URL must use HTTPS in production')
+      process.exit(1)
+    }
+    if (!data.API_URL.startsWith('https://')) {
+      console.error('❌ FATAL: API_URL must use HTTPS in production')
+      process.exit(1)
+    }
+
+    console.log('✅ Production environment validated')
+  }
+
+  return data
 }
 
 export const env = loadEnv()

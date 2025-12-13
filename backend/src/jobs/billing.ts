@@ -2,7 +2,7 @@
 // Run daily via cron or scheduled task manager
 
 import { db } from '../db/client.js'
-import { chargeAuthorization, generateReference, initiateTransfer, createTransferRecipient } from '../services/paystack.js'
+import { chargeAuthorization, initiateTransfer, createTransferRecipient } from '../services/paystack.js'
 import { calculateServiceFee, calculateLegacyFee, type FeeMode } from '../services/fees.js'
 import { decryptAccountNumber } from '../utils/encryption.js'
 import { acquireLock, releaseLock } from '../services/lock.js'
@@ -162,7 +162,11 @@ export async function processRecurringBilling(): Promise<BillingResult> {
           }
         }
       }
-      const reference = generateReference('REC')
+
+      // Generate deterministic reference for idempotency
+      // If we retry the same billing cycle, Paystack will reject the duplicate
+      const billingMonth = (sub.currentPeriodEnd || now).toISOString().slice(0, 7) // YYYY-MM
+      const reference = `REC-${sub.id.slice(0, 8)}-${billingMonth.replace('-', '')}${retryAttempt > 0 ? `-R${retryAttempt}` : ''}`
 
       // Calculate fees based on subscription's fee model
       let feeCents: number
@@ -466,7 +470,11 @@ export async function processRetries(): Promise<BillingResult> {
           continue
         }
       }
-      const reference = generateReference('RET')
+
+      // Generate deterministic reference for idempotency
+      // If we retry the same billing cycle, Paystack will reject the duplicate
+      const billingMonth = (sub.currentPeriodEnd || now).toISOString().slice(0, 7) // YYYY-MM
+      const reference = `RET-${sub.id.slice(0, 8)}-${billingMonth.replace('-', '')}-R${attemptCount + 1}`
 
       // Calculate fees based on subscription's fee model
       let feeCents: number
