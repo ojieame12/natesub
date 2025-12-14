@@ -20,3 +20,5 @@ prisma/migrations/**/migration_lock.toml
 
 # Logs
 *.log
+.vercel
+.env*.local

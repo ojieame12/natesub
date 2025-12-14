@@ -314,6 +314,9 @@ export async function getWebhookStats(periodDays = 7): Promise<{
 interface PaystackReconciliationResult {
   runAt: Date
   periodHours: number
+  bufferMinutes: number
+  windowStart: string  // ISO string for debugging
+  windowEnd: string    // ISO string for debugging
   paystackTransactions: number
   dbPayments: number
   missingInDb: Array<{
@@ -343,18 +346,25 @@ interface PaystackReconciliationResult {
  */
 export async function reconcilePaystackTransactions(options: {
   periodHours?: number  // How far back to look (default: 48 hours)
+  bufferMinutes?: number // Ignore recent transactions (default: 60 min) to avoid false positives
   autoFix?: boolean     // Auto-fix status mismatches (default: false)
   alertOnDiscrepancy?: boolean // Send email alert (default: true)
 } = {}): Promise<PaystackReconciliationResult> {
-  const { periodHours = 48, autoFix = false, alertOnDiscrepancy = true } = options
+  const { periodHours = 48, bufferMinutes = 60, autoFix = false, alertOnDiscrepancy = true } = options
   const now = new Date()
+  // Look from (now - periodHours) to (now - bufferMinutes)
+  // The buffer prevents false positives from in-flight webhooks
   const periodStart = new Date(now.getTime() - periodHours * 60 * 60 * 1000)
+  const periodEnd = new Date(now.getTime() - bufferMinutes * 60 * 1000)
 
-  console.log(`[reconciliation] Starting Paystack transaction reconciliation (${periodHours}h window)`)
+  console.log(`[reconciliation] Starting Paystack transaction reconciliation (${periodHours}h window, ${bufferMinutes}min buffer)`)
 
   const result: PaystackReconciliationResult = {
     runAt: now,
     periodHours,
+    bufferMinutes,
+    windowStart: periodStart.toISOString(),
+    windowEnd: periodEnd.toISOString(),
     paystackTransactions: 0,
     dbPayments: 0,
     missingInDb: [],
@@ -365,9 +375,10 @@ export async function reconcilePaystackTransactions(options: {
 
   try {
     // 1. Fetch all successful transactions from Paystack in the period
+    // Use periodEnd (not now) to exclude recent transactions that might have in-flight webhooks
     const paystackTxns = await listAllTransactions({
       from: periodStart,
-      to: now,
+      to: periodEnd,
       status: 'success',
     })
 
@@ -484,8 +495,10 @@ export async function reconcilePaystackTransactions(options: {
  * Get missing transactions that need manual intervention
  * These are transactions that exist in Paystack but not in our DB
  */
-export async function getMissingTransactions(periodHours = 48): Promise<{
+export async function getMissingTransactions(periodHours = 48, bufferMinutes = 60): Promise<{
   count: number
+  windowStart: string
+  windowEnd: string
   transactions: Array<{
     reference: string
     amount: number
@@ -497,11 +510,12 @@ export async function getMissingTransactions(periodHours = 48): Promise<{
 }> {
   const now = new Date()
   const periodStart = new Date(now.getTime() - periodHours * 60 * 60 * 1000)
+  const periodEnd = new Date(now.getTime() - bufferMinutes * 60 * 1000)
 
-  // Fetch successful Paystack transactions
+  // Fetch successful Paystack transactions (with buffer to avoid false positives)
   const paystackTxns = await listAllTransactions({
     from: periodStart,
-    to: now,
+    to: periodEnd,
     status: 'success',
   })
 
@@ -530,6 +544,8 @@ export async function getMissingTransactions(periodHours = 48): Promise<{
 
   return {
     count: missing.length,
+    windowStart: periodStart.toISOString(),
+    windowEnd: periodEnd.toISOString(),
     transactions: missing,
   }
 }
