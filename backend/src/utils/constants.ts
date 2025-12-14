@@ -163,25 +163,50 @@ export const STRIPE_SUPPORTED_COUNTRIES: Record<string, string> = {
   BR: 'Brazil',
 }
 
-// Countries where Stripe is NOT available (common requests)
+// Countries supported via Stripe Cross-Border Payouts
+// These countries can receive payouts from a US-based platform
+// https://docs.stripe.com/connect/cross-border-payouts
+export const STRIPE_CROSS_BORDER_COUNTRIES: Record<string, string> = {
+  // Africa
+  NG: 'Nigeria',
+  GH: 'Ghana',
+  KE: 'Kenya',
+  ZA: 'South Africa',
+  // Add more as needed - Stripe supports 80+ countries for cross-border
+}
+
+// Countries where Stripe is NOT available at all
 export const STRIPE_UNSUPPORTED_REGIONS = [
-  'NG', // Nigeria - use Flutterwave/Paystack
-  'GH', // Ghana - use Flutterwave/Paystack
-  'KE', // Kenya - use Flutterwave/Paystack
-  'ZA', // South Africa - use Flutterwave/Paystack
   'IN', // India - limited Stripe support
   'PK', // Pakistan
   'BD', // Bangladesh
-  'PH', // Philippines
 ]
 
-export function isStripeSupported(countryCode: string): boolean {
+// Check if country has native Stripe support
+export function isStripeNativeSupported(countryCode: string): boolean {
   return countryCode.toUpperCase() in STRIPE_SUPPORTED_COUNTRIES
 }
 
+// Check if country is supported via cross-border payouts
+export function isStripeCrossBorderSupported(countryCode: string): boolean {
+  return countryCode.toUpperCase() in STRIPE_CROSS_BORDER_COUNTRIES
+}
+
+// Check if Stripe is available (either native or cross-border)
+export function isStripeSupported(countryCode: string): boolean {
+  const code = countryCode.toUpperCase()
+  return code in STRIPE_SUPPORTED_COUNTRIES || code in STRIPE_CROSS_BORDER_COUNTRIES
+}
+
 export function getStripeSupportedCountries() {
-  return Object.entries(STRIPE_SUPPORTED_COUNTRIES).map(([code, name]) => ({
+  // Combine native and cross-border countries
+  const allCountries = {
+    ...STRIPE_SUPPORTED_COUNTRIES,
+    ...STRIPE_CROSS_BORDER_COUNTRIES,
+  }
+  return Object.entries(allCountries).map(([code, name]) => ({
     code,
     name,
+    crossBorder: code in STRIPE_CROSS_BORDER_COUNTRIES,
   }))
 }

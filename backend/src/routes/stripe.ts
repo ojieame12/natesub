@@ -12,7 +12,7 @@ import {
   getPayoutHistory,
   createExpressDashboardLink,
 } from '../services/stripe.js'
-import { isStripeSupported, getStripeSupportedCountries, STRIPE_SUPPORTED_COUNTRIES } from '../utils/constants.js'
+import { isStripeSupported, isStripeCrossBorderSupported, getStripeSupportedCountries, STRIPE_SUPPORTED_COUNTRIES, STRIPE_CROSS_BORDER_COUNTRIES } from '../utils/constants.js'
 
 const stripeRoutes = new Hono()
 
@@ -20,7 +20,9 @@ const stripeRoutes = new Hono()
 stripeRoutes.get('/supported-countries', async (c) => {
   return c.json({
     countries: getStripeSupportedCountries(),
-    total: Object.keys(STRIPE_SUPPORTED_COUNTRIES).length,
+    nativeCount: Object.keys(STRIPE_SUPPORTED_COUNTRIES).length,
+    crossBorderCount: Object.keys(STRIPE_CROSS_BORDER_COUNTRIES).length,
+    total: Object.keys(STRIPE_SUPPORTED_COUNTRIES).length + Object.keys(STRIPE_CROSS_BORDER_COUNTRIES).length,
   })
 })
 
@@ -49,6 +51,7 @@ stripeRoutes.post('/connect', requireAuth, paymentRateLimit, async (c) => {
   }
 
   try {
+    const isCrossBorder = isStripeCrossBorderSupported(user.profile.countryCode)
     const result = await createExpressAccount(
       userId,
       user.email,
@@ -61,6 +64,7 @@ stripeRoutes.post('/connect', requireAuth, paymentRateLimit, async (c) => {
         success: true,
         alreadyOnboarded: true,
         message: 'Payments already connected',
+        crossBorder: isCrossBorder,
       })
     }
 
@@ -68,6 +72,11 @@ stripeRoutes.post('/connect', requireAuth, paymentRateLimit, async (c) => {
       success: true,
       accountId: result.accountId,
       onboardingUrl: result.accountLink,
+      crossBorder: isCrossBorder,
+      // Cross-border accounts receive payouts in local currency (e.g., NGN for Nigeria)
+      ...(isCrossBorder && {
+        note: 'Your account will receive payouts in your local currency. Payments are collected in USD and converted automatically.',
+      }),
     })
   } catch (error) {
     console.error('Stripe Connect error:', error)

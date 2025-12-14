@@ -87,8 +87,8 @@ export default function PaymentMethodStep() {
                 setStripeCountryCodes(result.countries.map(c => c.code))
             } catch (err) {
                 console.error('Failed to fetch supported countries:', err)
-                // Fallback to common countries if API fails
-                setStripeCountryCodes(['US', 'CA', 'GB', 'AU', 'DE', 'FR', 'JP', 'SG'])
+                // Fallback to common countries if API fails (includes cross-border countries like NG)
+                setStripeCountryCodes(['US', 'CA', 'GB', 'AU', 'DE', 'FR', 'JP', 'SG', 'NG', 'GH', 'KE', 'ZA'])
             } finally {
                 setLoading(false)
             }

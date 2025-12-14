@@ -3,6 +3,7 @@ import crypto from 'crypto'
 import { env } from '../config/env.js'
 import { db } from '../db/client.js'
 import { stripeCircuitBreaker, CircuitBreakerError } from '../utils/circuitBreaker.js'
+import { isStripeCrossBorderSupported } from '../utils/constants.js'
 
 // Generate idempotency key for Stripe API calls
 // Uses 5-minute time buckets so duplicate requests within 5 minutes get same key
@@ -18,6 +19,7 @@ export const stripe = new Stripe(env.STRIPE_SECRET_KEY, {
 })
 
 // Create Express account for a user
+// Supports both native Stripe countries and cross-border payout countries
 export async function createExpressAccount(
   userId: string,
   email: string,
@@ -32,12 +34,15 @@ export async function createExpressAccount(
     const account = await stripe.accounts.retrieve(profile.stripeAccountId)
 
     if (!account.details_submitted) {
-      const accountLink = await createAccountLink(profile.stripeAccountId)
+      const accountLink = await createAccountLink(profile.stripeAccountId, country)
       return { accountId: profile.stripeAccountId, accountLink }
     }
 
     return { accountId: profile.stripeAccountId, accountLink: null, alreadyOnboarded: true }
   }
+
+  // Check if this is a cross-border payout country (e.g., Nigeria, Ghana, Kenya)
+  const isCrossBorder = isStripeCrossBorderSupported(country)
 
   // Parse name for KYC prefill
   const nameParts = displayName?.trim().split(' ') || []
@@ -47,34 +52,43 @@ export async function createExpressAccount(
   // Create new Express account with prefilled KYC data
   // Use idempotency key to prevent duplicate accounts on retry/double-click
   const idempotencyKey = generateIdempotencyKey('acct_create', userId, email)
-  const account = await stripe.accounts.create(
-    {
-      type: 'express',
+
+  // For cross-border payouts, use recipient service agreement
+  // This enables the platform to send payouts to these accounts
+  const accountParams: Stripe.AccountCreateParams = {
+    type: 'express',
+    email,
+    country,
+    capabilities: {
+      transfers: { requested: true },
+      // Cross-border accounts don't need card_payments capability
+      ...(isCrossBorder ? {} : { card_payments: { requested: true } }),
+    },
+    business_type: 'individual',
+    // Prefill KYC data to speed up onboarding
+    individual: {
       email,
-      country,
-      capabilities: {
-        card_payments: { requested: true },
-        transfers: { requested: true },
-      },
-      business_type: 'individual',
-      // Prefill KYC data to speed up onboarding
-      individual: {
-        email,
-        first_name: firstName,
-        last_name: lastName,
-      },
-      settings: {
-        payouts: {
-          schedule: {
-            interval: 'daily',
-          },
+      first_name: firstName,
+      last_name: lastName,
+    },
+    settings: {
+      payouts: {
+        schedule: {
+          interval: 'daily',
         },
       },
     },
-    { idempotencyKey }
-  )
+    // Cross-border accounts use recipient TOS
+    ...(isCrossBorder ? {
+      tos_acceptance: {
+        service_agreement: 'recipient',
+      },
+    } : {}),
+  }
 
-  // Save account ID to profile
+  const account = await stripe.accounts.create(accountParams, { idempotencyKey })
+
+  // Save account ID to profile with cross-border flag
   await db.profile.update({
     where: { userId },
     data: {
@@ -84,13 +98,16 @@ export async function createExpressAccount(
   })
 
   // Create account link for onboarding
-  const accountLink = await createAccountLink(account.id)
+  const accountLink = await createAccountLink(account.id, country)
 
-  return { accountId: account.id, accountLink }
+  return { accountId: account.id, accountLink, crossBorder: isCrossBorder }
 }
 
 // Create account link for onboarding
-export async function createAccountLink(accountId: string) {
+export async function createAccountLink(accountId: string, country?: string) {
+  // Check if cross-border country for proper collection options
+  const isCrossBorder = country ? isStripeCrossBorderSupported(country) : false
+
   const accountLink = await stripe.accountLinks.create({
     account: accountId,
     refresh_url: env.STRIPE_ONBOARDING_REFRESH_URL,
