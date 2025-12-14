@@ -4,6 +4,7 @@ import { Capacitor } from '@capacitor/core'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
 const AUTH_TOKEN_KEY = 'nate_auth_token'
+const AUTH_SESSION_KEY = 'nate_has_session'
 
 // Token storage utilities (works on web and Capacitor)
 export function getAuthToken(): string | null {
@@ -12,10 +13,25 @@ export function getAuthToken(): string | null {
 
 export function setAuthToken(token: string): void {
   localStorage.setItem(AUTH_TOKEN_KEY, token)
+  localStorage.setItem(AUTH_SESSION_KEY, 'true')
 }
 
 export function clearAuthToken(): void {
   localStorage.removeItem(AUTH_TOKEN_KEY)
+  localStorage.removeItem(AUTH_SESSION_KEY)
+}
+
+// Session flag for cookie-based auth (no token stored)
+export function hasAuthSession(): boolean {
+  return localStorage.getItem(AUTH_SESSION_KEY) === 'true'
+}
+
+export function setAuthSession(): void {
+  localStorage.setItem(AUTH_SESSION_KEY, 'true')
+}
+
+export function clearAuthSession(): void {
+  localStorage.removeItem(AUTH_SESSION_KEY)
 }
 
 // Types
@@ -64,6 +80,7 @@ export interface Profile {
   paymentsReady?: boolean // For public profiles - indicates if checkout will work
   feeMode?: 'absorb' | 'pass_to_subscriber' // Who pays the platform fee
   crossBorder?: boolean // True if Stripe cross-border account (payments in USD, payouts in local currency)
+  notificationPrefs?: NotificationPrefs // Email/push notification preferences
 }
 
 export interface Tier {
@@ -305,7 +322,11 @@ export const auth = {
           .then(r => r.ok)
           .catch(() => false)
 
-        if (!cookieAuthOk) {
+        if (cookieAuthOk) {
+          // Cookie auth works - set session flag but not token
+          setAuthSession()
+        } else {
+          // Fall back to token auth
           setAuthToken(result.token)
         }
       }
@@ -316,8 +337,9 @@ export const auth = {
 
   logout: async () => {
     const result = await apiFetch<{ success: boolean }>('/auth/logout', { method: 'POST' })
-    // Clear stored token
+    // Clear stored token and session
     clearAuthToken()
+    clearAuthSession()
     return result
   },
 
@@ -378,10 +400,10 @@ export interface OnboardingStatus {
 }
 
 export interface NotificationPrefs {
-  push: boolean
-  email: boolean
-  subscriberAlerts: boolean
-  paymentAlerts: boolean
+  push?: boolean
+  email?: boolean
+  subscriberAlerts?: boolean
+  paymentAlerts?: boolean
 }
 
 export interface Settings {
@@ -640,8 +662,8 @@ export const subscriptions = {
     ),
 
   cancel: (id: string) =>
-    apiFetch<{ success: boolean; subscription: Subscription }>(`/subscriptions/${id}`, {
-      method: 'DELETE',
+    apiFetch<{ success: boolean; subscription: Subscription }>(`/subscriptions/${id}/cancel`, {
+      method: 'POST',
     }),
 }
 
@@ -978,6 +1000,62 @@ export const payroll = {
 }
 
 // ============================================
+// MY SUBSCRIPTIONS (Subscriber-facing)
+// ============================================
+
+export interface MySubscription {
+  id: string
+  provider: {
+    id: string
+    displayName: string
+    avatarUrl: string | null
+    username: string | null
+  }
+  tierName: string | null
+  amount: number
+  currency: string
+  interval: string
+  status: string
+  startedAt: string
+  currentPeriodEnd: string | null
+  cancelAtPeriodEnd: boolean
+  hasStripe: boolean
+}
+
+export const mySubscriptions = {
+  list: (params?: { cursor?: string; limit?: number; status?: 'all' | 'active' | 'canceled' | 'past_due' }) => {
+    const searchParams = new URLSearchParams()
+    if (params?.cursor) searchParams.set('cursor', params.cursor)
+    if (params?.limit) searchParams.set('limit', params.limit.toString())
+    if (params?.status) searchParams.set('status', params.status)
+    const query = searchParams.toString()
+    return apiFetch<{ subscriptions: MySubscription[]; nextCursor: string | null; hasMore: boolean }>(
+      `/my-subscriptions${query ? `?${query}` : ''}`
+    )
+  },
+
+  get: (id: string) =>
+    apiFetch<{ subscription: MySubscription & { payments: any[] } }>(
+      `/my-subscriptions/${id}`
+    ),
+
+  cancel: (id: string) =>
+    apiFetch<{ success: boolean; subscription: MySubscription }>(`/my-subscriptions/${id}/cancel`, {
+      method: 'POST',
+    }),
+
+  reactivate: (id: string) =>
+    apiFetch<{ success: boolean; subscription: MySubscription }>(`/my-subscriptions/${id}/reactivate`, {
+      method: 'POST',
+    }),
+
+  getPortalUrl: (id: string) =>
+    apiFetch<{ url: string }>(`/my-subscriptions/${id}/portal`, {
+      method: 'POST',
+    }),
+}
+
+// ============================================
 // BILLING (Platform Subscription)
 // ============================================
 
@@ -1077,6 +1155,7 @@ export const api = {
   paystack,
   checkout,
   subscriptions,
+  mySubscriptions,
   activity,
   requests,
   updates,

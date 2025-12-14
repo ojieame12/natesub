@@ -955,6 +955,7 @@ export async function sendUpdateEmail(
   options?: {
     photoUrl?: string | null
     creatorUsername?: string
+    deliveryId?: string  // For tracking pixel
   }
 ): Promise<EmailResult> {
   const safeSenderName = escapeHtml(senderName)
@@ -977,6 +978,11 @@ export async function sendUpdateEmail(
     </p>
   ` : ''
 
+  // Build tracking pixel HTML if deliveryId provided
+  const trackingPixelHtml = options?.deliveryId ? `
+    <img src="${env.API_URL || env.APP_URL}/updates/track/${options.deliveryId}" alt="" width="1" height="1" style="display:block;width:1px;height:1px;border:0;" />
+  ` : ''
+
   return sendWithRetry(() =>
     resend.emails.send({
       from: env.EMAIL_FROM,
@@ -990,6 +996,7 @@ export async function sendUpdateEmail(
           ${photoHtml}
           <p style="margin: 0; white-space: pre-wrap; line-height: 1.6;">${safeBody}</p>
           ${viewOnlineHtml}
+          ${trackingPixelHtml}
         `,
         showUnsubscribe: true,  // Updates are marketing emails - must have unsubscribe
       }),
@@ -1262,6 +1269,53 @@ export async function sendPlatformDebitRecoveredNotification(
         ctaText: remainingDebit > 0 ? 'Update Payment Method' : 'View Billing',
         ctaUrl: `${env.APP_URL}/settings/billing`,
         ctaColor: remainingDebit > 0 ? undefined : '#10B981',
+      }),
+    })
+  )
+}
+
+/**
+ * Send notification when Stripe Connect verification is complete and payments are active
+ */
+export async function sendPaymentSetupCompleteEmail(
+  to: string,
+  displayName: string,
+  shareUrl: string
+): Promise<EmailResult> {
+  const safeName = escapeHtml(displayName)
+  const safeShareUrl = escapeHtml(shareUrl)
+
+  return sendWithRetry(() =>
+    resend.emails.send({
+      from: env.EMAIL_FROM,
+      to,
+      subject: sanitizeEmailSubject('Your payment account is now active!'),
+      html: baseTemplate({
+        preheader: `Great news! Your account is verified and you can now accept payments.`,
+        headline: `You're ready to get paid, ${safeName}!`,
+        body: `
+          <p style="margin: 0 0 16px 0;">
+            Your payment account has been verified and is now <strong style="color: #16a34a;">active</strong>. You can start accepting payments from clients immediately.
+          </p>
+
+          ${alertBox('✓ Identity verified', 'success')}
+
+          <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin: 20px 0;">
+            <tr>
+              <td style="background-color: #f5f5f5; border-radius: 8px; padding: 16px;">
+                <p style="margin: 0 0 8px 0; font-size: 14px; color: #888888;">Your page link:</p>
+                <a href="https://${safeShareUrl}" style="font-size: 16px; color: ${BRAND_COLOR}; word-break: break-all; text-decoration: none;">${safeShareUrl}</a>
+              </td>
+            </tr>
+          </table>
+
+          <p style="margin: 0; font-size: 14px; color: #666666;">
+            Share this link with your clients to start receiving payments. Funds are deposited to your bank account automatically.
+          </p>
+        `,
+        ctaText: 'Go to Dashboard',
+        ctaUrl: `${env.APP_URL}/dashboard`,
+        ctaColor: '#16a34a',
       }),
     })
   )

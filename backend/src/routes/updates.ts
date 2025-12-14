@@ -426,11 +426,28 @@ updates.post(
       // Send emails (in batches to avoid overwhelming email provider)
       // This runs after response is sent to client
       const sendEmails = async () => {
+        // Get all delivery records with their IDs for tracking
+        const deliveries = await db.updateDelivery.findMany({
+          where: {
+            updateId: id,
+            subscriberId: { in: eligibleSubscribers.map(s => s.subscriber.id) },
+          },
+          select: {
+            id: true,
+            subscriberId: true,
+          },
+        })
+
+        // Create a map for quick lookup
+        const deliveryMap = new Map(deliveries.map(d => [d.subscriberId, d.id]))
+
         const batchSize = 10
         for (let i = 0; i < eligibleSubscribers.length; i += batchSize) {
           const batch = eligibleSubscribers.slice(i, i + batchSize)
 
           await Promise.all(batch.map(async (sub) => {
+            const deliveryId = deliveryMap.get(sub.subscriber.id)
+
             try {
               await sendUpdateEmail(
                 sub.subscriber.email,
@@ -440,6 +457,7 @@ updates.post(
                 {
                   photoUrl: update.photoUrl,
                   creatorUsername,
+                  deliveryId,  // Pass delivery ID for tracking pixel
                 }
               )
 
@@ -558,6 +576,7 @@ updates.post(
           {
             photoUrl: update.photoUrl,
             creatorUsername: profile.username,
+            deliveryId: delivery.id,  // Pass delivery ID for tracking pixel
           }
         )
 
@@ -588,6 +607,65 @@ updates.post(
       retriedCount,
       successCount,
       failedCount: retriedCount - successCount,
+    })
+  }
+)
+
+// Track email open (tracking pixel)
+// GET /updates/track/:deliveryId
+// Returns a 1x1 transparent GIF and records the open
+updates.get(
+  '/track/:deliveryId',
+  zValidator('param', z.object({ deliveryId: z.string().uuid() })),
+  async (c) => {
+    const { deliveryId } = c.req.valid('param')
+
+    // 1x1 transparent GIF
+    const TRANSPARENT_GIF = Buffer.from(
+      'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
+      'base64'
+    )
+
+    try {
+      // Find the delivery record
+      const delivery = await db.updateDelivery.findUnique({
+        where: { id: deliveryId },
+        select: { id: true, openedAt: true, updateId: true },
+      })
+
+      if (delivery && !delivery.openedAt) {
+        // Update delivery record with opened timestamp
+        await db.updateDelivery.update({
+          where: { id: deliveryId },
+          data: {
+            status: 'opened',
+            openedAt: new Date(),
+          },
+        })
+
+        // Increment viewCount on the Update
+        await db.update.update({
+          where: { id: delivery.updateId },
+          data: {
+            viewCount: { increment: 1 },
+          },
+        })
+      }
+    } catch (err) {
+      // Silently ignore errors - don't break email display
+      console.error('[updates] Track pixel error:', err)
+    }
+
+    // Always return the GIF regardless of tracking success
+    return new Response(TRANSPARENT_GIF, {
+      status: 200,
+      headers: {
+        'Content-Type': 'image/gif',
+        'Content-Length': String(TRANSPARENT_GIF.length),
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+      },
     })
   }
 )

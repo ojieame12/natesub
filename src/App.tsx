@@ -52,6 +52,8 @@ const PaystackComplete = lazy(() => import('./PaystackComplete'))
 const PublicRequestPage = lazy(() => import('./request/PublicRequestPage'))
 const Terms = lazy(() => import('./legal/Terms'))
 const Privacy = lazy(() => import('./legal/Privacy'))
+const Unsubscribe = lazy(() => import('./Unsubscribe'))
+const MySubscriptions = lazy(() => import('./MySubscriptions'))
 const NotFound = lazy(() => import('./NotFound'))
 
 function isPublicCreatorPage(pathname: string): boolean {
@@ -68,6 +70,7 @@ function isPublicRoute(pathname: string): boolean {
     pathname === '/' ||
     pathname === '/terms' ||
     pathname === '/privacy' ||
+    pathname === '/unsubscribe' ||
     pathname === '/payment/success' ||
     pathname.startsWith('/onboarding/') ||
     pathname.startsWith('/r/') || // Public request pages
@@ -391,6 +394,10 @@ function AppShell() {
           {/* Legal pages */}
           <Route path="/terms" element={<Terms />} />
           <Route path="/privacy" element={<Privacy />} />
+
+          {/* Email management */}
+          <Route path="/unsubscribe" element={<Unsubscribe />} />
+          <Route path="/my-subscriptions" element={<RequireAuth><MySubscriptions /></RequireAuth>} />
 
           {/* Public Request Pages - for payment/subscription requests */}
           <Route path="/r/:token" element={<PublicRequestPage />} />
