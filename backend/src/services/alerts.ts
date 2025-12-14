@@ -183,6 +183,97 @@ export async function sendFeeMismatchAlert(
 }
 
 /**
+ * Send alert for reconciliation discrepancies
+ */
+export async function sendReconciliationAlert(params: {
+  missingInDb: Array<{ reference: string; amount: number; currency: string; paidAt: string }>
+  statusMismatches: Array<{ reference: string; dbStatus: string; paystackStatus: string; amount: number }>
+  totalDiscrepancyCents: number
+}): Promise<void> {
+  const { missingInDb, statusMismatches, totalDiscrepancyCents } = params
+
+  if (missingInDb.length === 0 && statusMismatches.length === 0) return
+
+  const missingRows = missingInDb.slice(0, 20).map(t => `
+    <tr>
+      <td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">${t.reference}</td>
+      <td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">${t.currency} ${(t.amount / 100).toFixed(2)}</td>
+      <td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">${new Date(t.paidAt).toLocaleString()}</td>
+    </tr>
+  `).join('')
+
+  const mismatchRows = statusMismatches.slice(0, 20).map(t => `
+    <tr>
+      <td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">${t.reference}</td>
+      <td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">${t.dbStatus}</td>
+      <td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">${t.paystackStatus}</td>
+      <td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">${(t.amount / 100).toFixed(2)}</td>
+    </tr>
+  `).join('')
+
+  await resend.emails.send({
+    from: env.EMAIL_FROM,
+    to: ALERT_EMAIL,
+    subject: `🚨 Reconciliation Alert: ${missingInDb.length} missing, ${statusMismatches.length} mismatched`,
+    html: `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 700px; margin: 0 auto; padding: 20px;">
+        <h1 style="font-size: 20px; font-weight: 600; color: #dc2626; margin-bottom: 16px;">
+          ⚠️ Paystack Reconciliation Discrepancies Found
+        </h1>
+
+        <div style="background: #f3f4f6; border-radius: 8px; padding: 16px; margin-bottom: 20px;">
+          <p style="margin: 0;"><strong>Missing in DB:</strong> ${missingInDb.length} transactions</p>
+          <p style="margin: 8px 0 0 0;"><strong>Status Mismatches:</strong> ${statusMismatches.length} transactions</p>
+          <p style="margin: 8px 0 0 0;"><strong>Total Discrepancy:</strong> ${(totalDiscrepancyCents / 100).toFixed(2)} (estimated)</p>
+        </div>
+
+        ${missingInDb.length > 0 ? `
+          <h2 style="font-size: 16px; margin: 20px 0 10px;">Transactions Missing in Database</h2>
+          <p style="color: #dc2626; font-size: 14px;">These payments succeeded in Paystack but have no record in your database. Possible webhook failure.</p>
+          <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+            <thead>
+              <tr style="background: #fef2f2;">
+                <th style="padding: 8px; text-align: left;">Reference</th>
+                <th style="padding: 8px; text-align: left;">Amount</th>
+                <th style="padding: 8px; text-align: left;">Paid At</th>
+              </tr>
+            </thead>
+            <tbody>${missingRows}</tbody>
+          </table>
+          ${missingInDb.length > 20 ? `<p style="color: #666; font-size: 12px;">...and ${missingInDb.length - 20} more</p>` : ''}
+        ` : ''}
+
+        ${statusMismatches.length > 0 ? `
+          <h2 style="font-size: 16px; margin: 20px 0 10px;">Status Mismatches</h2>
+          <p style="color: #f59e0b; font-size: 14px;">These transactions have different statuses in DB vs Paystack.</p>
+          <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+            <thead>
+              <tr style="background: #fef3c7;">
+                <th style="padding: 8px; text-align: left;">Reference</th>
+                <th style="padding: 8px; text-align: left;">DB Status</th>
+                <th style="padding: 8px; text-align: left;">Paystack Status</th>
+                <th style="padding: 8px; text-align: left;">Amount</th>
+              </tr>
+            </thead>
+            <tbody>${mismatchRows}</tbody>
+          </table>
+          ${statusMismatches.length > 20 ? `<p style="color: #666; font-size: 12px;">...and ${statusMismatches.length - 20} more</p>` : ''}
+        ` : ''}
+
+        <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 12px; margin-top: 20px;">
+          <strong style="color: #dc2626;">Action Required:</strong>
+          <p style="margin: 8px 0 0 0; color: #991b1b;">
+            Review these discrepancies. Missing transactions may indicate webhook failures and unpaid creators.
+          </p>
+        </div>
+      </div>
+    `,
+  })
+
+  console.log(`[alerts] Sent reconciliation alert: ${missingInDb.length} missing, ${statusMismatches.length} mismatched`)
+}
+
+/**
  * Check for stuck transfers and send alert if found
  * Returns the count of stuck transfers
  */

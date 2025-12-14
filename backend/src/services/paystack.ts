@@ -552,6 +552,138 @@ export async function getBalance(): Promise<{
 }
 
 // ============================================
+// TRANSACTION LIST (For Reconciliation)
+// ============================================
+
+export interface PaystackTransaction {
+  id: number
+  reference: string
+  amount: number
+  currency: string
+  status: 'success' | 'failed' | 'abandoned' | 'pending'
+  channel: string
+  paid_at: string | null
+  created_at: string
+  customer: {
+    id: number
+    email: string
+    customer_code: string
+  }
+  metadata: Record<string, any> | null
+  fees: number
+  subaccount?: {
+    subaccount_code: string
+  }
+}
+
+interface TransactionListResponse {
+  data: PaystackTransaction[]
+  meta: {
+    total: number
+    skipped: number
+    perPage: number
+    page: number
+    pageCount: number
+  }
+}
+
+/**
+ * List transactions from Paystack
+ * Used for reconciliation to compare DB records against Paystack's records
+ */
+export async function listTransactions(params: {
+  from?: Date  // Start date (defaults to 24h ago)
+  to?: Date    // End date (defaults to now)
+  status?: 'success' | 'failed' | 'abandoned'
+  perPage?: number
+  page?: number
+}): Promise<{ transactions: PaystackTransaction[]; meta: TransactionListResponse['meta'] }> {
+  const {
+    from = new Date(Date.now() - 24 * 60 * 60 * 1000),
+    to = new Date(),
+    status,
+    perPage = 100,
+    page = 1,
+  } = params
+
+  // Format dates for Paystack (ISO 8601)
+  const fromStr = from.toISOString()
+  const toStr = to.toISOString()
+
+  let url = `/transaction?perPage=${perPage}&page=${page}&from=${fromStr}&to=${toStr}`
+  if (status) {
+    url += `&status=${status}`
+  }
+
+  const response = await paystackFetch<TransactionListResponse['data']>(url)
+
+  // The meta is in the response object at the same level as data
+  // Need to fetch full response
+  const fullResponse = await fetch(`${PAYSTACK_API_URL}${url}`, {
+    headers: {
+      Authorization: `Bearer ${env.PAYSTACK_SECRET_KEY}`,
+      'Content-Type': 'application/json',
+    },
+  })
+  const fullData = await fullResponse.json()
+
+  return {
+    transactions: response.data,
+    meta: fullData.meta || { total: response.data.length, skipped: 0, perPage, page, pageCount: 1 },
+  }
+}
+
+/**
+ * Fetch all transactions in a date range (handles pagination)
+ */
+export async function listAllTransactions(params: {
+  from: Date
+  to: Date
+  status?: 'success' | 'failed' | 'abandoned'
+}): Promise<PaystackTransaction[]> {
+  const allTransactions: PaystackTransaction[] = []
+  let page = 1
+  let hasMore = true
+
+  while (hasMore) {
+    const { transactions, meta } = await listTransactions({
+      ...params,
+      perPage: 100,
+      page,
+    })
+
+    allTransactions.push(...transactions)
+
+    if (page >= meta.pageCount || transactions.length === 0) {
+      hasMore = false
+    } else {
+      page++
+    }
+
+    // Safety limit to prevent infinite loops
+    if (page > 100) {
+      console.warn('[paystack] listAllTransactions: Reached page limit (100)')
+      break
+    }
+  }
+
+  return allTransactions
+}
+
+/**
+ * Get a single transaction by reference
+ */
+export async function getTransaction(reference: string): Promise<PaystackTransaction | null> {
+  try {
+    const response = await paystackFetch<PaystackTransaction>(`/transaction/verify/${reference}`)
+    return response.data
+  } catch (error) {
+    console.error(`[paystack] Failed to fetch transaction ${reference}:`, error)
+    return null
+  }
+}
+
+// ============================================
 // HELPERS
 // ============================================
 

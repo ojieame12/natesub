@@ -19,6 +19,10 @@
     {
       "path": "/api/cron/transfers",
       "schedule": "30 * * * *"
+    },
+    {
+      "path": "/api/cron/reconciliation",
+      "schedule": "0 2 * * *"
     }
   ]
 }

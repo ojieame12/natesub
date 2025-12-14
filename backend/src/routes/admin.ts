@@ -10,6 +10,7 @@ import { HTTPException } from 'hono/http-exception'
 import dlq from '../services/dlq.js'
 import { db } from '../db/client.js'
 import { getStuckTransfers, getTransferStats } from '../jobs/transfers.js'
+import { getMissingTransactions, reconcilePaystackTransactions } from '../jobs/reconciliation.js'
 
 const admin = new Hono()
 
@@ -221,6 +222,49 @@ admin.get('/transfers/all-pending', async (c) => {
       transferCode: t.paystackTransferCode,
       createdAt: t.createdAt,
     })),
+  })
+})
+
+// ============================================
+// RECONCILIATION
+// ============================================
+
+/**
+ * GET /admin/reconciliation/missing
+ * List Paystack transactions that are missing from DB
+ */
+admin.get('/reconciliation/missing', async (c) => {
+  const periodHours = c.req.query('hours') ? parseInt(c.req.query('hours')!) : 48
+
+  const result = await getMissingTransactions(periodHours)
+
+  return c.json({
+    periodHours,
+    ...result,
+    warning: result.count > 0
+      ? 'These transactions succeeded in Paystack but have no record in your database. Possible webhook failure - creators may not have been paid.'
+      : null,
+  })
+})
+
+/**
+ * POST /admin/reconciliation/run
+ * Manually trigger reconciliation
+ */
+admin.post('/reconciliation/run', async (c) => {
+  const body = await c.req.json().catch(() => ({}))
+  const periodHours = body.periodHours || 48
+  const autoFix = body.autoFix === true
+
+  const result = await reconcilePaystackTransactions({
+    periodHours,
+    autoFix,
+    alertOnDiscrepancy: true,
+  })
+
+  return c.json({
+    success: true,
+    ...result,
   })
 })
 

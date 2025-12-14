@@ -1,10 +1,11 @@
-// Balance Reconciliation Job
+// Balance & Transaction Reconciliation Job
 // Compares database totals with Stripe/Paystack to detect discrepancies
 // Run daily or weekly via cron
 
 import { db } from '../db/client.js'
 import { stripe } from '../services/stripe.js'
-import { getBalance as getPaystackBalance } from '../services/paystack.js'
+import { getBalance as getPaystackBalance, listAllTransactions, type PaystackTransaction } from '../services/paystack.js'
+import { sendReconciliationAlert } from '../services/alerts.js'
 
 interface ReconciliationResult {
   runAt: Date
@@ -303,5 +304,232 @@ export async function getWebhookStats(periodDays = 7): Promise<{
     byEventType,
     avgProcessingTimeMs: processedCount > 0 ? Math.round(totalProcessingTime / processedCount) : 0,
     failureRate: totalCount > 0 ? (failedCount / totalCount) * 100 : 0,
+  }
+}
+
+// ============================================
+// PAYSTACK TRANSACTION RECONCILIATION
+// ============================================
+
+interface PaystackReconciliationResult {
+  runAt: Date
+  periodHours: number
+  paystackTransactions: number
+  dbPayments: number
+  missingInDb: Array<{
+    reference: string
+    amount: number
+    currency: string
+    paidAt: string
+    metadata: Record<string, any> | null
+  }>
+  statusMismatches: Array<{
+    reference: string
+    dbStatus: string
+    paystackStatus: string
+    amount: number
+  }>
+  autoFixed: number
+  alerts: string[]
+}
+
+/**
+ * Reconcile Paystack transactions with database payments
+ * Finds:
+ * 1. Successful payments in Paystack that are missing from DB (webhook failed)
+ * 2. Payments with status mismatches (DB says pending, Paystack says success)
+ *
+ * Optionally auto-fixes status mismatches
+ */
+export async function reconcilePaystackTransactions(options: {
+  periodHours?: number  // How far back to look (default: 48 hours)
+  autoFix?: boolean     // Auto-fix status mismatches (default: false)
+  alertOnDiscrepancy?: boolean // Send email alert (default: true)
+} = {}): Promise<PaystackReconciliationResult> {
+  const { periodHours = 48, autoFix = false, alertOnDiscrepancy = true } = options
+  const now = new Date()
+  const periodStart = new Date(now.getTime() - periodHours * 60 * 60 * 1000)
+
+  console.log(`[reconciliation] Starting Paystack transaction reconciliation (${periodHours}h window)`)
+
+  const result: PaystackReconciliationResult = {
+    runAt: now,
+    periodHours,
+    paystackTransactions: 0,
+    dbPayments: 0,
+    missingInDb: [],
+    statusMismatches: [],
+    autoFixed: 0,
+    alerts: [],
+  }
+
+  try {
+    // 1. Fetch all successful transactions from Paystack in the period
+    const paystackTxns = await listAllTransactions({
+      from: periodStart,
+      to: now,
+      status: 'success',
+    })
+
+    result.paystackTransactions = paystackTxns.length
+    console.log(`[reconciliation] Fetched ${paystackTxns.length} successful Paystack transactions`)
+
+    if (paystackTxns.length === 0) {
+      console.log('[reconciliation] No transactions to reconcile')
+      return result
+    }
+
+    // 2. Get all Paystack references from our DB in the same period
+    const dbPayments = await db.payment.findMany({
+      where: {
+        paystackTransactionRef: { not: null },
+        createdAt: { gte: periodStart },
+      },
+      select: {
+        id: true,
+        paystackTransactionRef: true,
+        status: true,
+        amountCents: true,
+        currency: true,
+      },
+    })
+
+    result.dbPayments = dbPayments.length
+
+    // Create a map for quick lookup
+    const dbPaymentMap = new Map(
+      dbPayments.map(p => [p.paystackTransactionRef, p])
+    )
+
+    // 3. Compare each Paystack transaction
+    for (const txn of paystackTxns) {
+      const dbPayment = dbPaymentMap.get(txn.reference)
+
+      if (!dbPayment) {
+        // Transaction exists in Paystack but NOT in our DB
+        // This is the critical case: customer paid, webhook failed, creator didn't get credited
+        result.missingInDb.push({
+          reference: txn.reference,
+          amount: txn.amount,
+          currency: txn.currency,
+          paidAt: txn.paid_at || txn.created_at,
+          metadata: txn.metadata,
+        })
+
+        result.alerts.push(`MISSING: ${txn.reference} - ${txn.currency} ${txn.amount / 100} paid at ${txn.paid_at}`)
+        continue
+      }
+
+      // Check for status mismatch
+      // Paystack status is 'success', but our DB might have 'pending' or 'failed'
+      const dbStatus = dbPayment.status
+      if (dbStatus !== 'succeeded') {
+        result.statusMismatches.push({
+          reference: txn.reference,
+          dbStatus,
+          paystackStatus: txn.status,
+          amount: txn.amount,
+        })
+
+        // Auto-fix if enabled
+        if (autoFix && dbStatus === 'pending') {
+          try {
+            await db.payment.update({
+              where: { id: dbPayment.id },
+              data: { status: 'succeeded' },
+            })
+            result.autoFixed++
+            console.log(`[reconciliation] Auto-fixed payment ${dbPayment.id}: pending -> succeeded`)
+          } catch (err) {
+            console.error(`[reconciliation] Failed to auto-fix payment ${dbPayment.id}:`, err)
+          }
+        }
+      }
+    }
+
+    // 4. Log summary
+    console.log(`[reconciliation] Complete:`)
+    console.log(`  - Paystack transactions: ${result.paystackTransactions}`)
+    console.log(`  - DB payments: ${result.dbPayments}`)
+    console.log(`  - Missing in DB: ${result.missingInDb.length}`)
+    console.log(`  - Status mismatches: ${result.statusMismatches.length}`)
+    console.log(`  - Auto-fixed: ${result.autoFixed}`)
+
+    // 5. Send alert if discrepancies found
+    if (alertOnDiscrepancy && (result.missingInDb.length > 0 || result.statusMismatches.length > 0)) {
+      const totalDiscrepancy = result.missingInDb.reduce((sum, t) => sum + t.amount, 0)
+
+      try {
+        await sendReconciliationAlert({
+          missingInDb: result.missingInDb,
+          statusMismatches: result.statusMismatches,
+          totalDiscrepancyCents: totalDiscrepancy,
+        })
+        result.alerts.push('Email alert sent')
+      } catch (err) {
+        console.error('[reconciliation] Failed to send alert:', err)
+        result.alerts.push(`Failed to send alert: ${err instanceof Error ? err.message : 'Unknown'}`)
+      }
+    }
+
+  } catch (err) {
+    console.error('[reconciliation] Paystack reconciliation failed:', err)
+    result.alerts.push(`RECONCILIATION FAILED: ${err instanceof Error ? err.message : 'Unknown error'}`)
+  }
+
+  return result
+}
+
+/**
+ * Get missing transactions that need manual intervention
+ * These are transactions that exist in Paystack but not in our DB
+ */
+export async function getMissingTransactions(periodHours = 48): Promise<{
+  count: number
+  transactions: Array<{
+    reference: string
+    amount: number
+    currency: string
+    paidAt: string
+    customerEmail: string
+    metadata: Record<string, any> | null
+  }>
+}> {
+  const now = new Date()
+  const periodStart = new Date(now.getTime() - periodHours * 60 * 60 * 1000)
+
+  // Fetch successful Paystack transactions
+  const paystackTxns = await listAllTransactions({
+    from: periodStart,
+    to: now,
+    status: 'success',
+  })
+
+  // Get all references from our DB
+  const dbRefs = await db.payment.findMany({
+    where: {
+      paystackTransactionRef: { not: null },
+      createdAt: { gte: periodStart },
+    },
+    select: { paystackTransactionRef: true },
+  })
+
+  const dbRefSet = new Set(dbRefs.map(p => p.paystackTransactionRef))
+
+  // Find missing
+  const missing = paystackTxns
+    .filter(txn => !dbRefSet.has(txn.reference))
+    .map(txn => ({
+      reference: txn.reference,
+      amount: txn.amount,
+      currency: txn.currency,
+      paidAt: txn.paid_at || txn.created_at,
+      customerEmail: txn.customer.email,
+      metadata: txn.metadata,
+    }))
+
+  return {
+    count: missing.length,
+    transactions: missing,
   }
 }

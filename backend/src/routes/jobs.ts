@@ -7,6 +7,7 @@ import { processRecurringBilling, processRetries } from '../jobs/billing.js'
 import { generatePayrollPeriods } from '../jobs/payroll.js'
 import { sendRenewalReminders, sendDunningEmails, sendCancellationEmails } from '../jobs/notifications.js'
 import { monitorStuckTransfers } from '../jobs/transfers.js'
+import { reconcilePaystackTransactions } from '../jobs/reconciliation.js'
 
 const jobs = new Hono()
 
@@ -187,11 +188,34 @@ jobs.post('/transfers', async (c) => {
   }
 })
 
+// Reconcile Paystack transactions (run nightly)
+jobs.post('/reconciliation', async (c) => {
+  console.log('[jobs] Starting Paystack reconciliation job')
+
+  try {
+    const result = await reconcilePaystackTransactions({
+      periodHours: 48,       // Look back 48 hours
+      autoFix: false,        // Don't auto-fix, just alert
+      alertOnDiscrepancy: true,
+    })
+
+    console.log(`[jobs] Reconciliation complete: ${result.missingInDb.length} missing, ${result.statusMismatches.length} mismatched`)
+
+    return c.json({
+      success: true,
+      ...result,
+    })
+  } catch (error: any) {
+    console.error('[jobs] Reconciliation job failed:', error.message)
+    return c.json({ error: 'Reconciliation job failed', message: error.message }, 500)
+  }
+})
+
 // Health check for job system
 jobs.get('/health', async (c) => {
   return c.json({
     status: 'ok',
-    jobs: ['billing', 'retries', 'payroll', 'reminders', 'dunning', 'cancellations', 'notifications', 'transfers'],
+    jobs: ['billing', 'retries', 'payroll', 'reminders', 'dunning', 'cancellations', 'notifications', 'transfers', 'reconciliation'],
     timestamp: new Date().toISOString(),
   })
 })
