@@ -6,12 +6,17 @@ import { Button } from './components'
 import { useAIGenerate, blobToBase64 } from '../api/hooks'
 import './onboarding.css'
 
-// Helper to fetch audio from URL and convert to base64
-async function fetchAudioAsBase64(url: string): Promise<string> {
+// Helper to fetch audio from URL and convert to base64 with MIME type
+async function fetchAudioWithMime(url: string): Promise<{ base64: string; mimeType: string }> {
     const response = await fetch(url)
     if (!response.ok) throw new Error('Failed to fetch audio')
+    // Get MIME type from response headers (set by R2 based on upload)
+    const contentType = response.headers.get('content-type') || 'audio/webm'
+    // Strip codec params like 'audio/webm;codecs=opus' -> 'audio/webm'
+    const mimeType = contentType.split(';')[0]
     const blob = await response.blob()
-    return blobToBase64(blob)
+    const base64 = await blobToBase64(blob)
+    return { base64, mimeType }
 }
 
 export default function AIGeneratingStep() {
@@ -39,11 +44,11 @@ export default function AIGeneratingStep() {
             let audioData: { data: string; mimeType: string } | undefined
 
             if (serviceDescriptionAudioUrl) {
-                // Fetch the audio from S3 and convert to base64 for the AI
-                const base64 = await fetchAudioAsBase64(serviceDescriptionAudioUrl)
+                // Fetch the audio from R2 and get actual MIME type from headers
+                const { base64, mimeType } = await fetchAudioWithMime(serviceDescriptionAudioUrl)
                 audioData = {
                     data: base64,
-                    mimeType: 'audio/webm',
+                    mimeType,  // Use actual MIME from R2, not hardcoded
                 }
             }
 

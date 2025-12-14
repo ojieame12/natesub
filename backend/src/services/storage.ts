@@ -54,7 +54,8 @@ export async function getSignedUploadUrl(
   }
 
   // Generate unique key
-  const ext = mimeType.split('/')[1]
+  // Normalize MIME: strip codec params like 'audio/webm;codecs=opus' -> 'webm'
+  const ext = mimeType.split(';')[0].split('/')[1]
   const key = `${type}s/${userId}/${nanoid()}.${ext}`
 
   // Create signed URL (expires in 10 minutes)

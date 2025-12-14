@@ -237,3 +237,15 @@ export const updateSendRateLimit = rateLimit({
   keyPrefix: 'update_send_ratelimit',
   message: 'You can only send 5 updates per day. Please try again tomorrow.',
 })
+
+/**
+ * Media upload rate limiter - User-based
+ * Prevents upload spam/abuse
+ * 30 uploads per hour per user
+ */
+export const mediaUploadRateLimit = rateLimit({
+  windowMs: 60 * 60 * 1000,  // 1 hour
+  maxRequests: 30,
+  keyPrefix: 'media_upload_ratelimit',
+  message: 'Too many uploads. Please try again later.',
+})

@@ -28,7 +28,7 @@ const ai = new Hono()
 
 // Constants
 const MAX_AUDIO_BASE64_SIZE = 5 * 1024 * 1024  // 5MB base64 (~3.7MB raw audio, ~4 minutes at 128kbps)
-const ALLOWED_AUDIO_MIMES = ['audio/webm', 'audio/mp3', 'audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/aac', 'audio/flac']
+const ALLOWED_AUDIO_MIMES = ['audio/webm', 'audio/mp4', 'audio/mp3', 'audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/aac', 'audio/flac']
 
 // ============================================
 // HEALTH CHECK

@@ -633,12 +633,25 @@ export async function uploadFile(
   return publicUrl
 }
 
+// Max file sizes in bytes (must match backend/src/services/storage.ts)
+const MAX_UPLOAD_SIZES = {
+  avatar: 10 * 1024 * 1024,  // 10MB
+  photo: 15 * 1024 * 1024,   // 15MB
+  voice: 10 * 1024 * 1024,   // 10MB
+}
+
 // Helper to upload blob (e.g., audio recording) to S3
 export async function uploadBlob(
   blob: Blob,
   type: 'avatar' | 'photo' | 'voice',
   mimeType?: string
 ): Promise<string> {
+  // Client-side size validation (fail fast before requesting signed URL)
+  const maxSize = MAX_UPLOAD_SIZES[type]
+  if (blob.size > maxSize) {
+    throw new Error(`File too large. Maximum size is ${Math.round(maxSize / 1024 / 1024)}MB`)
+  }
+
   const contentType = mimeType || blob.type || 'application/octet-stream'
 
   // Get signed URL

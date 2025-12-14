@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { requireAuth } from '../middleware/auth.js'
+import { mediaUploadRateLimit } from '../middleware/rateLimit.js'
 import { getSignedUploadUrl } from '../services/storage.js'
 
 const media = new Hono()
@@ -10,6 +11,7 @@ const media = new Hono()
 media.post(
   '/upload-url',
   requireAuth,
+  mediaUploadRateLimit,
   zValidator('json', z.object({
     type: z.enum(['avatar', 'photo', 'voice']),
     mimeType: z.string(),

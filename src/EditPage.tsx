@@ -3,9 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Camera, Plus, GripVertical, Trash2, ExternalLink, Check, X, Loader2 } from 'lucide-react'
 import { Pressable, useToast, Skeleton, VoiceRecorder } from './components'
 import { useProfile, useUpdateProfile, uploadFile, uploadBlob } from './api/hooks'
-import { getCurrencySymbol, formatCompactNumber } from './utils/currency'
+import { getCurrencySymbol, formatCompactNumber, centsToDisplayAmount } from './utils/currency'
 import { calculateFeePreview, getPricing } from './utils/pricing'
-import { centsToDollars } from './api/mappers'
 import type { Tier, Perk, ImpactItem } from './api/client'
 import './EditPage.css'
 
@@ -35,20 +34,22 @@ export default function EditPage() {
   const [voiceBlob, setVoiceBlob] = useState<Blob | null>(null)
 
   // Hydrate local state from profile
-  // IMPORTANT: Backend returns amounts in CENTS, convert to dollars for display
+  // IMPORTANT: Backend returns amounts in CENTS, convert to display amount
+  // Uses currency-aware conversion (zero-decimal currencies like JPY don't divide by 100)
   useEffect(() => {
     if (profile) {
+      const currency = profile.currency || 'USD'
       setDisplayName(profile.displayName || '')
       setBio(profile.bio || '')
       setAvatarUrl(profile.avatarUrl)
       setVoiceIntroUrl(profile.voiceIntroUrl || null)
       setPricingModel(profile.pricingModel || 'single')
-      // Convert cents to dollars for display
-      setSingleAmount(profile.singleAmount ? centsToDollars(profile.singleAmount) : 10)
-      // Convert tier amounts from cents to dollars
+      // Convert cents to display amount (currency-aware)
+      setSingleAmount(profile.singleAmount ? centsToDisplayAmount(profile.singleAmount, currency) : 10)
+      // Convert tier amounts from cents to display amounts
       setTiers((profile.tiers || []).map(t => ({
         ...t,
-        amount: centsToDollars(t.amount)
+        amount: centsToDisplayAmount(t.amount, currency)
       })))
       setPerks(profile.perks || [])
       setImpactItems(profile.impactItems || [])
@@ -59,13 +60,14 @@ export default function EditPage() {
   const currencySymbol = getCurrencySymbol(profile?.currency || 'USD')
 
   // Track changes
-  // Note: Compare with converted values (profile stores cents, local state is dollars)
+  // Note: Compare with converted values (profile stores cents, local state is display amounts)
   useEffect(() => {
     if (!profile) return
-    const profileAmountDollars = profile.singleAmount ? centsToDollars(profile.singleAmount) : 10
-    const profileTiersDollars = (profile.tiers || []).map(t => ({
+    const currency = profile.currency || 'USD'
+    const profileAmountDisplay = profile.singleAmount ? centsToDisplayAmount(profile.singleAmount, currency) : 10
+    const profileTiersDisplay = (profile.tiers || []).map(t => ({
       ...t,
-      amount: centsToDollars(t.amount)
+      amount: centsToDisplayAmount(t.amount, currency)
     }))
     const changed =
       displayName !== (profile.displayName || '') ||
@@ -73,8 +75,8 @@ export default function EditPage() {
       avatarUrl !== (profile.avatarUrl || null) ||
       voiceIntroUrl !== (profile.voiceIntroUrl || null) ||
       pricingModel !== profile.pricingModel ||
-      singleAmount !== profileAmountDollars ||
-      JSON.stringify(tiers) !== JSON.stringify(profileTiersDollars) ||
+      singleAmount !== profileAmountDisplay ||
+      JSON.stringify(tiers) !== JSON.stringify(profileTiersDisplay) ||
       JSON.stringify(perks) !== JSON.stringify(profile.perks || []) ||
       JSON.stringify(impactItems) !== JSON.stringify(profile.impactItems || []) ||
       feeMode !== (profile.feeMode || 'pass_to_subscriber')
@@ -129,7 +131,8 @@ export default function EditPage() {
     setVoiceBlob(blob)
     setIsVoiceUploading(true)
     try {
-      const url = await uploadBlob(blob, 'voice', 'audio/webm')
+      // Use blob.type (detected by VoiceRecorder) instead of hardcoding
+      const url = await uploadBlob(blob, 'voice')
       setVoiceIntroUrl(url)
       setVoiceBlob(null)
       toast.success('Voice intro saved')
@@ -631,11 +634,11 @@ export default function EditPage() {
       {/* Save Button */}
       <div className="edit-page-footer">
         <Pressable
-          className={`save-btn ${!hasChanges ? 'disabled' : ''}`}
+          className={`save-btn ${!hasChanges || isUploading || isVoiceUploading ? 'disabled' : ''}`}
           onClick={handleSave}
-          disabled={!hasChanges || isSaving}
+          disabled={!hasChanges || isSaving || isUploading || isVoiceUploading}
         >
-          {isSaving ? 'Saving...' : 'Save Changes'}
+          {isSaving ? 'Saving...' : isUploading || isVoiceUploading ? 'Uploading...' : 'Save Changes'}
         </Pressable>
       </div>
     </div>

@@ -43,13 +43,11 @@ const impactItemSchema = z.object({
   subtitle: z.string(),
 })
 
-// Custom URL validator that accepts http(s) URLs and data URLs
-const urlOrDataUrl = z.string().refine(
+// URL validator - only accepts http(s) URLs
+// Data URLs are rejected to prevent DB bloat and enforce proper upload flow
+const httpsUrl = z.string().refine(
   (val) => {
     if (!val) return true
-    // Accept data URLs (base64 images)
-    if (val.startsWith('data:')) return true
-    // Accept http(s) URLs
     try {
       const url = new URL(val)
       return url.protocol === 'http:' || url.protocol === 'https:'
@@ -57,7 +55,7 @@ const urlOrDataUrl = z.string().refine(
       return false
     }
   },
-  { message: 'Must be a valid URL or data URL' }
+  { message: 'Must be a valid HTTP(S) URL' }
 )
 
 // Profile create/update schema
@@ -65,8 +63,8 @@ const profileSchema = z.object({
   username: z.string().min(3).max(20).regex(/^[a-z0-9_]+$/),
   displayName: z.string().min(2).max(50),
   bio: z.string().max(500).optional().nullable(),
-  avatarUrl: urlOrDataUrl.optional().nullable(),
-  voiceIntroUrl: urlOrDataUrl.optional().nullable(),
+  avatarUrl: httpsUrl.optional().nullable(),
+  voiceIntroUrl: httpsUrl.optional().nullable(),
   country: z.string(),
   countryCode: z.string().length(2),
   currency: z.string().length(3).default('USD'),

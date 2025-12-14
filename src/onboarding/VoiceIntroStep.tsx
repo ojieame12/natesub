@@ -32,7 +32,8 @@ export default function VoiceIntroStep() {
         setIsUploading(true)
 
         try {
-            const publicUrl = await uploadBlob(blob, 'voice', 'audio/webm')
+            // Use blob.type (detected by VoiceRecorder) instead of hardcoding
+            const publicUrl = await uploadBlob(blob, 'voice')
             setAudioUrl(publicUrl)
             setVoiceIntroUrl(publicUrl)
             setAudioBlob(null)

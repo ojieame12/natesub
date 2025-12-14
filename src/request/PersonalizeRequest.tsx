@@ -62,24 +62,46 @@ export default function PersonalizeRequest() {
 
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-            mediaRecorderRef.current = new MediaRecorder(stream)
+
+            // Detect best supported MIME type (like VoiceRecorder does)
+            const mimeTypes = [
+                'audio/webm;codecs=opus',
+                'audio/webm',
+                'audio/mp4',
+                'audio/ogg;codecs=opus',
+                'audio/ogg',
+            ]
+            let selectedMimeType = ''
+            for (const mimeType of mimeTypes) {
+                if (MediaRecorder.isTypeSupported(mimeType)) {
+                    selectedMimeType = mimeType
+                    break
+                }
+            }
+
+            const options = selectedMimeType ? { mimeType: selectedMimeType } : undefined
+            mediaRecorderRef.current = new MediaRecorder(stream, options)
             audioChunksRef.current = []
+
+            // Store the actual MIME type being used
+            const actualMimeType = mediaRecorderRef.current.mimeType || 'audio/webm'
 
             mediaRecorderRef.current.ondataavailable = (event) => {
                 audioChunksRef.current.push(event.data)
             }
 
             mediaRecorderRef.current.onstop = async () => {
-                const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' })
+                // Use detected MIME type, not hardcoded
+                const audioBlob = new Blob(audioChunksRef.current, { type: actualMimeType })
 
                 // 1. Optimistic local preview
                 const localUrl = URL.createObjectURL(audioBlob)
                 setVoiceNote(localUrl, recordingTime)
 
-                // 2. Upload to S3
+                // 2. Upload to S3 - let uploadBlob use blob.type
                 setIsUploading(true)
                 try {
-                    const s3Url = await uploadBlob(audioBlob, 'voice', 'audio/webm')
+                    const s3Url = await uploadBlob(audioBlob, 'voice')
                     // Update store with the REAL public URL
                     // Note: We keep the duration from the recording session
                     setVoiceNote(s3Url, recordingTime)
@@ -140,7 +162,8 @@ export default function PersonalizeRequest() {
         setIsPlaying(false)
     }
 
-    const togglePlayback = () => {
+    // Handles play() Promise properly to avoid UI desync
+    const togglePlayback = async () => {
         if (!voiceNoteUrl) return
 
         if (!audioRef.current) {
@@ -158,8 +181,13 @@ export default function PersonalizeRequest() {
             audioRef.current.pause()
             setIsPlaying(false)
         } else {
-            audioRef.current.play()
-            setIsPlaying(true)
+            try {
+                await audioRef.current.play()
+                setIsPlaying(true)
+            } catch (err) {
+                console.error('Audio playback failed:', err)
+                setIsPlaying(false)
+            }
         }
     }
 

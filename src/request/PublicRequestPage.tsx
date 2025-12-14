@@ -258,6 +258,22 @@ export default function PublicRequestPage() {
                 "{request.message}"
               </p>
             )}
+
+            {/* Voice Note - render if creator included one */}
+            {request.voiceUrl && (
+              <div style={{ marginTop: 16 }}>
+                <audio
+                  controls
+                  src={request.voiceUrl}
+                  style={{
+                    width: '100%',
+                    borderRadius: 8,
+                    background: 'var(--bg-subtle)',
+                  }}
+                  onError={(e) => console.error('Voice note playback error:', e)}
+                />
+              </div>
+            )}
           </div>
 
           {/* Email Input */}

@@ -204,15 +204,21 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
 
     const [checkoutError, setCheckoutError] = useState<string | null>(null)
 
-    // Audio player controls
-    const toggleAudio = () => {
+    // Audio player controls - handles play() Promise properly
+    const toggleAudio = async () => {
         if (!audioRef.current) return
         if (isPlaying) {
             audioRef.current.pause()
+            setIsPlaying(false)
         } else {
-            audioRef.current.play()
+            try {
+                await audioRef.current.play()
+                setIsPlaying(true)
+            } catch (err) {
+                console.error('Audio playback failed:', err)
+                setIsPlaying(false)
+            }
         }
-        setIsPlaying(!isPlaying)
     }
 
     const formatTime = (seconds: number) => {
@@ -617,6 +623,10 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
                                                 }
                                             }}
                                             onEnded={() => setIsPlaying(false)}
+                                            onError={(e) => {
+                                                console.error('Audio load error:', e)
+                                                setIsPlaying(false)
+                                            }}
                                         />
                                         <Pressable
                                             className={`sub-voice-play ${isPlaying ? 'playing' : ''}`}

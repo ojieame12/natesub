@@ -32,7 +32,8 @@ export default function ServiceDescriptionStep() {
 
         try {
             // Upload to S3 and get URL
-            const publicUrl = await uploadBlob(blob, 'voice', 'audio/webm')
+            // Use blob.type (detected by VoiceRecorder) instead of hardcoding
+            const publicUrl = await uploadBlob(blob, 'voice')
             setServiceDescriptionAudioUrl(publicUrl)
             // Clear the blob after successful upload (URL is now persisted)
             setServiceDescriptionAudio(null)

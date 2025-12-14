@@ -76,15 +76,41 @@ export function VoiceRecorder({
 
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-            mediaRecorderRef.current = new MediaRecorder(stream)
+
+            // Determine the best supported MIME type for this browser
+            // iOS Safari: audio/mp4, audio/aac
+            // Chrome/Firefox: audio/webm, audio/ogg
+            const mimeTypes = [
+                'audio/webm;codecs=opus',
+                'audio/webm',
+                'audio/mp4',
+                'audio/ogg;codecs=opus',
+                'audio/ogg',
+            ]
+
+            let selectedMimeType = ''
+            for (const mimeType of mimeTypes) {
+                if (MediaRecorder.isTypeSupported(mimeType)) {
+                    selectedMimeType = mimeType
+                    break
+                }
+            }
+
+            // Create MediaRecorder with detected MIME type (or let browser choose default)
+            const options = selectedMimeType ? { mimeType: selectedMimeType } : undefined
+            mediaRecorderRef.current = new MediaRecorder(stream, options)
             audioChunksRef.current = []
+
+            // Store the actual MIME type being used
+            const actualMimeType = mediaRecorderRef.current.mimeType || 'audio/webm'
 
             mediaRecorderRef.current.ondataavailable = (event) => {
                 audioChunksRef.current.push(event.data)
             }
 
             mediaRecorderRef.current.onstop = () => {
-                const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' })
+                // Use the actual MIME type from MediaRecorder, not hardcoded
+                const blob = new Blob(audioChunksRef.current, { type: actualMimeType })
                 onRecorded(blob, recordingTime)
                 stream.getTracks().forEach(track => track.stop())
             }
@@ -140,7 +166,8 @@ export function VoiceRecorder({
         onRemove()
     }
 
-    const togglePlayback = () => {
+    // Handles play() Promise properly to avoid UI desync
+    const togglePlayback = async () => {
         if (!audioUrl) return
 
         if (!audioRef.current) {
@@ -158,8 +185,13 @@ export function VoiceRecorder({
             audioRef.current.pause()
             setIsPlaying(false)
         } else {
-            audioRef.current.play()
-            setIsPlaying(true)
+            try {
+                await audioRef.current.play()
+                setIsPlaying(true)
+            } catch (err) {
+                console.error('Audio playback failed:', err)
+                setIsPlaying(false)
+            }
         }
     }
 
