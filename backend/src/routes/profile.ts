@@ -9,6 +9,7 @@ import { publicStrictRateLimit, publicRateLimit } from '../middleware/rateLimit.
 import { sendWelcomeEmail } from '../services/email.js'
 import { cancelOnboardingReminders } from '../jobs/reminders.js'
 import { RESERVED_USERNAMES } from '../utils/constants.js'
+import { displayAmountToCents } from '../utils/currency.js'
 import {
   getPlatformFeePercent,
   getProcessingFeePercent,
@@ -125,10 +126,13 @@ profile.put(
     const currentProfile = await db.profile.findUnique({ where: { userId } })
     const isNewProfile = !currentProfile
 
-    // Convert amounts to cents for storage
+    // Normalize currency for consistent handling
+    const currency = data.currency.toUpperCase()
+
+    // Convert amounts to cents for storage (handles zero-decimal currencies like JPY, KRW)
     // Use Prisma.JsonNull for null JSON values, or the actual value
     const tiersData = data.tiers
-      ? data.tiers.map(t => ({ ...t, amount: Math.round(t.amount * 100) }))
+      ? data.tiers.map(t => ({ ...t, amount: displayAmountToCents(t.amount, currency) }))
       : Prisma.JsonNull
     const perksData = data.perks || Prisma.JsonNull
     const impactItemsData = data.impactItems || Prisma.JsonNull
@@ -142,10 +146,10 @@ profile.put(
       voiceIntroUrl: data.voiceIntroUrl || null,
       country: data.country,
       countryCode: data.countryCode.toUpperCase(),
-      currency: data.currency.toUpperCase(),
+      currency,
       purpose: data.purpose,
       pricingModel: data.pricingModel,
-      singleAmount: data.singleAmount ? Math.round(data.singleAmount * 100) : null,
+      singleAmount: data.singleAmount ? displayAmountToCents(data.singleAmount, currency) : null,
       tiers: tiersData,
       perks: perksData,
       impactItems: impactItemsData,

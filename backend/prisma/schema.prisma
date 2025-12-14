@@ -12,6 +12,7 @@ datasource db {
 // ============================================
 
 enum SubscriptionStatus {
+  pending    // Awaiting payment confirmation (async payment methods)
   active
   canceled
   past_due

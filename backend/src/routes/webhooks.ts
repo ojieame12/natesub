@@ -445,7 +445,8 @@ async function handleCheckoutCompleted(event: Stripe.Event) {
         amount: basePrice, // Creator's SET PRICE - fees calculated on this for renewals
         currency: session.currency?.toUpperCase() || 'USD',
         interval: subscriptionInterval,
-        status: 'active',
+        // Use 'pending' for async payments until payment confirms
+        status: isAsyncPayment ? 'pending' : 'active',
         stripeSubscriptionId: session.subscription as string || null,
         stripeCustomerId: session.customer as string || null,
         feeModel: feeModel || null,
@@ -456,7 +457,8 @@ async function handleCheckoutCompleted(event: Stripe.Event) {
       },
       update: {
         // Reactivate subscription with new details
-        status: 'active',
+        // Use 'pending' for async payments until payment confirms
+        status: isAsyncPayment ? 'pending' : 'active',
         tierId: tierId || null,
         tierName,
         amount: basePrice,
@@ -1015,15 +1017,15 @@ async function handleInvoicePaid(event: Stripe.Event) {
     netCents = legacyFees.netCents
   }
 
-  // Update subscription period, LTV, and recover from past_due if applicable
+  // Update subscription period, LTV, and activate if pending/past_due
   // IMPORTANT: LTV tracks creator's earnings (netCents), not gross amount paid
-  const wasRecovered = subscription.status === 'past_due'
+  const needsActivation = subscription.status === 'past_due' || subscription.status === 'pending'
   await db.subscription.update({
     where: { id: subscription.id },
     data: {
-      // RECOVERY: If subscription was past_due, payment success means it's active again
-      // This provides a recovery path without waiting for customer.subscription.updated webhook
-      status: subscription.status === 'past_due' ? 'active' : undefined,
+      // ACTIVATION: If subscription was pending (async payment) or past_due, payment success means it's active
+      // This provides activation for async payments and recovery from past_due
+      status: needsActivation ? 'active' : undefined,
       currentPeriodEnd: invoice.lines.data[0]?.period?.end
         ? new Date(invoice.lines.data[0].period.end * 1000)
         : null,
@@ -1031,8 +1033,8 @@ async function handleInvoicePaid(event: Stripe.Event) {
     },
   })
 
-  if (wasRecovered) {
-    console.log(`[invoice.paid] Recovered subscription ${subscription.id} from past_due to active`)
+  if (needsActivation) {
+    console.log(`[invoice.paid] Activated subscription ${subscription.id} from ${subscription.status} to active`)
   }
 
   // Create payment record with charge ID
