@@ -7,7 +7,7 @@ import { uploadFile } from '../api/hooks'
 import '../Dashboard.css'
 import './onboarding.css'
 
-const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
+const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB (images are compressed before upload)
 
 export default function AvatarUploadStep() {
     const { avatarUrl, setAvatarUrl, nextStep, prevStep } = useOnboardingStore()
@@ -24,12 +24,18 @@ export default function AvatarUploadStep() {
 
         // Validate file size
         if (file.size > MAX_FILE_SIZE) {
-            setError('Image must be under 5MB')
+            setError('Image must be under 10MB')
             return
         }
 
-        // Validate file type
-        if (!file.type.startsWith('image/')) {
+        // Validate file type (including HEIC from iPhone cameras)
+        const isImage = file.type.startsWith('image/') ||
+                       file.type === 'image/heic' ||
+                       file.type === 'image/heif' ||
+                       file.name.toLowerCase().endsWith('.heic') ||
+                       file.name.toLowerCase().endsWith('.heif')
+
+        if (!isImage) {
             setError('Please select an image file')
             return
         }
@@ -90,7 +96,7 @@ export default function AvatarUploadStep() {
                     <input
                         ref={fileInputRef}
                         type="file"
-                        accept="image/*"
+                        accept="image/*,.heic,.heif"
                         onChange={handleFileSelect}
                         style={{ display: 'none' }}
                     />

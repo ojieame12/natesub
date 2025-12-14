@@ -8,6 +8,7 @@ import { sendOtpEmail } from './email.js'
 import type { OnboardingBranch } from '@prisma/client'
 
 const OTP_EXPIRES_MS = parseInt(env.MAGIC_LINK_EXPIRES_MINUTES) * 60 * 1000
+const OTP_GRACE_PERIOD_MS = 30 * 1000 // 30 seconds grace period for clock skew
 const SESSION_EXPIRES_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
 const MAX_OTP_ATTEMPTS = 5
 const OTP_LOCKOUT_MS = 15 * 60 * 1000 // 15 minutes
@@ -181,7 +182,9 @@ export async function verifyMagicLink(token: string): Promise<{
     throw new Error('This code has already been used')
   }
 
-  if (magicLinkToken.expiresAt < new Date()) {
+  // Add grace period to handle minor clock skew between servers
+  const expirationWithGrace = new Date(magicLinkToken.expiresAt.getTime() + OTP_GRACE_PERIOD_MS)
+  if (expirationWithGrace < new Date()) {
     throw new Error('This code has expired')
   }
 

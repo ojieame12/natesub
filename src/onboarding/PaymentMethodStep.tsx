@@ -208,7 +208,8 @@ export default function PaymentMethodStep() {
                 } catch (stripeErr: any) {
                     // Profile saved but Stripe call failed
                     console.error('Stripe connect error:', stripeErr)
-                    setError('Payment setup failed. Your profile was saved - you can complete payment setup from Settings.')
+                    const errorMsg = stripeErr?.error || stripeErr?.message || 'Payment setup failed'
+                    setError(`${errorMsg}. Your profile was saved - you can complete payment setup from Settings.`)
                     setSaving(false)
                     return
                 }

@@ -90,15 +90,21 @@ export default function EditPage() {
     const file = e.target.files?.[0]
     if (!file) return
 
-    // Validate file type
-    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-      toast.error('Please upload a JPG, PNG, or WebP image')
+    // Validate file type (including HEIC from iPhone cameras)
+    const isImage = file.type.startsWith('image/') ||
+                   file.type === 'image/heic' ||
+                   file.type === 'image/heif' ||
+                   file.name.toLowerCase().endsWith('.heic') ||
+                   file.name.toLowerCase().endsWith('.heif')
+
+    if (!isImage) {
+      toast.error('Please upload an image file')
       return
     }
 
-    // Validate file size (5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error('Image must be less than 5MB')
+    // Validate file size (10MB - images are compressed before upload)
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('Image must be less than 10MB')
       return
     }
 
@@ -108,7 +114,7 @@ export default function EditPage() {
       setAvatarUrl(url)
       toast.success('Avatar uploaded')
     } catch (err: any) {
-      toast.error(err?.error || 'Failed to upload avatar')
+      toast.error(err?.error || err?.message || 'Failed to upload avatar')
     } finally {
       setIsUploading(false)
       // Reset input so same file can be selected again
@@ -348,7 +354,7 @@ export default function EditPage() {
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/jpeg,image/png,image/webp"
+              accept="image/*,.heic,.heif"
               onChange={handleFileChange}
               className="hidden-input"
             />

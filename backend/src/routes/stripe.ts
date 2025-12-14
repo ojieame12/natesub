@@ -78,9 +78,16 @@ stripeRoutes.post('/connect', requireAuth, paymentRateLimit, async (c) => {
         note: 'Your account will receive payouts in your local currency. Payments are collected in USD and converted automatically.',
       }),
     })
-  } catch (error) {
+  } catch (error: any) {
     console.error('Stripe Connect error:', error)
-    return c.json({ error: 'Failed to create payment account' }, 500)
+    // Provide more specific error messages for debugging
+    const errorMessage = error?.message || error?.raw?.message || 'Failed to create payment account'
+    const errorType = error?.type || error?.code || 'unknown'
+    console.error(`[stripe/connect] Error type: ${errorType}, message: ${errorMessage}`)
+    return c.json({
+      error: errorMessage,
+      errorType,
+    }, 500)
   }
 })
 

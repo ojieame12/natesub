@@ -22,9 +22,9 @@ const ALLOWED_MIME_TYPES = {
 
 // Max file sizes in bytes
 const MAX_FILE_SIZES = {
-  avatar: 5 * 1024 * 1024,  // 5MB
-  photo: 10 * 1024 * 1024,  // 10MB
-  voice: 10 * 1024 * 1024,  // 10MB
+  avatar: 10 * 1024 * 1024,  // 10MB - frontend compresses, but allow headroom
+  photo: 15 * 1024 * 1024,   // 15MB
+  voice: 10 * 1024 * 1024,   // 10MB
 }
 
 type UploadType = 'avatar' | 'photo' | 'voice'

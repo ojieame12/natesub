@@ -18,7 +18,7 @@ const envSchema = z.object({
   JWT_SECRET: z.string().min(32),
   MAGIC_LINK_SECRET: z.string().min(32),
   SESSION_SECRET: z.string().min(32),
-  MAGIC_LINK_EXPIRES_MINUTES: z.string().default('15'),
+  MAGIC_LINK_EXPIRES_MINUTES: z.string().default('30'),
 
   // Stripe
   STRIPE_SECRET_KEY: z.string().startsWith('sk_'),

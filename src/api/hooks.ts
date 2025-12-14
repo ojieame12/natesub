@@ -515,22 +515,106 @@ export function useUploadUrl() {
   })
 }
 
+// Compress and convert image to JPEG
+async function compressImage(file: File, maxWidth = 1200, quality = 0.85): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => {
+      URL.revokeObjectURL(img.src)
+
+      // Calculate new dimensions
+      let width = img.width
+      let height = img.height
+
+      if (width > maxWidth) {
+        height = Math.round((height * maxWidth) / width)
+        width = maxWidth
+      }
+
+      // Draw to canvas
+      const canvas = document.createElement('canvas')
+      canvas.width = width
+      canvas.height = height
+
+      const ctx = canvas.getContext('2d')
+      if (!ctx) {
+        reject(new Error('Failed to get canvas context'))
+        return
+      }
+
+      ctx.drawImage(img, 0, 0, width, height)
+
+      // Convert to blob
+      canvas.toBlob(
+        (blob) => {
+          if (blob) {
+            resolve(blob)
+          } else {
+            reject(new Error('Failed to compress image'))
+          }
+        },
+        'image/jpeg',
+        quality
+      )
+    }
+    img.onerror = () => {
+      URL.revokeObjectURL(img.src)
+      reject(new Error('Failed to load image'))
+    }
+    img.src = URL.createObjectURL(file)
+  })
+}
+
 // Helper to upload file to S3
 export async function uploadFile(
   file: File,
   type: 'avatar' | 'photo' | 'voice'
 ): Promise<string> {
-  // Get signed URL
-  const { uploadUrl, publicUrl } = await api.media.getUploadUrl(type, file.type)
+  let uploadBlob: Blob = file
+  let mimeType = file.type
 
-  // Upload to S3
-  await fetch(uploadUrl, {
+  // For images, compress and convert to JPEG (handles HEIC, large files, etc.)
+  if (type === 'avatar' || type === 'photo') {
+    // Check if it's an image type that needs conversion/compression
+    const isImage = file.type.startsWith('image/') ||
+                    file.type === 'image/heic' ||
+                    file.type === 'image/heif' ||
+                    file.name.toLowerCase().endsWith('.heic') ||
+                    file.name.toLowerCase().endsWith('.heif')
+
+    if (isImage) {
+      try {
+        // Compress to max 1200px width for avatars/photos, JPEG quality 85%
+        const maxWidth = type === 'avatar' ? 800 : 1600
+        uploadBlob = await compressImage(file, maxWidth, 0.85)
+        mimeType = 'image/jpeg'
+      } catch (compressError) {
+        console.warn('Image compression failed, using original:', compressError)
+        // Fall back to original file if compression fails
+        uploadBlob = file
+        mimeType = file.type
+      }
+    }
+  }
+
+  // Get signed URL with the correct mime type
+  const { uploadUrl, publicUrl } = await api.media.getUploadUrl(type, mimeType)
+
+  // Upload to R2/S3
+  const response = await fetch(uploadUrl, {
     method: 'PUT',
-    body: file,
+    body: uploadBlob,
     headers: {
-      'Content-Type': file.type,
+      'Content-Type': mimeType,
     },
   })
+
+  // Check if upload succeeded
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => 'Unknown error')
+    console.error('R2 upload failed:', response.status, errorText)
+    throw new Error(`Upload failed: ${response.status === 403 ? 'Access denied' : 'Server error'}`)
+  }
 
   return publicUrl
 }
