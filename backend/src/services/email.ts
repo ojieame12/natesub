@@ -549,6 +549,69 @@ export async function sendNewSubscriberEmail(
   )
 }
 
+/**
+ * Send subscription confirmation to the subscriber (person who paid)
+ * Includes link to manage their subscription
+ */
+export async function sendSubscriptionConfirmationEmail(
+  to: string,
+  subscriberName: string,
+  providerName: string,
+  providerUsername: string,
+  tierName: string | null,
+  amount: number,
+  currency: string
+): Promise<EmailResult> {
+  const formattedAmount = formatAmountForEmail(amount, currency)
+  const safeSubscriberName = escapeHtml(subscriberName.split(' ')[0] || 'there') // First name only
+  const safeProviderName = escapeHtml(providerName)
+  const safeTierName = tierName ? escapeHtml(tierName) : null
+  const tierText = safeTierName ? ` (${safeTierName})` : ''
+
+  return sendWithRetry(() =>
+    resend.emails.send({
+      from: env.EMAIL_FROM,
+      to,
+      subject: sanitizeEmailSubject(`You're subscribed to ${providerName}`),
+      html: baseTemplate({
+        preheader: `Thanks for subscribing! You'll be charged ${formattedAmount}/month.`,
+        headline: `You're subscribed!`,
+        body: `
+          <p style="margin: 0 0 16px 0;">
+            Hey ${safeSubscriberName}, thanks for subscribing to <strong>${safeProviderName}</strong>${tierText}.
+          </p>
+
+          ${amountCard('Monthly subscription', formattedAmount, '#16a34a')}
+
+          <p style="margin: 0 0 8px 0; font-size: 14px; color: #4a4a4a;">
+            <strong>What's next:</strong>
+          </p>
+          <ul style="margin: 0 0 20px 0; padding-left: 20px; color: #4a4a4a; font-size: 14px;">
+            <li style="margin-bottom: 6px;">You'll be charged ${escapeHtml(formattedAmount)} each month</li>
+            <li style="margin-bottom: 6px;">Cancel anytime - no questions asked</li>
+            <li style="margin-bottom: 6px;">Manage your subscription from the link below</li>
+          </ul>
+
+          <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin: 20px 0; border: 1px solid #e5e5e5; border-radius: 8px;">
+            <tr>
+              <td style="padding: 16px; background-color: #fafafa;">
+                <p style="margin: 0 0 8px 0; font-size: 13px; color: #666666;">Need to update payment method or cancel?</p>
+                <a href="${env.APP_URL}/my-subscriptions" style="color: ${BRAND_COLOR}; text-decoration: none; font-weight: 500;">
+                  Manage your subscriptions →
+                </a>
+              </td>
+            </tr>
+          </table>
+        `,
+        ctaText: `View ${safeProviderName}'s Page`,
+        ctaUrl: `${env.APP_URL}/${escapeHtml(providerUsername)}`,
+        ctaColor: '#16a34a',
+        footerText: 'You can cancel your subscription anytime from your account settings.',
+      }),
+    })
+  )
+}
+
 export async function sendRenewalReminderEmail(
   to: string,
   providerName: string,

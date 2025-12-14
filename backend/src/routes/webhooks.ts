@@ -4,7 +4,7 @@ import Stripe from 'stripe'
 import { stripe, setSubscriptionDefaultFee } from '../services/stripe.js'
 import { db } from '../db/client.js'
 import { env } from '../config/env.js'
-import { sendNewSubscriberEmail, sendPlatformDebitRecoveredNotification } from '../services/email.js'
+import { sendNewSubscriberEmail, sendSubscriptionConfirmationEmail, sendPlatformDebitRecoveredNotification } from '../services/email.js'
 import { scheduleReminder, cancelAllRemindersForEntity } from '../jobs/reminders.js'
 import { handlePlatformSubscriptionEvent } from '../services/platformSubscription.js'
 import { calculateServiceFee, calculateLegacyFee } from '../services/fees.js'
@@ -579,7 +579,7 @@ async function handleCheckoutCompleted(event: Stripe.Event) {
   // Send notification email to creator
   const creator = await db.user.findUnique({
     where: { id: creatorId },
-    include: { profile: { select: { displayName: true, platformDebitCents: true } } },
+    include: { profile: { select: { displayName: true, username: true, platformDebitCents: true } } },
   })
   if (creator) {
     await sendNewSubscriberEmail(
@@ -589,6 +589,23 @@ async function handleCheckoutCompleted(event: Stripe.Event) {
       session.amount_total || 0,
       session.currency?.toUpperCase() || 'USD'
     )
+
+    // Send confirmation email to subscriber with manage subscription link
+    if (session.customer_details?.email) {
+      try {
+        await sendSubscriptionConfirmationEmail(
+          session.customer_details.email,
+          session.customer_details.name || 'there',
+          creator.profile?.displayName || creator.email,
+          creator.profile?.username || '',
+          tierName,
+          session.amount_total || 0,
+          session.currency?.toUpperCase() || 'USD'
+        )
+      } catch (emailErr) {
+        console.error(`[checkout] Failed to send subscriber confirmation email:`, emailErr)
+      }
+    }
 
     // Send debit recovery email if we recovered any debit
     if (platformDebitRecovered > 0) {
@@ -2367,7 +2384,10 @@ async function handlePaystackChargeSuccess(data: any, eventId: string) {
   }
 
   // Send notification email to creator
-  const creator = await db.user.findUnique({ where: { id: creatorId } })
+  const creator = await db.user.findUnique({
+    where: { id: creatorId },
+    include: { profile: { select: { displayName: true, username: true } } },
+  })
   if (creator) {
     await sendNewSubscriberEmail(
       creator.email,
@@ -2376,6 +2396,23 @@ async function handlePaystackChargeSuccess(data: any, eventId: string) {
       netCents, // Show creator their earnings
       currency?.toUpperCase() || 'NGN'
     )
+
+    // Send confirmation email to subscriber with manage subscription link
+    if (customer?.email) {
+      try {
+        await sendSubscriptionConfirmationEmail(
+          customer.email,
+          customer.first_name || customer.email.split('@')[0] || 'there',
+          creator.profile?.displayName || creator.email,
+          creator.profile?.username || '',
+          tierName,
+          netCents,
+          currency?.toUpperCase() || 'NGN'
+        )
+      } catch (emailErr) {
+        console.error(`[paystack] Failed to send subscriber confirmation email:`, emailErr)
+      }
+    }
   }
 }
 
