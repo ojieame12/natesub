@@ -82,6 +82,7 @@ export default function SubscriptionLiquid({ profile, canceled }: SubscribeBound
     // State
     const [currentView, setCurrentView] = useState<ViewType>('welcome')
     const [slideDirection, setSlideDirection] = useState<'left' | 'right' | null>(null)
+    const [entryDirection, setEntryDirection] = useState<'left' | 'right' | null>(null) // Direction new view enters from
     const [isAnimating, setIsAnimating] = useState(false)
     const [isSubscribed, setIsSubscribed] = useState(false)
     const [isVerifying, setIsVerifying] = useState(false)
@@ -379,13 +380,19 @@ export default function SubscriptionLiquid({ profile, canceled }: SubscribeBound
 
         // Short delay for exit animation, then switch view
         setTimeout(() => {
+            // Set entry direction (opposite of slide direction)
+            // Sliding left = next = new view enters from right
+            // Sliding right = prev = new view enters from left
+            setEntryDirection(direction === 'left' ? 'right' : 'left')
             setCurrentView(newView)
-            // Reset animation state after enter animation
+
+            // Reset animation state after enter animation completes
             setTimeout(() => {
                 setIsAnimating(false)
                 setSlideDirection(null)
-            }, 250)
-        }, 50)
+                setEntryDirection(null)
+            }, 500) // Match CSS animation duration
+        }, 100) // Brief exit animation
     }
 
     const handleDotClick = (index: number) => {
@@ -407,52 +414,17 @@ export default function SubscriptionLiquid({ profile, canceled }: SubscribeBound
         }
     }
 
-    // === LIQUID MORPHING: DYNAMIC HEIGHT ===
-    // Uses ResizeObserver for smooth, jank-free height transitions
+    // Helper to get view class with entry animation
+    const getViewClass = (baseClass: string) => {
+        const classes = ['sub-view', baseClass]
+        if (entryDirection) {
+            classes.push(`slide-from-${entryDirection}`)
+        }
+        return classes.join(' ')
+    }
+
+    // Content ref for touch handling
     const contentRef = useRef<HTMLDivElement>(null)
-    const [contentHeight, setContentHeight] = useState<number | null>(null) // null = auto
-    const hasMounted = useRef(false)
-
-    useEffect(() => {
-        if (!contentRef.current) return
-
-        const measureHeight = () => {
-            const currentViewEl = contentRef.current?.querySelector('.sub-view')
-            if (currentViewEl) {
-                const height = currentViewEl.getBoundingClientRect().height + 40 // + padding
-                // Only animate height after initial mount to prevent pop
-                if (hasMounted.current) {
-                    setContentHeight(height)
-                } else {
-                    // First mount: set height immediately without animation
-                    hasMounted.current = true
-                    setContentHeight(height)
-                }
-            }
-        }
-
-        // Use ResizeObserver for efficient, layout-aware height detection
-        const resizeObserver = new ResizeObserver(() => {
-            // Use requestAnimationFrame to batch with browser paint
-            requestAnimationFrame(measureHeight)
-        })
-
-        // Observe the current view for size changes
-        const currentViewEl = contentRef.current.querySelector('.sub-view')
-        if (currentViewEl) {
-            resizeObserver.observe(currentViewEl)
-        }
-
-        // Initial measurement
-        measureHeight()
-
-        return () => {
-            resizeObserver.disconnect()
-        }
-    }, [currentView, selectedTierId])
-
-
-    // ... existing touch handlers ...
 
     // Swipe handlers
     const handleTouchStart = (e: React.TouchEvent) => {
@@ -723,22 +695,17 @@ export default function SubscriptionLiquid({ profile, canceled }: SubscribeBound
                     </div>
                 </div>
 
-                {/* Content Area - Swipeable & Liquid Height */}
+                {/* Content Area - Swipeable & Fluid Height */}
                 <div
                     ref={contentRef}
-                    className={`sub-content ${isAnimating ? `sub-animating sub-slide-${slideDirection}` : ''}`}
-                    style={{
-                        height: contentHeight !== null ? `${contentHeight}px` : 'auto',
-                        transition: hasMounted.current ? 'height 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)' : 'none',
-                        overflow: 'hidden'
-                    }}
+                    className={`sub-content ${isAnimating ? `sub-slide-${slideDirection}` : ''}`}
                     onTouchStart={handleTouchStart}
                     onTouchMove={handleTouchMove}
                     onTouchEnd={handleTouchEnd}
                 >
                     {/* Welcome View */}
                     {currentView === 'welcome' && (
-                        <div className="sub-view sub-view-welcome">
+                        <div className={getViewClass('sub-view-welcome')}>
                             <div className="sub-welcome-content">
                                 <h1 className="sub-welcome-title">
                                     {isService ? (
@@ -793,7 +760,7 @@ export default function SubscriptionLiquid({ profile, canceled }: SubscribeBound
 
                     {/* Impact View */}
                     {currentView === 'impact' && (
-                        <div className="sub-view sub-view-impact">
+                        <div className={getViewClass('sub-view-impact')}>
                             <h2 className="sub-section-title">
                                 {isService ? 'Why Work With Me' : 'How it would Help Me'}
                             </h2>
@@ -814,7 +781,7 @@ export default function SubscriptionLiquid({ profile, canceled }: SubscribeBound
 
                     {/* Perks View */}
                     {currentView === 'perks' && (
-                        <div className="sub-view sub-view-perks">
+                        <div className={getViewClass('sub-view-perks')}>
                             <h2 className="sub-section-title">
                                 {isService ? "What's Included" : 'What You would Get'}
                             </h2>
@@ -843,7 +810,7 @@ export default function SubscriptionLiquid({ profile, canceled }: SubscribeBound
 
                     {/* Tiers View - For service accounts with multiple tiers */}
                     {currentView === 'tiers' && hasTiers && tiers && (
-                        <div className="sub-view sub-view-tiers">
+                        <div className={getViewClass('sub-view-tiers')}>
                             <h2 className="sub-section-title">Choose Your Plan</h2>
 
                             <div className="sub-tiers-list">
@@ -895,7 +862,7 @@ export default function SubscriptionLiquid({ profile, canceled }: SubscribeBound
                         const feePreview = calculateFeePreview(currentAmount, currency, purpose, feeMode)
 
                         return (
-                            <div className="sub-view sub-view-payment">
+                            <div className={getViewClass('sub-view-payment')}>
                                 <h2 className="sub-section-title">Complete Subscription</h2>
 
                                 <div className="sub-payment-summary">

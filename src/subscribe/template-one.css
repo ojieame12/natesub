@@ -130,11 +130,12 @@
     flex-shrink: 0;
 }
 
-/* === MAIN CARD - Fixed Height, Centered === */
+/* === MAIN CARD - Fluid Height, Max 95vh === */
 .template-boundary .sub-card {
     width: 100%;
-    max-height: 680px;
-    min-height: 580px;
+    min-height: 480px;
+    max-height: 95vh;
+    max-height: 95dvh; /* Dynamic viewport for mobile keyboards */
     background: #FFFFFF;
     border-radius: var(--radius-2xl);
     box-shadow:
@@ -142,9 +143,11 @@
         0 0 0 1px rgba(255, 255, 255, 0.5) inset;
     display: flex;
     flex-direction: column;
-    overflow: visible;
+    overflow: hidden;
     position: relative;
     z-index: 1;
+    /* Smooth height transitions */
+    transition: height 0.5s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* === HERO SECTION === */
@@ -267,7 +270,7 @@
     object-fit: cover;
 }
 
-/* === CONTENT AREA - Flex Centered === */
+/* === CONTENT AREA - Fluid with smooth scroll === */
 .template-boundary .sub-content {
     flex: 1;
     display: flex;
@@ -278,38 +281,96 @@
     overflow-x: hidden;
     touch-action: pan-x pan-y;
     position: relative;
+    /* Smooth iOS momentum scrolling */
+    -webkit-overflow-scrolling: touch;
+    /* Hide scrollbar but keep functionality */
+    scrollbar-width: none;
+    -ms-overflow-style: none;
 }
 
-/* Fade-up gradient removed from content - now on pagination */
+.template-boundary .sub-content::-webkit-scrollbar {
+    display: none;
+}
 
-/* === VIEW CONTAINER - Centered Content === */
+/* === VIEW CONTAINER - Reveal Animation === */
 .template-boundary .sub-view {
     flex: 1;
     display: flex;
     flex-direction: column;
-    justify-content: center;
-    animation: viewSlideIn 0.25s ease-out;
+    justify-content: flex-start;
+    padding-top: var(--space-sm);
 }
 
-@keyframes viewSlideIn {
+/* View enter animation - smooth ease */
+.template-boundary .sub-view.view-enter {
+    animation: viewReveal 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes viewReveal {
     from {
         opacity: 0;
-        transform: translateX(16px);
+        transform: translateY(16px);
     }
-
     to {
         opacity: 1;
-        transform: translateX(0);
+        transform: translateY(0);
     }
 }
 
-/* === WELCOME VIEW === */
+/* Slide transitions for swipe */
+.template-boundary .sub-content.sub-slide-left .sub-view {
+    animation: slideOutLeft 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.template-boundary .sub-content.sub-slide-right .sub-view {
+    animation: slideOutRight 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes slideOutLeft {
+    from { opacity: 1; transform: translateX(0); }
+    to { opacity: 0; transform: translateX(-24px); }
+}
+
+@keyframes slideOutRight {
+    from { opacity: 1; transform: translateX(0); }
+    to { opacity: 0; transform: translateX(24px); }
+}
+
+/* View slide in from direction */
+.template-boundary .sub-view.slide-from-left {
+    animation: slideInFromLeft 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.template-boundary .sub-view.slide-from-right {
+    animation: slideInFromRight 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes slideInFromLeft {
+    from { opacity: 0; transform: translateX(-24px); }
+    to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes slideInFromRight {
+    from { opacity: 0; transform: translateX(24px); }
+    to { opacity: 1; transform: translateX(0); }
+}
+
+/* === WELCOME VIEW - Cascade Reveal === */
+.template-boundary .sub-welcome-content {
+    flex: 1;
+}
+
 .template-boundary .sub-welcome-title {
     font-size: 26px;
     font-weight: 600;
     color: var(--text-primary);
     margin: 0 0 var(--space-md);
     line-height: 1.2;
+    /* Cascade animation */
+    opacity: 0;
+    transform: translateY(12px);
+    animation: contentCascade 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    animation-delay: 0.05s;
 }
 
 .template-boundary .sub-welcome-highlight {
@@ -321,11 +382,30 @@
     color: var(--text-secondary);
     line-height: 1.6;
     margin: 0 0 var(--space-xl);
+    /* Cascade animation */
+    opacity: 0;
+    transform: translateY(12px);
+    animation: contentCascade 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    animation-delay: 0.12s;
 }
 
-/* Welcome Content wrapper */
-.template-boundary .sub-welcome-content {
-    flex: 1;
+/* Voice card cascade */
+.template-boundary .sub-voice-card-mini {
+    opacity: 0;
+    transform: translateY(12px);
+    animation: contentCascade 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    animation-delay: 0.2s;
+}
+
+@keyframes contentCascade {
+    from {
+        opacity: 0;
+        transform: translateY(12px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 /* Mini Voice Card for Welcome */
@@ -362,15 +442,20 @@
     height: 44px;
 }
 
-/* === SECTION TITLE === */
+/* === SECTION TITLE - Cascade === */
 .template-boundary .sub-section-title {
     font-size: 20px;
     font-weight: 600;
     color: var(--text-primary);
     margin: 0 0 var(--space-xl);
+    /* Cascade animation */
+    opacity: 0;
+    transform: translateY(12px);
+    animation: contentCascade 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    animation-delay: 0.05s;
 }
 
-/* === ITEMS - Gray card style === */
+/* === ITEMS - Gray card style with cascade reveal === */
 .template-boundary .sub-items-free {
     display: flex;
     flex-direction: column;
@@ -384,31 +469,25 @@
     display: flex;
     align-items: center;
     gap: var(--space-md);
-    animation: itemFadeIn 0.4s ease-out backwards;
+    /* Cascade reveal animation */
+    opacity: 0;
+    transform: translateY(12px);
+    animation: itemCascade 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
-.template-boundary .sub-item:nth-child(1) {
-    animation-delay: 0.1s;
-}
+/* Staggered delays - smooth cascade */
+.template-boundary .sub-item:nth-child(1) { animation-delay: 0.1s; }
+.template-boundary .sub-item:nth-child(2) { animation-delay: 0.18s; }
+.template-boundary .sub-item:nth-child(3) { animation-delay: 0.26s; }
+.template-boundary .sub-item:nth-child(4) { animation-delay: 0.34s; }
+.template-boundary .sub-item:nth-child(5) { animation-delay: 0.42s; }
+.template-boundary .sub-item:nth-child(6) { animation-delay: 0.50s; }
 
-.template-boundary .sub-item:nth-child(2) {
-    animation-delay: 0.2s;
-}
-
-.template-boundary .sub-item:nth-child(3) {
-    animation-delay: 0.3s;
-}
-
-.template-boundary .sub-item:nth-child(4) {
-    animation-delay: 0.4s;
-}
-
-@keyframes itemFadeIn {
+@keyframes itemCascade {
     from {
         opacity: 0;
-        transform: translateY(8px);
+        transform: translateY(12px);
     }
-
     to {
         opacity: 1;
         transform: translateY(0);
