@@ -551,13 +551,13 @@ export async function sendNewSubscriberEmail(
 
 export async function sendRenewalReminderEmail(
   to: string,
-  creatorName: string,
+  providerName: string,
   amount: number,
   currency: string,
   renewalDate: Date
 ): Promise<EmailResult> {
   const formattedAmount = formatAmountForEmail(amount, currency)
-  const safeCreatorName = escapeHtml(creatorName)
+  const safeProviderName = escapeHtml(providerName)
   const formattedDate = renewalDate.toLocaleDateString('en-US', {
     month: 'long',
     day: 'numeric',
@@ -568,13 +568,13 @@ export async function sendRenewalReminderEmail(
     resend.emails.send({
       from: env.EMAIL_FROM,
       to,
-      subject: sanitizeEmailSubject(`Subscription renewal reminder - ${creatorName}`),
+      subject: sanitizeEmailSubject(`Subscription renewal reminder - ${providerName}`),
       html: baseTemplate({
-        preheader: `Your subscription to ${creatorName} renews on ${formattedDate}.`,
+        preheader: `Your subscription to ${providerName} renews on ${formattedDate}.`,
         headline: 'Your subscription renews soon',
         body: `
           <p style="margin: 0 0 16px 0;">
-            Your subscription to <strong>${safeCreatorName}</strong> will renew on <strong>${escapeHtml(formattedDate)}</strong> for <strong>${escapeHtml(formattedAmount)}</strong>.
+            Your subscription to <strong>${safeProviderName}</strong> will renew on <strong>${escapeHtml(formattedDate)}</strong> for <strong>${escapeHtml(formattedAmount)}</strong>.
           </p>
           <p style="margin: 0; font-size: 14px; color: #888888;">
             No action needed if you'd like to continue. To update your payment method or cancel, visit your account settings.
@@ -590,13 +590,13 @@ export async function sendRenewalReminderEmail(
 
 export async function sendPaymentFailedEmail(
   to: string,
-  creatorName: string,
+  providerName: string,
   amount: number,
   currency: string,
   retryDate: Date | null
 ): Promise<EmailResult> {
   const formattedAmount = formatAmountForEmail(amount, currency)
-  const safeCreatorName = escapeHtml(creatorName)
+  const safeProviderName = escapeHtml(providerName)
 
   const retryMessage = retryDate
     ? `We'll automatically retry on ${retryDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}.`
@@ -606,13 +606,13 @@ export async function sendPaymentFailedEmail(
     resend.emails.send({
       from: env.EMAIL_FROM,
       to,
-      subject: sanitizeEmailSubject(`Action required: Payment failed for ${creatorName}`),
+      subject: sanitizeEmailSubject(`Action required: Payment failed for ${providerName}`),
       html: baseTemplate({
         preheader: `We couldn't process your ${formattedAmount} payment. Please update your payment method.`,
         headline: 'Payment failed',
         body: `
           <p style="margin: 0 0 16px 0;">
-            We couldn't process your <strong>${escapeHtml(formattedAmount)}</strong> payment for your subscription to <strong>${safeCreatorName}</strong>.
+            We couldn't process your <strong>${escapeHtml(formattedAmount)}</strong> payment for your subscription to <strong>${safeProviderName}</strong>.
           </p>
           <p style="margin: 0; font-size: 14px; color: #888888;">${escapeHtml(retryMessage)}</p>
         `,
@@ -626,10 +626,10 @@ export async function sendPaymentFailedEmail(
 
 export async function sendSubscriptionCanceledEmail(
   to: string,
-  creatorName: string,
-  reason: 'payment_failed' | 'user_canceled' | 'creator_deactivated' | 'other' = 'other'
+  providerName: string,
+  reason: 'payment_failed' | 'user_canceled' | 'provider_deactivated' | 'other' = 'other'
 ): Promise<EmailResult> {
-  const safeCreatorName = escapeHtml(creatorName)
+  const safeProviderName = escapeHtml(providerName)
 
   let reasonMessage: string
   switch (reason) {
@@ -639,7 +639,7 @@ export async function sendSubscriptionCanceledEmail(
     case 'user_canceled':
       reasonMessage = 'has been canceled as requested'
       break
-    case 'creator_deactivated':
+    case 'provider_deactivated':
       reasonMessage = 'has ended because the service provider deactivated their account'
       break
     default:
@@ -650,16 +650,16 @@ export async function sendSubscriptionCanceledEmail(
     resend.emails.send({
       from: env.EMAIL_FROM,
       to,
-      subject: sanitizeEmailSubject(`Subscription to ${creatorName} has ended`),
+      subject: sanitizeEmailSubject(`Subscription to ${providerName} has ended`),
       html: baseTemplate({
-        preheader: `Your subscription to ${creatorName} ${reasonMessage}.`,
+        preheader: `Your subscription to ${providerName} ${reasonMessage}.`,
         headline: 'Your subscription has ended',
         body: `
           <p style="margin: 0 0 16px 0;">
-            Your subscription to <strong>${safeCreatorName}</strong> ${reasonMessage}.
+            Your subscription to <strong>${safeProviderName}</strong> ${reasonMessage}.
           </p>
           <p style="margin: 0; font-size: 14px; color: #888888;">
-            You can resubscribe anytime to continue supporting ${safeCreatorName}.
+            You can resubscribe anytime if you'd like to continue.
           </p>
         `,
         ctaText: 'Resubscribe',
@@ -886,26 +886,26 @@ export async function sendInvoiceOverdueEmail(
 
 export async function sendUpdateEmail(
   to: string,
-  creatorName: string,
+  senderName: string,
   title: string | null,
   body: string
 ): Promise<EmailResult> {
-  const safeCreatorName = escapeHtml(creatorName)
+  const safeSenderName = escapeHtml(senderName)
   const safeTitle = title ? escapeHtml(title) : null
   const safeBody = escapeHtml(body)
 
-  const headlineText = safeTitle || `New update from ${safeCreatorName}`
+  const headlineText = safeTitle || `New update from ${safeSenderName}`
 
   return sendWithRetry(() =>
     resend.emails.send({
       from: env.EMAIL_FROM,
       to,
-      subject: sanitizeEmailSubject(title || `New update from ${creatorName}`),
+      subject: sanitizeEmailSubject(title || `New update from ${senderName}`),
       html: baseTemplate({
         preheader: body.substring(0, 100) + (body.length > 100 ? '...' : ''),
         headline: headlineText,
         body: `
-          <p style="margin: 0 0 8px 0; font-size: 14px; color: #888888;">From ${safeCreatorName}</p>
+          <p style="margin: 0 0 8px 0; font-size: 14px; color: #888888;">From ${safeSenderName}</p>
           <p style="margin: 0; white-space: pre-wrap; line-height: 1.6;">${safeBody}</p>
         `,
       }),

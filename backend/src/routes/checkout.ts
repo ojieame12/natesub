@@ -44,19 +44,19 @@ checkout.post(
     })
 
     if (!profile) {
-      return c.json({ error: 'Creator not found' }, 404)
+      return c.json({ error: 'User not found' }, 404)
     }
 
-    // Check if creator has payment set up
+    // Check if service provider has payment set up
     const hasStripe = profile.paymentProvider === 'stripe' && profile.stripeAccountId
     const hasPaystack = profile.paymentProvider === 'paystack' && profile.paystackSubaccountCode
 
     if (!hasStripe && !hasPaystack) {
-      return c.json({ error: 'Creator has not set up payments' }, 400)
+      return c.json({ error: 'This service provider has not set up payments yet' }, 400)
     }
 
     if (profile.payoutStatus !== 'active') {
-      return c.json({ error: 'Creator payments are not active' }, 400)
+      return c.json({ error: 'Payments are not active for this account' }, 400)
     }
 
     // Enforce platform subscription for service providers
@@ -64,7 +64,7 @@ checkout.post(
       const validSubscriptionStatuses = ['active', 'trialing']
       if (!profile.platformSubscriptionStatus || !validSubscriptionStatuses.includes(profile.platformSubscriptionStatus)) {
         return c.json({
-          error: 'This creator needs to activate their service plan to receive payments.',
+          error: 'This service provider needs to activate their plan to receive payments.',
           code: 'PLATFORM_SUBSCRIPTION_REQUIRED',
         }, 402)
       }
@@ -108,12 +108,12 @@ checkout.post(
           : null
 
         if (!expectedCurrency) {
-          return c.json({ error: 'Creator country not supported by Paystack' }, 400)
+          return c.json({ error: 'This country is not supported by Paystack' }, 400)
         }
 
         if (profile.currency !== expectedCurrency) {
           return c.json({
-            error: `Currency mismatch. Creator's currency is ${profile.currency}, but Paystack in ${profile.countryCode} requires ${expectedCurrency}`,
+            error: `Currency mismatch. Account currency is ${profile.currency}, but Paystack in ${profile.countryCode} requires ${expectedCurrency}`,
           }, 400)
         }
 
@@ -177,7 +177,7 @@ checkout.post(
 
       // Default to Stripe
       if (!profile.stripeAccountId) {
-        return c.json({ error: 'Creator has not connected Stripe' }, 400)
+        return c.json({ error: 'Payment account not connected' }, 400)
       }
 
       // Verify Stripe account can accept payments and transfers
@@ -187,7 +187,7 @@ checkout.post(
           ? 'cannot accept payments'
           : 'cannot receive transfers'
         return c.json({
-          error: `Creator payment account ${issue}. Please ask the creator to complete their payment setup.`
+          error: `Payment account ${issue}. Please ask them to complete their payment setup.`
         }, 400)
       }
 

@@ -135,7 +135,7 @@ requests.post(
     }
 
     if (!request.creator.profile?.stripeAccountId) {
-      return c.json({ error: 'Creator has not set up payments' }, 400)
+      return c.json({ error: 'This service provider has not set up payments yet' }, 400)
     }
 
     try {
