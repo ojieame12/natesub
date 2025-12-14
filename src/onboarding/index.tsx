@@ -1,5 +1,7 @@
 import { useRef, useEffect, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { useOnboardingStore } from './store'
+import { useAuthState } from '../hooks/useAuthState'
 import StartStep from './StartStep'
 import EmailStep from './EmailStep'
 import OtpStep from './OtpStep'
@@ -21,10 +23,45 @@ const PERSONAL_STEP_COUNT = 5  // Pricing, Username, Avatar, VoiceIntro, Payment
 const SERVICE_STEP_COUNT = 8  // Description, AI Gen, AI Review, Pricing, Username, Avatar, VoiceIntro, Payment
 
 export default function OnboardingFlow() {
-    const { currentStep, branch } = useOnboardingStore()
+    const location = useLocation()
+    const { onboarding, status } = useAuthState()
+    const { currentStep, branch, hydrateFromServer } = useOnboardingStore()
     const [direction, setDirection] = useState<'forward' | 'back'>('forward')
     const [isAnimating, setIsAnimating] = useState(false)
     const prevStepRef = useRef(currentStep)
+    const hasHydrated = useRef(false)
+
+    // Hydrate onboarding state from URL ?step= param or server state
+    // This handles resuming onboarding from where user left off
+    useEffect(() => {
+        if (hasHydrated.current) return
+        if (status !== 'authenticated') return
+
+        // Parse ?step= from URL (server emits this redirect)
+        const params = new URLSearchParams(location.search)
+        const urlStep = params.get('step')
+
+        // Hydrate from URL param if present and current step is 0
+        if (urlStep && currentStep === 0) {
+            hasHydrated.current = true
+            hydrateFromServer({
+                step: parseInt(urlStep, 10),
+                branch: onboarding?.branch,
+                data: onboarding?.data,
+            })
+            return
+        }
+
+        // Hydrate from server state if we have saved progress
+        if (onboarding?.step && onboarding.step > 0 && currentStep === 0) {
+            hasHydrated.current = true
+            hydrateFromServer({
+                step: onboarding.step,
+                branch: onboarding.branch,
+                data: onboarding.data,
+            })
+        }
+    }, [location.search, status, onboarding, currentStep, hydrateFromServer])
 
     // Track direction of navigation
     useEffect(() => {

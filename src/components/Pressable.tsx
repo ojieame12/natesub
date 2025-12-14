@@ -113,6 +113,25 @@ const Pressable = memo(function Pressable({
         }
     }, [disabled, onClick])
 
+    // Keyboard accessibility - activate on Enter or Space
+    const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+        if (disabled) return
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            setIsPressed(true)
+            if (haptic !== 'none') {
+                triggerHaptic(haptic)
+            }
+            onClick?.()
+        }
+    }, [disabled, haptic, onClick])
+
+    const handleKeyUp = useCallback((e: React.KeyboardEvent) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            setIsPressed(false)
+        }
+    }, [])
+
     // Memoize combined styles
     const combinedStyle = useMemo(() => ({
         ...baseStyles,
@@ -139,6 +158,8 @@ const Pressable = memo(function Pressable({
             onMouseEnter={onMouseEnter}
             onTouchStart={handleTouchStart}
             onTouchEnd={handleTouchEnd}
+            onKeyDown={handleKeyDown}
+            onKeyUp={handleKeyUp}
             style={combinedStyle}
             role="button"
             tabIndex={disabled ? -1 : 0}

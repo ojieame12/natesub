@@ -7,6 +7,7 @@ import {
   useInfiniteQuery,
 } from '@tanstack/react-query'
 import { api, type ApiError } from './client'
+import { useAuthState } from '../hooks/useAuthState'
 
 // ============================================
 // ERROR HANDLING UTILITIES
@@ -62,14 +63,28 @@ export function getStatusMessage(status: number): string {
 // AUTH HOOKS
 // ============================================
 
-export function useCurrentUser(options?: { enabled?: boolean }) {
-  return useQuery({
-    queryKey: ['currentUser'],
-    queryFn: api.auth.me,
-    retry: false,
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    enabled: options?.enabled ?? true,
-  })
+/**
+ * useCurrentUser - Delegates to useAuthState for single source of truth
+ *
+ * This ensures consistent behavior regardless of which hook mounts first.
+ * The query options are defined in useAuthState, not here.
+ */
+export function useCurrentUser() {
+  const { user, status, error, refetch } = useAuthState()
+
+  return {
+    data: status === 'authenticated' && user ? {
+      id: user.id,
+      email: user.email,
+      profile: user.profile,
+      createdAt: user.createdAt,
+    } : undefined,
+    isLoading: status === 'unknown' || status === 'checking',
+    isError: !!error,
+    error,
+    refetch,
+    status,
+  }
 }
 
 export function useRequestMagicLink() {
@@ -82,7 +97,7 @@ export function useVerifyMagicLink() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: api.auth.verify,
+    mutationFn: ({ otp, email }: { otp: string; email: string }) => api.auth.verify(otp, email),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['currentUser'] })
     },

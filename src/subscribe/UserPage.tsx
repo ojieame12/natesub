@@ -1,8 +1,9 @@
 import { lazy, Suspense, type ReactNode } from 'react'
 import { useParams, Navigate, useSearchParams } from 'react-router-dom'
+import { Lock, Clock, AlertCircle } from 'lucide-react'
 import { isReservedUsername } from '../utils/constants'
 import { usePublicProfile } from '../api/hooks'
-import { Skeleton, SkeletonAvatar } from '../components'
+import { Skeleton, SkeletonAvatar, Pressable } from '../components'
 
 // This component handles vanity URLs like natepay.co/username
 // It checks if the username is valid and renders the subscribe page
@@ -57,15 +58,71 @@ export default function UserPage() {
   }
 
   // Fetch real profile data from API (includes viewerSubscription if logged in)
-  const { data, isLoading, error } = usePublicProfile(username)
+  const { data, isLoading, error, refetch } = usePublicProfile(username)
 
   // Loading state - use skeleton that matches final layout
   if (isLoading) {
     return <SubscriptionPageSkeleton />
   }
 
-  // Error or not found
+  // Error handling - differentiate by status code
   if (error || !data?.profile) {
+    const errorStatus = (error as any)?.status
+
+    // 403 - Profile is private
+    if (errorStatus === 403) {
+      return (
+        <div className="sub-page template-boundary">
+          <div className="sub-not-found">
+            <Lock size={48} style={{ marginBottom: 16, opacity: 0.6 }} />
+            <h1>Private Profile</h1>
+            <p>@{username} has made their page private.</p>
+          </div>
+        </div>
+      )
+    }
+
+    // 429 - Rate limited
+    if (errorStatus === 429) {
+      return (
+        <div className="sub-page template-boundary">
+          <div className="sub-not-found">
+            <Clock size={48} style={{ marginBottom: 16, opacity: 0.6 }} />
+            <h1>Too Many Requests</h1>
+            <p>Please wait a moment and try again.</p>
+            <Pressable
+              className="sub-retry-btn"
+              onClick={() => refetch()}
+              style={{ marginTop: 24 }}
+            >
+              Try Again
+            </Pressable>
+          </div>
+        </div>
+      )
+    }
+
+    // 500+ - Server error
+    if (errorStatus >= 500) {
+      return (
+        <div className="sub-page template-boundary">
+          <div className="sub-not-found">
+            <AlertCircle size={48} style={{ marginBottom: 16, opacity: 0.6 }} />
+            <h1>Something went wrong</h1>
+            <p>We're having trouble loading this page. Please try again.</p>
+            <Pressable
+              className="sub-retry-btn"
+              onClick={() => refetch()}
+              style={{ marginTop: 24 }}
+            >
+              Try Again
+            </Pressable>
+          </div>
+        </div>
+      )
+    }
+
+    // Default: 404 not found (or unknown error)
     return (
       <div className="sub-page template-boundary">
         <div className="sub-not-found">

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, ChevronRight, Mail, Bell, Eye, Download, Trash2, LogOut, CreditCard, Loader2 } from 'lucide-react'
-import { Pressable, useToast } from './components'
+import { Pressable, useToast, Toggle } from './components'
 import { useCurrentUser, useLogout, useDeleteAccount, useSettings, useUpdateSettings, useBillingStatus } from './api/hooks'
 import { useOnboardingStore } from './onboarding/store'
 import { getPricing } from './utils/pricing'
@@ -15,24 +15,6 @@ function getTrialDaysRemaining(trialEndsAt: string | null): number {
   const end = new Date(trialEndsAt)
   const diff = end.getTime() - now.getTime()
   return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)))
-}
-
-// Toggle component
-interface ToggleProps {
-  value: boolean
-  onChange: (value: boolean) => void
-  disabled?: boolean
-}
-
-const Toggle = ({ value, onChange, disabled }: ToggleProps) => {
-  return (
-    <div
-      className={`toggle ${value ? 'on' : ''} ${disabled ? 'disabled' : ''}`}
-      onClick={() => !disabled && onChange(!value)}
-    >
-      <div className="toggle-knob" />
-    </div>
-  )
 }
 
 export default function Settings() {
@@ -189,6 +171,10 @@ export default function Settings() {
                     'Service Plan · $5/mo'
                   ) : isService && subscriptionStatus === 'past_due' ? (
                     'Payment Failed'
+                  ) : isService && subscriptionStatus === 'canceled' ? (
+                    'Subscription Canceled'
+                  ) : isService && subscriptionStatus === 'unpaid' ? (
+                    'Payment Required'
                   ) : isService && !subscriptionStatus ? (
                     'Start Free Trial'
                   ) : (

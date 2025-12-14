@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useReducedMotion } from '../hooks'
 
 interface AnimatedNumberProps {
     value: number
@@ -11,6 +12,7 @@ interface AnimatedNumberProps {
 /**
  * AnimatedNumber - Rolls up numbers for a premium feel
  * Used for currency values, stats, and metrics
+ * Respects prefers-reduced-motion for accessibility
  */
 export function AnimatedNumber({
     value,
@@ -22,10 +24,20 @@ export function AnimatedNumber({
     const previousValue = useRef(value)
     const frameRef = useRef<number | undefined>(undefined)
     const startTime = useRef<number | undefined>(undefined)
+    const prefersReducedMotion = useReducedMotion()
 
     useEffect(() => {
         // Skip animation if values are the same
-        if (value === previousValue.current) return
+        if (value === previousValue.current) {
+            return
+        }
+
+        // If user prefers reduced motion, update instantly without animation
+        if (prefersReducedMotion) {
+            setDisplayValue(value)
+            previousValue.current = value
+            return
+        }
 
         const from = previousValue.current
         const to = value
@@ -63,7 +75,7 @@ export function AnimatedNumber({
                 cancelAnimationFrame(frameRef.current)
             }
         }
-    }, [value, duration])
+    }, [value, duration, prefersReducedMotion])
 
     return (
         <span

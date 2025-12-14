@@ -12,15 +12,16 @@
  */
 
 import { useMemo } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api/client'
-import { getAuthToken } from '../api/client'
+import { getAuthToken, hasAuthSession, clearAuthSession } from '../api/client'
 
 export type AuthStatus =
   | 'unknown'        // Initial state, haven't checked yet
   | 'checking'       // API call in progress
   | 'authenticated'  // Valid session
-  | 'unauthenticated' // No session or invalid
+  | 'unauthenticated' // No session or invalid (401)
+  | 'error'          // Network/server error - don't redirect, show retry
 
 export interface AuthState {
   /** Current auth status */
@@ -31,6 +32,7 @@ export interface AuthState {
     id: string
     email: string
     profile: any | null
+    createdAt: string | null
   } | null
 
   /** Onboarding state for routing decisions */
@@ -39,6 +41,7 @@ export interface AuthState {
     hasActivePayment: boolean
     step: number | null
     branch: 'personal' | 'service' | null
+    data: Record<string, any> | null
     redirectTo: string
   } | null
 
@@ -62,7 +65,11 @@ export interface AuthState {
 }
 
 export function useAuthState(): AuthState {
+  const queryClient = useQueryClient()
   const hasToken = !!getAuthToken()
+  const hasSession = hasAuthSession()
+  // Enable auth check if we have either a token or a session flag (cookie-based auth)
+  const shouldCheckAuth = hasToken || hasSession
 
   const {
     data: user,
@@ -72,64 +79,71 @@ export function useAuthState(): AuthState {
     failureCount,
   } = useQuery({
     queryKey: ['currentUser'],
-    queryFn: api.auth.me,
+    queryFn: async () => {
+      const result = await api.auth.me()
+      return result
+    },
     // Retry transient errors (500, network) up to 2 times, but not 401s
     retry: (failureCount, err) => {
       const status = (err as any)?.status
       // Don't retry 401s - they're definitive
-      if (status === 401) return false
+      if (status === 401) {
+        // Clear session flag and cached data on 401 - session is invalid
+        clearAuthSession()
+        queryClient.removeQueries({ queryKey: ['currentUser'] })
+        return false
+      }
       // Retry other errors up to 2 times
       return failureCount < 2
     },
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 5000),
     // Cache for 5 minutes - token is cleared on cold start anyway
     staleTime: 5 * 60 * 1000,
-    // Only fetch if we have a token
-    enabled: hasToken,
+    // Fetch if we have a token OR a session flag (cookie-based auth)
+    enabled: shouldCheckAuth,
     // Don't refetch on window focus to avoid flickering
     refetchOnWindowFocus: false,
   })
 
   // Compute status based on query state
   const status = useMemo<AuthStatus>(() => {
-    // No token = definitely unauthenticated
-    if (!hasToken) {
+    // No token or session = definitely unauthenticated
+    if (!shouldCheckAuth) {
       return 'unauthenticated'
     }
 
-    // Have token but still loading = checking
+    // Have token/session but still loading = checking
     if (isLoading) {
       return 'checking'
     }
 
-    // Have token, not loading, but got an error
+    // Have token/session, not loading, but got an error
     if (error) {
       const errStatus = (error as any)?.status
       // 401 = definitely unauthenticated
       if (errStatus === 401) {
         return 'unauthenticated'
       }
-      // Other errors (500, network) after retries exhausted = treat as unauthenticated
-      // This prevents infinite "checking" state. User can refetch to try again.
-      // failureCount >= 2 means we've retried twice and still failed
+      // Other errors (500, network) after retries exhausted = show error state
+      // This prevents redirecting users during outages. User can retry.
       if (failureCount >= 2) {
-        return 'unauthenticated'
+        return 'error'
       }
       // Still retrying
       return 'checking'
     }
 
-    // Have token, have user data = authenticated
+    // Have token/session, have user data = authenticated
     if (user) {
       return 'authenticated'
     }
 
     // Shouldn't reach here, but default to checking
     return 'checking'
-  }, [hasToken, isLoading, error, user, failureCount])
+  }, [shouldCheckAuth, isLoading, error, user, failureCount])
 
   // Derive convenience booleans
-  const isReady = status === 'authenticated' || status === 'unauthenticated'
+  const isReady = status === 'authenticated' || status === 'unauthenticated' || status === 'error'
   const hasProfile = user?.onboarding?.hasProfile ?? false
   const hasActivePayment = user?.onboarding?.hasActivePayment ?? false
   const isFullySetUp = hasProfile && hasActivePayment
@@ -142,12 +156,14 @@ export function useAuthState(): AuthState {
       id: user.id,
       email: user.email,
       profile: user.profile,
+      createdAt: user.createdAt ?? null,
     } : null,
     onboarding: user?.onboarding ? {
       hasProfile: user.onboarding.hasProfile,
       hasActivePayment: user.onboarding.hasActivePayment,
       step: user.onboarding.step ?? null,
       branch: user.onboarding.branch ?? null,
+      data: user.onboarding.data ?? null,
       redirectTo: user.onboarding.redirectTo ?? '/onboarding',
     } : null,
     isReady,

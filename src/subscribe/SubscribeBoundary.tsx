@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Check, Play, Pause, Banknote, Briefcase, X, ChevronLeft, Loader2, ArrowRight } from 'lucide-react'
 import { Pressable } from '../components'
-import { useCreateCheckout, useRecordPageView, useUpdatePageView, useVerifyPaystackPayment } from '../api/hooks'
+import { useCreateCheckout, useRecordPageView, useUpdatePageView } from '../api/hooks'
 import type { Profile } from '../api/client'
 import { getCurrencySymbol, formatCompactNumber, formatAmountWithSeparators, calculateFeePreview } from '../utils/currency'
 import './template-one.css'
@@ -28,7 +28,6 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
     const { mutateAsync: createCheckout, isPending: isCheckoutLoading } = useCreateCheckout()
     const { mutateAsync: recordPageView } = useRecordPageView()
     const { mutateAsync: updatePageView } = useUpdatePageView()
-    const { mutateAsync: verifyPaystack } = useVerifyPaystackPayment()
 
     // Extract profile data
     const {
@@ -60,9 +59,7 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
     const [currentView, setCurrentView] = useState<ViewType>('welcome')
     const [slideDirection, setSlideDirection] = useState<'left' | 'right' | null>(null)
     const [isAnimating, setIsAnimating] = useState(false)
-    const [isSubscribed, setIsSubscribed] = useState(false)
-    const [isVerifying, setIsVerifying] = useState(false)
-    const [verificationFailed, setVerificationFailed] = useState(false)
+    const pendingViewRef = useRef<ViewType | null>(null)
     const [isPlaying, setIsPlaying] = useState(false)
     const [audioDuration, setAudioDuration] = useState(0)
     const [audioCurrentTime, setAudioCurrentTime] = useState(0)
@@ -71,7 +68,6 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
     const [subscriberEmail, setSubscriberEmail] = useState('')
     const [emailError, setEmailError] = useState<string | null>(null)
     const [isRedirecting, setIsRedirecting] = useState(false)
-    const [isRetrying, setIsRetrying] = useState(false)
 
     // Tier selection state - default to popular tier or first tier
     // Show tier selection UI if there are multiple tiers, otherwise use single tier pricing
@@ -86,57 +82,10 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
     const viewIdRef = useRef<string | null>(null)
     const hasTrackedPayment = useRef(false)
 
-    // Extract stable search param values to avoid re-running effect on every render
-    const successParam = searchParams.get('success')
-    const providerParam = searchParams.get('provider')
-    const referenceParam = searchParams.get('reference') || searchParams.get('trxref')
-    const hasHandledSuccess = useRef(false)
+    // Note: Success handling (success=true query param) is handled by UserPage,
+    // which renders SubscriptionSuccess instead of this component.
 
-    // Handle success redirect from Stripe/Paystack (runs once on mount if success=true)
-    useEffect(() => {
-        if (successParam !== 'true' || hasHandledSuccess.current) return
-        hasHandledSuccess.current = true
-
-        const handleSuccess = async () => {
-            // For Paystack, verify the transaction reference
-            if (providerParam === 'paystack' && referenceParam) {
-                setIsVerifying(true)
-                try {
-                    const result = await verifyPaystack(referenceParam)
-                    if (!result.verified) {
-                        console.error('[subscribe] Paystack verification failed:', result.status)
-                        setIsVerifying(false)
-                        setVerificationFailed(true)
-                        return // Don't show success if verification failed
-                    }
-                    console.log(`[subscribe] Paystack payment verified: ${referenceParam}`)
-                } catch (err) {
-                    console.error('[subscribe] Paystack verification error:', err)
-                    // Still show success on verification error - webhook will handle actual status
-                }
-                setIsVerifying(false)
-                setVerificationFailed(false)
-            }
-
-            setIsSubscribed(true)
-
-            // Track successful conversion (viewIdRef may be set by page view effect)
-            setTimeout(() => {
-                if (viewIdRef.current) {
-                    updatePageView({
-                        viewId: viewIdRef.current,
-                        data: { completedCheckout: true },
-                    }).catch(() => {})
-                }
-            }, 100)
-
-            console.log(`[subscribe] Payment successful via ${providerParam || 'unknown'}`)
-        }
-
-        handleSuccess()
-    }, [successParam, providerParam, referenceParam, verifyPaystack, updatePageView])
-
-    // Record page view on mount (analytics only - success handling is in separate effect)
+    // Record page view on mount
     useEffect(() => {
         if (!profileId) return
 
@@ -297,21 +246,29 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
         }
     }
 
-    // Animated view transition
+    // Animated view transition using animationend events for precise timing
     const changeView = (newView: ViewType, direction: 'left' | 'right') => {
         if (isAnimating || newView === currentView) return
+        pendingViewRef.current = newView
         setSlideDirection(direction)
         setIsAnimating(true)
+    }
 
-        // Short delay for exit animation, then switch view
-        setTimeout(() => {
-            setCurrentView(newView)
-            // Reset animation state after enter animation
-            setTimeout(() => {
-                setIsAnimating(false)
-                setSlideDirection(null)
-            }, 250)
-        }, 50)
+    // Handle animation end on the content container
+    const handleAnimationEnd = (e: React.AnimationEvent) => {
+        // Only handle animations on the content div itself, not bubbled from children
+        if (e.target !== e.currentTarget) return
+
+        // If there's a pending view, switch to it (exit animation just finished)
+        if (pendingViewRef.current) {
+            setCurrentView(pendingViewRef.current)
+            pendingViewRef.current = null
+            // Keep isAnimating true - enter animation will now play
+        } else {
+            // Enter animation finished, reset state
+            setIsAnimating(false)
+            setSlideDirection(null)
+        }
     }
 
     const handleDotClick = (index: number) => {
@@ -357,127 +314,7 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
         }
     }
 
-    // Verification loading state
-    if (isVerifying) {
-        return (
-            <div className="sub-page template-boundary">
-                <div className="sub-success">
-                    <div className="sub-success-icon sub-verifying">
-                        <div className="sub-spinner" />
-                    </div>
-                    <h1 className="sub-success-title">Verifying payment...</h1>
-                    <p className="sub-success-text">
-                        Please wait while we confirm your payment.
-                    </p>
-                </div>
-            </div>
-        )
-    }
-
-    // Retry verification function
-    const handleRetryVerification = async () => {
-        const reference = searchParams.get('reference') || searchParams.get('trxref')
-        if (!reference) {
-            // No reference to retry with - go back to start
-            setVerificationFailed(false)
-            navigate(`/${username}`, { replace: true })
-            return
-        }
-
-        setIsRetrying(true)
-        try {
-            const result = await verifyPaystack(reference)
-            if (result.verified) {
-                setVerificationFailed(false)
-                setIsSubscribed(true)
-                // Track successful conversion
-                if (viewIdRef.current) {
-                    updatePageView({
-                        viewId: viewIdRef.current,
-                        data: { completedCheckout: true },
-                    }).catch(() => {})
-                }
-            } else {
-                // Still failed - keep showing error
-                console.error('[subscribe] Retry verification failed:', result.status)
-            }
-        } catch (err) {
-            console.error('[subscribe] Retry verification error:', err)
-            // Keep showing error state
-        }
-        setIsRetrying(false)
-    }
-
-    // Verification failed state
-    if (verificationFailed) {
-        return (
-            <div className="sub-page template-boundary">
-                <div className="sub-success">
-                    <div className="sub-success-icon sub-error">
-                        {isRetrying ? <Loader2 size={32} className="spin" /> : <X size={32} />}
-                    </div>
-                    <h1 className="sub-success-title">
-                        {isRetrying ? 'Retrying...' : 'Payment Issue'}
-                    </h1>
-                    <p className="sub-success-text">
-                        {isRetrying
-                            ? 'Checking your payment status again...'
-                            : "We couldn't verify your payment. If you were charged, please contact support and we'll resolve this."
-                        }
-                    </p>
-                    {!isRetrying && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                            <Pressable
-                                className="sub-btn sub-btn-primary"
-                                onClick={handleRetryVerification}
-                            >
-                                Try Again
-                            </Pressable>
-                            <a
-                                href="mailto:support@natepay.com?subject=Payment%20Verification%20Issue"
-                                className="sub-btn sub-btn-secondary"
-                                style={{ textDecoration: 'none', textAlign: 'center' }}
-                            >
-                                Contact Support
-                            </a>
-                            <Pressable
-                                className="sub-btn sub-btn-tertiary"
-                                onClick={() => {
-                                    setVerificationFailed(false)
-                                    navigate(`/${username}`, { replace: true })
-                                }}
-                            >
-                                Start Over
-                            </Pressable>
-                        </div>
-                    )}
-                </div>
-            </div>
-        )
-    }
-
-    // Success state
-    if (isSubscribed) {
-        return (
-            <div className="sub-page template-boundary">
-                <div className="sub-success">
-                    <div className="sub-success-icon">
-                        <Check size={32} />
-                    </div>
-                    <h1 className="sub-success-title">You're in!</h1>
-                    <p className="sub-success-text">
-                        {isService
-                            ? `You're now subscribed to ${name}'s services at ${formatAmountWithSeparators(currentAmount, currency)}/month`
-                            : `You're now supporting ${name} at ${formatAmountWithSeparators(currentAmount, currency)}/month`
-                        }
-                    </p>
-                    <p className="sub-success-subtext">
-                        You'll receive a confirmation email shortly.
-                    </p>
-                </div>
-            </div>
-        )
-    }
+    // Note: Success/verification states are handled by UserPage (shows SubscriptionSuccess component)
 
     // Payments not ready or pricing not configured - show coming soon state
     if (!paymentsReady || !hasValidPricing) {
@@ -587,6 +424,7 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
                     onTouchStart={handleTouchStart}
                     onTouchMove={handleTouchMove}
                     onTouchEnd={handleTouchEnd}
+                    onAnimationEnd={handleAnimationEnd}
                 >
                     {/* Welcome View */}
                     {currentView === 'welcome' && (

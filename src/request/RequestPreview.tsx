@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronLeft, MessageSquare, Mail, Link2, Check, Mic, Plus, Calendar } from 'lucide-react'
 import { useRequestStore, getRelationshipLabel, type RelationshipType } from './store'
@@ -58,8 +58,15 @@ export default function RequestPreview() {
     const [editingPhone, setEditingPhone] = useState(false)
     const [editingEmail, setEditingEmail] = useState(false)
 
+    // Redirect if no recipient (useEffect to avoid render-time side effects)
+    useEffect(() => {
+        if (!recipient) {
+            navigate('/request/new', { replace: true })
+        }
+    }, [recipient, navigate])
+
+    // Early return to prevent rendering errors
     if (!recipient) {
-        navigate('/request/new')
         return null
     }
 

@@ -35,6 +35,7 @@ afterEach(() => {
   } catch {
     // ignore
   }
+  vi.unstubAllGlobals()
   vi.restoreAllMocks()
 })
 
@@ -73,6 +74,14 @@ globalThis.IntersectionObserver = MockIntersectionObserver
 
 // Misc browser APIs used in a few places
 window.scrollTo = vi.fn()
+
+// Blob URL helpers (used for local previews)
+if (!URL.createObjectURL) {
+  URL.createObjectURL = vi.fn(() => 'blob:mock')
+}
+if (!URL.revokeObjectURL) {
+  URL.revokeObjectURL = vi.fn()
+}
 
 if (!navigator.clipboard) {
   // @ts-expect-error - jsdom partial

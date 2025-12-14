@@ -54,7 +54,8 @@ export default function OtpStep() {
         setError(null)
         setSuccess(null)
         try {
-            const result = await verifyCode(otp)
+            // Pass both OTP and email for security - prevents OTP collision attacks
+            const result = await verifyCode({ otp, email })
 
             // Smart routing based on user state
             if (result.hasProfile && result.hasActivePayment) {

@@ -42,17 +42,8 @@ export function ScrollRestoration() {
       }
     }
 
-    // Check if view transitions are active
-    // @ts-expect-error - View Transitions API
-    if (document.startViewTransition) {
-      // Wait for view transition to complete before scrolling
-      // This prevents janky scroll during transition
-      requestAnimationFrame(() => {
-        requestAnimationFrame(handleScroll)
-      })
-    } else {
-      handleScroll()
-    }
+    // Execute scroll immediately (view transitions disabled due to iOS flickering)
+    handleScroll()
 
     prevKeyRef.current = locationKey
   }, [locationKey, navigationType])

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronLeft, RefreshCw, Zap } from 'lucide-react'
 import { useRequestStore, getSuggestedAmounts, getRelationshipLabel } from './store'
@@ -28,8 +28,15 @@ export default function RequestDetails() {
     const currencySymbol = getCurrencySymbol(currency)
     const [customAmount, setCustomAmount] = useState(amount.toString())
 
+    // Redirect if no recipient (useEffect to avoid render-time side effects)
+    useEffect(() => {
+        if (!recipient) {
+            navigate('/request/new', { replace: true })
+        }
+    }, [recipient, navigate])
+
+    // Early return to prevent rendering errors
     if (!recipient) {
-        navigate('/request/new')
         return null
     }
 

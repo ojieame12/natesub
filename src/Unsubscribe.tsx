@@ -22,15 +22,16 @@ export default function Unsubscribe() {
     setIsUpdating(true)
     try {
       // Update notification preferences to disable email updates
-      const current = await api.profile.get()
-      const currentPrefs = current.profile?.notificationPrefs || {
+      // Use the correct settings endpoint (PATCH /profile/settings)
+      const currentSettings = await api.profile.getSettings()
+      const currentPrefs = currentSettings.notificationPrefs || {
         push: true,
         email: true,
         subscriberAlerts: true,
         paymentAlerts: true,
       }
 
-      await api.profile.update({
+      await api.profile.updateSettings({
         notificationPrefs: {
           ...currentPrefs,
           email: false,

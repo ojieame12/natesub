@@ -1,0 +1,20 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "58J4BTAH95.co.natepay.app",
+        "paths": [
+          "/settings/payments/complete",
+          "/settings/payments/refresh",
+          "/stripe-complete",
+          "/stripe-refresh",
+          "/*"
+        ]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": ["58J4BTAH95.co.natepay.app"]
+  }
+}

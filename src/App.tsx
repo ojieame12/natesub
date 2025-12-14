@@ -1,8 +1,10 @@
 import { useEffect, useRef, lazy, Suspense, useState } from 'react'
 import { BrowserRouter, HashRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import { Capacitor } from '@capacitor/core'
+import { App as CapacitorApp } from '@capacitor/app'
+import type { URLOpenListenerEvent } from '@capacitor/app'
 import { useOnboardingStore } from './onboarding/store'
-import { PageSkeleton, ScrollRestoration, useToast, SplashScreen, AmbientBackground } from './components'
+import { PageSkeleton, ScrollRestoration, useToast, SplashScreen, AmbientBackground, Pressable } from './components'
 import { useAuthState } from './hooks/useAuthState'
 import { AUTH_ERROR_EVENT } from './api/client'
 import { isReservedUsername } from './utils/constants'
@@ -65,9 +67,10 @@ function isPublicCreatorPage(pathname: string): boolean {
 }
 
 function isPublicRoute(pathname: string): boolean {
+  // Note: `/` is NOT public - it needs auth check to decide redirect destination
+  // Splash screen will show on `/` until auth is ready
   return (
     pathname === '/onboarding' ||
-    pathname === '/' ||
     pathname === '/terms' ||
     pathname === '/privacy' ||
     pathname === '/unsubscribe' ||
@@ -147,11 +150,27 @@ function checkAndClearPaymentConfirmed(): boolean {
  * auth state inline before deciding where to redirect.
  */
 function RootRedirect() {
-  const { status, isFullySetUp, needsPaymentSetup } = useAuthState()
+  const { status, isFullySetUp, needsPaymentSetup, refetch } = useAuthState()
 
   // Still checking - render nothing (splash screen handles this)
   if (status === 'unknown' || status === 'checking') {
     return null
+  }
+
+  // Network/server error - show retry UI instead of redirecting
+  if (status === 'error') {
+    return (
+      <div className="auth-error-page">
+        <div className="auth-error-content">
+          <div className="auth-error-icon">!</div>
+          <h1>Connection Error</h1>
+          <p>Unable to connect. Please check your connection and try again.</p>
+          <Pressable className="auth-error-retry-btn" onClick={() => refetch()}>
+            Try Again
+          </Pressable>
+        </div>
+      </div>
+    )
   }
 
   // Authenticated - go to appropriate page
@@ -178,14 +197,17 @@ function RootRedirect() {
  * InitialRouteRedirect - Handles navigation from /onboarding once auth is confirmed
  *
  * This handles the case where user lands directly on /onboarding but is already authenticated.
+ * Also hydrates the onboarding store from server data for resume functionality.
  */
 function InitialRouteRedirect() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { status, isFullySetUp, needsPaymentSetup } = useAuthState()
+  const { status, isFullySetUp, needsPaymentSetup, onboarding } = useAuthState()
   const hasNavigated = useRef(false)
+  const hasHydrated = useRef(false)
   const currentStep = useOnboardingStore((s) => s.currentStep)
   const resetOnboarding = useOnboardingStore((s) => s.reset)
+  const hydrateFromServer = useOnboardingStore((s) => s.hydrateFromServer)
 
   // Only run on /onboarding path (/ is handled by RootRedirect)
   const isOnboardingPath = location.pathname === '/onboarding'
@@ -208,11 +230,33 @@ function InitialRouteRedirect() {
       return
     }
 
+    // Authenticated - hydrate store from server if we have saved progress
+    // This handles the case where user returns to /onboarding with saved progress
+    if (
+      !hasHydrated.current &&
+      onboarding?.step &&
+      onboarding.step > 0 &&
+      currentStep === 0
+    ) {
+      hasHydrated.current = true
+      hydrateFromServer({
+        step: onboarding.step,
+        branch: onboarding.branch,
+        data: onboarding.data,
+      })
+      // Don't navigate - let user continue onboarding from restored step
+      return
+    }
+
     // Authenticated - decide where to go
     hasNavigated.current = true
 
+    // Check for returnTo in location state (e.g., from /unsubscribe)
+    const returnTo = (location.state as { returnTo?: string } | null)?.returnTo
+
     if (isFullySetUp) {
-      navigate('/dashboard', { replace: true })
+      // Honor returnTo if present, otherwise go to dashboard
+      navigate(returnTo || '/dashboard', { replace: true })
     } else if (needsPaymentSetup) {
       // Check for payment confirmation (handles webhook race condition)
       if (checkAndClearPaymentConfirmed()) {
@@ -222,12 +266,13 @@ function InitialRouteRedirect() {
       }
     }
     // needsOnboarding: Stay on /onboarding - the flow handles this
-  }, [isOnboardingPath, status, isFullySetUp, needsPaymentSetup, currentStep, navigate, resetOnboarding])
+  }, [isOnboardingPath, status, isFullySetUp, needsPaymentSetup, currentStep, onboarding, navigate, resetOnboarding, hydrateFromServer])
 
-  // Reset navigation flag when leaving /onboarding
+  // Reset flags when leaving /onboarding
   useEffect(() => {
     if (!isOnboardingPath) {
       hasNavigated.current = false
+      hasHydrated.current = false
     }
   }, [isOnboardingPath])
 
@@ -239,17 +284,35 @@ function InitialRouteRedirect() {
  *
  * Uses centralized auth state to:
  * - Show splash/skeleton while checking
+ * - Show error UI with retry if network/server error
  * - Redirect to onboarding if unauthenticated or needs profile setup
  * - Redirect to payment settings if needs payment setup
  * - Render children if fully set up
  */
 function RequireAuth({ children }: { children: React.ReactNode }) {
-  const { status, needsOnboarding, needsPaymentSetup } = useAuthState()
+  const { status, needsOnboarding, needsPaymentSetup, refetch } = useAuthState()
   const location = useLocation()
 
   // Still checking - show skeleton to prevent content flash
   if (status === 'unknown' || status === 'checking') {
     return <PageSkeleton />
+  }
+
+  // Network/server error - show retry UI instead of redirecting
+  // This prevents unwanted redirects during outages
+  if (status === 'error') {
+    return (
+      <div className="auth-error-page">
+        <div className="auth-error-content">
+          <div className="auth-error-icon">!</div>
+          <h1>Connection Error</h1>
+          <p>Unable to verify your session. Please check your connection and try again.</p>
+          <Pressable className="auth-error-retry-btn" onClick={() => refetch()}>
+            Try Again
+          </Pressable>
+        </div>
+      </div>
+    )
   }
 
   // Unauthenticated - redirect to onboarding
@@ -285,8 +348,36 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
 function AppShell() {
   const { isReady } = useAuthState()
   const location = useLocation()
+  const navigate = useNavigate()
   const [showSplash, setShowSplash] = useState(true)
   const [minTimeElapsed, setMinTimeElapsed] = useState(false)
+
+  // Deep link handler for iOS Universal Links / Android App Links
+  // When the app is opened via a link (e.g., after Stripe redirect), navigate to the path
+  useEffect(() => {
+    const handleDeepLink = (event: URLOpenListenerEvent) => {
+      // Extract path from URL (e.g., https://natepay.co/settings/payments/complete -> /settings/payments/complete)
+      const url = new URL(event.url)
+      const path = url.pathname + url.search
+
+      console.log('[DeepLink] Received URL:', event.url)
+      console.log('[DeepLink] Navigating to:', path)
+
+      // Navigate to the path
+      if (path && path !== '/') {
+        navigate(path, { replace: true })
+      }
+    }
+
+    // Only listen on native platforms
+    if (Capacitor.isNativePlatform()) {
+      CapacitorApp.addListener('appUrlOpen', handleDeepLink)
+
+      return () => {
+        CapacitorApp.removeAllListeners()
+      }
+    }
+  }, [navigate])
 
   // Minimum splash display time to prevent flash
   useEffect(() => {

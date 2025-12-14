@@ -6,7 +6,11 @@ import { useSaveOnboardingProgress } from '../api/hooks'
 import '../Dashboard.css'
 import './onboarding.css'
 
+// Cross-border countries: payments collected in USD, payouts in local currency
+const CROSS_BORDER_COUNTRIES = ['NG', 'GH', 'KE', 'ZA']
+
 // Countries with payment support info
+// Cross-border countries use USD for pricing (payouts convert to local currency)
 const countries = [
     { code: 'US', name: 'United States', flag: '🇺🇸', currency: 'USD' },
     { code: 'GB', name: 'United Kingdom', flag: '🇬🇧', currency: 'GBP' },
@@ -33,10 +37,11 @@ const countries = [
     { code: 'MX', name: 'Mexico', flag: '🇲🇽', currency: 'MXN' },
     { code: 'BR', name: 'Brazil', flag: '🇧🇷', currency: 'BRL' },
     { code: 'IN', name: 'India', flag: '🇮🇳', currency: 'INR' },
-    { code: 'NG', name: 'Nigeria', flag: '🇳🇬', currency: 'NGN' },
-    { code: 'ZA', name: 'South Africa', flag: '🇿🇦', currency: 'ZAR' },
-    { code: 'KE', name: 'Kenya', flag: '🇰🇪', currency: 'KES' },
-    { code: 'GH', name: 'Ghana', flag: '🇬🇭', currency: 'GHS' },
+    // Cross-border countries: prices in USD, payouts in local currency
+    { code: 'NG', name: 'Nigeria', flag: '🇳🇬', currency: 'USD', crossBorder: true },
+    { code: 'ZA', name: 'South Africa', flag: '🇿🇦', currency: 'USD', crossBorder: true },
+    { code: 'KE', name: 'Kenya', flag: '🇰🇪', currency: 'USD', crossBorder: true },
+    { code: 'GH', name: 'Ghana', flag: '🇬🇭', currency: 'USD', crossBorder: true },
     { code: 'AE', name: 'United Arab Emirates', flag: '🇦🇪', currency: 'AED' },
     { code: 'PH', name: 'Philippines', flag: '🇵🇭', currency: 'PHP' },
     { code: 'MY', name: 'Malaysia', flag: '🇲🇾', currency: 'MYR' },
@@ -122,7 +127,11 @@ export default function IdentityStep() {
                         )}
                         <ChevronDown size={20} className="country-chevron" />
                     </Pressable>
-                    <span className="country-hint">Used to set up payments in your region</span>
+                    <span className="country-hint">
+                        {selectedCountry && CROSS_BORDER_COUNTRIES.includes(selectedCountry.code)
+                            ? 'Payments collected in USD, payouts in local currency'
+                            : 'Used to set up payments in your region'}
+                    </span>
                 </div>
 
                 <div className="step-footer">

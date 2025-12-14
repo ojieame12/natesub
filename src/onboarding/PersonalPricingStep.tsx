@@ -36,6 +36,9 @@ export default function PersonalPricingStep() {
         const num = parseInt(value)
         if (!isNaN(num) && num > 0) {
             setSingleAmount(num)
+        } else if (value === '') {
+            // Clear store when input emptied - prevents stale value submission
+            setSingleAmount(null)
         }
     }
 

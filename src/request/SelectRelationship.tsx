@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronLeft, Heart, Users, Briefcase, Star, UserPlus, Sparkles, UserCheck, UserPlus2, Share2 } from 'lucide-react'
 import { useRequestStore, type RelationshipType } from './store'
@@ -71,8 +72,15 @@ export default function SelectRelationship() {
     // Use appropriate relationship options based on user type
     const relationshipGroups = isService ? serviceRelationshipGroups : personalRelationshipGroups
 
+    // Redirect if no recipient (moved to useEffect to avoid render-time side effects)
+    useEffect(() => {
+        if (!recipient) {
+            navigate('/request/new', { replace: true })
+        }
+    }, [recipient, navigate])
+
+    // Early return to prevent rendering errors
     if (!recipient) {
-        navigate('/request/new')
         return null
     }
 

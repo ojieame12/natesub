@@ -116,11 +116,17 @@
     }
 }
 
+/* Reduce blur on mobile/low-power devices */
+@media (hover: none), (max-width: 480px) {
+    .ambient-orb {
+        filter: blur(30px); /* Reduced from 60px for better perf */
+    }
+}
+
 /* Reduce motion preference */
 @media (prefers-reduced-motion: reduce) {
     .ambient-orb {
         animation: none;
-        display: none;
-        /* Or just static */
+        opacity: 0.15; /* Static but visible */
     }
 }

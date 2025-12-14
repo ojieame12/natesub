@@ -188,10 +188,6 @@ function dispatchAuthError() {
 // Default timeout for API requests (15 seconds)
 const API_TIMEOUT_MS = 15000
 
-// Auth endpoints that should clear token on 401
-// Other 401s might just mean "needs auth" on public pages - don't clear token
-const AUTH_ENDPOINTS = ['/auth/me', '/auth/verify', '/auth/logout']
-
 // Base fetch wrapper
 async function apiFetch<T>(
   path: string,
@@ -249,12 +245,20 @@ async function apiFetch<T>(
   }
 
   if (!response.ok) {
-    // Only clear auth on 401 from auth-specific endpoints
-    // Other 401s (e.g., on public pages) shouldn't log out the user
+    // Handle 401 - session expired or unauthorized
+    // Dispatch auth error for protected endpoints to trigger global re-auth flow
+    // Public endpoints (where 401 just means "viewer not logged in") are excluded
     if (response.status === 401) {
-      const isAuthEndpoint = AUTH_ENDPOINTS.some(ep => path.startsWith(ep))
-      if (isAuthEndpoint) {
+      const publicEndpoints = ['/users/', '/public/', '/profile/check-username']
+      const isPublicEndpoint = publicEndpoints.some(ep => path.startsWith(ep))
+
+      // Only clear auth and dispatch error if user actually had a session
+      // This prevents unnecessary clearing on public endpoints where user isn't logged in
+      const hadAuth = !!getAuthToken() || hasAuthSession()
+      if (!isPublicEndpoint && hadAuth) {
+        // Any 401 on protected endpoint = session expired, trigger re-auth
         clearAuthToken()
+        clearAuthSession()
         dispatchAuthError()
       }
     }
@@ -302,13 +306,14 @@ export const auth = {
     })
   },
 
-  verify: async (otp: string): Promise<VerifyResponse> => {
+  verify: async (otp: string, email: string): Promise<VerifyResponse> => {
     // Ensure stale tokens don't interfere with verification flows.
     clearAuthToken()
 
+    // Send both OTP and email - prevents account takeover via OTP collision
     const result = await apiFetch<VerifyResponse>('/auth/verify', {
       method: 'POST',
-      body: JSON.stringify({ token: otp }),
+      body: JSON.stringify({ token: otp, email }),
     })
 
     // Prefer HttpOnly cookie sessions on web when possible.
@@ -1065,11 +1070,19 @@ export interface BillingStatus {
   plan: 'personal' | 'service'
   subscriptionRequired: boolean
   subscription: {
-    status: string | null  // trialing, active, past_due, canceled
+    status: string | null  // trialing, active, past_due, canceled, unpaid
     subscriptionId: string | null
     currentPeriodEnd: string | null
     trialEndsAt: string | null
     cancelAtPeriodEnd: boolean
+  } | null
+  // Platform debit info (for service providers with lapsed subscriptions)
+  debit: {
+    amountCents: number
+    amountDisplay: string
+    willRecoverFromNextPayment: boolean
+    atCapLimit: boolean
+    message: string
   } | null
 }
 

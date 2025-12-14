@@ -5,7 +5,7 @@ import { Button } from './components'
 import '../Dashboard.css'
 import './onboarding.css'
 
-const HERO_IMAGE_URL = 'https://res.cloudinary.com/subframe/image/upload/v1764688418/uploads/13740/qnujqsgnfu917a1ntav4.png'
+const HERO_IMAGE_URL = '/hero.png'
 
 export default function StartStep() {
     // Use selector to prevent re-renders when other state changes

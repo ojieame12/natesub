@@ -287,3 +287,32 @@
 .update-done-btn.pressed {
     background: var(--neutral-200);
 }
+
+/* === ERROR STATE === */
+.update-send-error {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-md);
+    margin: 0 var(--space-lg);
+    padding: var(--space-md);
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: var(--radius-lg);
+    color: #ef4444;
+    font-size: 14px;
+}
+
+.update-retry-btn {
+    flex-shrink: 0;
+    padding: var(--space-xs) var(--space-md);
+    border-radius: var(--radius-md);
+    font-size: 14px;
+    font-weight: 500;
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+}
+
+.update-retry-btn.pressed {
+    background: rgba(239, 68, 68, 0.25);
+}

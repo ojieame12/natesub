@@ -20,14 +20,14 @@ export default function PersonalUsernameStep() {
     }, [username])
 
     // Check availability via API (only when 3+ chars)
-    const { data: availabilityData, isLoading: isChecking } = useCheckUsername(debouncedUsername)
+    const { data: availabilityData, isLoading: isChecking, isError, refetch } = useCheckUsername(debouncedUsername)
 
     const isFormatValid = username.length >= 3 && /^[a-z0-9_]+$/.test(username)
     const isAvailable = availabilityData?.available === true
     const isTaken = availabilityData?.available === false
 
-    // Can continue only if format valid AND API confirms available
-    const canContinue = isFormatValid && isAvailable && !isChecking
+    // Can continue only if format valid AND API confirms available (no errors)
+    const canContinue = isFormatValid && isAvailable && !isChecking && !isError
 
     return (
         <div className="onboarding">
@@ -78,6 +78,18 @@ export default function PersonalUsernameStep() {
                         <p style={{ fontSize: 14, color: 'var(--status-error)', marginTop: 8 }}>
                             {PUBLIC_DOMAIN}/{username} is already taken
                         </p>
+                    )}
+                    {isFormatValid && !isChecking && isError && (
+                        <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <p style={{ fontSize: 14, color: 'var(--status-error)', margin: 0 }}>
+                                Couldn't check availability
+                            </p>
+                            <Pressable onClick={() => refetch()}>
+                                <span style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 600 }}>
+                                    Retry
+                                </span>
+                            </Pressable>
+                        </div>
                     )}
                 </div>
 

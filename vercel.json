@@ -1,4 +1,12 @@
 {
+  "headers": [
+    {
+      "source": "/.well-known/apple-app-site-association",
+      "headers": [
+        { "key": "Content-Type", "value": "application/json" }
+      ]
+    }
+  ],
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/$1" },
     { "source": "/.well-known/(.*)", "destination": "/.well-known/$1" },
@@ -32,6 +40,14 @@
     {
       "path": "/api/cron/payroll",
       "schedule": "0 6 1,16 * *"
+    },
+    {
+      "path": "/api/cron/cleanup-auth",
+      "schedule": "0 4 * * *"
+    },
+    {
+      "path": "/api/cron/cleanup-pageviews",
+      "schedule": "0 5 * * 0"
     }
   ]
 }

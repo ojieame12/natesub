@@ -143,7 +143,7 @@ interface OnboardingStore {
     setCurrency: (currency: string) => void
     setPurpose: (purpose: SubscriptionPurpose) => void
     setPricingModel: (model: PricingModel) => void
-    setSingleAmount: (amount: number) => void
+    setSingleAmount: (amount: number | null) => void
     setTiers: (tiers: SubscriptionTier[]) => void
     addTier: (tier: SubscriptionTier) => void
     updateTier: (id: string, updates: Partial<SubscriptionTier>) => void

@@ -436,10 +436,10 @@ export default function Dashboard() {
                 className="payment-status-banner pending"
                 onClick={() => navigate('/settings/payments')}
               >
-                <CreditCard size={18} />
+                <Clock size={18} />
                 <div className="payment-status-content">
-                  <span className="payment-status-title">Complete Payment Setup</span>
-                  <span className="payment-status-desc">Finish connecting your payment account</span>
+                  <span className="payment-status-title">Payment Setup in Progress</span>
+                  <span className="payment-status-desc">Stripe is verifying your account. We'll email you when ready.</span>
                 </div>
                 <ChevronRight size={18} />
               </Pressable>

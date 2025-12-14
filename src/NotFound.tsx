@@ -1,11 +1,11 @@
 import { useNavigate } from 'react-router-dom'
 import { Home, ArrowLeft } from 'lucide-react'
-import { getAuthToken } from './api/client'
+import { getAuthToken, hasAuthSession } from './api/client'
 import './NotFound.css'
 
 export default function NotFound() {
     const navigate = useNavigate()
-    const isLoggedIn = !!getAuthToken()
+    const isLoggedIn = !!getAuthToken() || hasAuthSession()
 
     const handleGoHome = () => {
         navigate(isLoggedIn ? '/dashboard' : '/onboarding', { replace: true })

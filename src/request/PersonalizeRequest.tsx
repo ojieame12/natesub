@@ -44,8 +44,15 @@ export default function PersonalizeRequest() {
         }
     }, [recipient, relationship, amount, isRecurring, message, setMessage, currencySymbol])
 
+    // Redirect if no recipient (useEffect to avoid render-time side effects)
+    useEffect(() => {
+        if (!recipient) {
+            navigate('/request/new', { replace: true })
+        }
+    }, [recipient, navigate])
+
+    // Early return to prevent rendering errors
     if (!recipient) {
-        navigate('/request/new')
         return null
     }
 

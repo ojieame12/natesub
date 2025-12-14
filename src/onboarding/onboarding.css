@@ -41,11 +41,11 @@
 
 /* Only animate when explicitly navigating */
 .onboarding-step-container.slide-forward {
-    animation: slideInRight 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    animation: ob-slideInRight 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .onboarding-step-container.slide-back {
-    animation: slideInLeft 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    animation: ob-slideInLeft 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 /* Reduce motion for users who prefer it */
@@ -56,7 +56,7 @@
     }
 }
 
-@keyframes slideInRight {
+@keyframes ob-slideInRight {
     0% {
         opacity: 0;
         transform: translateX(40px) scale(0.98);
@@ -67,7 +67,7 @@
     }
 }
 
-@keyframes slideInLeft {
+@keyframes ob-slideInLeft {
     0% {
         opacity: 0;
         transform: translateX(-40px) scale(0.98);
@@ -81,7 +81,7 @@
 /* === INPUT ERROR STATES === */
 .input-error {
     border-color: var(--status-error) !important;
-    animation: shake 0.4s ease-out;
+    animation: ob-shake 0.4s ease-out;
 }
 
 .input-error-text {
@@ -90,7 +90,7 @@
     margin-top: 8px;
 }
 
-@keyframes shake {
+@keyframes ob-shake {
 
     0%,
     100% {
@@ -202,16 +202,17 @@
 }
 
 .start-hero img {
-    max-width: 280px;
-    max-height: 280px;
+    max-width: 616px;
+    max-height: 616px;
+    width: 80vw;
     object-fit: contain;
 }
 
 /* Placeholder while hero image loads */
 .start-hero-placeholder {
     position: absolute;
-    width: 280px;
-    height: 280px;
+    width: 616px;
+    height: 616px;
     border-radius: var(--radius-xl);
     background: linear-gradient(
         90deg,
@@ -220,10 +221,10 @@
         rgba(245, 245, 244, 0.6) 75%
     );
     background-size: 200% 100%;
-    animation: shimmer 1.8s infinite linear;
+    animation: ob-shimmer 1.8s infinite linear;
 }
 
-@keyframes shimmer {
+@keyframes ob-shimmer {
     0% {
         background-position: 200% 0;
     }
@@ -350,10 +351,10 @@
 
 .otp-digit-error {
     border-color: var(--status-error);
-    animation: shake 0.4s ease-out;
+    animation: ob-shakeSmall 0.4s ease-out;
 }
 
-@keyframes shake {
+@keyframes ob-shakeSmall {
 
     0%,
     100% {
@@ -462,7 +463,7 @@ button.btn-ghost {
 /* Spinner animation for buttons */
 .onboarding .btn .spinning,
 button.btn .spinning {
-    animation: spin 1s linear infinite;
+    animation: ob-spin 1s linear infinite;
 }
 
 /* === OPTION CARDS === */
@@ -493,10 +494,10 @@ button.btn .spinning {
     background: rgba(255, 255, 255, 0.95);
     border-color: var(--neutral-900);
     border-width: 2px;
-    animation: optionCardSelect 0.3s var(--ease-spring);
+    animation: ob-optionCardSelect 0.3s var(--ease-spring);
 }
 
-@keyframes optionCardSelect {
+@keyframes ob-optionCardSelect {
     0% {
         transform: scale(1);
     }
@@ -955,7 +956,7 @@ button.btn .spinning {
     flex-direction: column;
     align-items: center;
     gap: var(--space-xl);
-    animation: fadeIn 0.3s ease-out;
+    animation: lg-fadeIn 0.3s ease-out;
 }
 
 .avatar-preview-large {
@@ -1581,10 +1582,10 @@ button.btn .spinning {
     inset: 0;
     background: rgba(0, 0, 0, 0.5);
     z-index: 100;
-    animation: fadeIn 0.2s ease-out;
+    animation: ob-fadeIn 0.2s ease-out;
 }
 
-@keyframes fadeIn {
+@keyframes ob-fadeIn {
     from {
         opacity: 0;
     }
@@ -1607,11 +1608,11 @@ button.btn .spinning {
     max-height: 70vh;
     display: flex;
     flex-direction: column;
-    animation: drawerSlideUp 0.35s var(--ease-spring) both;
+    animation: ob-drawerSlideUp 0.35s var(--ease-spring) both;
     box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.1);
 }
 
-@keyframes drawerSlideUp {
+@keyframes ob-drawerSlideUp {
     from {
         transform: translateY(100%);
     }
@@ -2026,7 +2027,7 @@ button.btn .spinning {
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    animation: fadeInScale 0.2s var(--ease-spring);
+    animation: lg-fadeInScale 0.2s var(--ease-spring);
 }
 
 /* === SERVICE DESCRIPTION STEP === */
@@ -2101,7 +2102,7 @@ button.btn .spinning {
     font-weight: 500;
     color: var(--text-primary);
     transition: background 0.15s ease, transform 0.1s ease;
-    animation: fadeInUp 0.4s ease-out 0.2s both;
+    animation: lg-fadeInUp 0.4s ease-out 0.2s both;
 }
 
 .service-voice-trigger:active {
@@ -2137,11 +2138,11 @@ button.btn .spinning {
     background: var(--neutral-900);
     border-radius: var(--radius-xl);
     color: white;
-    animation: bounceIn 0.5s var(--ease-spring);
+    animation: lg-bounceIn 0.5s var(--ease-spring);
 }
 
 .ai-generating-icon svg {
-    animation: pulse 2s ease-in-out infinite;
+    animation: lg-pulse 2s ease-in-out infinite;
 }
 
 .ai-generating-title {
@@ -2149,14 +2150,14 @@ button.btn .spinning {
     font-weight: 600;
     color: var(--text-primary);
     margin: 0 0 var(--space-xs);
-    animation: fadeInUp 0.4s ease-out 0.1s both;
+    animation: lg-fadeInUp 0.4s ease-out 0.1s both;
 }
 
 .ai-generating-subtitle {
     font-size: 15px;
     color: var(--text-secondary);
     margin: 0;
-    animation: fadeInUp 0.4s ease-out 0.2s both;
+    animation: lg-fadeInUp 0.4s ease-out 0.2s both;
 }
 
 /* AI Skeletons */
@@ -2173,7 +2174,7 @@ button.btn .spinning {
     display: flex;
     flex-direction: column;
     gap: var(--space-sm);
-    animation: fadeInUp 0.4s ease-out both;
+    animation: lg-fadeInUp 0.4s ease-out both;
 }
 
 .ai-skeleton-card:nth-child(1) {
@@ -2212,10 +2213,10 @@ button.btn .spinning {
 }
 
 .ai-review-regenerate .spinning {
-    animation: spin 1s linear infinite;
+    animation: ob-spin 1s linear infinite;
 }
 
-@keyframes spin {
+@keyframes ob-spin {
     from {
         transform: rotate(0deg);
     }
@@ -2233,7 +2234,7 @@ button.btn .spinning {
 
 .ai-review-section {
     position: relative;
-    animation: fadeInUp 0.4s ease-out both;
+    animation: lg-fadeInUp 0.4s ease-out both;
 }
 
 .ai-review-section:nth-child(2) {
@@ -2560,7 +2561,7 @@ button.btn .spinning {
     border-radius: 0 0 var(--radius-lg) var(--radius-lg);
     background: var(--bg-card);
     overflow: hidden;
-    animation: fadeInUp 0.2s ease-out;
+    animation: lg-fadeInUp 0.2s ease-out;
 }
 
 .paystack-dropdown-search {

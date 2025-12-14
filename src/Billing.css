@@ -1004,3 +1004,48 @@
     color: var(--text-secondary);
     font-size: 15px;
 }
+
+/* Error State */
+.billing-error {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: var(--space-3xl) var(--space-lg);
+    gap: var(--space-md);
+}
+
+.billing-error svg {
+    color: var(--text-tertiary);
+    margin-bottom: var(--space-sm);
+}
+
+.billing-error h2 {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.billing-error p {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin: 0;
+    max-width: 260px;
+}
+
+.billing-retry-btn {
+    margin-top: var(--space-md);
+    padding: var(--space-sm) var(--space-xl);
+    background: var(--neutral-900);
+    color: white;
+    border-radius: var(--radius-lg);
+    font-size: 15px;
+    font-weight: 600;
+}
+
+.billing-retry-btn.pressed {
+    transform: scale(0.98);
+    opacity: 0.9;
+}
