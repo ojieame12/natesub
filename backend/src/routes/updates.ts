@@ -3,9 +3,94 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { db } from '../db/client.js'
 import { requireAuth } from '../middleware/auth.js'
+import { updateSendRateLimit } from '../middleware/rateLimit.js'
 import { sendUpdateEmail } from '../services/email.js'
+import { acquireLock, releaseLock } from '../services/lock.js'
 
 const updates = new Hono()
+
+// ============================================
+// TYPES
+// ============================================
+
+interface NotificationPrefs {
+  push?: boolean
+  email?: boolean
+  subscriberAlerts?: boolean
+  paymentAlerts?: boolean
+}
+
+interface Tier {
+  id: string
+  name: string
+  amount: number
+  perks?: string[]
+  isPopular?: boolean
+}
+
+// ============================================
+// HELPER FUNCTIONS
+// ============================================
+
+/**
+ * Validate that audience is a valid tier ID if not a preset
+ */
+async function validateAudience(audience: string, tiers: Tier[] | null): Promise<boolean> {
+  const presets = ['all', 'supporters', 'vip']
+  if (presets.includes(audience)) {
+    return true
+  }
+  // Check if it's a valid tier ID
+  if (tiers && Array.isArray(tiers)) {
+    return tiers.some(t => t.id === audience)
+  }
+  return false
+}
+
+/**
+ * Get tier IDs based on audience filter
+ */
+function getAudienceTierIds(audience: string, tiers: Tier[] | null): string[] | null {
+  if (!tiers || !Array.isArray(tiers) || tiers.length === 0) {
+    return null // No tier filtering
+  }
+
+  const sortedTiers = [...tiers].sort((a, b) => b.amount - a.amount)
+
+  switch (audience) {
+    case 'all':
+      return null // No filtering
+    case 'supporters':
+      // All tiers except the lowest (cheapest)
+      if (sortedTiers.length <= 1) return null
+      return sortedTiers.slice(0, -1).map(t => t.id)
+    case 'vip':
+      // Only the highest tier
+      return [sortedTiers[0].id]
+    default:
+      // Specific tier ID
+      return [audience]
+  }
+}
+
+/**
+ * Check if subscriber has opted in to receive update emails
+ */
+function shouldReceiveUpdate(notificationPrefs: NotificationPrefs | null): boolean {
+  if (!notificationPrefs) return true // Default to sending if no prefs set
+
+  // Check if email notifications are disabled
+  if (notificationPrefs.email === false) return false
+
+  // Check if subscriber alerts are disabled
+  if (notificationPrefs.subscriberAlerts === false) return false
+
+  return true
+}
+
+// ============================================
+// ROUTES
+// ============================================
 
 // Create update (draft)
 updates.post(
@@ -20,6 +105,19 @@ updates.post(
   async (c) => {
     const userId = c.get('userId')
     const data = c.req.valid('json')
+
+    // Get profile to validate audience against tiers
+    const profile = await db.profile.findUnique({
+      where: { userId },
+      select: { tiers: true },
+    })
+
+    const tiers = profile?.tiers as Tier[] | null
+
+    // Validate audience
+    if (!await validateAudience(data.audience, tiers)) {
+      return c.json({ error: 'Invalid audience. Use "all", "supporters", "vip", or a valid tier ID.' }, 400)
+    }
 
     const update = await db.update.create({
       data: {
@@ -74,7 +172,7 @@ updates.get('/', requireAuth, async (c) => {
   })
 })
 
-// Get single update
+// Get single update with delivery stats
 updates.get(
   '/:id',
   requireAuth,
@@ -85,13 +183,41 @@ updates.get(
 
     const update = await db.update.findFirst({
       where: { id, creatorId: userId },
+      include: {
+        _count: {
+          select: {
+            deliveries: true,
+          },
+        },
+      },
     })
 
     if (!update) {
       return c.json({ error: 'Update not found' }, 404)
     }
 
-    return c.json({ update })
+    // Get delivery stats if sent
+    let deliveryStats = null
+    if (update.status === 'sent') {
+      const stats = await db.updateDelivery.groupBy({
+        by: ['status'],
+        where: { updateId: id },
+        _count: true,
+      })
+      deliveryStats = {
+        total: update._count.deliveries,
+        sent: stats.find(s => s.status === 'sent')?._count || 0,
+        failed: stats.find(s => s.status === 'failed')?._count || 0,
+        opened: stats.find(s => s.status === 'opened')?._count || 0,
+      }
+    }
+
+    return c.json({
+      update: {
+        ...update,
+        deliveryStats,
+      },
+    })
   }
 )
 
@@ -121,6 +247,19 @@ updates.put(
 
     if (update.status !== 'draft') {
       return c.json({ error: 'Cannot edit a sent update' }, 400)
+    }
+
+    // Validate audience if being changed
+    if (data.audience) {
+      const profile = await db.profile.findUnique({
+        where: { userId },
+        select: { tiers: true },
+      })
+      const tiers = profile?.tiers as Tier[] | null
+
+      if (!await validateAudience(data.audience, tiers)) {
+        return c.json({ error: 'Invalid audience. Use "all", "supporters", "vip", or a valid tier ID.' }, 400)
+      }
     }
 
     const updated = await db.update.update({
@@ -165,8 +304,199 @@ updates.delete(
 )
 
 // Send update to subscribers
+// Rate limited: 5 updates per day per creator
 updates.post(
   '/:id/send',
+  requireAuth,
+  updateSendRateLimit,
+  zValidator('param', z.object({ id: z.string().uuid() })),
+  async (c) => {
+    const userId = c.get('userId')
+    const { id } = c.req.valid('param')
+
+    // Acquire lock to prevent double-send
+    const lockKey = `update:send:${id}`
+    const lockToken = await acquireLock(lockKey, 60000) // 1 minute TTL
+
+    if (!lockToken) {
+      return c.json({ error: 'Update is already being sent. Please wait.' }, 409)
+    }
+
+    try {
+      // Re-fetch update inside lock to prevent TOCTOU
+      const update = await db.update.findFirst({
+        where: { id, creatorId: userId },
+      })
+
+      if (!update) {
+        return c.json({ error: 'Update not found' }, 404)
+      }
+
+      if (update.status !== 'draft') {
+        return c.json({ error: 'Update has already been sent' }, 400)
+      }
+
+      // Get creator profile
+      const profile = await db.profile.findUnique({
+        where: { userId },
+        select: {
+          displayName: true,
+          username: true,
+          tiers: true,
+        },
+      })
+
+      if (!profile) {
+        return c.json({ error: 'Profile not found' }, 400)
+      }
+
+      const tiers = profile.tiers as Tier[] | null
+
+      // Build subscriber filter based on audience
+      const audienceTierIds = getAudienceTierIds(update.audience, tiers)
+
+      // Get active subscriptions with subscriber preferences
+      const subscriptions = await db.subscription.findMany({
+        where: {
+          creatorId: userId,
+          status: 'active',
+          ...(audienceTierIds && { tierId: { in: audienceTierIds } }),
+        },
+        include: {
+          subscriber: {
+            select: {
+              id: true,
+              email: true,
+              profile: {
+                select: {
+                  notificationPrefs: true,
+                },
+              },
+            },
+          },
+        },
+      })
+
+      // Filter subscribers based on notification preferences
+      const eligibleSubscribers = subscriptions.filter(sub => {
+        const prefs = sub.subscriber.profile?.notificationPrefs as NotificationPrefs | null
+        return shouldReceiveUpdate(prefs)
+      })
+
+      const creatorName = profile.displayName
+      const creatorUsername = profile.username
+
+      // Create delivery records for all eligible subscribers
+      if (eligibleSubscribers.length > 0) {
+        await db.updateDelivery.createMany({
+          data: eligibleSubscribers.map(sub => ({
+            updateId: id,
+            subscriberId: sub.subscriber.id,
+            status: 'pending',
+            channel: 'email',
+          })),
+          skipDuplicates: true,
+        })
+      }
+
+      // Mark update as sent immediately (emails sent in background)
+      await db.update.update({
+        where: { id },
+        data: {
+          status: 'sent',
+          sentAt: new Date(),
+          recipientCount: eligibleSubscribers.length,
+        },
+      })
+
+      // Create activity
+      await db.activity.create({
+        data: {
+          userId,
+          type: 'update_sent',
+          payload: {
+            updateId: id,
+            title: update.title,
+            recipientCount: eligibleSubscribers.length,
+            audience: update.audience,
+          },
+        },
+      })
+
+      // Send emails (in batches to avoid overwhelming email provider)
+      // This runs after response is sent to client
+      const sendEmails = async () => {
+        const batchSize = 10
+        for (let i = 0; i < eligibleSubscribers.length; i += batchSize) {
+          const batch = eligibleSubscribers.slice(i, i + batchSize)
+
+          await Promise.all(batch.map(async (sub) => {
+            try {
+              await sendUpdateEmail(
+                sub.subscriber.email,
+                creatorName,
+                update.title,
+                update.body,
+                {
+                  photoUrl: update.photoUrl,
+                  creatorUsername,
+                }
+              )
+
+              // Mark delivery as sent
+              await db.updateDelivery.updateMany({
+                where: {
+                  updateId: id,
+                  subscriberId: sub.subscriber.id,
+                },
+                data: {
+                  status: 'sent',
+                  sentAt: new Date(),
+                },
+              })
+            } catch (error: any) {
+              console.error(`Failed to send update email to ${sub.subscriber.email}:`, error.message)
+
+              // Mark delivery as failed
+              await db.updateDelivery.updateMany({
+                where: {
+                  updateId: id,
+                  subscriberId: sub.subscriber.id,
+                },
+                data: {
+                  status: 'failed',
+                  error: error.message?.substring(0, 500) || 'Unknown error',
+                },
+              })
+            }
+          }))
+
+          // Small delay between batches to avoid rate limits
+          if (i + batchSize < eligibleSubscribers.length) {
+            await new Promise(resolve => setTimeout(resolve, 100))
+          }
+        }
+      }
+
+      // Fire and forget - emails sent in background
+      sendEmails().catch(err => {
+        console.error(`[updates] Background email send failed for update ${id}:`, err.message)
+      })
+
+      return c.json({
+        success: true,
+        recipientCount: eligibleSubscribers.length,
+        skippedCount: subscriptions.length - eligibleSubscribers.length,
+      })
+    } finally {
+      await releaseLock(lockKey, lockToken)
+    }
+  }
+)
+
+// Retry failed deliveries (for manual retry)
+updates.post(
+  '/:id/retry-failed',
   requireAuth,
   zValidator('param', z.object({ id: z.string().uuid() })),
   async (c) => {
@@ -181,96 +511,83 @@ updates.post(
       return c.json({ error: 'Update not found' }, 404)
     }
 
-    if (update.status !== 'draft') {
-      return c.json({ error: 'Update has already been sent' }, 400)
+    if (update.status !== 'sent') {
+      return c.json({ error: 'Update has not been sent yet' }, 400)
+    }
+
+    // Get failed deliveries
+    const failedDeliveries = await db.updateDelivery.findMany({
+      where: {
+        updateId: id,
+        status: 'failed',
+      },
+      include: {
+        subscriber: {
+          select: {
+            email: true,
+          },
+        },
+      },
+    })
+
+    if (failedDeliveries.length === 0) {
+      return c.json({ success: true, retriedCount: 0, message: 'No failed deliveries to retry' })
     }
 
     // Get creator profile
-    const profile = await db.profile.findUnique({ where: { userId } })
+    const profile = await db.profile.findUnique({
+      where: { userId },
+      select: { displayName: true, username: true },
+    })
+
     if (!profile) {
       return c.json({ error: 'Profile not found' }, 400)
     }
 
-    // Get subscribers based on audience
-    let subscriberFilter: any = {
-      creatorId: userId,
-      status: 'active',
-    }
+    let retriedCount = 0
+    let successCount = 0
 
-    // Filter by tier if audience is a specific tier
-    if (update.audience !== 'all') {
-      if (update.audience === 'supporters') {
-        // Supporters = any tier except lowest
-        // For simplicity, include all for now
-      } else if (update.audience === 'vip') {
-        // VIP = highest tier only
-        if (profile.tiers) {
-          const tiers = profile.tiers as any[]
-          const sortedTiers = [...tiers].sort((a, b) => b.amount - a.amount)
-          if (sortedTiers[0]) {
-            subscriberFilter.tierId = sortedTiers[0].id
-          }
-        }
-      } else {
-        // Specific tier ID
-        subscriberFilter.tierId = update.audience
-      }
-    }
-
-    const subscriptions = await db.subscription.findMany({
-      where: subscriberFilter,
-      include: {
-        subscriber: {
-          select: { email: true },
-        },
-      },
-    })
-
-    // Send emails to all subscribers
-    const recipientCount = subscriptions.length
-    const creatorName = profile.displayName
-
-    // Send emails (in production, this should be queued)
-    for (const sub of subscriptions) {
+    for (const delivery of failedDeliveries) {
+      retriedCount++
       try {
         await sendUpdateEmail(
-          sub.subscriber.email,
-          creatorName,
+          delivery.subscriber.email,
+          profile.displayName,
           update.title,
-          update.body
+          update.body,
+          {
+            photoUrl: update.photoUrl,
+            creatorUsername: profile.username,
+          }
         )
-      } catch (error) {
-        console.error(`Failed to send update email to ${sub.subscriber.email}:`, error)
+
+        await db.updateDelivery.update({
+          where: { id: delivery.id },
+          data: {
+            status: 'sent',
+            sentAt: new Date(),
+            error: null,
+          },
+        })
+
+        successCount++
+      } catch (error: any) {
+        console.error(`Retry failed for ${delivery.subscriber.email}:`, error.message)
+
+        await db.updateDelivery.update({
+          where: { id: delivery.id },
+          data: {
+            error: `Retry failed: ${error.message?.substring(0, 500) || 'Unknown error'}`,
+          },
+        })
       }
     }
-
-    // Update status
-    await db.update.update({
-      where: { id },
-      data: {
-        status: 'sent',
-        sentAt: new Date(),
-        recipientCount,
-      },
-    })
-
-    // Create activity
-    await db.activity.create({
-      data: {
-        userId,
-        type: 'update_sent',
-        payload: {
-          updateId: id,
-          title: update.title,
-          recipientCount,
-          audience: update.audience,
-        },
-      },
-    })
 
     return c.json({
       success: true,
-      recipientCount,
+      retriedCount,
+      successCount,
+      failedCount: retriedCount - successCount,
     })
   }
 )

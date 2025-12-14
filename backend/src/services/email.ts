@@ -888,13 +888,31 @@ export async function sendUpdateEmail(
   to: string,
   senderName: string,
   title: string | null,
-  body: string
+  body: string,
+  options?: {
+    photoUrl?: string | null
+    creatorUsername?: string
+  }
 ): Promise<EmailResult> {
   const safeSenderName = escapeHtml(senderName)
   const safeTitle = title ? escapeHtml(title) : null
   const safeBody = escapeHtml(body)
 
   const headlineText = safeTitle || `New update from ${safeSenderName}`
+
+  // Build photo HTML if provided
+  const photoHtml = options?.photoUrl ? `
+    <div style="margin: 16px 0;">
+      <img src="${escapeHtml(options.photoUrl)}" alt="Update image" style="max-width: 100%; height: auto; border-radius: 8px;" />
+    </div>
+  ` : ''
+
+  // Build view online link if username provided
+  const viewOnlineHtml = options?.creatorUsername ? `
+    <p style="margin: 16px 0 0 0;">
+      <a href="${env.APP_URL}/${escapeHtml(options.creatorUsername)}" style="color: ${BRAND_COLOR}; text-decoration: none;">View ${safeSenderName}'s page →</a>
+    </p>
+  ` : ''
 
   return sendWithRetry(() =>
     resend.emails.send({
@@ -906,8 +924,11 @@ export async function sendUpdateEmail(
         headline: headlineText,
         body: `
           <p style="margin: 0 0 8px 0; font-size: 14px; color: #888888;">From ${safeSenderName}</p>
+          ${photoHtml}
           <p style="margin: 0; white-space: pre-wrap; line-height: 1.6;">${safeBody}</p>
+          ${viewOnlineHtml}
         `,
+        showUnsubscribe: true,  // Updates are marketing emails - must have unsubscribe
       }),
     })
   )

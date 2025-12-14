@@ -131,14 +131,15 @@ model User {
   onboardingBranch OnboardingBranch? // 'personal' | 'service'
   onboardingData   Json?             // Partial form data for recovery
 
-  profile        Profile?
-  subscriptions  Subscription[] @relation("Creator")
-  subscribedTo   Subscription[] @relation("Subscriber")
-  requests       Request[]
-  updates        Update[]
-  activities     Activity[]
-  sessions       Session[]
-  payrollPeriods PayrollPeriod[]
+  profile          Profile?
+  subscriptions    Subscription[] @relation("Creator")
+  subscribedTo     Subscription[] @relation("Subscriber")
+  requests         Request[]
+  updates          Update[]
+  updateDeliveries UpdateDelivery[]
+  activities       Activity[]
+  sessions         Session[]
+  payrollPeriods   PayrollPeriod[]
 
   @@map("users")
 }
@@ -424,8 +425,44 @@ model Update {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
+  // Relations
+  deliveries UpdateDelivery[]
+
   @@index([creatorId])
   @@map("updates")
+}
+
+// Track delivery status per subscriber for updates
+model UpdateDelivery {
+  id        String @id @default(uuid())
+  updateId  String
+  update    Update @relation(fields: [updateId], references: [id], onDelete: Cascade)
+
+  subscriberId String
+  subscriber   User   @relation(fields: [subscriberId], references: [id], onDelete: Cascade)
+
+  // Delivery status
+  status    UpdateDeliveryStatus @default(pending)
+  channel   String               @default("email") // email, sms
+  error     String?              // Error message if failed
+
+  // Tracking
+  sentAt    DateTime?
+  openedAt  DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@unique([updateId, subscriberId])
+  @@index([updateId])
+  @@index([subscriberId])
+  @@map("update_deliveries")
+}
+
+enum UpdateDeliveryStatus {
+  pending
+  sent
+  failed
+  opened
 }
 
 // ============================================

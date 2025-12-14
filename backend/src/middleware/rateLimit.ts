@@ -225,3 +225,15 @@ export const publicStrictRateLimit = rateLimit({
   },
   message: 'Too many requests. Please try again later.',
 })
+
+/**
+ * Update send rate limiter - User-based
+ * Prevents creators from spamming subscribers
+ * 5 updates per day per creator
+ */
+export const updateSendRateLimit = rateLimit({
+  windowMs: 24 * 60 * 60 * 1000,  // 24 hours
+  maxRequests: 5,
+  keyPrefix: 'update_send_ratelimit',
+  message: 'You can only send 5 updates per day. Please try again tomorrow.',
+})
