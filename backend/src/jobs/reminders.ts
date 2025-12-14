@@ -32,6 +32,21 @@ import { decrypt, decryptAccountNumber } from '../utils/encryption.js'
 import { acquireLock, releaseLock } from '../services/lock.js'
 
 // ============================================
+// HELPERS
+// ============================================
+
+/**
+ * Check if a request is still valid for reminders
+ * Returns false if expired or not in 'sent' status
+ */
+function isRequestValidForReminder(request: { status: string; tokenExpiresAt: Date | null } | null): boolean {
+  if (!request) return false
+  if (request.status !== 'sent') return false
+  if (request.tokenExpiresAt && request.tokenExpiresAt < new Date()) return false
+  return true
+}
+
+// ============================================
 // TYPES
 // ============================================
 
@@ -698,8 +713,8 @@ async function processRequestUnopenedReminder(
     },
   })
 
-  // Don't send if request is no longer pending or missing recipient
-  if (!request || request.status !== 'sent') {
+  // Don't send if request is no longer pending, missing recipient, or expired
+  if (!request || !isRequestValidForReminder(request)) {
     return false
   }
 
@@ -740,8 +755,8 @@ async function processRequestUnpaidReminder(
     },
   })
 
-  // Don't send if already paid or declined
-  if (!request || request.status !== 'sent') {
+  // Don't send if already paid, declined, or expired
+  if (!request || !isRequestValidForReminder(request)) {
     return false
   }
 
@@ -790,8 +805,8 @@ async function processRequestExpiringReminder(
     },
   })
 
-  // Don't send if already responded
-  if (!request || request.status !== 'sent') {
+  // Don't send if already responded or expired
+  if (!request || !isRequestValidForReminder(request)) {
     return false
   }
 
@@ -828,8 +843,8 @@ async function processInvoiceDueReminder(
     },
   })
 
-  // Don't send if already paid or no due date
-  if (!request || request.status !== 'sent' || !request.dueDate) {
+  // Don't send if already paid, no due date, or token expired
+  if (!request || !isRequestValidForReminder(request) || !request.dueDate) {
     return false
   }
 
@@ -880,8 +895,8 @@ async function processInvoiceOverdueReminder(
     },
   })
 
-  // Don't send if already paid or no due date
-  if (!request || request.status !== 'sent' || !request.dueDate) {
+  // Don't send if already paid, no due date, or token expired
+  if (!request || !isRequestValidForReminder(request) || !request.dueDate) {
     return false
   }
 

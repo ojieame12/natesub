@@ -371,6 +371,7 @@ model Request {
   message     String?
   voiceUrl    String?
   customPerks Json?
+  purpose     String?   // What the request/invoice is for (e.g., "Consultation", "Retainer")
   dueDate     DateTime? // For service invoices
 
   // Delivery

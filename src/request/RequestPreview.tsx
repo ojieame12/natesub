@@ -1,13 +1,25 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronLeft, MessageSquare, Mail, Link2, Check, Mic, Plus, Calendar } from 'lucide-react'
-import { useRequestStore, getRelationshipLabel } from './store'
+import { useRequestStore, getRelationshipLabel, type RelationshipType } from './store'
 import { useCreateRequest, useSendRequest, useCurrentUser } from '../api/hooks'
 import { getCurrencySymbol, formatCompactNumber } from '../utils/currency'
 import { Pressable } from '../components'
 import './request.css'
 
 type SendMethod = 'sms' | 'email' | 'link'
+
+// Map detailed frontend relationship types to backend coarse types
+function mapRelationshipToBackend(relationship: RelationshipType | null): string {
+    if (!relationship) return 'other'
+
+    if (relationship.startsWith('family_')) return 'family'
+    if (relationship.startsWith('friend_')) return 'friend'
+    if (relationship.startsWith('client')) return 'client'
+
+    // Direct matches: fan, colleague, partner, other
+    return relationship
+}
 
 export default function RequestPreview() {
     const navigate = useNavigate()
@@ -98,11 +110,14 @@ export default function RequestPreview() {
                 recipientName: recipient.name,
                 recipientEmail: sendMethod === 'email' ? emailAddress : undefined,
                 recipientPhone: sendMethod === 'sms' ? phoneNumber : undefined,
-                relationship: relationship || 'other',
+                relationship: mapRelationshipToBackend(relationship),
                 amountCents: Math.round(amount * 100),
+                currency,  // Use creator's currency
                 isRecurring,
                 message: message || undefined,
                 voiceUrl: voiceNoteUrl || undefined,
+                dueDate: dueDate || undefined,  // Pass invoice due date if set
+                purpose: purpose || undefined,  // Pass purpose if set
             })
 
             // Step 2: Send via chosen method

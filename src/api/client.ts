@@ -693,11 +693,13 @@ export const requests = {
     recipientPhone?: string
     relationship: string
     amountCents: number
-    currency?: string
+    currency: string  // Required - use creator's currency
     isRecurring?: boolean
     message?: string
     voiceUrl?: string
     customPerks?: string[]
+    dueDate?: string  // ISO date string for invoices
+    purpose?: string  // What the request is for
   }) =>
     apiFetch<{ request: Request }>('/requests', {
       method: 'POST',

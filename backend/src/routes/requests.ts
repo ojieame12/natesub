@@ -6,8 +6,9 @@ import { Prisma } from '@prisma/client'
 import { db } from '../db/client.js'
 import { redis } from '../db/redis.js'
 import { requireAuth } from '../middleware/auth.js'
+import { publicRateLimit } from '../middleware/rateLimit.js'
 import { sendRequestEmail } from '../services/email.js'
-import { createCheckoutSession } from '../services/stripe.js'
+import { createCheckoutSession, stripe } from '../services/stripe.js'
 import { scheduleRequestReminders, scheduleRequestUnpaidReminder } from '../jobs/reminders.js'
 import { calculateServiceFee, type FeeMode } from '../services/fees.js'
 import { encrypt } from '../utils/encryption.js'
@@ -39,6 +40,7 @@ function getRateLimitKey(creatorId: string, recipientEmail: string): string {
 // View request (public)
 requests.get(
   '/r/:token',
+  publicRateLimit,  // Prevent abuse
   zValidator('param', z.object({ token: z.string() })),
   async (c) => {
     const { token } = c.req.valid('param')
@@ -95,6 +97,8 @@ requests.get(
         voiceUrl: request.voiceUrl,
         customPerks: request.customPerks,
         relationship: request.relationship,
+        purpose: request.purpose,
+        dueDate: request.dueDate,
       },
     })
   }
@@ -103,6 +107,7 @@ requests.get(
 // Accept request (creates checkout)
 requests.post(
   '/r/:token/accept',
+  publicRateLimit,  // Prevent abuse - expensive Stripe API calls
   zValidator('param', z.object({ token: z.string() })),
   zValidator('json', z.object({
     email: z.string().email(),
@@ -150,6 +155,28 @@ requests.post(
     }
 
     try {
+      // IDEMPOTENCY: Check for existing valid checkout session
+      // If we have an active session, return it instead of creating a new one
+      if (request.stripeCheckoutSessionId) {
+        try {
+          const existingSession = await stripe.checkout.sessions.retrieve(request.stripeCheckoutSessionId)
+
+          // Session is still usable if it's open and not expired
+          if (existingSession.status === 'open' && existingSession.url) {
+            console.log(`[requests] Returning existing checkout session for request ${request.id}`)
+            return c.json({
+              success: true,
+              checkoutUrl: existingSession.url,
+              cached: true,
+            })
+          }
+          // If session is expired or complete, we'll create a new one below
+        } catch (sessionErr: any) {
+          // Session not found or error retrieving - create a new one
+          console.log(`[requests] Existing session invalid for request ${request.id}, creating new`)
+        }
+      }
+
       // Calculate service fee based on creator's fee mode setting
       const feeCalc = calculateServiceFee(
         request.amountCents,
@@ -205,6 +232,7 @@ requests.post(
 // Decline request
 requests.post(
   '/r/:token/decline',
+  publicRateLimit,  // Prevent abuse
   zValidator('param', z.object({ token: z.string() })),
   async (c) => {
     const { token } = c.req.valid('param')
@@ -261,11 +289,12 @@ requests.post(
     recipientPhone: z.string().regex(/^\+?[0-9]{10,20}$/, 'Invalid phone format').optional(),
     relationship: z.enum(['family', 'friend', 'client', 'fan', 'colleague', 'partner', 'other']),
     amountCents: z.number().int().positive().max(10000000), // Max $100k
-    currency: z.string().length(3).default('USD'),
+    currency: z.string().length(3),  // Required - use creator's currency
     isRecurring: z.boolean().default(false),
     message: z.string().max(1000).optional(),
     voiceUrl: z.string().url().optional(),
     customPerks: z.array(z.string().max(100)).max(10).optional(),
+    purpose: z.string().max(100).optional(),  // What the request is for
     dueDate: z.string().datetime().optional(), // ISO date string for invoices
   })),
   async (c) => {
@@ -290,6 +319,7 @@ requests.post(
         message: data.message || null,
         voiceUrl: data.voiceUrl || null,
         customPerks: data.customPerks || Prisma.JsonNull,
+        purpose: data.purpose || null,
         dueDate: data.dueDate ? new Date(data.dueDate) : null,
         status: 'draft',
       },
@@ -340,6 +370,8 @@ requests.get(
         amount: r.amountCents / 100,
         currency: r.currency,
         isRecurring: r.isRecurring,
+        purpose: r.purpose,
+        dueDate: r.dueDate,
         status: r.status,
         sendMethod: r.sendMethod,
         sentAt: r.sentAt,
