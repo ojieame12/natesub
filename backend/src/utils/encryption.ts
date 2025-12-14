@@ -32,13 +32,37 @@ export function validateEncryptionConfig(): void {
   }
 }
 
-// Derive a key from the encryption secret
+// Check if a string is valid hex
+function isHexString(str: string): boolean {
+  return /^[0-9a-fA-F]+$/.test(str)
+}
+
+// Derive a 32-byte key from the encryption secret
+// Supports both hex-encoded keys (from `openssl rand -hex 32`) and arbitrary secrets
 function getKey(): Buffer {
   const secret = env.ENCRYPTION_KEY
   if (!secret || secret.length < 32) {
     throw new Error('ENCRYPTION_KEY must be at least 32 characters')
   }
-  // Use first 32 bytes of the secret as the key
+
+  // If the secret is exactly 64 hex characters, decode it as hex (32 bytes)
+  // This is the expected format from `openssl rand -hex 32`
+  if (secret.length === 64 && isHexString(secret)) {
+    return Buffer.from(secret, 'hex')
+  }
+
+  // For other formats, use SHA-256 to derive a consistent 32-byte key
+  // This ensures full entropy regardless of input format
+  return crypto.createHash('sha256').update(secret).digest()
+}
+
+// Legacy key derivation for backward compatibility with existing encrypted data
+// This was the original (less secure) method that sliced the first 32 chars as UTF-8
+function getLegacyKey(): Buffer {
+  const secret = env.ENCRYPTION_KEY
+  if (!secret || secret.length < 32) {
+    throw new Error('ENCRYPTION_KEY must be at least 32 characters')
+  }
   return Buffer.from(secret.slice(0, 32), 'utf8')
 }
 
@@ -63,19 +87,12 @@ export function encrypt(plaintext: string): string {
   return `${iv.toString('base64')}:${authTag.toString('base64')}:${encrypted}`
 }
 
-/**
- * Decrypt a string value
- * Expects format: iv:authTag:encryptedData (all base64)
- */
-export function decrypt(encrypted: string): string {
-  if (!encrypted || !encrypted.includes(':')) return encrypted
-
-  const key = getKey()
+// Helper to attempt decryption with a specific key
+function tryDecryptWithKey(encrypted: string, key: Buffer): string | null {
   const [ivBase64, authTagBase64, encryptedData] = encrypted.split(':')
 
   if (!ivBase64 || !authTagBase64 || !encryptedData) {
-    // Return as-is if not in expected format (backwards compatibility)
-    return encrypted
+    return null
   }
 
   try {
@@ -89,11 +106,51 @@ export function decrypt(encrypted: string): string {
     decrypted += decipher.final('utf8')
 
     return decrypted
-  } catch (error) {
-    // If decryption fails, return original (might be unencrypted legacy data)
-    console.warn('[encryption] Failed to decrypt, returning original value')
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Decrypt a string value
+ * Expects format: iv:authTag:encryptedData (all base64)
+ * Tries new key derivation first, falls back to legacy for backward compatibility
+ */
+export function decrypt(encrypted: string): string {
+  if (!encrypted || !encrypted.includes(':')) return encrypted
+
+  const [ivBase64, authTagBase64, encryptedData] = encrypted.split(':')
+
+  if (!ivBase64 || !authTagBase64 || !encryptedData) {
+    // Return as-is if not in expected format (backwards compatibility)
     return encrypted
   }
+
+  // Try with new (proper) key derivation first
+  const newKey = getKey()
+  const result = tryDecryptWithKey(encrypted, newKey)
+  if (result !== null) {
+    return result
+  }
+
+  // Fall back to legacy key for data encrypted with old method
+  try {
+    const legacyKey = getLegacyKey()
+    // Only try legacy if keys are different
+    if (!newKey.equals(legacyKey)) {
+      const legacyResult = tryDecryptWithKey(encrypted, legacyKey)
+      if (legacyResult !== null) {
+        console.warn('[encryption] Decrypted with legacy key - consider re-encrypting data')
+        return legacyResult
+      }
+    }
+  } catch {
+    // Legacy key derivation failed, ignore
+  }
+
+  // If both fail, return original (might be unencrypted legacy data)
+  console.warn('[encryption] Failed to decrypt with both keys, returning original value')
+  return encrypted
 }
 
 /**

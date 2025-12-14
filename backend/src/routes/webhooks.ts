@@ -859,7 +859,19 @@ async function handleInvoicePaid(event: Stripe.Event) {
 
   if (!subscriptionId) return
 
-  const subscription = await db.subscription.findUnique({
+  // Lock to prevent duplicate processing of same invoice
+  const lockKey = `invoice:paid:${invoice.id}`
+  const processed = await withLock(lockKey, 30000, async () => {
+    // Check idempotency - already processed this invoice?
+    const existingPayment = await db.payment.findFirst({
+      where: { stripeEventId: event.id },
+    })
+    if (existingPayment) {
+      console.log(`[invoice.paid] Already processed event ${event.id}, skipping`)
+      return true
+    }
+
+    const subscription = await db.subscription.findUnique({
     where: { stripeSubscriptionId: subscriptionId },
     include: {
       creator: {
@@ -868,9 +880,9 @@ async function handleInvoicePaid(event: Stripe.Event) {
     },
   })
 
-  if (!subscription) return
+    if (!subscription) return true // Nothing to process
 
-  // Get actual fee from Stripe invoice (more reliable than recalculating)
+    // Get actual fee from Stripe invoice (more reliable than recalculating)
   const invoiceAny = invoice as any
   const stripeActualFee = invoiceAny.application_fee_amount || 0
 
@@ -977,6 +989,11 @@ async function handleInvoicePaid(event: Stripe.Event) {
   }
 
   // Create payment record with charge ID
+  // Use invoice paid_at timestamp for accurate period-based reporting
+  const paidAt = invoiceAny.status_transitions?.paid_at
+    ? new Date(invoiceAny.status_transitions.paid_at * 1000)
+    : new Date()
+
   await db.payment.create({
     data: {
       subscriptionId: subscription.id,
@@ -992,6 +1009,7 @@ async function handleInvoicePaid(event: Stripe.Event) {
       feeWasCapped,
       type: 'recurring',
       status: 'succeeded',
+      occurredAt: paidAt,
       stripeEventId: event.id,
       stripePaymentIntentId: invoiceAny.payment_intent as string || null,
       stripeChargeId: invoiceAny.charge as string || null,
@@ -1052,18 +1070,25 @@ async function handleInvoicePaid(event: Stripe.Event) {
     })
   }
 
-  // Create activity event
-  await db.activity.create({
-    data: {
-      userId: subscription.creatorId,
-      type: 'payment_received',
-      payload: {
-        subscriptionId: subscription.id,
-        amount: invoice.amount_paid,
-        currency: invoice.currency,
+    // Create activity event
+    await db.activity.create({
+      data: {
+        userId: subscription.creatorId,
+        type: 'payment_received',
+        payload: {
+          subscriptionId: subscription.id,
+          amount: invoice.amount_paid,
+          currency: invoice.currency,
+        },
       },
-    },
-  })
+    })
+
+    return true
+  }) // End of withLock
+
+  if (!processed) {
+    console.log(`[invoice.paid] Could not acquire lock for invoice ${invoice.id}, will retry`)
+  }
 }
 
 // Handle invoice.payment_failed
@@ -1350,12 +1375,23 @@ async function handleDisputeCreated(event: Stripe.Event) {
       feeCents: 0,
       netCents: -dispute.amount,
       type: subscription.interval === 'month' ? 'recurring' : 'one_time',
-      status: 'pending', // Dispute is open, funds held
+      status: 'disputed', // Dispute is open, funds held - use 'disputed' for payroll tracking
       stripeDisputeId: dispute.id, // Track dispute for later resolution
       stripeChargeId: dispute.charge as string || null,
       stripeEventId: event.id,
     },
   })
+
+  // Decrement LTV when dispute is opened (funds are held)
+  // This will be restored if dispute is won in handleDisputeClosed
+  const currentLtv = subscription.ltvCents || 0
+  const decrementAmount = Math.min(dispute.amount, currentLtv)
+  if (decrementAmount > 0) {
+    await db.subscription.update({
+      where: { id: subscription.id },
+      data: { ltvCents: { decrement: decrementAmount } },
+    })
+  }
 
   // Create activity event
   await db.activity.create({
@@ -1590,8 +1626,10 @@ webhooks.post('/paystack', async (c) => {
 
   const { event, data } = payload
 
-  // Use transaction reference or ID for idempotency - REQUIRED
-  const eventId = data.id?.toString() || data.reference
+  // Use transaction reference for idempotency - REQUIRED
+  // IMPORTANT: Prefer reference over id because Paystack may retry webhooks with different
+  // event IDs but the same reference. Reference is the stable business-level identifier.
+  const eventId = data.reference || data.id?.toString()
 
   if (!eventId) {
     console.error('[paystack] Webhook missing ID/reference - cannot ensure idempotency:', { event, data })
@@ -1737,7 +1775,11 @@ async function handlePaystackChargeSuccess(data: any, eventId: string) {
     customer,
     authorization,
     metadata,
+    paid_at, // ISO timestamp of when payment was made
   } = data
+
+  // Parse paid_at for accurate occurredAt (Paystack provides ISO string)
+  const occurredAt = paid_at ? new Date(paid_at) : new Date()
 
   // IDEMPOTENCY CHECK: Skip if we've already processed this event
   // This prevents double-processing on webhook retries
@@ -1937,6 +1979,7 @@ async function handlePaystackChargeSuccess(data: any, eventId: string) {
         feeWasCapped,
         type: subscriptionInterval === 'month' ? 'recurring' : 'one_time',
         status: 'succeeded',
+        occurredAt,
         paystackEventId: eventId,
         paystackTransactionRef: reference,
       },
@@ -1972,25 +2015,29 @@ async function handlePaystackChargeSuccess(data: any, eventId: string) {
   // This is done AFTER the transaction to ensure we don't transfer if DB write fails
   // Supports both 'flat' and 'progressive' fee models
   if (feeModel && creatorProfile?.paystackBankCode && creatorProfile?.paystackAccountNumber) {
-    // Idempotency check: ensure we don't double-transfer on webhook retry
-    // Paystack only allows alphanumeric and hyphens (no underscores)
+    // Lock to prevent duplicate payout processing on webhook retry
     const payoutReference = `PAYOUT-${reference}`
-    const existingPayout = await db.payment.findFirst({
-      where: {
-        paystackTransactionRef: payoutReference,
-        type: 'payout',
-      },
-    })
+    const payoutLockKey = `payout:${payoutReference}`
 
-    if (existingPayout) {
-      console.log(`[paystack] Payout ${payoutReference} already exists, skipping transfer`)
-    } else {
+    await withLock(payoutLockKey, 30000, async () => {
+      // Idempotency check: ensure we don't double-transfer on webhook retry
+      const existingPayout = await db.payment.findFirst({
+        where: {
+          paystackTransactionRef: payoutReference,
+          type: 'payout',
+        },
+      })
+
+      if (existingPayout) {
+        console.log(`[paystack] Payout ${payoutReference} already exists, skipping transfer`)
+        return
+      }
       try {
         // Decrypt the stored account number
         const accountNumber = decryptAccountNumber(creatorProfile.paystackAccountNumber)
         const bankCode = creatorProfile.paystackBankCode
 
-        if (!accountNumber) {
+        if (!accountNumber || !bankCode) {
           console.error(`[paystack] Could not decrypt account number for creator ${creatorId}`)
           // Record failed payout for manual intervention
           await db.payment.create({
@@ -2076,7 +2123,7 @@ async function handlePaystackChargeSuccess(data: any, eventId: string) {
         // Outer catch for unexpected errors (e.g., DB issues)
         console.error(`[paystack] Failed to process payout for creator ${creatorId}:`, err)
       }
-    }
+    }) // End withLock for payout
   }
 
   // Send notification email to creator
@@ -2389,6 +2436,7 @@ async function handlePaystackRefundProcessed(data: any, eventId: string) {
   }
 
   // Create refund payment record (negative amounts)
+  // Use eventId for uniqueness to support multiple partial refunds for same transaction
   await db.payment.create({
     data: {
       subscriptionId: originalPayment.subscriptionId,
@@ -2401,7 +2449,7 @@ async function handlePaystackRefundProcessed(data: any, eventId: string) {
       type: 'refund',
       status: 'refunded',
       paystackEventId: eventId,
-      paystackTransactionRef: `REF-${transactionRef}`,
+      paystackTransactionRef: `REF-${eventId}`, // Use eventId for uniqueness (supports partial refunds)
       feeModel: originalPayment.feeModel,
     },
   })

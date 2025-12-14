@@ -87,6 +87,7 @@ async function getBestChannel(userId: string, reminderType: ReminderType): Promi
  * Schedule a reminder for future sending
  * Uses upsert to prevent duplicates (unique constraint on entityType + entityId + type)
  * Auto-detects best channel (SMS for African markets on critical reminders)
+ * Uses distributed lock to prevent TOCTOU race conditions
  */
 export async function scheduleReminder(params: {
   userId: string
@@ -101,46 +102,59 @@ export async function scheduleReminder(params: {
   // Auto-detect channel if not specified
   const channel = params.channel || await getBestChannel(userId, type)
 
-  // First check if reminder exists and is already sent
-  const existing = await db.reminder.findUnique({
-    where: {
-      entityType_entityId_type: {
-        entityType,
-        entityId,
-        type,
-      },
-    },
-  })
+  // Use distributed lock to prevent TOCTOU race between check and upsert
+  const lockKey = `reminder:schedule:${entityType}:${entityId}:${type}`
+  const lockToken = await acquireLock(lockKey, 10000) // 10 second TTL
 
-  // Don't resurrect already-sent reminders
-  if (existing && existing.status === 'sent') {
+  if (!lockToken) {
+    console.log(`[reminders] Could not acquire lock for ${lockKey}, skipping`)
     return
   }
 
-  await db.reminder.upsert({
-    where: {
-      entityType_entityId_type: {
+  try {
+    // Check if reminder exists and is already sent (inside lock)
+    const existing = await db.reminder.findUnique({
+      where: {
+        entityType_entityId_type: {
+          entityType,
+          entityId,
+          type,
+        },
+      },
+    })
+
+    // Don't resurrect already-sent reminders
+    if (existing && existing.status === 'sent') {
+      return
+    }
+
+    await db.reminder.upsert({
+      where: {
+        entityType_entityId_type: {
+          entityType,
+          entityId,
+          type,
+        },
+      },
+      create: {
+        userId,
         entityType,
         entityId,
         type,
+        channel,
+        scheduledFor,
+        status: 'scheduled',
       },
-    },
-    create: {
-      userId,
-      entityType,
-      entityId,
-      type,
-      channel,
-      scheduledFor,
-      status: 'scheduled',
-    },
-    update: {
-      // Only update scheduledFor, don't change status if already sent
-      scheduledFor,
-      // Only set to scheduled if currently canceled (allow rescheduling)
-      ...(existing?.status === 'canceled' && { status: 'scheduled' }),
-    },
-  })
+      update: {
+        // Only update scheduledFor, don't change status if already sent
+        scheduledFor,
+        // Only set to scheduled if currently canceled (allow rescheduling)
+        ...(existing?.status === 'canceled' && { status: 'scheduled' }),
+      },
+    })
+  } finally {
+    await releaseLock(lockKey, lockToken)
+  }
 }
 
 /**
@@ -925,8 +939,8 @@ async function processPayoutCompletedReminder(
 
   if (!user || !user.profile) return false
 
-  // Get phone number for SMS (stored in profile for Paystack users)
-  const phone = null // TODO: Add phone to profile
+  // Get phone number for SMS (stored in profile)
+  const phone = user.profile.phone || null
 
   // Decrypt account number and get last 4 digits
   const accountNumber = decryptAccountNumber(user.profile.paystackAccountNumber)
@@ -966,8 +980,8 @@ async function processPayoutFailedReminder(
 
   if (!user || !user.profile) return false
 
-  // Get phone number for SMS
-  const phone = null // TODO: Add phone to profile
+  // Get phone number for SMS (stored in profile)
+  const phone = user.profile.phone || null
 
   if (channel === 'sms' && phone) {
     await sendPayoutFailedSms(phone, payment.amountCents, payment.currency)
@@ -1055,8 +1069,8 @@ async function processBankSetupIncompleteReminder(
   const pendingAmount = pendingPayments._sum.netCents || 0
   if (pendingAmount === 0) return false
 
-  // Get phone number for SMS
-  const phone = null // TODO: Add phone to profile
+  // Get phone number for SMS (stored in profile)
+  const phone = user.profile.phone || null
 
   if (channel === 'sms' && phone) {
     await sendBankSetupReminderSms(phone, pendingAmount, user.profile.currency)

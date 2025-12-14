@@ -7,6 +7,7 @@ import { env } from '../config/env.js'
 import { requireAuth } from '../middleware/auth.js'
 import { publicStrictRateLimit, publicRateLimit } from '../middleware/rateLimit.js'
 import { sendWelcomeEmail } from '../services/email.js'
+import { cancelOnboardingReminders } from '../jobs/reminders.js'
 import { RESERVED_USERNAMES } from '../utils/constants.js'
 import {
   getPlatformFeePercent,
@@ -161,9 +162,11 @@ profile.put(
       update: profileData,
     })
 
-    // Send welcome email for new profiles
+    // Send welcome email for new profiles and cancel onboarding reminders
     if (isNewProfile && user) {
       await sendWelcomeEmail(user.email, data.displayName)
+      // Cancel any pending onboarding reminders since profile is now complete
+      await cancelOnboardingReminders(userId)
     }
 
     return c.json({ profile: updatedProfile })

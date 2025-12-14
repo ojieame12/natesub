@@ -198,9 +198,16 @@ export async function processRecurringBilling(): Promise<BillingResult> {
       // Charge the subscriber
       // New model: charge full amount (gross), then transfer to creator
       // Legacy model: use subaccount split
-      // SECURITY: Decrypt authorization code before use
+      // SECURITY: Decrypt authorization code before use (handle decryption failure gracefully)
+      const authCode = decryptAuthorizationCode(sub.paystackAuthorizationCode)
+      if (!authCode) {
+        result.skipped++
+        console.error(`[billing] Skipping sub ${sub.id}: failed to decrypt authorization code`)
+        continue
+      }
+
       const chargeResult = await chargeAuthorization({
-        authorizationCode: decryptAuthorizationCode(sub.paystackAuthorizationCode)!,
+        authorizationCode: authCode,
         email: sub.subscriber.email,
         amount: isNewFeeModel ? grossCents! : sub.amount,
         currency: sub.currency,
@@ -234,6 +241,9 @@ export async function processRecurringBilling(): Promise<BillingResult> {
       })
 
       // Create successful payment record
+      // Use paid_at from Paystack response if available, otherwise current time
+      const paidAt = chargeResult.paid_at ? new Date(chargeResult.paid_at) : new Date()
+
       await db.payment.create({
         data: {
           subscriptionId: sub.id,
@@ -249,6 +259,7 @@ export async function processRecurringBilling(): Promise<BillingResult> {
           feeWasCapped,
           type: 'recurring',
           status: 'succeeded',
+          occurredAt: paidAt,
           paystackEventId: chargeResult.id?.toString(),
           paystackTransactionRef: reference,
         },
@@ -355,6 +366,7 @@ export async function processRecurringBilling(): Promise<BillingResult> {
           netCents: 0,
           type: 'recurring',
           status: 'failed',
+          occurredAt: new Date(),
         },
       })
 
@@ -504,9 +516,16 @@ export async function processRetries(): Promise<BillingResult> {
         netCents = legacyFees.netCents
       }
 
-      // SECURITY: Decrypt authorization code before use
+      // SECURITY: Decrypt authorization code before use (handle decryption failure gracefully)
+      const authCode = decryptAuthorizationCode(sub.paystackAuthorizationCode)
+      if (!authCode) {
+        result.skipped++
+        console.error(`[billing] Skipping retry for sub ${sub.id}: failed to decrypt authorization code`)
+        continue
+      }
+
       const chargeResult = await chargeAuthorization({
-        authorizationCode: decryptAuthorizationCode(sub.paystackAuthorizationCode)!,
+        authorizationCode: authCode,
         email: sub.subscriber.email,
         amount: isNewFeeModel ? grossCents! : sub.amount,
         currency: sub.currency,
@@ -540,6 +559,9 @@ export async function processRetries(): Promise<BillingResult> {
         },
       })
 
+      // Use paid_at from Paystack response if available
+      const paidAt = chargeResult.paid_at ? new Date(chargeResult.paid_at) : new Date()
+
       await db.payment.create({
         data: {
           subscriptionId: sub.id,
@@ -555,6 +577,7 @@ export async function processRetries(): Promise<BillingResult> {
           feeWasCapped,
           type: 'recurring',
           status: 'succeeded',
+          occurredAt: paidAt,
           paystackEventId: chargeResult.id?.toString(),
           paystackTransactionRef: reference,
         },
@@ -644,6 +667,7 @@ export async function processRetries(): Promise<BillingResult> {
           netCents: 0,
           type: 'recurring',
           status: 'failed',
+          occurredAt: new Date(),
         },
       })
 

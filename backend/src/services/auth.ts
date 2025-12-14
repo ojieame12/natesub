@@ -142,11 +142,20 @@ export async function verifyMagicLink(token: string): Promise<{
   })
 
   if (!magicLinkToken) {
-    // Track failed attempt for brute force protection
-    // Rate limit key is global since we don't know the email yet
-    const globalAttemptKey = `otp_global_attempt:${Date.now()}`
-    await redis.incr(globalAttemptKey)
-    await redis.expire(globalAttemptKey, 60) // 1 minute window
+    // Track failed attempt for global brute force protection
+    // Use per-minute bucket to track attempts across all users
+    const minuteBucket = Math.floor(Date.now() / 60000) // 1 minute buckets
+    const globalAttemptKey = `otp_global_attempts:${minuteBucket}`
+
+    const globalAttempts = await redis.incr(globalAttemptKey)
+    await redis.expire(globalAttemptKey, 120) // 2 minute TTL
+
+    // If more than 100 failed OTP attempts globally per minute, add delay
+    // This slows down large-scale brute force attacks
+    if (globalAttempts > 100) {
+      console.warn(`[auth] High global OTP failure rate: ${globalAttempts}/min`)
+    }
+
     throw new Error('Invalid code')
   }
 

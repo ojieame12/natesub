@@ -375,3 +375,65 @@ export async function verifyInvoiceFee(
     return { actualFee: 0, matched: false }
   }
 }
+
+/**
+ * Cancel a Stripe subscription
+ *
+ * @param stripeSubscriptionId - The Stripe subscription ID
+ * @param cancelAtPeriodEnd - If true, cancel at end of billing period; if false, cancel immediately
+ * @returns The updated subscription status
+ */
+export async function cancelSubscription(
+  stripeSubscriptionId: string,
+  cancelAtPeriodEnd: boolean = true
+): Promise<{ status: string; canceledAt: Date | null; cancelAtPeriodEnd: boolean }> {
+  try {
+    let subscription: Stripe.Subscription
+
+    if (cancelAtPeriodEnd) {
+      // Cancel at end of current billing period
+      subscription = await stripe.subscriptions.update(stripeSubscriptionId, {
+        cancel_at_period_end: true,
+      })
+      console.log(`[stripe] Subscription ${stripeSubscriptionId} set to cancel at period end`)
+    } else {
+      // Cancel immediately
+      subscription = await stripe.subscriptions.cancel(stripeSubscriptionId)
+      console.log(`[stripe] Subscription ${stripeSubscriptionId} canceled immediately`)
+    }
+
+    return {
+      status: subscription.status,
+      canceledAt: subscription.canceled_at ? new Date(subscription.canceled_at * 1000) : null,
+      cancelAtPeriodEnd: subscription.cancel_at_period_end,
+    }
+  } catch (err) {
+    console.error(`[stripe] Failed to cancel subscription ${stripeSubscriptionId}:`, err)
+    throw err
+  }
+}
+
+/**
+ * Reactivate a subscription that was set to cancel at period end
+ *
+ * @param stripeSubscriptionId - The Stripe subscription ID
+ * @returns The updated subscription status
+ */
+export async function reactivateSubscription(
+  stripeSubscriptionId: string
+): Promise<{ status: string; cancelAtPeriodEnd: boolean }> {
+  try {
+    const subscription = await stripe.subscriptions.update(stripeSubscriptionId, {
+      cancel_at_period_end: false,
+    })
+    console.log(`[stripe] Subscription ${stripeSubscriptionId} reactivated`)
+
+    return {
+      status: subscription.status,
+      cancelAtPeriodEnd: subscription.cancel_at_period_end,
+    }
+  } catch (err) {
+    console.error(`[stripe] Failed to reactivate subscription ${stripeSubscriptionId}:`, err)
+    throw err
+  }
+}

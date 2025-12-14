@@ -154,6 +154,7 @@ model Profile {
   bio           String?
   avatarUrl     String?
   voiceIntroUrl String?
+  phone         String?  // Phone number for SMS notifications (E.164 format)
 
   // Location
   country     String
@@ -243,9 +244,9 @@ model Subscription {
 
   // Who is subscribing to whom
   subscriberId String
-  subscriber   User   @relation("Subscriber", fields: [subscriberId], references: [id])
+  subscriber   User   @relation("Subscriber", fields: [subscriberId], references: [id], onDelete: Cascade)
   creatorId    String
-  creator      User   @relation("Creator", fields: [creatorId], references: [id])
+  creator      User   @relation("Creator", fields: [creatorId], references: [id], onDelete: Cascade)
 
   // Subscription details
   tierId   String?
@@ -286,7 +287,8 @@ model Subscription {
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
 
-  payments Payment[]
+  payments         Payment[]
+  notificationLogs NotificationLog[]
 
   @@unique([subscriberId, creatorId, interval])  // Prevent duplicate subs per interval type
   @@index([creatorId])
@@ -298,7 +300,7 @@ model Payment {
   id String @id @default(uuid())
 
   subscriptionId String?
-  subscription   Subscription? @relation(fields: [subscriptionId], references: [id])
+  subscription   Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
   creatorId      String
   subscriberId   String?
 
@@ -350,7 +352,7 @@ model Payment {
 model Request {
   id        String @id @default(uuid())
   creatorId String
-  creator   User   @relation(fields: [creatorId], references: [id])
+  creator   User   @relation(fields: [creatorId], references: [id], onDelete: Cascade)
 
   // Recipient (may not be a user)
   recipientName  String
@@ -400,7 +402,7 @@ model Request {
 model Update {
   id        String @id @default(uuid())
   creatorId String
-  creator   User   @relation(fields: [creatorId], references: [id])
+  creator   User   @relation(fields: [creatorId], references: [id], onDelete: Cascade)
 
   // Content
   title    String?
@@ -433,7 +435,7 @@ model Update {
 model Activity {
   id     String @id @default(uuid())
   userId String
-  user   User   @relation(fields: [userId], references: [id])
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // Type: subscription_created, payment_received, request_sent, request_accepted, update_sent
   type    String
@@ -481,10 +483,11 @@ model PageView {
 // ============================================
 
 model NotificationLog {
-  id             String   @id @default(uuid())
+  id             String       @id @default(uuid())
   subscriptionId String
-  type           String   // 'renewal_reminder' | 'payment_failed' | 'subscription_canceled'
-  sentAt         DateTime @default(now())
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  type           String       // 'renewal_reminder' | 'payment_failed' | 'subscription_canceled'
+  sentAt         DateTime     @default(now())
 
   // Unique constraint prevents duplicate sends
   @@unique([subscriptionId, type])
@@ -499,7 +502,7 @@ model NotificationLog {
 model PayrollPeriod {
   id     String @id @default(uuid())
   userId String
-  user   User   @relation(fields: [userId], references: [id])
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // Period boundaries
   periodStart DateTime

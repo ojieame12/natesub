@@ -32,6 +32,7 @@ export interface PayrollSummary {
   paymentCount: number
   currency: string
   verificationCode: string
+  payoutDate: Date | null
   createdAt: Date
 }
 
@@ -332,6 +333,7 @@ export async function getPayrollPeriods(userId: string): Promise<PayrollSummary[
     paymentCount: p.paymentCount,
     currency: p.currency,
     verificationCode: p.verificationCode,
+    payoutDate: p.payoutDate, // Include for status determination
     createdAt: p.createdAt,
   }))
 }
@@ -500,6 +502,7 @@ export async function generatePayrollPeriod(
       paymentCount: existing.paymentCount,
       currency: existing.currency,
       verificationCode: existing.verificationCode,
+      payoutDate: existing.payoutDate,
       createdAt: existing.createdAt,
     }
   }
@@ -591,6 +594,7 @@ export async function generatePayrollPeriod(
     paymentCount: period.paymentCount,
     currency: period.currency,
     verificationCode: period.verificationCode,
+    payoutDate: period.payoutDate,
     createdAt: period.createdAt,
   }
 }

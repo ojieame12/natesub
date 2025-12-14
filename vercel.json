@@ -23,6 +23,14 @@
     {
       "path": "/api/cron/reconciliation",
       "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/scheduled-reminders",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/payroll",
+      "schedule": "0 6 1,16 * *"
     }
   ]
 }

@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { SubscriptionStatus } from '@prisma/client'
 import { db } from '../db/client.js'
 import { requireAuth } from '../middleware/auth.js'
+import { cancelSubscription as cancelStripeSubscription, reactivateSubscription } from '../services/stripe.js'
 
 const subscriptions = new Hono()
 
@@ -148,6 +149,169 @@ subscriptions.get(
           status: p.status,
           occurredAt: p.occurredAt,
         })),
+      },
+    })
+  }
+)
+
+// Cancel subscription (service provider cancels a subscriber)
+// POST instead of DELETE to allow body with options
+subscriptions.post(
+  '/:id/cancel',
+  requireAuth,
+  zValidator('param', z.object({ id: z.string().uuid() })),
+  zValidator('json', z.object({
+    immediate: z.boolean().default(false), // If true, cancel immediately; otherwise at period end
+  }).optional()),
+  async (c) => {
+    const userId = c.get('userId')
+    const { id } = c.req.valid('param')
+    const body = c.req.valid('json')
+    const immediate = body?.immediate || false
+
+    // Find subscription - service provider can cancel their subscribers
+    const subscription = await db.subscription.findFirst({
+      where: {
+        id,
+        creatorId: userId,
+      },
+    })
+
+    if (!subscription) {
+      return c.json({ error: 'Subscription not found' }, 404)
+    }
+
+    // Can't cancel already canceled subscriptions
+    if (subscription.status === 'canceled') {
+      return c.json({ error: 'Subscription is already canceled' }, 400)
+    }
+
+    // Cancel in Stripe if it's a Stripe subscription
+    if (subscription.stripeSubscriptionId) {
+      try {
+        const result = await cancelStripeSubscription(subscription.stripeSubscriptionId, !immediate)
+
+        // Update local subscription based on Stripe result
+        await db.subscription.update({
+          where: { id },
+          data: {
+            status: result.status === 'canceled' ? 'canceled' : subscription.status,
+            cancelAtPeriodEnd: result.cancelAtPeriodEnd,
+            canceledAt: result.canceledAt,
+          },
+        })
+
+        return c.json({
+          success: true,
+          subscription: {
+            id: subscription.id,
+            status: result.status,
+            cancelAtPeriodEnd: result.cancelAtPeriodEnd,
+            canceledAt: result.canceledAt?.toISOString() || null,
+          },
+        })
+      } catch (err: any) {
+        console.error(`[subscriptions] Failed to cancel Stripe subscription:`, err)
+        return c.json({ error: 'Failed to cancel subscription' }, 500)
+      }
+    }
+
+    // For Paystack subscriptions (recurring via authorization code), just update local status
+    // The recurring charge job will check status before attempting to charge
+    await db.subscription.update({
+      where: { id },
+      data: {
+        status: immediate ? 'canceled' : subscription.status,
+        cancelAtPeriodEnd: !immediate,
+        canceledAt: immediate ? new Date() : null,
+      },
+    })
+
+    return c.json({
+      success: true,
+      subscription: {
+        id: subscription.id,
+        status: immediate ? 'canceled' : subscription.status,
+        cancelAtPeriodEnd: !immediate,
+        canceledAt: immediate ? new Date().toISOString() : null,
+      },
+    })
+  }
+)
+
+// Reactivate subscription (undo cancel at period end)
+subscriptions.post(
+  '/:id/reactivate',
+  requireAuth,
+  zValidator('param', z.object({ id: z.string().uuid() })),
+  async (c) => {
+    const userId = c.get('userId')
+    const { id } = c.req.valid('param')
+
+    // Find subscription - service provider can reactivate their subscribers
+    const subscription = await db.subscription.findFirst({
+      where: {
+        id,
+        creatorId: userId,
+      },
+    })
+
+    if (!subscription) {
+      return c.json({ error: 'Subscription not found' }, 404)
+    }
+
+    // Can only reactivate subscriptions set to cancel at period end
+    if (!subscription.cancelAtPeriodEnd) {
+      return c.json({ error: 'Subscription is not set to cancel' }, 400)
+    }
+
+    // Already fully canceled subscriptions cannot be reactivated
+    if (subscription.status === 'canceled') {
+      return c.json({ error: 'Cannot reactivate a canceled subscription' }, 400)
+    }
+
+    // Reactivate in Stripe if it's a Stripe subscription
+    if (subscription.stripeSubscriptionId) {
+      try {
+        const result = await reactivateSubscription(subscription.stripeSubscriptionId)
+
+        await db.subscription.update({
+          where: { id },
+          data: {
+            cancelAtPeriodEnd: false,
+            canceledAt: null,
+          },
+        })
+
+        return c.json({
+          success: true,
+          subscription: {
+            id: subscription.id,
+            status: result.status,
+            cancelAtPeriodEnd: false,
+          },
+        })
+      } catch (err: any) {
+        console.error(`[subscriptions] Failed to reactivate Stripe subscription:`, err)
+        return c.json({ error: 'Failed to reactivate subscription' }, 500)
+      }
+    }
+
+    // For Paystack subscriptions, just update local status
+    await db.subscription.update({
+      where: { id },
+      data: {
+        cancelAtPeriodEnd: false,
+        canceledAt: null,
+      },
+    })
+
+    return c.json({
+      success: true,
+      subscription: {
+        id: subscription.id,
+        status: subscription.status,
+        cancelAtPeriodEnd: false,
       },
     })
   }

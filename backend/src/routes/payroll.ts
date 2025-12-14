@@ -77,11 +77,12 @@ payroll.get('/periods', requireAuth, requireServicePurpose, async (c) => {
   return c.json({
     periods: periods.map((p) => {
       // Determine status: current (ongoing), pending (completed but not paid), paid
+      // Status logic consistent with detail view - uses payoutDate
       const isPeriodComplete = p.periodEnd < now
       let status: 'current' | 'pending' | 'paid' = 'current'
       if (isPeriodComplete) {
-        // Check if there's payout info (would be set by Stripe/Paystack webhook)
-        status = p.netCents > 0 ? 'pending' : 'paid' // For now, mark as pending until payout tracking is added
+        // If payoutDate exists, it's paid; otherwise pending
+        status = p.payoutDate ? 'paid' : 'pending'
       }
 
       return {

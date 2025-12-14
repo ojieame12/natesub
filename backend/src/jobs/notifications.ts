@@ -194,34 +194,46 @@ export async function sendDunningEmails(): Promise<NotificationResult> {
 
     // Idempotency check - use payment ID in type to allow one email per failed payment
     const idempotencyType = `payment_failed_${payment.id}`
-    const existingLog = await db.notificationLog.findFirst({
-      where: {
-        subscriptionId: sub.id,
-        type: idempotencyType,
-      },
-    })
 
-    if (existingLog) {
-      console.log(`[notifications] Skipping sub ${sub.id} - dunning already sent for this payment`)
+    // Acquire lock to prevent race conditions between workers
+    const lockKey = `notification:${sub.id}:${idempotencyType}`
+    const lockToken = await acquireLock(lockKey, 30000) // 30 second TTL
+
+    if (!lockToken) {
+      console.log(`[notifications] Skipping sub ${sub.id} - locked by another worker`)
       continue
     }
 
-    // Calculate next retry date (1 day after failure)
-    const retryDate = new Date(payment.createdAt.getTime() + 24 * 60 * 60 * 1000)
-
-    // Calculate what the subscriber will actually pay (respects feeMode)
-    let subscriberAmount = sub.amount
-    if (sub.creator.profile?.feeMode === 'pass_to_subscriber') {
-      const feeCalc = calculateServiceFee(
-        sub.amount,
-        sub.currency,
-        sub.creator.profile?.purpose,
-        'pass_to_subscriber'
-      )
-      subscriberAmount = feeCalc.grossCents
-    }
-
     try {
+      // Idempotency check inside lock to prevent TOCTOU race
+      const existingLog = await db.notificationLog.findFirst({
+        where: {
+          subscriptionId: sub.id,
+          type: idempotencyType,
+        },
+      })
+
+      if (existingLog) {
+        console.log(`[notifications] Skipping sub ${sub.id} - dunning already sent for this payment`)
+        await releaseLock(lockKey, lockToken)
+        continue
+      }
+
+      // Calculate next retry date (1 day after failure)
+      const retryDate = new Date(payment.createdAt.getTime() + 24 * 60 * 60 * 1000)
+
+      // Calculate what the subscriber will actually pay (respects feeMode)
+      let subscriberAmount = sub.amount
+      if (sub.creator.profile?.feeMode === 'pass_to_subscriber') {
+        const feeCalc = calculateServiceFee(
+          sub.amount,
+          sub.currency,
+          sub.creator.profile?.purpose,
+          'pass_to_subscriber'
+        )
+        subscriberAmount = feeCalc.grossCents
+      }
+
       await sendPaymentFailedEmail(
         sub.subscriber.email,
         sub.creator.profile.displayName,
@@ -245,6 +257,8 @@ export async function sendDunningEmails(): Promise<NotificationResult> {
         error: error.message || 'Unknown error',
       })
       console.error(`[notifications] Failed to send dunning email for sub ${sub.id}:`, error.message)
+    } finally {
+      await releaseLock(lockKey, lockToken)
     }
   }
 
@@ -288,37 +302,49 @@ export async function sendCancellationEmails(): Promise<NotificationResult> {
 
     result.processed++
 
-    // Idempotency check
-    const existingLog = await db.notificationLog.findUnique({
-      where: {
-        subscriptionId_type: {
-          subscriptionId: sub.id,
-          type: 'subscription_canceled',
-        },
-      },
-    })
+    const idempotencyType = 'subscription_canceled'
 
-    if (existingLog) {
-      console.log(`[notifications] Skipping sub ${sub.id} - cancellation already sent`)
+    // Acquire lock to prevent race conditions between workers
+    const lockKey = `notification:${sub.id}:${idempotencyType}`
+    const lockToken = await acquireLock(lockKey, 30000) // 30 second TTL
+
+    if (!lockToken) {
+      console.log(`[notifications] Skipping sub ${sub.id} - locked by another worker`)
       continue
     }
 
-    // Determine cancellation reason by checking for recent failed payments
-    const recentFailedPayment = await db.payment.findFirst({
-      where: {
-        subscriptionId: sub.id,
-        status: 'failed',
-        createdAt: {
-          gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // Last 7 days
-        },
-      },
-    })
-
-    const cancellationReason = recentFailedPayment
-      ? 'payment_failed' as const
-      : 'other' as const
-
     try {
+      // Idempotency check inside lock to prevent TOCTOU race
+      const existingLog = await db.notificationLog.findUnique({
+        where: {
+          subscriptionId_type: {
+            subscriptionId: sub.id,
+            type: idempotencyType,
+          },
+        },
+      })
+
+      if (existingLog) {
+        console.log(`[notifications] Skipping sub ${sub.id} - cancellation already sent`)
+        await releaseLock(lockKey, lockToken)
+        continue
+      }
+
+      // Determine cancellation reason by checking for recent failed payments
+      const recentFailedPayment = await db.payment.findFirst({
+        where: {
+          subscriptionId: sub.id,
+          status: 'failed',
+          createdAt: {
+            gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // Last 7 days
+          },
+        },
+      })
+
+      const cancellationReason = recentFailedPayment
+        ? 'payment_failed' as const
+        : 'other' as const
+
       await sendSubscriptionCanceledEmail(
         sub.subscriber.email,
         sub.creator.profile.displayName,
@@ -328,7 +354,7 @@ export async function sendCancellationEmails(): Promise<NotificationResult> {
       await db.notificationLog.create({
         data: {
           subscriptionId: sub.id,
-          type: 'subscription_canceled',
+          type: idempotencyType,
         },
       })
 
@@ -340,6 +366,8 @@ export async function sendCancellationEmails(): Promise<NotificationResult> {
         error: error.message || 'Unknown error',
       })
       console.error(`[notifications] Failed to send cancellation email for sub ${sub.id}:`, error.message)
+    } finally {
+      await releaseLock(lockKey, lockToken)
     }
   }
 
