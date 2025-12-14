@@ -296,6 +296,9 @@ model Subscription {
   @@unique([subscriberId, creatorId, interval])  // Prevent duplicate subs per interval type
   @@index([creatorId])
   @@index([subscriberId])
+  @@index([creatorId, status])                    // Dashboard: count active subs per creator
+  @@index([status, interval, currentPeriodEnd])   // Billing job: find due renewals
+  @@index([creatorId, status, interval])          // Metrics: MRR calculation
   @@map("subscriptions")
 }
 
@@ -516,6 +519,7 @@ model PageView {
 
   @@index([profileId, createdAt(sort: Desc)])
   @@index([visitorHash])
+  @@index([profileId, visitorHash, createdAt])  // For debounce query: findFirst where profileId + visitorHash + createdAt >= threshold
   @@map("page_views")
 }
 

@@ -1,6 +1,7 @@
 // Reserved usernames - cannot be used
+// IMPORTANT: Keep in sync with frontend src/utils/constants.ts
 export const RESERVED_USERNAMES = [
-  // App routes
+  // App routes (MUST match all top-level routes in App.tsx)
   'onboarding',
   'dashboard',
   'activity',
@@ -20,6 +21,12 @@ export const RESERVED_USERNAMES = [
   'logout',
   'signup',
   'register',
+  'payroll',           // /payroll routes
+  'my-subscriptions',  // subscriber-facing subscription list
+  'unsubscribe',       // email unsubscribe
+  'verify',            // payroll verification /verify/:id
+  'r',                 // public request pages /r/:token
+  'payment',           // /payment/success
 
   // System/reserved words
   'admin',

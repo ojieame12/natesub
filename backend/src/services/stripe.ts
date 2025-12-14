@@ -2,8 +2,13 @@ import Stripe from 'stripe'
 import crypto from 'crypto'
 import { env } from '../config/env.js'
 import { db } from '../db/client.js'
+import { redis } from '../db/redis.js'
 import { stripeCircuitBreaker, CircuitBreakerError } from '../utils/circuitBreaker.js'
 import { isStripeCrossBorderSupported } from '../utils/constants.js'
+
+// Cache TTL for Stripe account status (5 minutes)
+// Status changes are rare and webhooks update payoutStatus in DB
+const STRIPE_STATUS_CACHE_TTL = 300
 
 // Generate idempotency key for Stripe API calls
 // Uses 5-minute time buckets so duplicate requests within 5 minutes get same key
@@ -123,7 +128,20 @@ export async function createAccountLink(accountId: string, country?: string) {
 }
 
 // Get account status with detailed requirements
+// Uses Redis cache to reduce Stripe API calls (5-minute TTL)
 export async function getAccountStatus(stripeAccountId: string) {
+  const cacheKey = `stripe:status:${stripeAccountId}`
+
+  // Check cache first
+  try {
+    const cached = await redis.get(cacheKey)
+    if (cached) {
+      return JSON.parse(cached)
+    }
+  } catch (err) {
+    // Cache miss or error - continue to API call
+  }
+
   const account = await stripe.accounts.retrieve(stripeAccountId, {
     expand: ['external_accounts'],
   })
@@ -157,7 +175,7 @@ export async function getAccountStatus(stripeAccountId: string) {
     }
   }
 
-  return {
+  const result = {
     detailsSubmitted: account.details_submitted,
     chargesEnabled: account.charges_enabled,
     payoutsEnabled: account.payouts_enabled,
@@ -173,6 +191,11 @@ export async function getAccountStatus(stripeAccountId: string) {
         : null,
     },
   }
+
+  // Cache the result (non-blocking)
+  redis.setex(cacheKey, STRIPE_STATUS_CACHE_TTL, JSON.stringify(result)).catch(() => {})
+
+  return result
 }
 
 // Create Express Dashboard login link
@@ -243,12 +266,13 @@ export async function createCheckoutSession(params: {
   }
 
   // Generate idempotency key
-  // If no email, add random suffix to prevent collision between anonymous visitors
-  const emailOrRandom = params.subscriberEmail || crypto.randomUUID()
+  // Use viewId for anonymous visitors to prevent double-checkout on same page session
+  // Falls back to random UUID only if no viewId (shouldn't happen in normal flow)
+  const visitorIdentifier = params.subscriberEmail || params.viewId || crypto.randomUUID()
   const idempotencyKey = generateIdempotencyKey(
     'checkout',
     params.creatorId,
-    emailOrRandom,
+    visitorIdentifier,
     params.tierId,
     chargeAmount.toString(),
     params.interval

@@ -45,9 +45,13 @@ interface BillingResult {
   errors: Array<{ subscriptionId: string; error: string }>
 }
 
+// Batch size for processing subscriptions (prevents memory issues at scale)
+const BILLING_BATCH_SIZE = 100
+
 /**
  * Process recurring billing for Paystack subscriptions
  * Should be run daily, ideally at 00:00 UTC
+ * Uses cursor-based pagination to handle large volumes
  */
 export async function processRecurringBilling(): Promise<BillingResult> {
   const result: BillingResult = {
@@ -59,28 +63,40 @@ export async function processRecurringBilling(): Promise<BillingResult> {
   }
 
   const now = new Date()
+  let cursor: string | undefined
+  let totalFound = 0
 
-  // Find subscriptions due for renewal
-  // IMPORTANT: Only renew subscriptions that haven't been canceled
-  const subscriptions = await db.subscription.findMany({
-    where: {
-      status: 'active',
-      interval: 'month',
-      currentPeriodEnd: { lte: now },
-      paystackAuthorizationCode: { not: null },
-      cancelAtPeriodEnd: false, // Don't renew subscriptions pending cancellation
-    },
-    include: {
-      creator: {
-        include: { profile: true },
+  // Process subscriptions in batches using cursor-based pagination
+  while (true) {
+    // Find subscriptions due for renewal
+    // IMPORTANT: Only renew subscriptions that haven't been canceled
+    const subscriptions = await db.subscription.findMany({
+      where: {
+        status: 'active',
+        interval: 'month',
+        currentPeriodEnd: { lte: now },
+        paystackAuthorizationCode: { not: null },
+        cancelAtPeriodEnd: false, // Don't renew subscriptions pending cancellation
       },
-      subscriber: true,
-    },
-  })
+      include: {
+        creator: {
+          include: { profile: true },
+        },
+        subscriber: true,
+      },
+      take: BILLING_BATCH_SIZE,
+      ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+      orderBy: { id: 'asc' },
+    })
 
-  console.log(`[billing] Found ${subscriptions.length} subscriptions due for renewal`)
+    if (subscriptions.length === 0) break
 
-  for (const sub of subscriptions) {
+    totalFound += subscriptions.length
+    cursor = subscriptions[subscriptions.length - 1].id
+
+    console.log(`[billing] Processing batch of ${subscriptions.length} subscriptions (total found: ${totalFound})`)
+
+    for (const sub of subscriptions) {
     result.processed++
 
     // DISTRIBUTED LOCK: Prevent concurrent processing of same subscription
@@ -385,6 +401,7 @@ export async function processRecurringBilling(): Promise<BillingResult> {
       await releaseLock(lockKey, lockToken)
     }
   }
+  } // End of while (true) pagination loop
 
   console.log(`[billing] Complete: ${result.succeeded} succeeded, ${result.failed} failed, ${result.skipped} skipped`)
 

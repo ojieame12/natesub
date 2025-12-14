@@ -41,52 +41,72 @@ activity.get(
 )
 
 // Get dashboard metrics (must be before /:id to avoid route conflict)
+// Optimized to use DB aggregates instead of loading all subscriptions into memory
 activity.get('/metrics', requireAuth, async (c) => {
   const userId = c.get('userId')
 
-  // Get active subscriptions
-  const subscriptions = await db.subscription.findMany({
-    where: {
-      creatorId: userId,
-      status: 'active',
-    },
-    select: {
-      amount: true,
-      currency: true,
-      tierName: true,
-      interval: true,
-    },
-  })
+  // Run all queries in parallel for efficiency
+  const [
+    subscriberCount,
+    mrrResult,
+    totalRevenue,
+    tierBreakdown,
+  ] = await Promise.all([
+    // Count active subscribers
+    db.subscription.count({
+      where: {
+        creatorId: userId,
+        status: 'active',
+      },
+    }),
 
-  // Calculate MRR (only recurring subscriptions)
-  const mrrCents = subscriptions
-    .filter(s => s.interval === 'month')
-    .reduce((sum, s) => sum + s.amount, 0)
+    // Calculate MRR using DB aggregate (only recurring subscriptions)
+    db.subscription.aggregate({
+      where: {
+        creatorId: userId,
+        status: 'active',
+        interval: 'month',
+      },
+      _sum: { amount: true },
+    }),
 
-  // Get total revenue
-  const payments = await db.payment.aggregate({
-    where: {
-      creatorId: userId,
-      status: 'succeeded',
-    },
-    _sum: { netCents: true },
-  })
+    // Get total revenue
+    db.payment.aggregate({
+      where: {
+        creatorId: userId,
+        status: 'succeeded',
+      },
+      _sum: { netCents: true },
+    }),
 
-  // Tier breakdown
-  const tierBreakdown: Record<string, number> = {}
-  for (const sub of subscriptions) {
-    const tier = sub.tierName || 'Default'
-    tierBreakdown[tier] = (tierBreakdown[tier] || 0) + 1
+    // Tier breakdown using groupBy
+    db.subscription.groupBy({
+      by: ['tierName'],
+      where: {
+        creatorId: userId,
+        status: 'active',
+      },
+      _count: true,
+    }),
+  ])
+
+  // Convert tier breakdown to record format
+  const tierBreakdownRecord: Record<string, number> = {}
+  for (const tier of tierBreakdown) {
+    const tierName = tier.tierName || 'Default'
+    tierBreakdownRecord[tierName] = tier._count
   }
+
+  const mrrCents = mrrResult._sum.amount || 0
 
   return c.json({
     metrics: {
-      subscriberCount: subscriptions.length,
+      subscriberCount,
       mrrCents,
       mrr: mrrCents / 100,
-      totalRevenueCents: payments._sum.netCents || 0,
-      totalRevenue: (payments._sum.netCents || 0) / 100,
-      tierBreakdown,
+      totalRevenueCents: totalRevenue._sum.netCents || 0,
+      totalRevenue: (totalRevenue._sum.netCents || 0) / 100,
+      tierBreakdown: tierBreakdownRecord,
     },
   })
 })
