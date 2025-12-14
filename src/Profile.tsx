@@ -3,6 +3,7 @@ import { Pen, ExternalLink, ChevronRight, LogOut, Copy } from 'lucide-react'
 import { Pressable, Skeleton, ErrorState, useToast } from './components'
 import { useProfile, useMetrics, useLogout, useCurrentUser } from './api/hooks'
 import { useOnboardingStore } from './onboarding/store'
+import { getShareableLink, getShareableLinkFull, getPublicPageUrl } from './utils/constants'
 import './Profile.css'
 
 const quickLinks = [
@@ -46,12 +47,12 @@ export default function Profile() {
   const isLoading = profileLoading || metricsLoading
 
   const handleViewPage = () => {
-    window.open(`https://natepay.co/${username}`, '_blank')
+    window.open(getPublicPageUrl(username), '_blank')
   }
 
   const handleCopyLink = async () => {
     try {
-      await navigator.clipboard.writeText(`https://natepay.co/${username}`)
+      await navigator.clipboard.writeText(getShareableLinkFull(username))
       toast.success('Link copied!')
     } catch {
       toast.error('Failed to copy')
@@ -113,7 +114,7 @@ export default function Profile() {
               <p className="profile-username">@{username}</p>
               <div className="profile-link-actions">
                 <Pressable className="view-page-btn" onClick={handleViewPage}>
-                  <span>natepay.co/{username}</span>
+                  <span>{getShareableLink(username)}</span>
                   <ExternalLink size={14} />
                 </Pressable>
                 <Pressable className="copy-link-btn" onClick={handleCopyLink}>

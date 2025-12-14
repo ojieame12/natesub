@@ -6,6 +6,7 @@ import Stripe from 'stripe'
 import { env } from '../config/env.js'
 import { db } from '../db/client.js'
 import { PLATFORM_SUBSCRIPTION_PRICE_CENTS } from './pricing.js'
+import { sendPlatformDebitNotification } from './email.js'
 
 const stripe = new Stripe(env.STRIPE_SECRET_KEY, {
   apiVersion: '2025-11-17.clover',
@@ -331,19 +332,53 @@ export async function handlePlatformSubscriptionEvent(
     case 'invoice.payment_failed': {
       const invoice = event.data.object as Stripe.Invoice
       const customerId = invoice.customer as string
+      const failedAmount = invoice.amount_due || 0 // Amount in cents
 
       const profile = await db.profile.findFirst({
         where: { platformCustomerId: customerId },
+        include: { user: { select: { id: true, email: true } } },
       })
 
-      if (profile) {
+      if (profile && failedAmount > 0) {
+        // Calculate new total debit
+        const newTotalDebit = (profile.platformDebitCents || 0) + failedAmount
+
+        // Add failed amount to debit instead of blocking
+        // Don't change status to past_due - keep them operational
         await db.profile.update({
           where: { id: profile.id },
           data: {
-            platformSubscriptionStatus: 'past_due',
+            platformDebitCents: { increment: failedAmount },
+            // Keep status as-is (active or trialing) - don't set to past_due
           },
         })
-        console.log(`[platform] Subscription payment failed for customer ${customerId}`)
+
+        // Create activity for audit trail
+        await db.activity.create({
+          data: {
+            userId: profile.user.id,
+            type: 'platform_debit_created',
+            payload: {
+              amountCents: failedAmount,
+              reason: 'platform_subscription_payment_failed',
+              invoiceId: invoice.id,
+            },
+          },
+        })
+
+        // Send email notification about the debit
+        try {
+          await sendPlatformDebitNotification(
+            profile.user.email,
+            profile.displayName || 'there',
+            failedAmount,
+            newTotalDebit
+          )
+        } catch (emailErr) {
+          console.error(`[platform] Failed to send debit notification email:`, emailErr)
+        }
+
+        console.log(`[platform] Added $${(failedAmount / 100).toFixed(2)} debit for customer ${customerId} (invoice: ${invoice.id})`)
       }
       break
     }

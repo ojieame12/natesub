@@ -17,6 +17,7 @@ import checkout from './routes/checkout.js'
 import webhooks from './routes/webhooks.js'
 import media from './routes/media.js'
 import subscriptions from './routes/subscriptions.js'
+import mySubscriptions from './routes/my-subscriptions.js'
 import activity from './routes/activity.js'
 import requests from './routes/requests.js'
 import updates from './routes/updates.js'
@@ -234,6 +235,7 @@ app.route('/checkout', checkout)
 app.route('/webhooks', webhooks)
 app.route('/media', media)
 app.route('/subscriptions', subscriptions)
+app.route('/my-subscriptions', mySubscriptions)
 app.route('/activity', activity)
 app.route('/requests', requests)
 app.route('/updates', updates)

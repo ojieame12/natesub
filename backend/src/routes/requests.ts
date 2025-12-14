@@ -138,6 +138,17 @@ requests.post(
       return c.json({ error: 'This service provider has not set up payments yet' }, 400)
     }
 
+    // Enforce platform debit cap for service providers ($30 max = 6 months)
+    const PLATFORM_DEBIT_CAP_CENTS = 3000
+    if (request.creator.profile?.purpose === 'service' &&
+        (request.creator.profile.platformDebitCents || 0) >= PLATFORM_DEBIT_CAP_CENTS) {
+      return c.json({
+        error: 'Outstanding platform balance must be cleared before accepting new payments.',
+        code: 'PLATFORM_DEBIT_CAP_REACHED',
+        debitCents: request.creator.profile.platformDebitCents,
+      }, 402)
+    }
+
     try {
       // Calculate service fee based on creator's fee mode setting
       const feeCalc = calculateServiceFee(

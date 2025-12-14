@@ -59,15 +59,14 @@ checkout.post(
       return c.json({ error: 'Payments are not active for this account' }, 400)
     }
 
-    // Enforce platform subscription for service providers
-    if (profile.purpose === 'service') {
-      const validSubscriptionStatuses = ['active', 'trialing']
-      if (!profile.platformSubscriptionStatus || !validSubscriptionStatuses.includes(profile.platformSubscriptionStatus)) {
-        return c.json({
-          error: 'This service provider needs to activate their plan to receive payments.',
-          code: 'PLATFORM_SUBSCRIPTION_REQUIRED',
-        }, 402)
-      }
+    // Enforce platform debit cap for service providers ($30 max = 6 months)
+    const PLATFORM_DEBIT_CAP_CENTS = 3000
+    if (profile.purpose === 'service' && profile.platformDebitCents >= PLATFORM_DEBIT_CAP_CENTS) {
+      return c.json({
+        error: 'Outstanding platform balance must be cleared before accepting new payments.',
+        code: 'PLATFORM_DEBIT_CAP_REACHED',
+        debitCents: profile.platformDebitCents,
+      }, 402)
     }
 
     // Validate amount against creator's pricing

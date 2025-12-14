@@ -4,6 +4,7 @@ import { CheckCircle, AlertCircle, Loader2, Copy, Share2 } from 'lucide-react'
 import { api } from './api'
 import { Pressable } from './components'
 import { getCurrencySymbol, formatAmountWithSeparators } from './utils/currency'
+import { getShareableLink } from './utils/constants'
 import './StripeComplete.css' // Reuse Stripe complete styles
 
 interface VerificationResult {
@@ -53,7 +54,7 @@ export default function PaystackComplete() {
   }, [reference])
 
   const shareUrl = verification?.creatorUsername || creatorUsername
-    ? `natepay.co/${verification?.creatorUsername || creatorUsername}`
+    ? getShareableLink(verification?.creatorUsername || creatorUsername || '')
     : null
   const fullShareUrl = shareUrl ? `https://${shareUrl}` : null
 

@@ -7,6 +7,7 @@ import { useProfile } from './api/hooks'
 import { useOnboardingStore } from './onboarding/store'
 import { setPaymentConfirmed } from './App'
 import { Pressable } from './components'
+import { getShareableLink } from './utils/constants'
 import './StripeComplete.css'
 
 // Format Stripe requirement keys into readable text
@@ -193,7 +194,7 @@ export default function StripeComplete() {
     }
   }, [status])
 
-  const shareUrl = profile?.username ? `natepay.co/${profile.username}` : null
+  const shareUrl = profile?.username ? getShareableLink(profile.username) : null
   const fullShareUrl = shareUrl ? `https://${shareUrl}` : null
 
   const handleCopy = async () => {

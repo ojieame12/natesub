@@ -27,6 +27,8 @@ export const stripeCheckoutMetadataSchema = z.object({
   feeMode: z.enum(['absorb', 'pass_to_subscriber']).optional(),
   feeEffectiveRate: z.string().optional(),
   feeWasCapped: z.enum(['true', 'false']).optional(),
+  // Platform debit recovery (for service providers with lapsed platform subscription)
+  platformDebitRecovered: z.string().regex(/^\d+$/, 'platformDebitRecovered must be numeric string').optional(),
 })
 
 /**

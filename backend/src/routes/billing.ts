@@ -21,7 +21,10 @@ billing.get('/status', requireAuth, async (c) => {
   // Check if user needs platform subscription
   const profile = await db.profile.findUnique({
     where: { userId },
-    select: { purpose: true },
+    select: {
+      purpose: true,
+      platformDebitCents: true,
+    },
   })
 
   const needsSubscription = requiresPlatformSubscription(profile?.purpose as UserPurpose)
@@ -31,10 +34,15 @@ billing.get('/status', requireAuth, async (c) => {
       plan: 'personal',
       subscriptionRequired: false,
       subscription: null,
+      debit: null,
     })
   }
 
   const subscription = await getPlatformSubscriptionStatus(userId)
+
+  // Calculate debit info
+  const debitCents = profile?.platformDebitCents || 0
+  const PLATFORM_DEBIT_CAP_CENTS = 3000 // $30
 
   return c.json({
     plan: 'service',
@@ -46,6 +54,16 @@ billing.get('/status', requireAuth, async (c) => {
       trialEndsAt: subscription.trialEndsAt?.toISOString() || null,
       cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
     },
+    // Platform debit info (for service providers with lapsed subscriptions)
+    debit: debitCents > 0 ? {
+      amountCents: debitCents,
+      amountDisplay: `$${(debitCents / 100).toFixed(2)}`,
+      willRecoverFromNextPayment: true,
+      atCapLimit: debitCents >= PLATFORM_DEBIT_CAP_CENTS,
+      message: debitCents >= PLATFORM_DEBIT_CAP_CENTS
+        ? 'Platform balance reached maximum. Please update your payment method to continue accepting payments.'
+        : 'This balance will be recovered from your next client payment.',
+    } : null,
   })
 })
 

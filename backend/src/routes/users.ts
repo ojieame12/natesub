@@ -47,6 +47,7 @@ users.get(
         stripeAccountId: true,
         paystackSubaccountCode: true,
         payoutStatus: true,
+        platformDebitCents: true,
       },
     })
 
@@ -58,7 +59,13 @@ users.get(
     const hasPaymentProvider =
       (profile.paymentProvider === 'stripe' && profile.stripeAccountId) ||
       (profile.paymentProvider === 'paystack' && profile.paystackSubaccountCode)
-    const paymentsReady = hasPaymentProvider && profile.payoutStatus === 'active'
+
+    // Service providers blocked only if debit exceeds cap ($30)
+    const PLATFORM_DEBIT_CAP_CENTS = 3000
+    const underDebitCap = profile.purpose !== 'service' ||
+      (profile.platformDebitCents || 0) < PLATFORM_DEBIT_CAP_CENTS
+
+    const paymentsReady = hasPaymentProvider && profile.payoutStatus === 'active' && underDebitCap
 
     // Check if viewer is subscribed to this creator (if logged in)
     let viewerSubscription: {
@@ -72,11 +79,13 @@ users.get(
 
     if (viewerId && viewerId !== profile.userId) {
       // Don't check if viewing own profile
+      // Only check for recurring subscriptions (not one-time payments)
       const subscription = await db.subscription.findFirst({
         where: {
           subscriberId: viewerId,
           creatorId: profile.userId,
           status: 'active',
+          interval: 'month', // Only recurring subscriptions count as "subscribed"
         },
         select: {
           tierName: true,

@@ -197,6 +197,12 @@ export async function createCheckoutSession(params: {
   // Store validated stripeAccountId for type narrowing
   const stripeAccountId = creatorProfile.stripeAccountId
 
+  // Check for platform debit to recover (only for one-time payments)
+  // For subscriptions, debit recovery happens via separate charge in webhook
+  const platformDebitToRecover = params.interval === 'one_time'
+    ? Math.min(creatorProfile.platformDebitCents || 0, 3000) // Max $30 recovery per payment
+    : 0
+
   // Use pre-calculated amounts from fee engine
   // This correctly handles both fee modes:
   // - pass_to_subscriber: grossAmount = netAmount + fee
@@ -245,7 +251,12 @@ export async function createCheckoutSession(params: {
     feeMode: params.feeMetadata?.feeMode || 'pass_to_subscriber',
     feeEffectiveRate: params.feeMetadata?.feeEffectiveRate?.toString() || '',
     feeWasCapped: params.feeMetadata?.feeWasCapped ? 'true' : 'false',
+    // Platform debit recovery tracking
+    platformDebitRecovered: platformDebitToRecover.toString(),
   }
+
+  // Total application fee = service fee + debit recovery
+  const totalApplicationFee = params.serviceFee + platformDebitToRecover
 
   // Create checkout session with circuit breaker protection
   // For both one-time and subscriptions, use application_fee_amount (fixed fee)
@@ -259,9 +270,9 @@ export async function createCheckoutSession(params: {
             quantity: 1,
           },
         ],
-        // One-time payments: set fee on payment intent
+        // One-time payments: set fee on payment intent (includes debit recovery)
         payment_intent_data: params.interval === 'one_time' ? {
-          application_fee_amount: params.serviceFee,
+          application_fee_amount: totalApplicationFee,
           transfer_data: {
             destination: stripeAccountId,
           },
@@ -434,6 +445,31 @@ export async function reactivateSubscription(
     }
   } catch (err) {
     console.error(`[stripe] Failed to reactivate subscription ${stripeSubscriptionId}:`, err)
+    throw err
+  }
+}
+
+/**
+ * Create a customer portal session for a subscriber
+ * Allows subscribers to manage their payment methods and cancel subscriptions
+ *
+ * @param stripeCustomerId - The Stripe customer ID from the subscription
+ * @param returnUrl - URL to redirect back to after portal session
+ * @returns The portal session URL
+ */
+export async function createSubscriberPortalSession(
+  stripeCustomerId: string,
+  returnUrl: string
+): Promise<{ url: string }> {
+  try {
+    const session = await stripe.billingPortal.sessions.create({
+      customer: stripeCustomerId,
+      return_url: returnUrl,
+    })
+
+    return { url: session.url }
+  } catch (err) {
+    console.error(`[stripe] Failed to create portal session for customer ${stripeCustomerId}:`, err)
     throw err
   }
 }

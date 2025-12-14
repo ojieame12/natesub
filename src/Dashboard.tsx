@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { api } from './api/client'
+import { getShareableLink } from './utils/constants'
 import {
   Menu,
   Bell,
@@ -152,7 +153,7 @@ export default function Dashboard() {
     navigate(path) // Navigate instantly - no delay
   }, [navigate])
 
-  const pageUrl = `natepay.co/${profile?.username || 'yourname'}`
+  const pageUrl = getShareableLink(profile?.username || 'yourname')
 
   const handleCopyLink = async () => {
     try {

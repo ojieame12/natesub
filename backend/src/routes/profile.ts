@@ -181,6 +181,12 @@ profile.get('/onboarding-status', requireAuth, async (c) => {
     where: { userId },
   })
 
+  // Check if user is a service provider (needs platform subscription)
+  const isServiceProvider = userProfile?.purpose === 'service'
+  const validSubscriptionStatuses = ['active', 'trialing']
+  const hasActiveSubscription = userProfile?.platformSubscriptionStatus &&
+    validSubscriptionStatuses.includes(userProfile.platformSubscriptionStatus)
+
   // Define onboarding steps and their completion status
   const steps = {
     profile: {
@@ -203,6 +209,15 @@ profile.get('/onboarding-status', requireAuth, async (c) => {
       status: userProfile?.payoutStatus || 'not_started',
       stripeAccountId: userProfile?.stripeAccountId || null,
     },
+    // Platform subscription step (only for service providers)
+    ...(isServiceProvider && {
+      subscription: {
+        required: true,
+        completed: hasActiveSubscription,
+        status: userProfile?.platformSubscriptionStatus || null,
+        trialEndsAt: userProfile?.platformTrialEndsAt?.toISOString() || null,
+      },
+    }),
   }
 
   // Calculate overall progress
@@ -210,10 +225,31 @@ profile.get('/onboarding-status', requireAuth, async (c) => {
   const profileProgress = profileFields.filter(Boolean).length / profileFields.length
   const paymentsProgress = steps.payments.completed ? 1 : (steps.payments.stripeAccountId ? 0.5 : 0)
 
-  const overallProgress = (profileProgress * 0.6) + (paymentsProgress * 0.4) // 60% profile, 40% payments
+  // Service providers have 3 steps, personal users have 2
+  let overallProgress: number
+  if (isServiceProvider) {
+    const subscriptionProgress = hasActiveSubscription ? 1 : 0
+    overallProgress = (profileProgress * 0.4) + (paymentsProgress * 0.3) + (subscriptionProgress * 0.3)
+  } else {
+    overallProgress = (profileProgress * 0.6) + (paymentsProgress * 0.4)
+  }
 
-  // Bank users are "complete" with onboarding but can't actually accept payments
-  const canAcceptPayments = userProfile?.payoutStatus === 'active'
+  // Service providers can only accept payments if they have active subscription
+  const canAcceptPayments = userProfile?.payoutStatus === 'active' &&
+    (!isServiceProvider || hasActiveSubscription)
+
+  // Determine completion and next step
+  const baseComplete = steps.profile.completed && steps.payments.completed
+  const isComplete = isServiceProvider ? (baseComplete && hasActiveSubscription) : baseComplete
+
+  let nextStep: string | null = null
+  if (!steps.profile.completed) {
+    nextStep = 'profile'
+  } else if (!steps.payments.completed) {
+    nextStep = 'payments'
+  } else if (isServiceProvider && !hasActiveSubscription) {
+    nextStep = 'subscription'
+  }
 
   return c.json({
     steps,
@@ -222,13 +258,14 @@ profile.get('/onboarding-status', requireAuth, async (c) => {
       payments: Math.round(paymentsProgress * 100),
       overall: Math.round(overallProgress * 100),
     },
-    isComplete: steps.profile.completed && steps.payments.completed,
+    isComplete,
     canAcceptPayments,
-    nextStep: !steps.profile.completed
-      ? 'profile'
-      : !steps.payments.completed
-        ? 'payments'
-        : null,
+    nextStep,
+    // Additional context for service providers
+    ...(isServiceProvider && {
+      plan: 'service',
+      subscriptionRequired: true,
+    }),
   })
 })
 

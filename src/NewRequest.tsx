@@ -4,6 +4,7 @@ import { X, Copy, Share2, Check } from 'lucide-react'
 import { Pressable } from './components'
 import { useCurrentUser } from './api/hooks'
 import { getCurrencySymbol, formatCompactNumber } from './utils/currency'
+import { PUBLIC_PAGE_URL } from './utils/constants'
 import './NewRequest.css'
 
 const quickAmounts = [5, 10, 25, 50]
@@ -34,7 +35,7 @@ export default function NewRequest() {
   }
 
   const handleCopyLink = async () => {
-    const link = `https://natepay.co/pay?amount=${amount}&recurring=${isRecurring}`
+    const link = `${PUBLIC_PAGE_URL}/pay?amount=${amount}&recurring=${isRecurring}`
     try {
       await navigator.clipboard.writeText(link)
       setCopied(true)
@@ -45,7 +46,7 @@ export default function NewRequest() {
   }
 
   const handleShare = async () => {
-    const link = `https://natepay.co/pay?amount=${amount}&recurring=${isRecurring}`
+    const link = `${PUBLIC_PAGE_URL}/pay?amount=${amount}&recurring=${isRecurring}`
     if (navigator.share) {
       try {
         await navigator.share({

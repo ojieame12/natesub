@@ -61,12 +61,14 @@ export async function processRecurringBilling(): Promise<BillingResult> {
   const now = new Date()
 
   // Find subscriptions due for renewal
+  // IMPORTANT: Only renew subscriptions that haven't been canceled
   const subscriptions = await db.subscription.findMany({
     where: {
       status: 'active',
       interval: 'month',
       currentPeriodEnd: { lte: now },
       paystackAuthorizationCode: { not: null },
+      cancelAtPeriodEnd: false, // Don't renew subscriptions pending cancellation
     },
     include: {
       creator: {

@@ -303,6 +303,9 @@ async function handleCheckoutCompleted(event: Stripe.Event) {
   const feeEffectiveRate = validatedMeta.feeEffectiveRate ? parseFloat(validatedMeta.feeEffectiveRate) : null
   const feeWasCapped = validatedMeta.feeWasCapped === 'true'
 
+  // Platform debit recovery (for service providers with lapsed platform subscription)
+  const platformDebitRecovered = parseMetadataAmount(validatedMeta.platformDebitRecovered)
+
   // Log with sanitized values for audit trail
   console.log(`[checkout.session.completed] Processing session ${session.id} for creator ${sanitizeForLog(creatorId)}`)
 
@@ -498,6 +501,7 @@ async function handleCheckoutCompleted(event: Stripe.Event) {
           feeModel: feeModel || null,
           feeEffectiveRate: feeEffectiveRate,
           feeWasCapped: feeWasCapped,
+          platformDebitRecoveredCents: platformDebitRecovered, // Track debit recovery
           type: 'one_time',
           status: 'succeeded',
           stripeEventId: event.id,
@@ -505,6 +509,31 @@ async function handleCheckoutCompleted(event: Stripe.Event) {
           stripeChargeId,
         },
       })
+
+      // Clear platform debit if recovered from this payment
+      if (platformDebitRecovered > 0) {
+        await tx.profile.update({
+          where: { userId: creatorId },
+          data: {
+            platformDebitCents: { decrement: platformDebitRecovered },
+          },
+        })
+
+        // Create activity for audit trail
+        await tx.activity.create({
+          data: {
+            userId: creatorId,
+            type: 'platform_debit_recovered',
+            payload: {
+              amountCents: platformDebitRecovered,
+              source: 'stripe_one_time_payment',
+              paymentIntentId: session.payment_intent as string || null,
+            },
+          },
+        })
+
+        console.log(`[checkout] Recovered $${(platformDebitRecovered / 100).toFixed(2)} platform debit from creator ${creatorId}`)
+      }
     }
 
     // Create activity event
@@ -1082,6 +1111,97 @@ async function handleInvoicePaid(event: Stripe.Event) {
         },
       },
     })
+
+    // PLATFORM DEBIT RECOVERY for subscription renewals
+    // When a service provider's platform subscription fails, we accumulate debit
+    // and recover it from their next client payment via a separate charge
+    const creatorProfile = await db.profile.findUnique({
+      where: { userId: subscription.creatorId },
+      select: {
+        platformDebitCents: true,
+        platformCustomerId: true,
+        purpose: true,
+      },
+    })
+
+    if (creatorProfile?.purpose === 'service' &&
+        creatorProfile.platformDebitCents > 0 &&
+        creatorProfile.platformCustomerId) {
+      // Recover up to $30 per payment (cap to prevent large unexpected charges)
+      const debitToRecover = Math.min(creatorProfile.platformDebitCents, 3000)
+
+      try {
+        // Get the default payment method from the platform customer
+        const customer = await stripe.customers.retrieve(creatorProfile.platformCustomerId)
+        const defaultPaymentMethod = typeof customer !== 'string' && !customer.deleted
+          ? customer.invoice_settings?.default_payment_method
+          : null
+
+        if (defaultPaymentMethod) {
+          // Create a separate charge to recover the platform debit
+          const paymentIntent = await stripe.paymentIntents.create({
+            amount: debitToRecover,
+            currency: 'usd',
+            customer: creatorProfile.platformCustomerId,
+            payment_method: defaultPaymentMethod as string,
+            confirm: true,
+            off_session: true,
+            description: 'Platform subscription recovery',
+            metadata: {
+              type: 'platform_debit_recovery',
+              userId: subscription.creatorId,
+              originalDebitCents: creatorProfile.platformDebitCents.toString(),
+            },
+          })
+
+          if (paymentIntent.status === 'succeeded') {
+            // Clear the recovered debit
+            await db.profile.update({
+              where: { userId: subscription.creatorId },
+              data: {
+                platformDebitCents: { decrement: debitToRecover },
+              },
+            })
+
+            // Create activity for audit trail
+            await db.activity.create({
+              data: {
+                userId: subscription.creatorId,
+                type: 'platform_debit_recovered',
+                payload: {
+                  amountCents: debitToRecover,
+                  source: 'stripe_subscription_renewal',
+                  paymentIntentId: paymentIntent.id,
+                  invoiceId: invoice.id,
+                },
+              },
+            })
+
+            console.log(`[invoice.paid] Recovered $${(debitToRecover / 100).toFixed(2)} platform debit from creator ${subscription.creatorId}`)
+          }
+        } else {
+          console.log(`[invoice.paid] No payment method for debit recovery, debit remains: $${(creatorProfile.platformDebitCents / 100).toFixed(2)}`)
+        }
+      } catch (recoveryErr: any) {
+        // Recovery failed - debit stays, will try again on next payment
+        // Don't fail the webhook - the main payment succeeded
+        console.error(`[invoice.paid] Platform debit recovery failed for ${subscription.creatorId}:`, recoveryErr.message)
+
+        // Create activity for visibility
+        await db.activity.create({
+          data: {
+            userId: subscription.creatorId,
+            type: 'platform_debit_recovery_failed',
+            payload: {
+              attemptedAmountCents: debitToRecover,
+              remainingDebitCents: creatorProfile.platformDebitCents,
+              error: recoveryErr.message,
+              invoiceId: invoice.id,
+            },
+          },
+        })
+      }
+    }
 
     return true
   }) // End of withLock
@@ -2032,6 +2152,21 @@ async function handlePaystackChargeSuccess(data: any, eventId: string) {
         console.log(`[paystack] Payout ${payoutReference} already exists, skipping transfer`)
         return
       }
+
+      // PLATFORM DEBIT RECOVERY for Paystack
+      // When a service provider's platform subscription fails, we accumulate debit
+      // and recover it by reducing their transfer amount
+      let platformDebitRecovered = 0
+      if (creatorProfile?.purpose === 'service' && (creatorProfile.platformDebitCents || 0) > 0) {
+        // Recover up to $30 equivalent or the net amount, whichever is less
+        // For simplicity, use a fixed cap (3000 cents = $30 equivalent)
+        const maxRecovery = Math.min(creatorProfile.platformDebitCents || 0, 3000, netCents)
+        platformDebitRecovered = maxRecovery
+      }
+
+      // Calculate final transfer amount after debit recovery
+      const finalTransferAmount = netCents - platformDebitRecovered
+
       try {
         // Decrypt the stored account number
         const accountNumber = decryptAccountNumber(creatorProfile.paystackAccountNumber)
@@ -2045,13 +2180,14 @@ async function handlePaystackChargeSuccess(data: any, eventId: string) {
               subscriptionId: subscription.id,
               creatorId,
               subscriberId: subscriber.id,
-              amountCents: netCents,
+              amountCents: finalTransferAmount,
               currency: currency?.toUpperCase() || 'NGN',
               feeCents: 0,
-              netCents,
+              netCents: finalTransferAmount,
               feeModel: feeModel || null,
               feeEffectiveRate,
               feeWasCapped,
+              platformDebitRecoveredCents: platformDebitRecovered,
               type: 'payout',
               status: 'failed',
               paystackTransactionRef: payoutReference,
@@ -2065,13 +2201,14 @@ async function handlePaystackChargeSuccess(data: any, eventId: string) {
               subscriptionId: subscription.id,
               creatorId,
               subscriberId: subscriber.id,
-              amountCents: netCents,
+              amountCents: finalTransferAmount,
               currency: currency?.toUpperCase() || 'NGN',
               feeCents: 0,
-              netCents,
+              netCents: finalTransferAmount,
               feeModel: feeModel || null,
               feeEffectiveRate,
               feeWasCapped,
+              platformDebitRecoveredCents: platformDebitRecovered,
               type: 'payout',
               status: 'pending', // Will be updated by transfer.success/failed webhook
               paystackTransactionRef: payoutReference,
@@ -2087,9 +2224,9 @@ async function handlePaystackChargeSuccess(data: any, eventId: string) {
               currency: currency?.toUpperCase() || 'NGN',
             })
 
-            // Initiate transfer to creator
+            // Initiate transfer to creator (reduced by debit recovery)
             const transferResult = await initiateTransfer({
-              amount: netCents,
+              amount: finalTransferAmount,
               recipientCode,
               reason: `Payment from ${customer?.email || 'subscriber'}`,
               reference: payoutReference,
@@ -2105,10 +2242,37 @@ async function handlePaystackChargeSuccess(data: any, eventId: string) {
               },
             })
 
+            // Clear platform debit if recovered
+            if (platformDebitRecovered > 0) {
+              await db.profile.update({
+                where: { userId: creatorId },
+                data: {
+                  platformDebitCents: { decrement: platformDebitRecovered },
+                },
+              })
+
+              // Create activity for audit trail
+              await db.activity.create({
+                data: {
+                  userId: creatorId,
+                  type: 'platform_debit_recovered',
+                  payload: {
+                    amountCents: platformDebitRecovered,
+                    source: 'paystack_payment',
+                    transactionRef: reference,
+                    originalNetCents: netCents,
+                    finalTransferAmount,
+                  },
+                },
+              })
+
+              console.log(`[paystack] Recovered ${platformDebitRecovered} platform debit, transferring ${finalTransferAmount} to creator ${creatorId}`)
+            }
+
             if (transferResult.status === 'otp') {
               console.log(`[paystack] Transfer ${payoutReference} requires OTP finalization`)
             } else {
-              console.log(`[paystack] Initiated transfer of ${netCents} to creator ${creatorId}`)
+              console.log(`[paystack] Initiated transfer of ${finalTransferAmount} to creator ${creatorId}`)
             }
           } catch (transferErr) {
             // Transfer failed - update payout record for manual retry

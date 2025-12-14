@@ -1073,3 +1073,102 @@ export async function sendPayrollReadyEmail(
     })
   )
 }
+
+// ============================================
+// PLATFORM BILLING EMAILS
+// ============================================
+
+/**
+ * Send notification when platform subscription payment fails and debit is created
+ * The service provider continues operating, but debit will be recovered from next client payment
+ */
+export async function sendPlatformDebitNotification(
+  to: string,
+  displayName: string,
+  debitAmount: number,
+  totalDebit: number
+): Promise<EmailResult> {
+  const safeName = escapeHtml(displayName)
+  const formattedDebit = formatAmountForEmail(debitAmount, 'USD')
+  const formattedTotal = formatAmountForEmail(totalDebit, 'USD')
+
+  return sendWithRetry(() =>
+    resend.emails.send({
+      from: env.EMAIL_FROM,
+      to,
+      subject: sanitizeEmailSubject('Payment issue with your Nate plan'),
+      html: baseTemplate({
+        preheader: `Your $5 plan payment didn't go through. We'll recover it from your next client payment.`,
+        headline: 'Plan payment issue',
+        body: `
+          <p style="margin: 0 0 16px 0;">
+            Hey ${safeName}, we couldn't process your Nate plan payment of ${formattedDebit}.
+          </p>
+          <p style="margin: 0 0 16px 0;">
+            <strong>Good news:</strong> You can still accept payments from your clients. The outstanding balance (${formattedTotal}) will be automatically recovered from your next client payment.
+          </p>
+          <p style="margin: 0 0 16px 0;">
+            If you'd like to clear this balance now, you can update your payment method in billing settings.
+          </p>
+          <p style="margin: 0; font-size: 14px; color: #888888;">
+            Note: If your balance reaches $30, new payments will be paused until the balance is cleared.
+          </p>
+        `,
+        ctaText: 'Update Payment Method',
+        ctaUrl: `${env.APP_URL}/settings/billing`,
+      }),
+    })
+  )
+}
+
+/**
+ * Send notification when platform debit is successfully recovered from a client payment
+ */
+export async function sendPlatformDebitRecoveredNotification(
+  to: string,
+  displayName: string,
+  recoveredAmount: number,
+  remainingDebit: number
+): Promise<EmailResult> {
+  const safeName = escapeHtml(displayName)
+  const formattedRecovered = formatAmountForEmail(recoveredAmount, 'USD')
+  const formattedRemaining = formatAmountForEmail(remainingDebit, 'USD')
+
+  const bodyContent = remainingDebit > 0
+    ? `
+      <p style="margin: 0 0 16px 0;">
+        Hey ${safeName}, we've recovered ${formattedRecovered} of your outstanding platform balance from a recent client payment.
+      </p>
+      <p style="margin: 0 0 16px 0;">
+        Remaining balance: <strong>${formattedRemaining}</strong>
+      </p>
+      <p style="margin: 0; font-size: 14px; color: #888888;">
+        The remaining balance will be recovered from your next client payment.
+      </p>
+    `
+    : `
+      <p style="margin: 0 0 16px 0;">
+        Hey ${safeName}, we've recovered ${formattedRecovered} from a recent client payment. Your platform balance is now <strong>$0</strong>.
+      </p>
+      <p style="margin: 0; font-size: 14px; color: #888888;">
+        To prevent future balance issues, please update your payment method if needed.
+      </p>
+    `
+
+  return sendWithRetry(() =>
+    resend.emails.send({
+      from: env.EMAIL_FROM,
+      to,
+      subject: sanitizeEmailSubject(remainingDebit > 0 ? 'Platform balance partially recovered' : 'Platform balance cleared'),
+      html: baseTemplate({
+        preheader: remainingDebit > 0
+          ? `We recovered ${formattedRecovered} from your last payment. ${formattedRemaining} remaining.`
+          : `Your platform balance is now $0. All caught up!`,
+        headline: remainingDebit > 0 ? 'Balance partially recovered' : 'Balance cleared',
+        body: bodyContent,
+        ctaText: 'View Billing',
+        ctaUrl: `${env.APP_URL}/settings/billing`,
+      }),
+    })
+  )
+}

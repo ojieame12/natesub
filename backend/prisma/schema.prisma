@@ -191,6 +191,7 @@ model Profile {
   platformSubscriptionId   String?  @unique  // Stripe subscription ID for $5/mo
   platformSubscriptionStatus String? // trialing, active, past_due, canceled
   platformTrialEndsAt      DateTime? // When the free trial ends
+  platformDebitCents       Int      @default(0) // Accumulated platform debt to recover from earnings
 
   // Public URL
   shareUrl String?
@@ -311,6 +312,7 @@ model Payment {
   currency    String
   feeCents    Int @default(0) // Service fee taken by platform
   netCents    Int             // What creator receives
+  platformDebitRecoveredCents Int @default(0) // Platform debt recovered from this payment
 
   // Fee metadata (for auditing)
   feeModel         String?   // 'progressive_v1', 'legacy_percent', null for old

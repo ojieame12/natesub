@@ -4,6 +4,7 @@ import { ArrowLeft, Download, CheckCircle, Clock, ExternalLink, Loader2 } from '
 import { Pressable, Skeleton, ErrorState, useToast } from '../components'
 import { usePayrollPeriod, useCurrentUser } from '../api/hooks'
 import { getCurrencySymbol } from '../utils/currency'
+import { PUBLIC_DOMAIN } from '../utils/constants'
 import './payroll.css'
 
 // Format date for display
@@ -244,7 +245,7 @@ export default function PayrollDetail() {
                                 Third parties can verify this statement at:
                             </p>
                             <div className="payroll-verify-link">
-                                <span>natepay.co/verify/{period.verificationCode}</span>
+                                <span>{PUBLIC_DOMAIN}/verify/{period.verificationCode}</span>
                                 <ExternalLink size={14} />
                             </div>
                         </div>

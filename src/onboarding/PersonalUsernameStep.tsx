@@ -3,6 +3,7 @@ import { ChevronLeft, Loader2 } from 'lucide-react'
 import { useOnboardingStore } from './store'
 import { Button, Pressable } from './components'
 import { useCheckUsername } from '../api/hooks'
+import { PUBLIC_DOMAIN } from '../utils/constants'
 import '../Dashboard.css'
 import './onboarding.css'
 
@@ -47,7 +48,7 @@ export default function PersonalUsernameStep() {
 
                 <div className="step-body">
                     <div className="username-wrapper">
-                        <span className="username-prefix">natepay.co/</span>
+                        <span className="username-prefix">{PUBLIC_DOMAIN}/</span>
                         <input
                             className="input"
                             value={username}
@@ -70,12 +71,12 @@ export default function PersonalUsernameStep() {
                     )}
                     {isFormatValid && !isChecking && isAvailable && (
                         <p style={{ fontSize: 14, color: 'var(--status-success)', marginTop: 8 }}>
-                            natepay.co/{username} is available
+                            {PUBLIC_DOMAIN}/{username} is available
                         </p>
                     )}
                     {isFormatValid && !isChecking && isTaken && (
                         <p style={{ fontSize: 14, color: 'var(--status-error)', marginTop: 8 }}>
-                            natepay.co/{username} is already taken
+                            {PUBLIC_DOMAIN}/{username} is already taken
                         </p>
                     )}
                 </div>

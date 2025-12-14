@@ -7,6 +7,7 @@ import { useOnboardingStore } from './onboarding/store'
 import { setPaymentConfirmed } from './App'
 import { Pressable } from './components'
 import { getPricing } from './utils/pricing'
+import { getShareableLink } from './utils/constants'
 import './StripeComplete.css' // Reuse Stripe complete styles
 
 export default function PaystackOnboardingComplete() {
@@ -60,7 +61,7 @@ export default function PaystackOnboardingComplete() {
     }
   }, [resetOnboarding, queryClient])
 
-  const shareUrl = profile?.username ? `natepay.co/${profile.username}` : null
+  const shareUrl = profile?.username ? getShareableLink(profile.username) : null
   const fullShareUrl = shareUrl ? `https://${shareUrl}` : null
 
   const handleCopy = async () => {
