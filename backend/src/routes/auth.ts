@@ -14,6 +14,7 @@ import { requireAuth } from '../middleware/auth.js'
 import { authVerifyRateLimit, authMagicLinkRateLimit } from '../middleware/rateLimit.js'
 import { env } from '../config/env.js'
 import { db } from '../db/client.js'
+import { stripe } from '../services/stripe.js'
 
 const auth = new Hono()
 
@@ -45,9 +46,10 @@ auth.post(
   }
 )
 
-async function handleVerify(c: any, token: string) {
+async function handleVerify(c: any, token: string, email?: string) {
   try {
-    const { sessionToken, onboarding } = await verifyMagicLink(token)
+    // Pass email to verifyMagicLink for scoped lookup (prevents OTP collision attacks)
+    const { sessionToken, onboarding } = await verifyMagicLink(token, email)
 
     // Set session cookie (for web)
     // SECURITY: sameSite='Strict' prevents CSRF attacks
@@ -79,15 +81,17 @@ async function handleVerify(c: any, token: string) {
 
 // Verify magic link token (preferred)
 // Rate limited to prevent brute force OTP guessing
+// Requires email to prevent OTP collision/takeover attacks
 auth.post(
   '/verify',
   authVerifyRateLimit,
   zValidator('json', z.object({
     token: z.string().min(1),
+    email: z.string().email(),
   })),
   async (c) => {
-    const { token } = c.req.valid('json')
-    return handleVerify(c, token)
+    const { token, email } = c.req.valid('json')
+    return handleVerify(c, token, email)
   }
 )
 
@@ -135,10 +139,22 @@ auth.get('/me', requireAuth, async (c) => {
 
   const { user, onboarding } = result
 
+  // Only return necessary profile fields to avoid exposing internal data
+  const safeProfile = user.profile ? {
+    id: user.profile.id,
+    username: user.profile.username,
+    displayName: user.profile.displayName,
+    avatarUrl: user.profile.avatarUrl,
+    country: user.profile.country,
+    currency: user.profile.currency,
+    purpose: user.profile.purpose,
+    payoutStatus: user.profile.payoutStatus,
+  } : null
+
   return c.json({
     id: user.id,
     email: user.email,
-    profile: user.profile,
+    profile: safeProfile,
     createdAt: user.createdAt,
     // Onboarding state for smart routing
     onboarding: {
@@ -153,14 +169,42 @@ auth.get('/me', requireAuth, async (c) => {
 })
 
 const onboardingDataSchema = z.object({
+  // Identity fields
   name: z.string().min(1).max(100).optional(),
   displayName: z.string().min(1).max(100).optional(),
   country: z.string().min(2).max(100).optional(),
   countryCode: z.string().length(2).optional(),
   currency: z.string().length(3).optional(),
   username: z.string().min(3).max(20).regex(/^[a-z0-9_]+$/i).optional(),
+
+  // Profile fields
+  avatarUrl: z.string().url().optional(),
+  voiceIntroUrl: z.string().url().optional(),
+  bio: z.string().max(500).optional(),
+
+  // Purpose/branch selection
+  purpose: z.enum(['tips', 'support', 'allowance', 'fan_club', 'exclusive_content', 'service', 'other']).optional(),
+
+  // Pricing fields
   pricingModel: z.enum(['single', 'tiers']).optional(),
   singleAmount: z.number().int().min(1).max(1_000_000).optional(),
+  tiers: z.array(z.object({
+    id: z.string(),
+    name: z.string(),
+    amount: z.number(),
+    perks: z.array(z.string()),
+  })).optional(),
+
+  // Perks
+  perks: z.array(z.object({
+    id: z.string(),
+    title: z.string(),
+    enabled: z.boolean(),
+  })).optional(),
+
+  // Service-specific fields
+  serviceDescription: z.string().max(500).optional(),
+  serviceDescriptionAudioUrl: z.string().url().optional(),
 }).partial()
 
 // Save onboarding progress
@@ -197,6 +241,79 @@ auth.delete(
     const userId = c.get('userId')
     const sessionToken = getCookie(c, 'session')
 
+    // Cancel all Stripe subscriptions BEFORE deleting the account
+    // This must happen outside the transaction since it's external API calls
+    try {
+      // 1. Cancel platform subscription if exists
+      const profile = await db.profile.findUnique({
+        where: { userId },
+        select: { platformSubscriptionId: true },
+      })
+
+      if (profile?.platformSubscriptionId) {
+        try {
+          await stripe.subscriptions.cancel(profile.platformSubscriptionId)
+          console.log(`[auth] Canceled platform subscription ${profile.platformSubscriptionId} for user ${userId}`)
+        } catch (err: any) {
+          // Don't fail account deletion if subscription already canceled
+          if (err.code !== 'resource_missing') {
+            console.error(`[auth] Failed to cancel platform subscription:`, err.message)
+          }
+        }
+      }
+
+      // 2. Cancel all subscriptions where user is the creator
+      const creatorSubs = await db.subscription.findMany({
+        where: {
+          creatorId: userId,
+          stripeSubscriptionId: { not: null },
+          status: { in: ['active', 'past_due', 'pending'] },
+        },
+        select: { stripeSubscriptionId: true },
+      })
+
+      for (const sub of creatorSubs) {
+        if (sub.stripeSubscriptionId) {
+          try {
+            await stripe.subscriptions.cancel(sub.stripeSubscriptionId)
+            console.log(`[auth] Canceled creator subscription ${sub.stripeSubscriptionId}`)
+          } catch (err: any) {
+            if (err.code !== 'resource_missing') {
+              console.error(`[auth] Failed to cancel creator subscription:`, err.message)
+            }
+          }
+        }
+      }
+
+      // 3. Cancel all subscriptions where user is the subscriber
+      const subscriberSubs = await db.subscription.findMany({
+        where: {
+          subscriberId: userId,
+          stripeSubscriptionId: { not: null },
+          status: { in: ['active', 'past_due', 'pending'] },
+        },
+        select: { stripeSubscriptionId: true },
+      })
+
+      for (const sub of subscriberSubs) {
+        if (sub.stripeSubscriptionId) {
+          try {
+            await stripe.subscriptions.cancel(sub.stripeSubscriptionId)
+            console.log(`[auth] Canceled subscriber subscription ${sub.stripeSubscriptionId}`)
+          } catch (err: any) {
+            if (err.code !== 'resource_missing') {
+              console.error(`[auth] Failed to cancel subscriber subscription:`, err.message)
+            }
+          }
+        }
+      }
+
+      console.log(`[auth] Finished canceling subscriptions for user ${userId}`)
+    } catch (err) {
+      console.error(`[auth] Error during subscription cleanup for user ${userId}:`, err)
+      // Continue with account deletion even if subscription cleanup fails
+    }
+
     // Soft delete user - sets deletedAt timestamp
     // Profile will be cascade deleted due to onDelete: Cascade
     await db.$transaction(async (tx) => {
@@ -221,9 +338,6 @@ auth.delete(
       await tx.profile.deleteMany({
         where: { userId },
       })
-
-      // Optionally: Cancel active subscriptions via Stripe
-      // This would require additional Stripe API calls
     })
 
     // Clear session cookie

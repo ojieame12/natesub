@@ -8,6 +8,7 @@ import { requireAuth } from '../middleware/auth.js'
 import { publicStrictRateLimit, publicRateLimit } from '../middleware/rateLimit.js'
 import { sendWelcomeEmail } from '../services/email.js'
 import { cancelOnboardingReminders } from '../jobs/reminders.js'
+import { clearOnboardingState } from '../services/auth.js'
 import { RESERVED_USERNAMES } from '../utils/constants.js'
 import { displayAmountToCents } from '../utils/currency.js'
 import {
@@ -17,6 +18,7 @@ import {
   requiresPlatformSubscription,
   type UserPurpose,
 } from '../services/pricing.js'
+import { startPlatformTrial } from '../services/platformSubscription.js'
 
 const profile = new Hono()
 
@@ -164,11 +166,28 @@ profile.put(
       update: profileData,
     })
 
-    // Send welcome email for new profiles and cancel onboarding reminders
+    // Send welcome email for new profiles and clean up onboarding state
     if (isNewProfile && user) {
       await sendWelcomeEmail(user.email, data.displayName)
       // Cancel any pending onboarding reminders since profile is now complete
       await cancelOnboardingReminders(userId)
+      // Clear onboarding state from user record (step, branch, data)
+      await clearOnboardingState(userId)
+    }
+
+    // Auto-start platform trial for service users
+    // This makes their page "live" immediately without requiring separate subscription checkout
+    // The startPlatformTrial function is idempotent - skips if already subscribed
+    if (data.purpose === 'service' && user) {
+      try {
+        const trialId = await startPlatformTrial(userId, user.email)
+        if (trialId) {
+          console.log(`[profile] Started platform trial ${trialId} for service user ${userId}`)
+        }
+      } catch (err) {
+        // Log but don't fail profile creation - they can subscribe later
+        console.error(`[profile] Failed to start platform trial for ${userId}:`, err)
+      }
     }
 
     return c.json({ profile: updatedProfile })

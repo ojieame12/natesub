@@ -7,6 +7,7 @@ import { env } from '../config/env.js'
 import { db } from '../db/client.js'
 import { PLATFORM_SUBSCRIPTION_PRICE_CENTS } from './pricing.js'
 import { sendPlatformDebitNotification, sendPlatformDebitCapReachedNotification } from './email.js'
+import { withLock } from './lock.js'
 
 // Platform debit cap in cents ($30 = 6 months of $5/mo)
 const PLATFORM_DEBIT_CAP_CENTS = 3000
@@ -116,8 +117,79 @@ async function getOrCreateCustomer(
 }
 
 /**
+ * Start a platform trial subscription automatically (no checkout required)
+ * Used when service users complete onboarding - gives them 14 days free
+ * Returns the subscription ID or null if already subscribed
+ */
+export async function startPlatformTrial(
+  userId: string,
+  email: string
+): Promise<string | null> {
+  const lockKey = `platform-trial:${userId}`
+
+  const result = await withLock(lockKey, 30000, async () => {
+    // Check if already subscribed
+    const profile = await db.profile.findUnique({
+      where: { userId },
+      select: {
+        platformSubscriptionId: true,
+        platformSubscriptionStatus: true,
+      },
+    })
+
+    // Skip if already has a non-canceled subscription
+    if (profile?.platformSubscriptionId && profile.platformSubscriptionStatus !== 'canceled') {
+      console.log(`[platform] User ${userId} already subscribed, skipping auto-trial`)
+      return null
+    }
+
+    const { priceId } = await ensurePlatformProduct()
+    const customerId = await getOrCreateCustomer(userId, email)
+
+    // Create subscription directly with 14-day trial (no payment required)
+    const subscription = await stripe.subscriptions.create({
+      customer: customerId,
+      items: [{ price: priceId }],
+      trial_period_days: 14,
+      trial_settings: {
+        end_behavior: {
+          missing_payment_method: 'cancel', // Cancel if no payment method after trial
+        },
+      },
+      metadata: {
+        userId,
+        type: 'platform_subscription',
+        source: 'onboarding_auto_trial',
+      },
+    })
+
+    const sub = subscription as any
+    const trialEndsAt = sub.trial_end
+      ? new Date(sub.trial_end * 1000)
+      : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
+
+    // Save to profile
+    await db.profile.update({
+      where: { userId },
+      data: {
+        platformSubscriptionId: subscription.id,
+        platformSubscriptionStatus: subscription.status, // 'trialing'
+        platformTrialEndsAt: trialEndsAt,
+      },
+    })
+
+    console.log(`[platform] Auto-started trial for user ${userId}: ${subscription.id} (ends ${trialEndsAt.toISOString()})`)
+
+    return subscription.id
+  })
+
+  return result
+}
+
+/**
  * Create a checkout session for the platform subscription
  * Returns the checkout URL
+ * Uses distributed lock to prevent duplicate subscriptions from concurrent requests
  */
 export async function createPlatformCheckout(
   userId: string,
@@ -125,52 +197,65 @@ export async function createPlatformCheckout(
   successUrl: string,
   cancelUrl: string
 ): Promise<{ url: string; sessionId: string }> {
-  const { priceId } = await ensurePlatformProduct()
-  const customerId = await getOrCreateCustomer(userId, email)
+  // Use lock to prevent race condition where multiple checkout sessions
+  // could be created before the first webhook writes platformSubscriptionId
+  const lockKey = `platform-checkout:${userId}`
 
-  // Check if already subscribed (any status except canceled)
-  const profile = await db.profile.findUnique({
-    where: { userId },
-    select: {
-      platformSubscriptionId: true,
-      platformSubscriptionStatus: true,
-    },
-  })
+  const result = await withLock(lockKey, 30000, async () => {
+    const { priceId } = await ensurePlatformProduct()
+    const customerId = await getOrCreateCustomer(userId, email)
 
-  // Block if subscription exists and isn't canceled
-  // This prevents duplicate subscriptions for trialing/active/past_due users
-  if (profile?.platformSubscriptionId && profile.platformSubscriptionStatus !== 'canceled') {
-    throw new Error('Already subscribed to platform')
-  }
-
-  const session = await stripe.checkout.sessions.create({
-    mode: 'subscription',
-    customer: customerId,
-    line_items: [
-      {
-        price: priceId,
-        quantity: 1,
+    // Check if already subscribed (any status except canceled)
+    const profile = await db.profile.findUnique({
+      where: { userId },
+      select: {
+        platformSubscriptionId: true,
+        platformSubscriptionStatus: true,
       },
-    ],
-    subscription_data: {
-      trial_period_days: 30, // First month free
+    })
+
+    // Block if subscription exists and isn't canceled
+    // This prevents duplicate subscriptions for trialing/active/past_due users
+    if (profile?.platformSubscriptionId && profile.platformSubscriptionStatus !== 'canceled') {
+      throw new Error('Already subscribed to platform')
+    }
+
+    const session = await stripe.checkout.sessions.create({
+      mode: 'subscription',
+      customer: customerId,
+      line_items: [
+        {
+          price: priceId,
+          quantity: 1,
+        },
+      ],
+      subscription_data: {
+        trial_period_days: 30, // First month free
+        metadata: {
+          userId,
+          type: 'platform_subscription',
+        },
+      },
+      success_url: successUrl,
+      cancel_url: cancelUrl,
       metadata: {
         userId,
         type: 'platform_subscription',
       },
-    },
-    success_url: successUrl,
-    cancel_url: cancelUrl,
-    metadata: {
-      userId,
-      type: 'platform_subscription',
-    },
+    })
+
+    return {
+      url: session.url!,
+      sessionId: session.id,
+    }
   })
 
-  return {
-    url: session.url!,
-    sessionId: session.id,
+  // If lock couldn't be acquired, throw error
+  if (!result) {
+    throw new Error('Could not acquire lock. Please try again.')
   }
+
+  return result
 }
 
 /**
@@ -343,6 +428,23 @@ export async function handlePlatformSubscriptionEvent(
       })
 
       if (profile && failedAmount > 0) {
+        // IDEMPOTENCY: Check if we already recorded a debit for this invoice
+        const existingDebit = await db.activity.findFirst({
+          where: {
+            userId: profile.user.id,
+            type: 'platform_debit_created',
+            payload: {
+              path: ['invoiceId'],
+              equals: invoice.id,
+            },
+          },
+        })
+
+        if (existingDebit) {
+          console.log(`[platform] Debit already recorded for invoice ${invoice.id}, skipping`)
+          break
+        }
+
         // Calculate new total debit
         const newTotalDebit = (profile.platformDebitCents || 0) + failedAmount
 
@@ -393,6 +495,62 @@ export async function handlePlatformSubscriptionEvent(
         }
 
         console.log(`[platform] Added $${(failedAmount / 100).toFixed(2)} debit for customer ${customerId} (invoice: ${invoice.id})`)
+      }
+      break
+    }
+
+    case 'invoice.paid': {
+      // DEBIT REVERSAL: If this invoice previously failed and created a debit, reverse it
+      const invoice = event.data.object as Stripe.Invoice
+      const customerId = invoice.customer as string
+
+      const profile = await db.profile.findFirst({
+        where: { platformCustomerId: customerId },
+        select: { id: true, userId: true, platformDebitCents: true },
+      })
+
+      if (!profile) break
+
+      // Check if this invoice previously failed and created a debit
+      const previousDebit = await db.activity.findFirst({
+        where: {
+          userId: profile.userId,
+          type: 'platform_debit_created',
+          payload: {
+            path: ['invoiceId'],
+            equals: invoice.id,
+          },
+        },
+      })
+
+      if (previousDebit) {
+        const debitAmount = (previousDebit.payload as any)?.amountCents || 0
+
+        if (debitAmount > 0) {
+          // Reverse the debit (clamp to 0 to prevent negative)
+          const newDebit = Math.max(0, (profile.platformDebitCents || 0) - debitAmount)
+
+          await db.profile.update({
+            where: { id: profile.id },
+            data: { platformDebitCents: newDebit },
+          })
+
+          // Record the reversal
+          await db.activity.create({
+            data: {
+              userId: profile.userId,
+              type: 'platform_debit_reversed',
+              payload: {
+                amountCents: debitAmount,
+                reason: 'invoice_paid_after_failure',
+                invoiceId: invoice.id,
+                originalDebitActivityId: previousDebit.id,
+              },
+            },
+          })
+
+          console.log(`[platform] Reversed $${(debitAmount / 100).toFixed(2)} debit for invoice ${invoice.id} (paid after failure)`)
+        }
       }
       break
     }

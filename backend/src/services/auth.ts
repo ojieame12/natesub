@@ -130,17 +130,23 @@ export function computeOnboardingState(user: {
 }
 
 // Verify OTP code with brute force protection
-export async function verifyMagicLink(token: string): Promise<{
+// Now requires email to prevent OTP collision/takeover attacks
+export async function verifyMagicLink(token: string, email?: string): Promise<{
   sessionToken: string
   userId: string
   onboarding: OnboardingState
 }> {
   const tokenHash = hashToken(token)
 
-  // Find token
-  const magicLinkToken = await db.magicLinkToken.findUnique({
-    where: { tokenHash },
-  })
+  // Find token - if email provided, scope lookup to that email (prevents OTP collision attacks)
+  // This is critical: with 6-digit OTPs and many users, collisions become likely at scale
+  const magicLinkToken = email
+    ? await db.magicLinkToken.findFirst({
+        where: { tokenHash, email },
+      })
+    : await db.magicLinkToken.findUnique({
+        where: { tokenHash },
+      })
 
   if (!magicLinkToken) {
     // Track failed attempt for global brute force protection
@@ -174,6 +180,7 @@ export async function verifyMagicLink(token: string): Promise<{
   if (magicLinkToken.usedAt) {
     // Increment failed attempts for used codes (possible replay attack)
     await redis.incr(attemptKey)
+    await redis.pexpire(attemptKey, OTP_LOCKOUT_MS) // TTL matches lockout window (15 min)
     const attempts = parseInt(await redis.get(attemptKey) || '0')
     if (attempts >= MAX_OTP_ATTEMPTS) {
       await redis.set(lockoutKey, '1', 'PX', OTP_LOCKOUT_MS)
@@ -246,9 +253,10 @@ export async function verifyMagicLink(token: string): Promise<{
 export async function validateSession(sessionToken: string): Promise<{ userId: string } | null> {
   const tokenHash = hashToken(sessionToken)
 
+  // Only select needed fields to avoid loading full user object
   const session = await db.session.findUnique({
     where: { token: tokenHash },
-    include: { user: true },
+    select: { id: true, userId: true, expiresAt: true },
   })
 
   if (!session) {

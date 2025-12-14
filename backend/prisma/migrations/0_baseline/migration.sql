@@ -1,0 +1,3 @@
+-- This is a baseline migration for the existing database state
+-- The database was created before migrations were set up
+-- Mark this migration as applied: npx prisma migrate resolve --applied 0_baseline

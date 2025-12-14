@@ -172,20 +172,23 @@ analytics.get('/stats', requireAuth, async (c) => {
       }),
     ])
 
-    // Get unique visitors (by visitorHash)
+    // Get unique visitors (by visitorHash) - use raw SQL for efficient COUNT(DISTINCT)
     const [uniqueToday, uniqueWeek, uniqueMonth] = await Promise.all([
-      db.pageView.groupBy({
-        by: ['visitorHash'],
-        where: { profileId: profile.id, createdAt: { gte: today } },
-      }).then(r => r.length),
-      db.pageView.groupBy({
-        by: ['visitorHash'],
-        where: { profileId: profile.id, createdAt: { gte: thisWeek } },
-      }).then(r => r.length),
-      db.pageView.groupBy({
-        by: ['visitorHash'],
-        where: { profileId: profile.id, createdAt: { gte: thisMonth } },
-      }).then(r => r.length),
+      db.$queryRaw<[{ count: bigint }]>`
+        SELECT COUNT(DISTINCT visitor_hash) as count
+        FROM page_views
+        WHERE profile_id = ${profile.id} AND created_at >= ${today}
+      `.then(r => Number(r[0]?.count ?? 0)),
+      db.$queryRaw<[{ count: bigint }]>`
+        SELECT COUNT(DISTINCT visitor_hash) as count
+        FROM page_views
+        WHERE profile_id = ${profile.id} AND created_at >= ${thisWeek}
+      `.then(r => Number(r[0]?.count ?? 0)),
+      db.$queryRaw<[{ count: bigint }]>`
+        SELECT COUNT(DISTINCT visitor_hash) as count
+        FROM page_views
+        WHERE profile_id = ${profile.id} AND created_at >= ${thisMonth}
+      `.then(r => Number(r[0]?.count ?? 0)),
     ])
 
     // Conversion funnel (last 30 days)

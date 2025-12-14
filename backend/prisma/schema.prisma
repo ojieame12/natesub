@@ -207,6 +207,9 @@ model Profile {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Relations
+  pageViews PageView[]
+
   @@map("profiles")
 }
 
@@ -223,6 +226,7 @@ model Session {
   createdAt DateTime @default(now())
 
   @@index([token])
+  @@index([expiresAt])  // TTL cleanup
   @@map("sessions")
 }
 
@@ -235,6 +239,7 @@ model MagicLinkToken {
   createdAt DateTime  @default(now())
 
   @@index([tokenHash])
+  @@index([expiresAt])  // TTL cleanup
   @@map("magic_link_tokens")
 }
 
@@ -349,6 +354,10 @@ model Payment {
   @@index([creatorId])
   @@index([stripeEventId])
   @@index([paystackEventId])
+  // Job query optimizations
+  @@index([type, status, createdAt])           // transfers.ts monitoring
+  @@index([subscriptionId, status, createdAt]) // billing.ts retries
+  @@index([creatorId, occurredAt])             // payroll.ts reporting
   @@map("payments")
 }
 
@@ -498,6 +507,7 @@ model Activity {
 model PageView {
   id        String   @id @default(uuid())
   profileId String
+  profile   Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
   // Visitor info (anonymous - no PII)
   visitorHash   String?  // Hashed IP + UA for unique visitor counting
@@ -520,6 +530,7 @@ model PageView {
   @@index([profileId, createdAt(sort: Desc)])
   @@index([visitorHash])
   @@index([profileId, visitorHash, createdAt])  // For debounce query: findFirst where profileId + visitorHash + createdAt >= threshold
+  @@index([createdAt])                          // TTL cleanup (90-day retention)
   @@map("page_views")
 }
 

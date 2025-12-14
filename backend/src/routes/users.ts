@@ -45,11 +45,13 @@ users.get(
         template: true, // For rendering correct template
         feeMode: true, // For fee breakdown display
         countryCode: true, // For cross-border detection
+        isPublic: true, // Privacy setting
         // Check payment readiness without exposing IDs
         stripeAccountId: true,
         paystackSubaccountCode: true,
         payoutStatus: true,
         platformDebitCents: true,
+        platformSubscriptionStatus: true, // Service providers need active subscription
       },
     })
 
@@ -57,17 +59,27 @@ users.get(
       return c.json({ error: 'User not found' }, 404)
     }
 
+    // Enforce privacy setting - only show profile if public or viewer is the owner
+    if (profile.isPublic === false && viewerId !== profile.userId) {
+      return c.json({ error: 'This profile is private' }, 403)
+    }
+
     // Check if payments are ready (has provider connected AND is active)
     const hasPaymentProvider =
       (profile.paymentProvider === 'stripe' && profile.stripeAccountId) ||
       (profile.paymentProvider === 'paystack' && profile.paystackSubaccountCode)
+
+    // Service providers must have active/trialing platform subscription
+    const validSubStatuses = ['trialing', 'active']
+    const hasValidSubscription = profile.purpose !== 'service' ||
+      validSubStatuses.includes(profile.platformSubscriptionStatus || '')
 
     // Service providers blocked only if debit exceeds cap ($30)
     const PLATFORM_DEBIT_CAP_CENTS = 3000
     const underDebitCap = profile.purpose !== 'service' ||
       (profile.platformDebitCents || 0) < PLATFORM_DEBIT_CAP_CENTS
 
-    const paymentsReady = hasPaymentProvider && profile.payoutStatus === 'active' && underDebitCap
+    const paymentsReady = hasPaymentProvider && profile.payoutStatus === 'active' && underDebitCap && hasValidSubscription
 
     // Check if viewer is subscribed to this creator (if logged in)
     let viewerSubscription: {

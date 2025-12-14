@@ -3,12 +3,14 @@
 
 import { Hono } from 'hono'
 import { env } from '../config/env.js'
+import { db } from '../db/client.js'
 import { processRecurringBilling, processRetries } from '../jobs/billing.js'
 import { generatePayrollPeriods } from '../jobs/payroll.js'
 import { sendRenewalReminders, sendDunningEmails, sendCancellationEmails } from '../jobs/notifications.js'
 import { monitorStuckTransfers } from '../jobs/transfers.js'
 import { reconcilePaystackTransactions } from '../jobs/reconciliation.js'
 import { processDueReminders, scanAndScheduleMissedReminders } from '../jobs/reminders.js'
+import { cleanupOldPageViews } from '../jobs/cleanup.js'
 
 const jobs = new Hono()
 
@@ -251,11 +253,95 @@ jobs.post('/scan-missed-reminders', async (c) => {
   }
 })
 
+// Clean up expired sessions (run daily)
+jobs.post('/cleanup-sessions', async (c) => {
+  console.log('[jobs] Starting session cleanup job')
+
+  try {
+    const result = await db.session.deleteMany({
+      where: { expiresAt: { lt: new Date() } },
+    })
+
+    console.log(`[jobs] Session cleanup complete: ${result.count} expired sessions deleted`)
+
+    return c.json({
+      success: true,
+      deleted: result.count,
+    })
+  } catch (error: any) {
+    console.error('[jobs] Session cleanup job failed:', error.message)
+    return c.json({ error: 'Session cleanup job failed', message: error.message }, 500)
+  }
+})
+
+// Clean up expired OTPs (run daily)
+jobs.post('/cleanup-otps', async (c) => {
+  console.log('[jobs] Starting OTP cleanup job')
+
+  try {
+    const result = await db.magicLinkToken.deleteMany({
+      where: { expiresAt: { lt: new Date() } },
+    })
+
+    console.log(`[jobs] OTP cleanup complete: ${result.count} expired OTPs deleted`)
+
+    return c.json({
+      success: true,
+      deleted: result.count,
+    })
+  } catch (error: any) {
+    console.error('[jobs] OTP cleanup job failed:', error.message)
+    return c.json({ error: 'OTP cleanup job failed', message: error.message }, 500)
+  }
+})
+
+// Combined auth cleanup (convenience endpoint - run daily)
+jobs.post('/cleanup-auth', async (c) => {
+  console.log('[jobs] Starting combined auth cleanup job')
+
+  try {
+    const [sessions, otps] = await Promise.all([
+      db.session.deleteMany({ where: { expiresAt: { lt: new Date() } } }),
+      db.magicLinkToken.deleteMany({ where: { expiresAt: { lt: new Date() } } }),
+    ])
+
+    console.log(`[jobs] Auth cleanup complete: ${sessions.count} sessions, ${otps.count} OTPs deleted`)
+
+    return c.json({
+      success: true,
+      sessions: { deleted: sessions.count },
+      otps: { deleted: otps.count },
+    })
+  } catch (error: any) {
+    console.error('[jobs] Auth cleanup job failed:', error.message)
+    return c.json({ error: 'Auth cleanup job failed', message: error.message }, 500)
+  }
+})
+
+// Clean up old page views (run weekly)
+jobs.post('/cleanup-pageviews', async (c) => {
+  console.log('[jobs] Starting page views cleanup job')
+
+  try {
+    const deleted = await cleanupOldPageViews()
+
+    console.log(`[jobs] Page views cleanup complete: ${deleted} deleted`)
+
+    return c.json({
+      success: true,
+      deleted,
+    })
+  } catch (error: any) {
+    console.error('[jobs] Page views cleanup job failed:', error.message)
+    return c.json({ error: 'Page views cleanup job failed', message: error.message }, 500)
+  }
+})
+
 // Health check for job system
 jobs.get('/health', async (c) => {
   return c.json({
     status: 'ok',
-    jobs: ['billing', 'retries', 'payroll', 'reminders', 'dunning', 'cancellations', 'notifications', 'transfers', 'reconciliation', 'scheduled-reminders', 'scan-missed-reminders'],
+    jobs: ['billing', 'retries', 'payroll', 'reminders', 'dunning', 'cancellations', 'notifications', 'transfers', 'reconciliation', 'scheduled-reminders', 'scan-missed-reminders', 'cleanup-sessions', 'cleanup-otps', 'cleanup-auth', 'cleanup-pageviews'],
     timestamp: new Date().toISOString(),
   })
 })

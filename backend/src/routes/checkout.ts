@@ -60,6 +60,18 @@ checkout.post(
       return c.json({ error: 'Payments are not active for this account' }, 400)
     }
 
+    // Enforce platform subscription for service providers
+    // Service users must have active/trialing subscription to accept payments
+    if (profile.purpose === 'service') {
+      const validStatuses = ['trialing', 'active']
+      if (!validStatuses.includes(profile.platformSubscriptionStatus || '')) {
+        return c.json({
+          error: 'Service plan subscription required to accept payments.',
+          code: 'PLATFORM_SUBSCRIPTION_REQUIRED',
+        }, 402)
+      }
+    }
+
     // Enforce platform debit cap for service providers ($30 max = 6 months)
     const PLATFORM_DEBIT_CAP_CENTS = 3000
     if (profile.purpose === 'service' && profile.platformDebitCents >= PLATFORM_DEBIT_CAP_CENTS) {

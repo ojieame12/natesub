@@ -400,7 +400,7 @@ export async function sendOtpEmail(to: string, otp: string): Promise<EmailResult
       to,
       subject: sanitizeEmailSubject(`${otp} is your ${BRAND_NAME} verification code`),
       html: baseTemplate({
-        preheader: `Your verification code is ${otp}. It expires in 15 minutes.`,
+        preheader: `Your verification code is ${otp}. It expires in ${env.MAGIC_LINK_EXPIRES_MINUTES} minutes.`,
         headline: 'Your verification code',
         body: `
           <p style="margin: 0 0 20px 0;">Enter this code in the app to sign in:</p>
@@ -413,7 +413,7 @@ export async function sendOtpEmail(to: string, otp: string): Promise<EmailResult
               </td>
             </tr>
           </table>
-          <p style="margin: 0; font-size: 14px; color: #888888;">This code expires in 15 minutes. If you didn't request this, you can safely ignore it.</p>
+          <p style="margin: 0; font-size: 14px; color: #888888;">This code expires in ${env.MAGIC_LINK_EXPIRES_MINUTES} minutes. If you didn't request this, you can safely ignore it.</p>
         `,
       }),
     })
