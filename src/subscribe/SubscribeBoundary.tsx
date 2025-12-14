@@ -9,6 +9,10 @@ import './template-one.css'
 
 type ViewType = 'welcome' | 'impact' | 'perks' | 'tiers' | 'payment'
 
+// TEMPORARY: Force all subscriptions to use Stripe until Paystack live keys are ready
+// Set to true to re-enable Paystack for creators who have it configured
+const PAYSTACK_ENABLED = false
+
 interface SubscribeBoundaryProps {
     profile: Profile
     canceled?: boolean
@@ -49,7 +53,7 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
     // Determine if this is a service page vs personal
     const isService = purpose === 'service'
     const currencySymbol = getCurrencySymbol(currency)
-    const isPaystack = paymentProvider === 'paystack'
+    const isPaystack = PAYSTACK_ENABLED && paymentProvider === 'paystack'
 
     // State
     const [currentView, setCurrentView] = useState<ViewType>('welcome')

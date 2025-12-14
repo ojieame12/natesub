@@ -11,6 +11,7 @@ import dlq from '../services/dlq.js'
 import { db } from '../db/client.js'
 import { getStuckTransfers, getTransferStats } from '../jobs/transfers.js'
 import { getMissingTransactions, reconcilePaystackTransactions } from '../jobs/reconciliation.js'
+import { checkEmailHealth, sendTestEmail } from '../services/email.js'
 
 const admin = new Hono()
 
@@ -96,17 +97,22 @@ admin.post('/webhooks/:id/retry', async (c) => {
 
 /**
  * GET /admin/health
- * System health check
+ * System health check (includes email)
  */
 admin.get('/health', async (c) => {
   try {
     // Check database connection
     await db.$queryRaw`SELECT 1`
 
+    // Check email service
+    const emailHealth = await checkEmailHealth()
+
     return c.json({
-      status: 'healthy',
+      status: emailHealth.healthy ? 'healthy' : 'degraded',
       timestamp: new Date().toISOString(),
       database: 'connected',
+      email: emailHealth.healthy ? 'connected' : 'error',
+      emailError: emailHealth.error || undefined,
     })
   } catch (error) {
     return c.json({
@@ -116,6 +122,41 @@ admin.get('/health', async (c) => {
       error: error instanceof Error ? error.message : 'Unknown error',
     }, 503)
   }
+})
+
+/**
+ * GET /admin/email/health
+ * Email service health check
+ */
+admin.get('/email/health', async (c) => {
+  const health = await checkEmailHealth()
+  return c.json({
+    healthy: health.healthy,
+    error: health.error,
+    timestamp: new Date().toISOString(),
+  }, health.healthy ? 200 : 503)
+})
+
+/**
+ * POST /admin/email/test
+ * Send a test email to verify delivery
+ */
+admin.post('/email/test', async (c) => {
+  const body = await c.req.json().catch(() => ({}))
+  const to = body.to
+
+  if (!to || typeof to !== 'string' || !to.includes('@')) {
+    return c.json({ error: 'Valid email address required in "to" field' }, 400)
+  }
+
+  const result = await sendTestEmail(to)
+
+  return c.json({
+    success: result.success,
+    messageId: result.messageId,
+    attempts: result.attempts,
+    error: result.error,
+  }, result.success ? 200 : 500)
 })
 
 /**

@@ -18,6 +18,7 @@ import {
 } from '../services/payroll.js'
 import {
   generateAndUploadPayStatement,
+  getPayStatementSignedUrl,
   type PayStatementData,
 } from '../services/pdf.js'
 
@@ -174,10 +175,12 @@ payroll.post('/periods/:id/pdf', requireAuth, requireServicePurpose, async (c) =
     return c.json({ error: 'Period not found' }, 404)
   }
 
-  // Check if PDF already exists
+  // Check if PDF already exists (pdfUrl is the storage key)
   if (period.pdfUrl) {
+    // Generate a time-limited signed URL for secure access
+    const signedUrl = await getPayStatementSignedUrl(period.pdfUrl)
     return c.json({
-      pdfUrl: period.pdfUrl,
+      pdfUrl: signedUrl,
       cached: true,
     })
   }
@@ -223,14 +226,17 @@ payroll.post('/periods/:id/pdf', requireAuth, requireServicePurpose, async (c) =
     currency: user.profile.currency,
   }
 
-  // Generate and upload PDF
-  const pdfUrl = await generateAndUploadPayStatement(userId, periodId, pdfData)
+  // Generate and upload PDF (returns storage key, not public URL)
+  const pdfKey = await generateAndUploadPayStatement(userId, periodId, pdfData)
 
-  // Store URL in database
-  await setPdfUrl(periodId, pdfUrl)
+  // Store storage key in database
+  await setPdfUrl(periodId, pdfKey)
+
+  // Generate a time-limited signed URL for secure access
+  const signedUrl = await getPayStatementSignedUrl(pdfKey)
 
   return c.json({
-    pdfUrl,
+    pdfUrl: signedUrl,
     cached: false,
   })
 })
@@ -242,11 +248,13 @@ payroll.get('/current', requireAuth, requireServicePurpose, async (c) => {
   const now = new Date()
   const { start, end } = getPeriodBoundaries(now)
 
-  // Aggregate current period payments
+  // Aggregate current period payments (only inbound revenue, exclude payouts)
   const payments = await db.payment.findMany({
     where: {
       creatorId: userId,
       status: 'succeeded',
+      // Only count inbound revenue - exclude payout transfers
+      type: { in: ['one_time', 'recurring'] },
       occurredAt: {
         gte: start,
         lte: now, // Up to now, not end of period
@@ -266,10 +274,14 @@ payroll.get('/current', requireAuth, requireServicePurpose, async (c) => {
     orderBy: { occurredAt: 'desc' },
   })
 
+  // Use actual recorded fees from payment records (not hardcoded percentages)
   const grossCents = payments.reduce((sum, p) => sum + p.amountCents, 0)
-  const platformFeeCents = Math.round(grossCents * 0.08)
-  const processingFeeCents = Math.round(grossCents * 0.02)
-  const netCents = grossCents - platformFeeCents - processingFeeCents
+  const totalFeeCents = payments.reduce((sum, p) => sum + p.feeCents, 0)
+  const netCents = payments.reduce((sum, p) => sum + p.netCents, 0)
+
+  // Split fees proportionally for display (approximate: 80% platform, 20% processing)
+  const platformFeeCents = Math.round(totalFeeCents * 0.8)
+  const processingFeeCents = totalFeeCents - platformFeeCents
 
   return c.json({
     periodStart: start.toISOString(),

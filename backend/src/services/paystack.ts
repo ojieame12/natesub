@@ -10,6 +10,12 @@ import { paystackCircuitBreaker, CircuitBreakerError } from '../utils/circuitBre
 
 const PAYSTACK_API_URL = 'https://api.paystack.co'
 
+// Mask sensitive data in API paths for logging (account numbers in querystrings)
+function maskPathForLogging(path: string): string {
+  // Mask account_number parameter
+  return path.replace(/account_number=([^&]+)/gi, (_, num) => `account_number=${maskAccountNumber(num)}`)
+}
+
 // Supported countries for Paystack
 export const PAYSTACK_COUNTRIES = ['NG', 'KE', 'ZA'] as const
 export type PaystackCountry = typeof PAYSTACK_COUNTRIES[number]
@@ -24,6 +30,17 @@ interface PaystackResponse<T> {
   status: boolean
   message: string
   data: T
+}
+
+// Extended response for list endpoints that include pagination meta
+interface PaystackListResponse<T> extends PaystackResponse<T> {
+  meta?: {
+    total: number
+    skipped: number
+    perPage: number
+    page: number
+    pageCount: number
+  }
 }
 
 interface Bank {
@@ -114,13 +131,22 @@ async function paystackFetch<T>(
     const data = await response.json()
 
     if (!response.ok || !data.status) {
-      // Log error without exposing request body (may contain PII)
-      console.error(`[paystack] API error on ${path}: ${data.message || 'Unknown error'}`)
+      // Log error with masked path to prevent PII exposure (account numbers in querystrings)
+      console.error(`[paystack] API error on ${maskPathForLogging(path)}: ${data.message || 'Unknown error'}`)
       throw new Error(data.message || 'Paystack API error')
     }
 
     return data
   })
+}
+
+// Variant for list endpoints that returns meta for pagination
+async function paystackFetchList<T>(
+  path: string,
+  options: RequestInit = {}
+): Promise<PaystackListResponse<T>> {
+  // Use the same circuit-breaker-protected fetch
+  return paystackFetch<T>(path, options) as Promise<PaystackListResponse<T>>
 }
 
 // ============================================
@@ -366,8 +392,14 @@ export async function initializeTransaction(params: {
 
 // Verify transaction
 export async function verifyTransaction(reference: string): Promise<TransactionData> {
+  // SECURITY: Validate reference to prevent path traversal attacks
+  // Reference should only contain alphanumeric, hyphens, and underscores
+  if (!reference || !/^[a-zA-Z0-9_-]+$/.test(reference)) {
+    throw new Error('Invalid transaction reference format')
+  }
+
   const response = await paystackFetch<TransactionData>(
-    `/transaction/verify/${reference}`
+    `/transaction/verify/${encodeURIComponent(reference)}`
   )
   return response.data
 }
@@ -615,21 +647,12 @@ export async function listTransactions(params: {
     url += `&status=${status}`
   }
 
-  const response = await paystackFetch<TransactionListResponse['data']>(url)
-
-  // The meta is in the response object at the same level as data
-  // Need to fetch full response
-  const fullResponse = await fetch(`${PAYSTACK_API_URL}${url}`, {
-    headers: {
-      Authorization: `Bearer ${env.PAYSTACK_SECRET_KEY}`,
-      'Content-Type': 'application/json',
-    },
-  })
-  const fullData = await fullResponse.json()
+  // Use paystackFetchList to get both data and meta through circuit breaker
+  const response = await paystackFetchList<PaystackTransaction[]>(url)
 
   return {
     transactions: response.data,
-    meta: fullData.meta || { total: response.data.length, skipped: 0, perPage, page, pageCount: 1 },
+    meta: response.meta || { total: response.data.length, skipped: 0, perPage, page, pageCount: 1 },
   }
 }
 

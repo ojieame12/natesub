@@ -314,6 +314,10 @@ model Payment {
   feeEffectiveRate Float?    // 0.0575 for 5.75%
   feeWasCapped     Boolean @default(false)
 
+  // Provider fees (for reconciliation - what Stripe/Paystack charges us)
+  providerFeeCents   Int?    // Processing fee charged by payment provider
+  providerTransferFeeCents Int? // Transfer/payout fee (Paystack only)
+
   // Type & Status
   type   PaymentType
   status PaymentStatus
@@ -367,8 +371,9 @@ model Request {
   sendMethod RequestSendMethod?
   status     RequestStatus      @default(draft)
 
-  // Public token for recipient link (hashed)
-  publicTokenHash String? @unique
+  // Public token for recipient link
+  publicToken     String?         // Encrypted raw token for reminder links
+  publicTokenHash String? @unique // Hashed for lookup
   tokenExpiresAt  DateTime?
 
   // Payment tracking
@@ -533,7 +538,8 @@ model PayrollPeriod {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([userId, periodStart, periodEnd])
+  // Include currency in uniqueness to support multi-currency creators
+  @@unique([userId, periodStart, periodEnd, currency])
   @@index([userId, periodStart])
   @@index([verificationCode])
   @@map("payroll_periods")
@@ -577,4 +583,79 @@ model WebhookEvent {
   @@index([receivedAt])
   @@index([userId])
   @@map("webhook_events")
+}
+
+// ============================================
+// REMINDERS (Multi-purpose notification scheduling)
+// ============================================
+
+enum ReminderType {
+  // Request/Invoice reminders (service providers)
+  request_unopened_24h    // Request sent but not opened after 24h
+  request_unopened_72h    // Request sent but not opened after 72h
+  request_unpaid_3d       // Request opened but not paid after 3 days
+  request_expiring        // Request token expiring soon (24h before)
+  invoice_due_7d          // Invoice due in 7 days
+  invoice_due_3d          // Invoice due in 3 days
+  invoice_due_1d          // Invoice due tomorrow
+  invoice_overdue_1d      // Invoice 1 day overdue
+  invoice_overdue_7d      // Invoice 7 days overdue
+
+  // Payout notifications (creators)
+  payout_completed        // Money hit their bank
+  payout_failed           // Transfer failed
+
+  // Payroll notifications
+  payroll_ready           // New pay statement available
+
+  // Onboarding/Setup reminders
+  onboarding_incomplete_24h
+  onboarding_incomplete_72h
+  bank_setup_incomplete   // Blocking payouts
+
+  // Engagement
+  no_subscribers_7d       // No subscribers after 7 days
+}
+
+enum ReminderChannel {
+  email
+  sms
+  push
+}
+
+enum ReminderStatus {
+  scheduled
+  sent
+  failed
+  canceled
+}
+
+model Reminder {
+  id         String   @id @default(uuid())
+  userId     String   // Who to remind (creator or subscriber)
+
+  // What this reminder is about
+  entityType String   // 'request' | 'subscription' | 'profile' | 'payroll' | 'payment'
+  entityId   String   // The related entity ID
+
+  // Reminder details
+  type       ReminderType
+  channel    ReminderChannel @default(email)
+  status     ReminderStatus  @default(scheduled)
+
+  // Scheduling
+  scheduledFor DateTime  // When to send
+  sentAt       DateTime? // When actually sent (null until sent)
+
+  // Error tracking
+  errorMessage String?
+  retryCount   Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([entityType, entityId, type]) // One reminder per type per entity
+  @@index([status, scheduledFor])        // For finding due reminders
+  @@index([userId])
+  @@map("reminders")
 }

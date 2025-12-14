@@ -51,6 +51,12 @@ const envSchema = z.object({
   ENABLE_FLUTTERWAVE: z.string().transform(v => v === 'true').default('false'),
   ENABLE_SMS: z.string().transform(v => v === 'true').default('false'),
 
+  // Bird SMS (formerly MessageBird)
+  BIRD_ACCESS_KEY: z.string().optional(),
+  BIRD_WORKSPACE_ID: z.string().optional(),
+  BIRD_CHANNEL_ID: z.string().optional(),        // SMS channel ID
+  BIRD_SENDER_ID: z.string().default('NatePay'), // Sender name (alphanumeric, max 11 chars)
+
   // AI Services
   GOOGLE_AI_API_KEY: z.string().optional(),     // Gemini 3 Pro - voice + content generation
   PERPLEXITY_API_KEY: z.string().optional(),    // Sonar Pro - market research

@@ -5,10 +5,11 @@ import { stripe, setSubscriptionDefaultFee } from '../services/stripe.js'
 import { db } from '../db/client.js'
 import { env } from '../config/env.js'
 import { sendNewSubscriberEmail } from '../services/email.js'
+import { scheduleReminder, cancelAllRemindersForEntity } from '../jobs/reminders.js'
 import { handlePlatformSubscriptionEvent } from '../services/platformSubscription.js'
 import { calculateServiceFee, calculateLegacyFee } from '../services/fees.js'
 import { initiateTransfer, createTransferRecipient } from '../services/paystack.js'
-import { decryptAccountNumber } from '../utils/encryption.js'
+import { decryptAccountNumber, encryptAuthorizationCode } from '../utils/encryption.js'
 import { webhookRateLimit } from '../middleware/rateLimit.js'
 import { withLock } from '../services/lock.js'
 import {
@@ -326,6 +327,12 @@ async function handleCheckoutCompleted(event: Stripe.Event) {
         status: 'accepted',
         respondedAt: new Date(),
       },
+    })
+
+    // Cancel any scheduled reminders for this request
+    await cancelAllRemindersForEntity({
+      entityType: 'request',
+      entityId: requestId,
     })
 
     // Get request details for activity logging
@@ -1657,6 +1664,19 @@ webhooks.post('/paystack', async (c) => {
         await handlePaystackTransferRequiresOtp(data)
         break
 
+      // Refund events
+      case 'refund.processed':
+        await handlePaystackRefundProcessed(data, eventId)
+        break
+
+      case 'refund.pending':
+        await handlePaystackRefundPending(data, eventId)
+        break
+
+      case 'refund.failed':
+        await handlePaystackRefundFailed(data, eventId)
+        break
+
       default:
         console.log(`Unhandled Paystack event: ${event}`)
     }
@@ -1689,7 +1709,14 @@ webhooks.post('/paystack', async (c) => {
     }).catch(() => {})
 
     // Critical events should return 500 so Paystack retries on transient failures
-    const criticalEvents = ['charge.success', 'transfer.failed']
+    // All payout and refund state transitions are critical - if we fail to record them, state drifts
+    const criticalEvents = [
+      'charge.success',
+      'transfer.success',
+      'transfer.failed',
+      'transfer.requires_otp',
+      'refund.processed',  // Refund affects LTV and balance
+    ]
 
     if (criticalEvents.includes(event)) {
       // Return 500 for critical events - Paystack will retry
@@ -1873,7 +1900,8 @@ async function handlePaystackChargeSuccess(data: any, eventId: string) {
         interval: subscriptionInterval,
         status: 'active',
         ltvCents: netCents, // Initialize LTV with creator's earnings (net)
-        paystackAuthorizationCode: authorization?.authorization_code || null,
+        // SECURITY: Encrypt authorization code at rest
+        paystackAuthorizationCode: encryptAuthorizationCode(authorization?.authorization_code || null),
         paystackCustomerCode: customer?.customer_code || null,
         feeModel: feeModel || null,
         feeMode: feeMode || null, // Lock fee mode at subscription creation for consistent renewals
@@ -1883,7 +1911,8 @@ async function handlePaystackChargeSuccess(data: any, eventId: string) {
       },
       update: {
         // Note: feeMode is NOT updated - it stays locked to the value at subscription creation
-        paystackAuthorizationCode: authorization?.authorization_code || null,
+        // SECURITY: Encrypt authorization code at rest
+        paystackAuthorizationCode: encryptAuthorizationCode(authorization?.authorization_code || null),
         paystackCustomerCode: customer?.customer_code || null,
         ltvCents: { increment: netCents }, // LTV is creator's earnings (net)
         currentPeriodEnd: interval === 'month'
@@ -2082,7 +2111,7 @@ async function handlePaystackChargeFailed(data: any) {
 
 // Handle Paystack transfer.success - update payout record
 async function handlePaystackTransferSuccess(data: any) {
-  const { reference, amount, recipient } = data
+  const { reference, amount, currency, recipient } = data
 
   // Find the payout record by reference
   const payout = await db.payment.findFirst({
@@ -2103,10 +2132,68 @@ async function handlePaystackTransferSuccess(data: any) {
     return
   }
 
+  // SECURITY: Verify amount and currency match our payout record
+  // Mismatches could indicate data corruption, webhook tampering, or bugs
+  const webhookCurrency = currency?.toUpperCase()
+  const payoutCurrency = payout.currency?.toUpperCase()
+
+  // Amount from Paystack is in smallest unit (kobo/cents), same as our amountCents
+  const amountMismatch = amount !== payout.amountCents
+  const currencyMismatch = webhookCurrency && payoutCurrency && webhookCurrency !== payoutCurrency
+
+  if (amountMismatch || currencyMismatch) {
+    // Log critical alert - this should never happen in normal operation
+    // All details captured in log for investigation
+    console.error(`[paystack] CRITICAL: Transfer amount/currency mismatch!`, {
+      reference,
+      payoutId: payout.id,
+      webhookAmount: amount,
+      payoutAmount: payout.amountCents,
+      webhookCurrency,
+      payoutCurrency,
+      creatorId: payout.creatorId,
+    })
+
+    // Mark payout as disputed (requires manual investigation)
+    // This prevents incorrect balance tracking while preserving the record
+    await db.payment.update({
+      where: { id: payout.id },
+      data: { status: 'disputed' },
+    })
+
+    // Create activity for ops team to investigate
+    await db.activity.create({
+      data: {
+        userId: payout.creatorId,
+        type: 'payout_mismatch',
+        payload: {
+          payoutId: payout.id,
+          reference,
+          webhookAmount: amount,
+          payoutAmount: payout.amountCents,
+          webhookCurrency,
+          payoutCurrency,
+        },
+      },
+    })
+
+    // Throw to trigger webhook retry and alert ops team
+    throw new Error(`Transfer amount/currency mismatch for ${reference}`)
+  }
+
   // Update payout status to succeeded
   await db.payment.update({
     where: { id: payout.id },
     data: { status: 'succeeded' },
+  })
+
+  // Schedule payout completed email notification (sends immediately)
+  await scheduleReminder({
+    userId: payout.creatorId,
+    entityType: 'payment',
+    entityId: payout.id,
+    type: 'payout_completed',
+    scheduledFor: new Date(), // Send immediately
   })
 
   // Create activity for creator (only on first processing)
@@ -2168,6 +2255,15 @@ async function handlePaystackTransferFailed(data: any) {
       data: { payoutStatus: 'restricted' },
     })
   }
+
+  // Schedule payout failed email notification (sends immediately)
+  await scheduleReminder({
+    userId: payout.creatorId,
+    entityType: 'payment',
+    entityId: payout.id,
+    type: 'payout_failed',
+    scheduledFor: new Date(), // Send immediately
+  })
 
   // Create activity for creator notification (only on first processing)
   await db.activity.create({
@@ -2231,6 +2327,161 @@ async function handlePaystackTransferRequiresOtp(data: any) {
   })
 
   console.log(`[paystack] Transfer requires OTP: ${reference}, transfer_code: ${transferCode}`)
+}
+
+// ============================================
+// PAYSTACK REFUND HANDLERS
+// ============================================
+
+// Handle Paystack refund.processed - refund completed successfully
+async function handlePaystackRefundProcessed(data: any, eventId: string) {
+  const { transaction, amount, currency } = data
+  const transactionRef = transaction?.reference || data.transaction_reference
+
+  if (!transactionRef) {
+    console.error('[paystack] Refund processed but no transaction reference')
+    return
+  }
+
+  // Find the original payment by transaction reference
+  const originalPayment = await db.payment.findFirst({
+    where: {
+      paystackTransactionRef: transactionRef,
+      type: { in: ['recurring', 'one_time'] },
+      status: 'succeeded',
+    },
+    include: {
+      subscription: {
+        include: {
+          creator: {
+            include: { profile: { select: { purpose: true } } },
+          },
+        },
+      },
+    },
+  })
+
+  if (!originalPayment) {
+    console.log(`[paystack] Refund processed but no original payment found: ${transactionRef}`)
+    return
+  }
+
+  // IDEMPOTENCY: Check if refund already recorded
+  const existingRefund = await db.payment.findFirst({
+    where: { paystackEventId: eventId },
+  })
+  if (existingRefund) {
+    console.log(`[paystack] Refund ${eventId} already processed, skipping`)
+    return
+  }
+
+  // Calculate refund fees using original payment's fee ratio
+  const refundAmount = amount || originalPayment.amountCents
+  let feeCents = 0
+  let netCents = refundAmount
+
+  if (originalPayment.grossCents && originalPayment.feeCents) {
+    // Use original fee ratio for accurate refund calculation
+    const feeRatio = originalPayment.feeCents / originalPayment.grossCents
+    const netRatio = originalPayment.netCents / originalPayment.grossCents
+    feeCents = Math.round(refundAmount * feeRatio)
+    netCents = Math.round(refundAmount * netRatio)
+  }
+
+  // Create refund payment record (negative amounts)
+  await db.payment.create({
+    data: {
+      subscriptionId: originalPayment.subscriptionId,
+      creatorId: originalPayment.creatorId,
+      subscriberId: originalPayment.subscriberId,
+      amountCents: -refundAmount, // Negative for refund
+      currency: currency?.toUpperCase() || originalPayment.currency,
+      feeCents: -feeCents,
+      netCents: -netCents,
+      type: 'refund',
+      status: 'refunded',
+      paystackEventId: eventId,
+      paystackTransactionRef: `REF-${transactionRef}`,
+      feeModel: originalPayment.feeModel,
+    },
+  })
+
+  // Decrement LTV if subscription exists
+  if (originalPayment.subscriptionId) {
+    const subscription = await db.subscription.findUnique({
+      where: { id: originalPayment.subscriptionId },
+    })
+    if (subscription) {
+      // Don't let LTV go negative
+      const decrementAmount = Math.min(netCents, subscription.ltvCents)
+      await db.subscription.update({
+        where: { id: originalPayment.subscriptionId },
+        data: { ltvCents: { decrement: decrementAmount } },
+      })
+    }
+  }
+
+  // Create activity for creator notification
+  await db.activity.create({
+    data: {
+      userId: originalPayment.creatorId,
+      type: 'payment_refunded',
+      payload: {
+        subscriptionId: originalPayment.subscriptionId,
+        originalPaymentId: originalPayment.id,
+        amount: refundAmount,
+        currency: currency?.toUpperCase() || originalPayment.currency,
+        reason: data.refund_reason || 'Customer requested refund',
+      },
+    },
+  })
+
+  console.log(`[paystack] Refund processed: ${transactionRef}, amount: ${refundAmount}`)
+}
+
+// Handle Paystack refund.pending - refund is being processed
+async function handlePaystackRefundPending(data: any, eventId: string) {
+  const { transaction } = data
+  const transactionRef = transaction?.reference || data.transaction_reference
+
+  console.log(`[paystack] Refund pending for transaction: ${transactionRef}`)
+
+  // We don't create a payment record yet - wait for refund.processed
+  // Just log for monitoring
+}
+
+// Handle Paystack refund.failed - refund attempt failed
+async function handlePaystackRefundFailed(data: any, eventId: string) {
+  const { transaction, reason } = data
+  const transactionRef = transaction?.reference || data.transaction_reference
+
+  console.error(`[paystack] Refund failed for transaction: ${transactionRef}`, {
+    reason: reason || 'Unknown reason',
+    eventId,
+  })
+
+  // Find the original payment to notify creator
+  const originalPayment = await db.payment.findFirst({
+    where: {
+      paystackTransactionRef: transactionRef,
+      type: { in: ['recurring', 'one_time'] },
+    },
+  })
+
+  if (originalPayment) {
+    // Create activity for ops team to investigate
+    await db.activity.create({
+      data: {
+        userId: originalPayment.creatorId,
+        type: 'refund_failed',
+        payload: {
+          transactionRef,
+          reason: reason || 'Refund processing failed',
+          eventId,
+        },
+      },
+    })
+  }
 }
 
 export default webhooks

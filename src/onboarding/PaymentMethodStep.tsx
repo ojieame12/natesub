@@ -8,6 +8,10 @@ import { getPricing } from '../utils/pricing'
 import '../Dashboard.css'
 import './onboarding.css'
 
+// TEMPORARY: Disable Paystack until live keys are ready
+// Set to true to re-enable Paystack for NG/KE/ZA countries
+const PAYSTACK_ENABLED = false
+
 // Paystack supported country codes (primary for Africa)
 const PAYSTACK_COUNTRY_CODES = ['NG', 'KE', 'ZA']
 
@@ -101,7 +105,7 @@ export default function PaymentMethodStep() {
     // Currency alignment check - only offer Paystack if currency matches country
     const expectedPaystackCurrency = PAYSTACK_CURRENCIES[countryUpper]
     const isCurrencyAligned = !expectedPaystackCurrency || currency?.toUpperCase() === expectedPaystackCurrency
-    const canUsePaystack = isPaystackCountry && isCurrencyAligned
+    const canUsePaystack = PAYSTACK_ENABLED && isPaystackCountry && isCurrencyAligned
 
     // Default recommendation - Paystack for NG/KE/ZA with aligned currency, otherwise Stripe
     const recommendedMethod = canUsePaystack ? 'paystack' : 'stripe'

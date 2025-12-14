@@ -8,7 +8,9 @@ import { redis } from '../db/redis.js'
 import { requireAuth } from '../middleware/auth.js'
 import { sendRequestEmail } from '../services/email.js'
 import { createCheckoutSession } from '../services/stripe.js'
+import { scheduleRequestReminders, scheduleRequestUnpaidReminder } from '../jobs/reminders.js'
 import { calculateServiceFee, type FeeMode } from '../services/fees.js'
+import { encrypt } from '../utils/encryption.js'
 import { env } from '../config/env.js'
 
 const requests = new Hono()
@@ -70,6 +72,12 @@ requests.get(
     if (request.status === 'accepted' || request.status === 'declined') {
       return c.json({ error: 'This request has already been responded to' }, 410)
     }
+
+    // Schedule unpaid reminder (they've opened it, cancel unopened reminders)
+    // Run in background so it doesn't slow down response
+    scheduleRequestUnpaidReminder(request.id).catch((err) => {
+      console.error(`[requests] Failed to schedule unpaid reminder for ${request.id}:`, err.message)
+    })
 
     return c.json({
       request: {
@@ -396,13 +404,14 @@ requests.post(
     const tokenHash = hashToken(token)
     const tokenExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
 
-    // Update request
+    // Update request - store both hash (for lookup) and encrypted raw token (for reminder links)
     await db.request.update({
       where: { id },
       data: {
         status: 'sent',
         sendMethod: method,
-        publicTokenHash: tokenHash,
+        publicToken: encrypt(token),      // Store encrypted for reminder links
+        publicTokenHash: tokenHash,       // Store hashed for lookup
         tokenExpiresAt,
         sentAt: new Date(),
       },
@@ -424,6 +433,9 @@ requests.post(
         requestLink
       )
     }
+
+    // Schedule follow-up reminders (24h, 72h, expiring, invoice due dates)
+    await scheduleRequestReminders(id)
 
     // Create activity
     await db.activity.create({

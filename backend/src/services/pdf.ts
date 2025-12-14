@@ -3,7 +3,8 @@
 
 import PDFDocument from 'pdfkit'
 import QRCode from 'qrcode'
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
+import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3'
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { env } from '../config/env.js'
 import type { PayrollDetail } from './payroll.js'
 
@@ -401,7 +402,23 @@ export async function uploadPayStatement(
 
   await r2.send(command)
 
-  return `${env.R2_PUBLIC_URL}/${key}`
+  // Return the storage key, not a public URL
+  // Use getPayStatementSignedUrl() to generate time-limited access URLs
+  return key
+}
+
+// Generate a time-limited signed URL for secure PDF access
+// URLs expire after 15 minutes - sufficient for download but limits exposure
+export async function getPayStatementSignedUrl(key: string): Promise<string> {
+  const command = new GetObjectCommand({
+    Bucket: env.R2_BUCKET,
+    Key: key,
+    ResponseContentDisposition: 'inline; filename="pay-statement.pdf"',
+  })
+
+  // 15 minute expiry - enough time to download but limits exposure window
+  const signedUrl = await getSignedUrl(r2, command, { expiresIn: 900 })
+  return signedUrl
 }
 
 // ============================================

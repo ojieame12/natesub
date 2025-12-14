@@ -37,8 +37,8 @@ export async function generatePayrollPeriods(): Promise<PayrollJobResult> {
     errors: [],
   }
 
-  // Acquire job-level lock
-  const jobLockKey = `${LOCK_PREFIX}job:${Date.now()}`
+  // Acquire job-level lock (single key for all payroll job runs)
+  const jobLockKey = `${LOCK_PREFIX}job:generate`
   const gotLock = await redis.set(jobLockKey, '1', 'EX', LOCK_TTL_SECONDS, 'NX')
 
   if (!gotLock) {

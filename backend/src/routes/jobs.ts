@@ -8,6 +8,7 @@ import { generatePayrollPeriods } from '../jobs/payroll.js'
 import { sendRenewalReminders, sendDunningEmails, sendCancellationEmails } from '../jobs/notifications.js'
 import { monitorStuckTransfers } from '../jobs/transfers.js'
 import { reconcilePaystackTransactions } from '../jobs/reconciliation.js'
+import { processDueReminders, scanAndScheduleMissedReminders } from '../jobs/reminders.js'
 
 const jobs = new Hono()
 
@@ -211,11 +212,50 @@ jobs.post('/reconciliation', async (c) => {
   }
 })
 
+// Process scheduled reminders (run hourly)
+// This handles request/invoice/payout/payroll/onboarding reminders
+jobs.post('/scheduled-reminders', async (c) => {
+  console.log('[jobs] Starting scheduled reminders job')
+
+  try {
+    const result = await processDueReminders()
+
+    console.log(`[jobs] Scheduled reminders complete: ${result.sent}/${result.processed} sent, ${result.failed} failed`)
+
+    return c.json({
+      success: true,
+      ...result,
+    })
+  } catch (error: any) {
+    console.error('[jobs] Scheduled reminders job failed:', error.message)
+    return c.json({ error: 'Scheduled reminders job failed', message: error.message }, 500)
+  }
+})
+
+// Scan for missed reminders (run once on deploy or weekly)
+jobs.post('/scan-missed-reminders', async (c) => {
+  console.log('[jobs] Starting scan for missed reminders')
+
+  try {
+    const scheduled = await scanAndScheduleMissedReminders()
+
+    console.log(`[jobs] Scan complete: ${scheduled} reminders scheduled`)
+
+    return c.json({
+      success: true,
+      scheduled,
+    })
+  } catch (error: any) {
+    console.error('[jobs] Scan missed reminders job failed:', error.message)
+    return c.json({ error: 'Scan missed reminders job failed', message: error.message }, 500)
+  }
+})
+
 // Health check for job system
 jobs.get('/health', async (c) => {
   return c.json({
     status: 'ok',
-    jobs: ['billing', 'retries', 'payroll', 'reminders', 'dunning', 'cancellations', 'notifications', 'transfers', 'reconciliation'],
+    jobs: ['billing', 'retries', 'payroll', 'reminders', 'dunning', 'cancellations', 'notifications', 'transfers', 'reconciliation', 'scheduled-reminders', 'scan-missed-reminders'],
     timestamp: new Date().toISOString(),
   })
 })

@@ -8,6 +8,7 @@ import { createCheckoutSession, getAccountStatus } from '../services/stripe.js'
 import { initializePaystackCheckout, generateReference, isPaystackSupported, type PaystackCountry } from '../services/paystack.js'
 import { calculateServiceFee, type FeeCalculation, type FeeMode } from '../services/fees.js'
 import { env } from '../config/env.js'
+import { maskEmail } from '../utils/pii.js'
 
 const checkout = new Hono()
 
@@ -122,7 +123,8 @@ checkout.post(
 
         if (existingCheckout) {
           const cached = JSON.parse(existingCheckout)
-          console.log(`[checkout] Returning cached Paystack checkout for ${dedupeKey}`)
+          // Log with masked email to prevent PII exposure
+          console.log(`[checkout] Returning cached Paystack checkout for ${maskEmail(subscriberEmail)}:${profile.userId}`)
           return c.json({
             provider: 'paystack',
             url: cached.url,

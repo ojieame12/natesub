@@ -4,7 +4,7 @@
 import { db } from '../db/client.js'
 import { chargeAuthorization, initiateTransfer, createTransferRecipient } from '../services/paystack.js'
 import { calculateServiceFee, calculateLegacyFee, type FeeMode } from '../services/fees.js'
-import { decryptAccountNumber } from '../utils/encryption.js'
+import { decryptAccountNumber, decryptAuthorizationCode, encryptAuthorizationCode } from '../utils/encryption.js'
 import { acquireLock, releaseLock } from '../services/lock.js'
 
 // Configuration
@@ -84,9 +84,9 @@ export async function processRecurringBilling(): Promise<BillingResult> {
     // DISTRIBUTED LOCK: Prevent concurrent processing of same subscription
     // This prevents double-charging if billing job runs while webhook is processing
     const lockKey = `billing:${sub.id}`
-    const lockAcquired = await acquireLock(lockKey, 60000) // 60 second TTL
+    const lockToken = await acquireLock(lockKey, 60000) // 60 second TTL
 
-    if (!lockAcquired) {
+    if (!lockToken) {
       result.skipped++
       console.log(`[billing] Skipping sub ${sub.id}: lock not acquired (another process handling)`)
       continue
@@ -198,8 +198,9 @@ export async function processRecurringBilling(): Promise<BillingResult> {
       // Charge the subscriber
       // New model: charge full amount (gross), then transfer to creator
       // Legacy model: use subaccount split
+      // SECURITY: Decrypt authorization code before use
       const chargeResult = await chargeAuthorization({
-        authorizationCode: sub.paystackAuthorizationCode,
+        authorizationCode: decryptAuthorizationCode(sub.paystackAuthorizationCode)!,
         email: sub.subscriber.email,
         amount: isNewFeeModel ? grossCents! : sub.amount,
         currency: sub.currency,
@@ -225,8 +226,10 @@ export async function processRecurringBilling(): Promise<BillingResult> {
         data: {
           currentPeriodEnd: newPeriodEnd,
           ltvCents: { increment: netCents }, // LTV is creator's earnings
-          // Update authorization code if Paystack rotated it
-          paystackAuthorizationCode: chargeResult.authorization?.authorization_code || sub.paystackAuthorizationCode,
+          // Update authorization code if Paystack rotated it (encrypt at rest)
+          paystackAuthorizationCode: chargeResult.authorization?.authorization_code
+            ? encryptAuthorizationCode(chargeResult.authorization.authorization_code)
+            : sub.paystackAuthorizationCode,
         },
       })
 
@@ -364,8 +367,8 @@ export async function processRecurringBilling(): Promise<BillingResult> {
       console.error(`[billing] Sub ${sub.id} charge failed:`, error.message)
       result.failed++
     } finally {
-      // Always release the lock
-      await releaseLock(lockKey)
+      // Always release the lock (with ownership token)
+      await releaseLock(lockKey, lockToken)
     }
   }
 
@@ -436,9 +439,9 @@ export async function processRetries(): Promise<BillingResult> {
 
     // DISTRIBUTED LOCK: Prevent concurrent retry processing
     const lockKey = `billing:${sub.id}`
-    const lockAcquired = await acquireLock(lockKey, 60000) // 60 second TTL
+    const lockToken = await acquireLock(lockKey, 60000) // 60 second TTL
 
-    if (!lockAcquired) {
+    if (!lockToken) {
       result.skipped++
       console.log(`[billing] Skipping retry for sub ${sub.id}: lock not acquired (another process handling)`)
       continue
@@ -501,8 +504,9 @@ export async function processRetries(): Promise<BillingResult> {
         netCents = legacyFees.netCents
       }
 
+      // SECURITY: Decrypt authorization code before use
       const chargeResult = await chargeAuthorization({
-        authorizationCode: sub.paystackAuthorizationCode,
+        authorizationCode: decryptAuthorizationCode(sub.paystackAuthorizationCode)!,
         email: sub.subscriber.email,
         amount: isNewFeeModel ? grossCents! : sub.amount,
         currency: sub.currency,
@@ -529,7 +533,10 @@ export async function processRetries(): Promise<BillingResult> {
         data: {
           currentPeriodEnd: newPeriodEnd,
           ltvCents: { increment: netCents },
-          paystackAuthorizationCode: chargeResult.authorization?.authorization_code || sub.paystackAuthorizationCode,
+          // Update authorization code if Paystack rotated it (encrypt at rest)
+          paystackAuthorizationCode: chargeResult.authorization?.authorization_code
+            ? encryptAuthorizationCode(chargeResult.authorization.authorization_code)
+            : sub.paystackAuthorizationCode,
         },
       })
 
@@ -572,22 +579,9 @@ export async function processRetries(): Promise<BillingResult> {
           try {
             const accountNumber = decryptAccountNumber(sub.creator.profile.paystackAccountNumber)
             if (accountNumber) {
-              const { recipientCode } = await createTransferRecipient({
-                name: sub.creator.profile.displayName,
-                accountNumber,
-                bankCode: sub.creator.profile.paystackBankCode,
-                currency: sub.currency,
-              })
-
-              await initiateTransfer({
-                amount: netCents,
-                recipientCode,
-                reason: `Retry payment from ${sub.subscriber.email}`,
-                reference: payoutReference,
-              })
-
-              // Record payout for idempotency tracking (with fee audit metadata)
-              await db.payment.create({
+              // SECURITY FIX: Create payout record BEFORE initiating transfer
+              // This prevents race condition where webhook arrives before DB record exists
+              const payoutRecord = await db.payment.create({
                 data: {
                   subscriptionId: sub.id,
                   creatorId: sub.creatorId,
@@ -605,10 +599,33 @@ export async function processRetries(): Promise<BillingResult> {
                 },
               })
 
-              console.log(`[billing] Initiated retry transfer of ${netCents} to creator ${sub.creatorId}`)
+              try {
+                const { recipientCode } = await createTransferRecipient({
+                  name: sub.creator.profile.displayName,
+                  accountNumber,
+                  bankCode: sub.creator.profile.paystackBankCode,
+                  currency: sub.currency,
+                })
+
+                await initiateTransfer({
+                  amount: netCents,
+                  recipientCode,
+                  reason: `Retry payment from ${sub.subscriber.email}`,
+                  reference: payoutReference,
+                })
+
+                console.log(`[billing] Initiated retry transfer of ${netCents} to creator ${sub.creatorId}`)
+              } catch (transferErr: any) {
+                // Transfer failed - update the payout record to failed
+                await db.payment.update({
+                  where: { id: payoutRecord.id },
+                  data: { status: 'failed' },
+                })
+                console.error(`[billing] Transfer failed for retry sub ${sub.id}:`, transferErr.message)
+              }
             }
-          } catch (transferErr: any) {
-            console.error(`[billing] Transfer failed for retry sub ${sub.id}:`, transferErr.message)
+          } catch (dbErr: any) {
+            console.error(`[billing] Failed to create payout record for retry sub ${sub.id}:`, dbErr.message)
           }
         }
       }
@@ -638,8 +655,8 @@ export async function processRetries(): Promise<BillingResult> {
       console.error(`[billing] Retry ${attemptCount + 1} failed for sub ${sub.id}:`, error.message)
       result.failed++
     } finally {
-      // Always release the lock
-      await releaseLock(lockKey)
+      // Always release the lock (with ownership token)
+      await releaseLock(lockKey, lockToken)
     }
   }
 

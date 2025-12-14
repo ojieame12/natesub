@@ -128,3 +128,27 @@ export function decryptAccountNumber(encrypted: string | null): string | null {
   if (!isEncryptionEnabled()) return encrypted
   return decrypt(encrypted)
 }
+
+/**
+ * Encrypt authorization code (for recurring payments)
+ * Returns original if encryption is not enabled (backwards compatibility)
+ */
+export function encryptAuthorizationCode(authCode: string | null): string | null {
+  if (!authCode) return null
+  if (!isEncryptionEnabled()) {
+    console.warn('[encryption] ENCRYPTION_KEY not set - storing auth code unencrypted')
+    return authCode
+  }
+  if (isEncrypted(authCode)) return authCode
+  return encrypt(authCode)
+}
+
+/**
+ * Decrypt authorization code
+ * Returns original if not encrypted or encryption is not enabled
+ */
+export function decryptAuthorizationCode(encrypted: string | null): string | null {
+  if (!encrypted) return null
+  if (!isEncryptionEnabled()) return encrypted
+  return decrypt(encrypted)
+}

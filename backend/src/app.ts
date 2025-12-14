@@ -151,9 +151,10 @@ app.get('/health/live', (c) => c.json({ status: 'ok' }))
 
 // Metrics endpoint for monitoring dashboards
 app.get('/metrics', async (c) => {
-  // Only allow in non-production or with API key
+  // Only allow in non-production or with valid API key
   const apiKey = c.req.header('X-API-Key')
-  if (env.NODE_ENV === 'production' && apiKey !== env.JOBS_API_KEY) {
+  // Require JOBS_API_KEY to be set in production, and header must match
+  if (env.NODE_ENV === 'production' && (!env.JOBS_API_KEY || apiKey !== env.JOBS_API_KEY)) {
     return c.json({ error: 'Unauthorized' }, 401)
   }
 

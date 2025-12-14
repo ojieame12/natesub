@@ -11,6 +11,8 @@ import {
   calculateFees,
   type UserPurpose,
 } from './pricing.js'
+import { scheduleReminder } from '../jobs/reminders.js'
+import { decryptAccountNumber } from '../utils/encryption.js'
 
 // ============================================
 // TYPES
@@ -154,6 +156,8 @@ async function aggregatePayments(
   grossCents: number
   refundsCents: number
   chargebacksCents: number
+  totalFeeCents: number  // Sum of actual recorded fees
+  totalNetCents: number  // Sum of actual recorded net amounts
   paymentCount: number
   payments: PaymentItem[]
 }> {
@@ -170,11 +174,13 @@ async function aggregatePayments(
     whereClause.currency = currency
   }
 
-  // Get successful payments
+  // Get successful inbound payments (revenue only, exclude payouts)
   const successfulPayments = await db.payment.findMany({
     where: {
       ...whereClause,
       status: 'succeeded',
+      // Only count inbound revenue (one_time, recurring) - exclude payout transfers
+      type: { in: ['one_time', 'recurring'] },
     },
     include: {
       subscription: {
@@ -190,25 +196,32 @@ async function aggregatePayments(
     orderBy: { occurredAt: 'desc' },
   })
 
-  // Get refunds in the same period
+  // Get refunds in the same period (only for revenue payments)
   const refunds = await db.payment.findMany({
     where: {
       ...whereClause,
       status: 'refunded',
+      type: { in: ['one_time', 'recurring'] },
     },
   })
 
-  // Get chargebacks (disputes lost)
+  // Get chargebacks (disputes lost, only for revenue payments)
   const chargebacks = await db.payment.findMany({
     where: {
       ...whereClause,
       status: { in: ['dispute_lost', 'disputed'] },
+      type: { in: ['one_time', 'recurring'] },
     },
   })
 
   const grossCents = successfulPayments.reduce((sum, p) => sum + p.amountCents, 0)
   const refundsCents = refunds.reduce((sum, p) => sum + Math.abs(p.amountCents), 0)
   const chargebacksCents = chargebacks.reduce((sum, p) => sum + Math.abs(p.amountCents), 0)
+
+  // Sum actual recorded fees and net amounts from payment records
+  // This uses the real fees charged at checkout, not recomputed approximations
+  const totalFeeCents = successfulPayments.reduce((sum, p) => sum + p.feeCents, 0)
+  const totalNetCents = successfulPayments.reduce((sum, p) => sum + p.netCents, 0)
 
   const paymentItems: PaymentItem[] = successfulPayments.map((p) => ({
     id: p.id,
@@ -223,6 +236,8 @@ async function aggregatePayments(
     grossCents,
     refundsCents,
     chargebacksCents,
+    totalFeeCents,
+    totalNetCents,
     paymentCount: successfulPayments.length,
     payments: paymentItems,
   }
@@ -230,12 +245,12 @@ async function aggregatePayments(
 
 /**
  * Calculate year-to-date totals
- * Uses the user's purpose to determine fee rates
+ * Uses actual recorded netCents from payment records, not recomputed approximations
  */
 async function calculateYTD(
   userId: string,
   asOfDate: Date,
-  purpose: UserPurpose | null
+  _purpose: UserPurpose | null // Kept for signature compatibility, but not used
 ): Promise<{ grossCents: number; netCents: number }> {
   const yearStart = new Date(asOfDate.getFullYear(), 0, 1, 0, 0, 0, 0)
 
@@ -243,6 +258,8 @@ async function calculateYTD(
     where: {
       creatorId: userId,
       status: 'succeeded',
+      // Only count inbound revenue (one_time, recurring) - exclude payout transfers
+      type: { in: ['one_time', 'recurring'] },
       occurredAt: {
         gte: yearStart,
         lte: asOfDate,
@@ -250,12 +267,13 @@ async function calculateYTD(
     },
     _sum: {
       amountCents: true,
+      netCents: true, // Sum actual recorded net amounts
     },
   })
 
   const grossCents = result._sum.amountCents || 0
-  const totalFeePercent = getTotalFeePercent(purpose)
-  const netCents = Math.round(grossCents * (1 - totalFeePercent / 100))
+  // Use actual recorded net amounts instead of recomputing from gross
+  const netCents = result._sum.netCents || 0
 
   return { grossCents, netCents }
 }
@@ -276,7 +294,11 @@ async function getBankLast4(userId: string): Promise<string | null> {
   if (!profile) return null
 
   if (profile.paymentProvider === 'paystack' && profile.paystackAccountNumber) {
-    return profile.paystackAccountNumber.slice(-4)
+    // Decrypt the account number before extracting last 4 digits
+    const decrypted = decryptAccountNumber(profile.paystackAccountNumber)
+    if (decrypted) {
+      return decrypted.slice(-4)
+    }
   }
 
   // For Stripe, return placeholder - would need to fetch from Stripe API
@@ -359,17 +381,86 @@ export async function getPayrollPeriod(
 }
 
 /**
- * Generate a payroll period for a user
+ * Get distinct currencies for which a user received payments in a period
+ */
+async function getDistinctCurrencies(
+  userId: string,
+  periodStart: Date,
+  periodEnd: Date
+): Promise<string[]> {
+  const payments = await db.payment.findMany({
+    where: {
+      creatorId: userId,
+      status: 'succeeded',
+      occurredAt: {
+        gte: periodStart,
+        lte: periodEnd,
+      },
+    },
+    select: { currency: true },
+    distinct: ['currency'],
+  })
+
+  return payments.map((p) => p.currency)
+}
+
+/**
+ * Find payout record for this period (actual Payment with type: 'payout')
+ * Returns the payout that covers this period's earnings, if any
+ */
+async function findPayoutForPeriod(
+  userId: string,
+  periodEnd: Date,
+  currency: string
+): Promise<{ payoutDate: Date; payoutMethod: string | null } | null> {
+  // Look for a payout Payment that occurred after the period ended
+  // and matches the currency (payouts happen after earnings are collected)
+  const payout = await db.payment.findFirst({
+    where: {
+      creatorId: userId,
+      type: 'payout',
+      status: 'succeeded',
+      currency,
+      occurredAt: {
+        gte: periodEnd,
+      },
+    },
+    orderBy: { occurredAt: 'asc' }, // Get the first payout after period end
+    select: {
+      occurredAt: true,
+      paystackTransactionRef: true,
+      stripePaymentIntentId: true,
+    },
+  })
+
+  if (!payout) return null
+
+  // Determine payout method based on which provider field is populated
+  let payoutMethod: string | null = null
+  if (payout.paystackTransactionRef) {
+    payoutMethod = 'paystack'
+  } else if (payout.stripePaymentIntentId) {
+    payoutMethod = 'stripe'
+  }
+
+  return {
+    payoutDate: payout.occurredAt,
+    payoutMethod,
+  }
+}
+
+/**
+ * Generate a payroll period for a user for a specific currency
  * This aggregates all payments in the period and creates a snapshot
- * Uses the creator's profile currency to ensure single-currency periods
  * Fee rates are based on the creator's purpose (personal: 10%, service: 8%)
  */
 export async function generatePayrollPeriod(
   userId: string,
   periodStart: Date,
-  periodEnd: Date
+  periodEnd: Date,
+  currency?: string
 ): Promise<PayrollSummary | null> {
-  // Get profile for currency and purpose (for fee calculation)
+  // Get profile for purpose (for fee calculation) and fallback currency
   const profile = await db.profile.findUnique({
     where: { userId },
     select: {
@@ -381,7 +472,8 @@ export async function generatePayrollPeriod(
 
   if (!profile) return null
 
-  const currency = profile.currency
+  // Use provided currency or fall back to profile currency
+  const periodCurrency = currency || profile.currency
 
   // Check if period already exists for this currency
   const existing = await db.payrollPeriod.findFirst({
@@ -389,7 +481,7 @@ export async function generatePayrollPeriod(
       userId,
       periodStart,
       periodEnd,
-      currency,
+      currency: periodCurrency,
     },
   })
 
@@ -413,11 +505,11 @@ export async function generatePayrollPeriod(
   }
 
   // Aggregate payments filtered by currency
-  const { grossCents, refundsCents, chargebacksCents, paymentCount } = await aggregatePayments(
+  const { grossCents, refundsCents, chargebacksCents, totalFeeCents, totalNetCents, paymentCount } = await aggregatePayments(
     userId,
     periodStart,
     periodEnd,
-    currency
+    periodCurrency
   )
 
   // Skip if no payments
@@ -428,13 +520,17 @@ export async function generatePayrollPeriod(
   // Calculate adjusted gross (after refunds and chargebacks)
   const adjustedGrossCents = grossCents - refundsCents - chargebacksCents
 
-  // Calculate fees on adjusted gross using user's purpose (personal: 10%, service: 8%)
+  // Use actual recorded fees from payment records (not recomputed approximations)
+  // For fee breakdown, approximate split: ~80% platform, ~20% processing (for display only)
   const purpose = profile.purpose as UserPurpose
-  const {
-    platformFeeCents,
-    processingFeeCents,
-    netCents,
-  } = calculateFees(adjustedGrossCents, purpose)
+  const platformFeePercent = getPlatformFeePercent(purpose)
+  const processingFeePercent = getProcessingFeePercent()
+  const totalFeePercent = platformFeePercent + processingFeePercent
+
+  // Split the actual total fee proportionally for display purposes
+  const platformFeeCents = Math.round(totalFeeCents * (platformFeePercent / totalFeePercent))
+  const processingFeeCents = totalFeeCents - platformFeeCents // Remainder to avoid rounding errors
+  const netCents = adjustedGrossCents - totalFeeCents
 
   // Calculate YTD
   const ytd = await calculateYTD(userId, periodEnd, purpose)
@@ -445,6 +541,9 @@ export async function generatePayrollPeriod(
   // Generate verification code
   const verificationCode = generateVerificationCode(userId, periodEnd)
 
+  // Find actual payout record for this period
+  const payoutInfo = await findPayoutForPeriod(userId, periodEnd, periodCurrency)
+
   // Create period record
   const period = await db.payrollPeriod.create({
     data: {
@@ -452,7 +551,7 @@ export async function generatePayrollPeriod(
       periodStart,
       periodEnd,
       periodType: 'biweekly',
-      currency,
+      currency: periodCurrency,
       grossCents,
       refundsCents,
       chargebacksCents,
@@ -462,11 +561,20 @@ export async function generatePayrollPeriod(
       paymentCount,
       ytdGrossCents: ytd.grossCents,
       ytdNetCents: ytd.netCents,
-      payoutDate: new Date(), // Approximate - actual payout timing varies
-      payoutMethod: profile.paymentProvider || null,
+      payoutDate: payoutInfo?.payoutDate || null,
+      payoutMethod: payoutInfo?.payoutMethod || null,
       bankLast4,
       verificationCode,
     },
+  })
+
+  // Schedule payroll ready notification (sends immediately)
+  await scheduleReminder({
+    userId,
+    entityType: 'payroll',
+    entityId: period.id,
+    type: 'payroll_ready',
+    scheduledFor: new Date(), // Send immediately
   })
 
   return {
@@ -488,8 +596,32 @@ export async function generatePayrollPeriod(
 }
 
 /**
+ * Generate payroll periods for all currencies received in a period
+ * Returns the count of periods generated
+ */
+export async function generatePayrollPeriodsForAllCurrencies(
+  userId: string,
+  periodStart: Date,
+  periodEnd: Date
+): Promise<number> {
+  // Get all currencies the user received payments in during this period
+  const currencies = await getDistinctCurrencies(userId, periodStart, periodEnd)
+
+  if (currencies.length === 0) return 0
+
+  let generated = 0
+  for (const currency of currencies) {
+    const result = await generatePayrollPeriod(userId, periodStart, periodEnd, currency)
+    if (result) generated++
+  }
+
+  return generated
+}
+
+/**
  * Generate all missing payroll periods for a user
  * Call this when user views payroll history
+ * Generates separate statements for each currency received
  */
 export async function generateMissingPeriods(userId: string): Promise<number> {
   // Get user's first payment date
@@ -513,8 +645,9 @@ export async function generateMissingPeriods(userId: string): Promise<number> {
 
     // Only generate if period has ended
     if (period.end < now) {
-      const result = await generatePayrollPeriod(userId, period.start, period.end)
-      if (result) generated++
+      // Generate for ALL currencies received in this period
+      const count = await generatePayrollPeriodsForAllCurrencies(userId, period.start, period.end)
+      generated += count
     }
 
     // Move to next period
@@ -552,7 +685,9 @@ export async function verifyDocument(code: string): Promise<VerificationResult |
     periodEnd: period.periodEnd,
     grossCents: period.grossCents,
     netCents: period.netCents,
-    currency: period.user.profile?.currency || 'USD',
+    // Use the period's currency, not the profile's current currency
+    // (profile currency could have changed since this period was created)
+    currency: period.currency || 'USD',
     createdAt: period.createdAt,
     verificationCode: period.verificationCode,
   }

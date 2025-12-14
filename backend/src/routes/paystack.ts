@@ -3,7 +3,7 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { db } from '../db/client.js'
 import { requireAuth } from '../middleware/auth.js'
-import { paymentRateLimit } from '../middleware/rateLimit.js'
+import { paymentRateLimit, publicRateLimit } from '../middleware/rateLimit.js'
 import {
   listBanks,
   resolveAccount,
@@ -260,13 +260,19 @@ paystackRoutes.get('/connect/status', requireAuth, async (c) => {
   try {
     const subaccount = await getSubaccount(profile.paystackSubaccountCode)
 
+    // Get decrypted account number and mask it for security
+    const decryptedAccountNumber = profile.paystackAccountNumber
+      ? decryptAccountNumber(profile.paystackAccountNumber)
+      : null
+
     return c.json({
       connected: true,
       status: subaccount.active ? 'active' : 'inactive',
       details: {
         businessName: subaccount.business_name,
         bank: subaccount.settlement_bank,
-        accountNumber: decryptAccountNumber(profile.paystackAccountNumber),
+        // SECURITY: Only return masked account number to prevent PII exposure
+        accountNumber: decryptedAccountNumber ? maskAccountNumber(decryptedAccountNumber) : null,
         accountName: profile.paystackAccountName,
         percentageCharge: subaccount.percentage_charge,
       },
@@ -312,7 +318,8 @@ paystackRoutes.post('/disconnect', requireAuth, async (c) => {
 })
 
 // Verify a transaction (for callback verification)
-paystackRoutes.get('/verify/:reference', async (c) => {
+// Rate limited to prevent enumeration attacks
+paystackRoutes.get('/verify/:reference', publicRateLimit, async (c) => {
   const reference = c.req.param('reference')
 
   if (!reference) {
@@ -351,7 +358,7 @@ paystackRoutes.get('/verify/:reference', async (c) => {
       amount: transaction.amount,
       currency: transaction.currency,
       creatorUsername,
-      customerEmail: transaction.customer?.email,
+      // SECURITY: customerEmail removed to prevent PII exposure on public endpoint
       paidAt: transaction.paid_at,
     })
   } catch (error: any) {

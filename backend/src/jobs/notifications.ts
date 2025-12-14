@@ -8,6 +8,8 @@ import {
   sendPaymentFailedEmail,
   sendSubscriptionCanceledEmail,
 } from '../services/email.js'
+import { calculateServiceFee, type FeeMode } from '../services/fees.js'
+import { acquireLock, releaseLock } from '../services/lock.js'
 
 interface NotificationResult {
   processed: number
@@ -43,7 +45,15 @@ export async function sendRenewalReminders(): Promise<NotificationResult> {
     include: {
       subscriber: true,
       creator: {
-        include: { profile: true },
+        include: {
+          profile: {
+            select: {
+              displayName: true,
+              feeMode: true,
+              purpose: true,
+            },
+          },
+        },
       },
     },
   })
@@ -57,35 +67,59 @@ export async function sendRenewalReminders(): Promise<NotificationResult> {
       continue
     }
 
-    // Idempotency check - skip if already sent this period
-    const existingLog = await db.notificationLog.findUnique({
-      where: {
-        subscriptionId_type: {
-          subscriptionId: sub.id,
-          type: 'renewal_reminder',
-        },
-      },
-    })
+    // Per-cycle idempotency key - includes the period end date to allow one reminder per billing cycle
+    const periodKey = sub.currentPeriodEnd!.toISOString().slice(0, 10) // YYYY-MM-DD
+    const idempotencyType = `renewal_reminder_${periodKey}`
 
-    if (existingLog) {
-      console.log(`[notifications] Skipping sub ${sub.id} - reminder already sent`)
+    // Acquire lock to prevent race conditions between workers
+    const lockKey = `notification:${sub.id}:${idempotencyType}`
+    const lockToken = await acquireLock(lockKey, 30000) // 30 second TTL
+
+    if (!lockToken) {
+      console.log(`[notifications] Skipping sub ${sub.id} - locked by another worker`)
       continue
     }
 
     try {
+      // Idempotency check - skip if already sent this period
+      const existingLog = await db.notificationLog.findFirst({
+        where: {
+          subscriptionId: sub.id,
+          type: idempotencyType,
+        },
+      })
+
+      if (existingLog) {
+        console.log(`[notifications] Skipping sub ${sub.id} - reminder already sent for period ${periodKey}`)
+        await releaseLock(lockKey, lockToken)
+        continue
+      }
+
+      // Calculate what the subscriber will actually pay (respects feeMode)
+      let subscriberAmount = sub.amount
+      if (sub.creator.profile?.feeMode === 'pass_to_subscriber') {
+        const feeCalc = calculateServiceFee(
+          sub.amount,
+          sub.currency,
+          sub.creator.profile?.purpose,
+          'pass_to_subscriber'
+        )
+        subscriberAmount = feeCalc.grossCents
+      }
+
       await sendRenewalReminderEmail(
         sub.subscriber.email,
         sub.creator.profile.displayName,
-        sub.amount,
+        subscriberAmount,
         sub.currency,
         sub.currentPeriodEnd!
       )
 
-      // Log the send for idempotency
+      // Log the send for idempotency - use period-specific type
       await db.notificationLog.create({
         data: {
           subscriptionId: sub.id,
-          type: 'renewal_reminder',
+          type: idempotencyType,
         },
       })
 
@@ -97,6 +131,8 @@ export async function sendRenewalReminders(): Promise<NotificationResult> {
         error: error.message || 'Unknown error',
       })
       console.error(`[notifications] Failed to send reminder for sub ${sub.id}:`, error.message)
+    } finally {
+      await releaseLock(lockKey, lockToken)
     }
   }
 
@@ -130,7 +166,15 @@ export async function sendDunningEmails(): Promise<NotificationResult> {
         include: {
           subscriber: true,
           creator: {
-            include: { profile: true },
+            include: {
+              profile: {
+                select: {
+                  displayName: true,
+                  feeMode: true,
+                  purpose: true,
+                },
+              },
+            },
           },
         },
       },
@@ -165,11 +209,23 @@ export async function sendDunningEmails(): Promise<NotificationResult> {
     // Calculate next retry date (1 day after failure)
     const retryDate = new Date(payment.createdAt.getTime() + 24 * 60 * 60 * 1000)
 
+    // Calculate what the subscriber will actually pay (respects feeMode)
+    let subscriberAmount = sub.amount
+    if (sub.creator.profile?.feeMode === 'pass_to_subscriber') {
+      const feeCalc = calculateServiceFee(
+        sub.amount,
+        sub.currency,
+        sub.creator.profile?.purpose,
+        'pass_to_subscriber'
+      )
+      subscriberAmount = feeCalc.grossCents
+    }
+
     try {
       await sendPaymentFailedEmail(
         sub.subscriber.email,
         sub.creator.profile.displayName,
-        sub.amount,
+        subscriberAmount,
         sub.currency,
         retryDate
       )
@@ -247,10 +303,26 @@ export async function sendCancellationEmails(): Promise<NotificationResult> {
       continue
     }
 
+    // Determine cancellation reason by checking for recent failed payments
+    const recentFailedPayment = await db.payment.findFirst({
+      where: {
+        subscriptionId: sub.id,
+        status: 'failed',
+        createdAt: {
+          gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // Last 7 days
+        },
+      },
+    })
+
+    const cancellationReason = recentFailedPayment
+      ? 'payment_failed' as const
+      : 'other' as const
+
     try {
       await sendSubscriptionCanceledEmail(
         sub.subscriber.email,
-        sub.creator.profile.displayName
+        sub.creator.profile.displayName,
+        cancellationReason
       )
 
       await db.notificationLog.create({
