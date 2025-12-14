@@ -6,7 +6,10 @@ import Stripe from 'stripe'
 import { env } from '../config/env.js'
 import { db } from '../db/client.js'
 import { PLATFORM_SUBSCRIPTION_PRICE_CENTS } from './pricing.js'
-import { sendPlatformDebitNotification } from './email.js'
+import { sendPlatformDebitNotification, sendPlatformDebitCapReachedNotification } from './email.js'
+
+// Platform debit cap in cents ($30 = 6 months of $5/mo)
+const PLATFORM_DEBIT_CAP_CENTS = 3000
 
 const stripe = new Stripe(env.STRIPE_SECRET_KEY, {
   apiVersion: '2025-11-17.clover',
@@ -367,13 +370,24 @@ export async function handlePlatformSubscriptionEvent(
         })
 
         // Send email notification about the debit
+        // Use different email if cap is reached
         try {
-          await sendPlatformDebitNotification(
-            profile.user.email,
-            profile.displayName || 'there',
-            failedAmount,
-            newTotalDebit
-          )
+          if (newTotalDebit >= PLATFORM_DEBIT_CAP_CENTS) {
+            // Cap reached - payments will be blocked
+            await sendPlatformDebitCapReachedNotification(
+              profile.user.email,
+              profile.displayName || 'there',
+              newTotalDebit
+            )
+          } else {
+            // Normal debit notification
+            await sendPlatformDebitNotification(
+              profile.user.email,
+              profile.displayName || 'there',
+              failedAmount,
+              newTotalDebit
+            )
+          }
         } catch (emailErr) {
           console.error(`[platform] Failed to send debit notification email:`, emailErr)
         }

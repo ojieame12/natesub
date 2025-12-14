@@ -1078,6 +1078,25 @@ export async function sendPayrollReadyEmail(
 // PLATFORM BILLING EMAILS
 // ============================================
 
+// Helper for alert/warning boxes
+function alertBox(message: string, type: 'warning' | 'info' | 'success' = 'warning'): string {
+  const colors = {
+    warning: { bg: '#FEF3C7', border: '#F59E0B', text: '#92400E' },
+    info: { bg: '#DBEAFE', border: '#3B82F6', text: '#1E40AF' },
+    success: { bg: '#D1FAE5', border: '#10B981', text: '#065F46' },
+  }
+  const c = colors[type]
+  return `
+    <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin: 20px 0;">
+      <tr>
+        <td style="background-color: ${c.bg}; border-left: 4px solid ${c.border}; border-radius: 8px; padding: 16px;">
+          <p style="margin: 0; font-size: 14px; color: ${c.text};">${message}</p>
+        </td>
+      </tr>
+    </table>
+  `
+}
+
 /**
  * Send notification when platform subscription payment fails and debit is created
  * The service provider continues operating, but debit will be recovered from next client payment
@@ -1092,6 +1111,11 @@ export async function sendPlatformDebitNotification(
   const formattedDebit = formatAmountForEmail(debitAmount, 'USD')
   const formattedTotal = formatAmountForEmail(totalDebit, 'USD')
 
+  // Check if close to cap (within $10)
+  const closeToCapWarning = totalDebit >= 2000 // $20 or more
+    ? alertBox('⚠️ Your balance is approaching the $30 limit. After that, new payments will be paused until cleared.', 'warning')
+    : ''
+
   return sendWithRetry(() =>
     resend.emails.send({
       from: env.EMAIL_FROM,
@@ -1102,17 +1126,18 @@ export async function sendPlatformDebitNotification(
         headline: 'Plan payment issue',
         body: `
           <p style="margin: 0 0 16px 0;">
-            Hey ${safeName}, we couldn't process your Nate plan payment of ${formattedDebit}.
+            Hey ${safeName}, we couldn't process your Nate plan payment of <strong>${formattedDebit}</strong>.
           </p>
+
+          ${amountCard('Outstanding balance', formattedTotal, '#F59E0B')}
+
+          ${alertBox('✓ <strong>Good news:</strong> You can still accept payments from your clients. This balance will be automatically recovered from your next client payment.', 'info')}
+
           <p style="margin: 0 0 16px 0;">
-            <strong>Good news:</strong> You can still accept payments from your clients. The outstanding balance (${formattedTotal}) will be automatically recovered from your next client payment.
+            If you'd like to clear this balance now and avoid recovery from your earnings, you can update your payment method below.
           </p>
-          <p style="margin: 0 0 16px 0;">
-            If you'd like to clear this balance now, you can update your payment method in billing settings.
-          </p>
-          <p style="margin: 0; font-size: 14px; color: #888888;">
-            Note: If your balance reaches $30, new payments will be paused until the balance is cleared.
-          </p>
+
+          ${closeToCapWarning}
         `,
         ctaText: 'Update Payment Method',
         ctaUrl: `${env.APP_URL}/settings/billing`,
@@ -1137,21 +1162,26 @@ export async function sendPlatformDebitRecoveredNotification(
   const bodyContent = remainingDebit > 0
     ? `
       <p style="margin: 0 0 16px 0;">
-        Hey ${safeName}, we've recovered ${formattedRecovered} of your outstanding platform balance from a recent client payment.
+        Hey ${safeName}, we've recovered <strong>${formattedRecovered}</strong> of your outstanding platform balance from a recent client payment.
       </p>
-      <p style="margin: 0 0 16px 0;">
-        Remaining balance: <strong>${formattedRemaining}</strong>
-      </p>
-      <p style="margin: 0; font-size: 14px; color: #888888;">
-        The remaining balance will be recovered from your next client payment.
+
+      ${amountCard('Remaining balance', formattedRemaining, '#F59E0B')}
+
+      <p style="margin: 0; font-size: 14px; color: #666666;">
+        The remaining balance will be automatically recovered from your next client payment. To avoid this, update your payment method to clear the balance directly.
       </p>
     `
     : `
       <p style="margin: 0 0 16px 0;">
-        Hey ${safeName}, we've recovered ${formattedRecovered} from a recent client payment. Your platform balance is now <strong>$0</strong>.
+        Hey ${safeName}, we've recovered <strong>${formattedRecovered}</strong> from a recent client payment.
       </p>
-      <p style="margin: 0; font-size: 14px; color: #888888;">
-        To prevent future balance issues, please update your payment method if needed.
+
+      ${amountCard('Balance', '$0.00', '#10B981')}
+
+      ${alertBox('✓ Your platform balance is now cleared. You\'re all caught up!', 'success')}
+
+      <p style="margin: 0; font-size: 14px; color: #666666;">
+        To prevent future balance issues, consider updating your payment method if the previous one expired or had insufficient funds.
       </p>
     `
 
@@ -1159,15 +1189,65 @@ export async function sendPlatformDebitRecoveredNotification(
     resend.emails.send({
       from: env.EMAIL_FROM,
       to,
-      subject: sanitizeEmailSubject(remainingDebit > 0 ? 'Platform balance partially recovered' : 'Platform balance cleared'),
+      subject: sanitizeEmailSubject(remainingDebit > 0 ? 'Platform balance partially recovered' : 'Platform balance cleared ✓'),
       html: baseTemplate({
         preheader: remainingDebit > 0
           ? `We recovered ${formattedRecovered} from your last payment. ${formattedRemaining} remaining.`
           : `Your platform balance is now $0. All caught up!`,
         headline: remainingDebit > 0 ? 'Balance partially recovered' : 'Balance cleared',
         body: bodyContent,
-        ctaText: 'View Billing',
+        ctaText: remainingDebit > 0 ? 'Update Payment Method' : 'View Billing',
         ctaUrl: `${env.APP_URL}/settings/billing`,
+        ctaColor: remainingDebit > 0 ? undefined : '#10B981',
+      }),
+    })
+  )
+}
+
+/**
+ * Send notification when platform debit reaches the cap ($30) and payments are blocked
+ */
+export async function sendPlatformDebitCapReachedNotification(
+  to: string,
+  displayName: string,
+  totalDebit: number
+): Promise<EmailResult> {
+  const safeName = escapeHtml(displayName)
+  const formattedTotal = formatAmountForEmail(totalDebit, 'USD')
+
+  return sendWithRetry(() =>
+    resend.emails.send({
+      from: env.EMAIL_FROM,
+      to,
+      subject: sanitizeEmailSubject('Action required: Payment acceptance paused'),
+      html: baseTemplate({
+        preheader: `Your platform balance has reached $30. Update your payment method to continue accepting payments.`,
+        headline: 'Payment acceptance paused',
+        body: `
+          <p style="margin: 0 0 16px 0;">
+            Hey ${safeName}, your outstanding platform balance has reached the maximum limit.
+          </p>
+
+          ${amountCard('Outstanding balance', formattedTotal, '#DC2626')}
+
+          ${alertBox('⚠️ <strong>Action required:</strong> New client payments are currently paused until this balance is cleared.', 'warning')}
+
+          <p style="margin: 0 0 16px 0;">
+            To resume accepting payments from your clients:
+          </p>
+          <ol style="margin: 0 0 16px 0; padding-left: 20px; color: #4a4a4a;">
+            <li style="margin-bottom: 8px;">Click the button below to update your payment method</li>
+            <li style="margin-bottom: 8px;">Clear the outstanding balance</li>
+            <li>Start accepting payments again immediately</li>
+          </ol>
+
+          <p style="margin: 0; font-size: 14px; color: #666666;">
+            Questions? Reply to this email and we'll help you get back on track.
+          </p>
+        `,
+        ctaText: 'Clear Balance Now',
+        ctaUrl: `${env.APP_URL}/settings/billing`,
+        ctaColor: '#DC2626',
       }),
     })
   )

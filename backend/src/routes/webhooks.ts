@@ -4,7 +4,7 @@ import Stripe from 'stripe'
 import { stripe, setSubscriptionDefaultFee } from '../services/stripe.js'
 import { db } from '../db/client.js'
 import { env } from '../config/env.js'
-import { sendNewSubscriberEmail } from '../services/email.js'
+import { sendNewSubscriberEmail, sendPlatformDebitRecoveredNotification } from '../services/email.js'
 import { scheduleReminder, cancelAllRemindersForEntity } from '../jobs/reminders.js'
 import { handlePlatformSubscriptionEvent } from '../services/platformSubscription.js'
 import { calculateServiceFee, calculateLegacyFee } from '../services/fees.js'
@@ -574,7 +574,10 @@ async function handleCheckoutCompleted(event: Stripe.Event) {
   }
 
   // Send notification email to creator
-  const creator = await db.user.findUnique({ where: { id: creatorId } })
+  const creator = await db.user.findUnique({
+    where: { id: creatorId },
+    include: { profile: { select: { displayName: true, platformDebitCents: true } } },
+  })
   if (creator) {
     await sendNewSubscriberEmail(
       creator.email,
@@ -583,6 +586,21 @@ async function handleCheckoutCompleted(event: Stripe.Event) {
       session.amount_total || 0,
       session.currency?.toUpperCase() || 'USD'
     )
+
+    // Send debit recovery email if we recovered any debit
+    if (platformDebitRecovered > 0) {
+      const remainingDebit = creator.profile?.platformDebitCents || 0
+      try {
+        await sendPlatformDebitRecoveredNotification(
+          creator.email,
+          creator.profile?.displayName || 'there',
+          platformDebitRecovered,
+          remainingDebit
+        )
+      } catch (emailErr) {
+        console.error(`[checkout] Failed to send debit recovery email:`, emailErr)
+      }
+    }
   }
 }
 
@@ -1118,6 +1136,7 @@ async function handleInvoicePaid(event: Stripe.Event) {
     const creatorProfile = await db.profile.findUnique({
       where: { userId: subscription.creatorId },
       select: {
+        displayName: true,
         platformDebitCents: true,
         platformCustomerId: true,
         purpose: true,
@@ -1176,6 +1195,25 @@ async function handleInvoicePaid(event: Stripe.Event) {
                 },
               },
             })
+
+            // Send recovery notification email
+            const creatorUser = await db.user.findUnique({
+              where: { id: subscription.creatorId },
+              select: { email: true },
+            })
+            if (creatorUser) {
+              const remainingDebit = creatorProfile.platformDebitCents - debitToRecover
+              try {
+                await sendPlatformDebitRecoveredNotification(
+                  creatorUser.email,
+                  creatorProfile.displayName || 'there',
+                  debitToRecover,
+                  Math.max(0, remainingDebit)
+                )
+              } catch (emailErr) {
+                console.error(`[invoice.paid] Failed to send debit recovery email:`, emailErr)
+              }
+            }
 
             console.log(`[invoice.paid] Recovered $${(debitToRecover / 100).toFixed(2)} platform debit from creator ${subscription.creatorId}`)
           }
@@ -2244,6 +2282,8 @@ async function handlePaystackChargeSuccess(data: any, eventId: string) {
 
             // Clear platform debit if recovered
             if (platformDebitRecovered > 0) {
+              const remainingDebit = (creatorProfile.platformDebitCents || 0) - platformDebitRecovered
+
               await db.profile.update({
                 where: { userId: creatorId },
                 data: {
@@ -2265,6 +2305,24 @@ async function handlePaystackChargeSuccess(data: any, eventId: string) {
                   },
                 },
               })
+
+              // Send recovery notification email
+              const creatorUser = await db.user.findUnique({
+                where: { id: creatorId },
+                select: { email: true },
+              })
+              if (creatorUser) {
+                try {
+                  await sendPlatformDebitRecoveredNotification(
+                    creatorUser.email,
+                    creatorProfile.displayName || 'there',
+                    platformDebitRecovered,
+                    Math.max(0, remainingDebit)
+                  )
+                } catch (emailErr) {
+                  console.error(`[paystack] Failed to send debit recovery email:`, emailErr)
+                }
+              }
 
               console.log(`[paystack] Recovered ${platformDebitRecovered} platform debit, transferring ${finalTransferAmount} to creator ${creatorId}`)
             }
