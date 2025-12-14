@@ -183,6 +183,29 @@ input {
   background: none;
 }
 
+/* === FOCUS VISIBILITY ===
+   Restore focus ring for keyboard users while hiding it for mouse/touch
+   This is critical for accessibility compliance (WCAG 2.1) */
+
+input:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+button:focus-visible,
+[role="button"]:focus-visible,
+[role="switch"]:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.pressable:focus-visible,
+.toggle:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
 /* === UTILITIES === */
 
 /* Crystal Glassmorphism */
@@ -316,7 +339,7 @@ input {
 /* === KEYFRAMES === */
 
 /* Fade animations */
-@keyframes fadeIn {
+@keyframes lg-fadeIn {
   from {
     opacity: 0;
   }
@@ -326,7 +349,7 @@ input {
   }
 }
 
-@keyframes fadeInUp {
+@keyframes lg-fadeInUp {
   from {
     opacity: 0;
     transform: translateY(12px);
@@ -338,7 +361,7 @@ input {
   }
 }
 
-@keyframes fadeInDown {
+@keyframes lg-fadeInDown {
   from {
     opacity: 0;
     transform: translateY(-12px);
@@ -350,7 +373,7 @@ input {
   }
 }
 
-@keyframes fadeInScale {
+@keyframes lg-fadeInScale {
   from {
     opacity: 0;
     transform: scale(0.95);
@@ -363,7 +386,7 @@ input {
 }
 
 /* Bounce/Spring animations */
-@keyframes bounceIn {
+@keyframes lg-bounceIn {
   0% {
     opacity: 0;
     transform: scale(0.3);
@@ -383,7 +406,7 @@ input {
   }
 }
 
-@keyframes shake {
+@keyframes lg-shake {
 
   0%,
   100% {
@@ -406,7 +429,7 @@ input {
   }
 }
 
-@keyframes pulse {
+@keyframes lg-pulse {
 
   0%,
   100% {
@@ -418,7 +441,7 @@ input {
   }
 }
 
-@keyframes slideInRight {
+@keyframes lg-slideInRight {
   from {
     opacity: 0;
     transform: translateX(20px);
@@ -430,7 +453,7 @@ input {
   }
 }
 
-@keyframes slideInLeft {
+@keyframes lg-slideInLeft {
   from {
     opacity: 0;
     transform: translateX(-20px);
@@ -445,39 +468,50 @@ input {
 /* === UTILITY CLASSES === */
 
 .animate-fade-in {
-  animation: fadeIn 0.3s var(--ease-out) both;
+  animation: lg-fadeIn 0.3s var(--ease-out) both;
 }
 
 .animate-fade-in-up {
-  animation: fadeInUp 0.4s var(--ease-out) both;
+  animation: lg-fadeInUp 0.4s var(--ease-out) both;
 }
 
 .animate-fade-in-down {
-  animation: fadeInDown 0.4s var(--ease-out) both;
+  animation: lg-fadeInDown 0.4s var(--ease-out) both;
 }
 
 .animate-fade-in-scale {
-  animation: fadeInScale 0.3s var(--ease-spring) both;
+  animation: lg-fadeInScale 0.3s var(--ease-spring) both;
 }
 
 .animate-bounce-in {
-  animation: bounceIn 0.5s var(--ease-spring) both;
+  animation: lg-bounceIn 0.5s var(--ease-spring) both;
 }
 
 .animate-shake {
-  animation: shake 0.5s var(--ease-out);
+  animation: lg-shake 0.5s var(--ease-out);
 }
 
 .animate-pulse {
-  animation: pulse 2s ease-in-out infinite;
+  animation: lg-pulse 2s ease-in-out infinite;
 }
 
 .animate-slide-in-right {
-  animation: slideInRight 0.3s var(--ease-out) both;
+  animation: lg-slideInRight 0.3s var(--ease-out) both;
 }
 
 .animate-slide-in-left {
-  animation: slideInLeft 0.3s var(--ease-out) both;
+  animation: lg-slideInLeft 0.3s var(--ease-out) both;
+}
+
+/* Active state bounce - for tab bar icons */
+.active-bounce {
+  animation: lg-activeBounce 0.3s var(--ease-spring);
+}
+
+@keyframes lg-activeBounce {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.15); }
+  100% { transform: scale(1); }
 }
 
 /* Stagger delay utilities */
@@ -515,11 +549,11 @@ input {
 
 /* View transition (for page-level animations) */
 .view-enter {
-  animation: fadeInUp 0.35s var(--ease-out) both;
+  animation: lg-fadeInUp 0.35s var(--ease-out) both;
 }
 
 .view-exit {
-  animation: fadeIn 0.2s var(--ease-out) both reverse;
+  animation: lg-fadeIn 0.2s var(--ease-out) both reverse;
 }
 
 /* ===========================================
@@ -532,230 +566,12 @@ input {
   navigation: none;
 }
 
-/* === DEFAULT TRANSITION (Fade) === */
-::view-transition-old(root) {
-  animation: vt-fade-out 0.2s ease-out both;
-}
-
-::view-transition-new(root) {
-  animation: vt-fade-in 0.25s ease-out both;
-}
-
-@keyframes vt-fade-out {
-  to {
-    opacity: 0;
-  }
-}
-
-@keyframes vt-fade-in {
-  from {
-    opacity: 0;
-  }
-}
-
-/* === SLIDE LEFT (Forward navigation) === */
-[data-transition="slide-left"]::view-transition-old(root) {
-  animation: vt-slide-out-left 0.3s var(--ease-out) both;
-}
-
-[data-transition="slide-left"]::view-transition-new(root) {
-  animation: vt-slide-in-right 0.3s var(--ease-out) both;
-}
-
-@keyframes vt-slide-out-left {
-  to {
-    opacity: 0;
-    transform: translateX(-30%);
-  }
-}
-
-@keyframes vt-slide-in-right {
-  from {
-    opacity: 0;
-    transform: translateX(30%);
-  }
-}
-
-/* === SLIDE RIGHT (Back navigation) === */
-[data-transition="slide-right"]::view-transition-old(root) {
-  animation: vt-slide-out-right 0.3s var(--ease-out) both;
-}
-
-[data-transition="slide-right"]::view-transition-new(root) {
-  animation: vt-slide-in-left 0.3s var(--ease-out) both;
-}
-
-@keyframes vt-slide-out-right {
-  to {
-    opacity: 0;
-    transform: translateX(30%);
-  }
-}
-
-@keyframes vt-slide-in-left {
-  from {
-    opacity: 0;
-    transform: translateX(-30%);
-  }
-}
-
-/* === ZOOM IN (List → Detail) === */
-[data-transition="zoom-in"]::view-transition-old(root) {
-  animation: vt-zoom-out 0.35s var(--ease-out) both;
-}
-
-[data-transition="zoom-in"]::view-transition-new(root) {
-  animation: vt-zoom-in 0.35s var(--ease-spring) both;
-}
-
-@keyframes vt-zoom-out {
-  to {
-    opacity: 0;
-    transform: scale(0.95);
-  }
-}
-
-@keyframes vt-zoom-in {
-  from {
-    opacity: 0;
-    transform: scale(1.05);
-  }
-}
-
-/* === ZOOM OUT (Detail → List) === */
-[data-transition="zoom-out"]::view-transition-old(root) {
-  animation: vt-zoom-in-reverse 0.3s var(--ease-out) both;
-}
-
-[data-transition="zoom-out"]::view-transition-new(root) {
-  animation: vt-zoom-out-reverse 0.3s var(--ease-out) both;
-}
-
-@keyframes vt-zoom-in-reverse {
-  to {
-    opacity: 0;
-    transform: scale(1.05);
-  }
-}
-
-@keyframes vt-zoom-out-reverse {
-  from {
-    opacity: 0;
-    transform: scale(0.95);
-  }
-}
-
-/* === SLIDE UP (Modal-like) === */
-[data-transition="slide-up"]::view-transition-old(root) {
-  animation: vt-fade-out 0.2s ease-out both;
-}
-
-[data-transition="slide-up"]::view-transition-new(root) {
-  animation: vt-slide-up 0.35s var(--ease-spring) both;
-}
-
-@keyframes vt-slide-up {
-  from {
-    opacity: 0;
-    transform: translateY(40px);
-  }
-}
-
-/* === SLIDE DOWN (Dismiss modal) === */
-[data-transition="slide-down"]::view-transition-old(root) {
-  animation: vt-slide-down 0.25s ease-in both;
-}
-
-[data-transition="slide-down"]::view-transition-new(root) {
-  animation: vt-fade-in 0.2s ease-out both;
-}
-
-@keyframes vt-slide-down {
-  to {
-    opacity: 0;
-    transform: translateY(40px);
-  }
-}
-
-/* === SHARED ELEMENTS === */
-
-/* Avatar morph transition (dynamic, set via JS) */
-::view-transition-group(avatar-morph) {
-  animation-duration: 0.35s;
-  animation-timing-function: var(--ease-spring);
-}
-
-::view-transition-old(avatar-morph),
-::view-transition-new(avatar-morph) {
-  mix-blend-mode: normal;
-  height: 100%;
-  width: 100%;
-  object-fit: cover;
-}
-
-/* Avatar that morphs between views (legacy class-based) */
-.vt-avatar {
-  view-transition-name: avatar-hero;
-}
-
-::view-transition-group(avatar-hero) {
-  animation-duration: 0.35s;
-  animation-timing-function: var(--ease-spring);
-}
-
-/* Card that expands into detail view */
-.vt-card {
-  view-transition-name: card-expand;
-}
-
-::view-transition-group(card-expand) {
-  animation-duration: 0.35s;
-  animation-timing-function: var(--ease-spring);
-}
-
-/* Amount that travels between views */
-.vt-amount {
-  view-transition-name: amount-hero;
-}
-
-::view-transition-group(amount-hero) {
-  animation-duration: 0.3s;
-  animation-timing-function: var(--ease-out);
-}
-
-/* Header that persists */
-.vt-header {
-  view-transition-name: header-persist;
-}
-
-::view-transition-group(header-persist) {
-  animation-duration: 0.25s;
-}
-
-/* === TRANSITION GROUP STYLING === */
-::view-transition-image-pair(root) {
-  isolation: auto;
-}
-
-/* Prevent flash of unstyled content */
-::view-transition-old(root),
-::view-transition-new(root) {
-  mix-blend-mode: normal;
-}
-
 /* ===========================================
    REDUCED MOTION
    Respect user preferences for less motion
    =========================================== */
 
 @media (prefers-reduced-motion: reduce) {
-
-  /* Disable all view transitions */
-  ::view-transition-group(*),
-  ::view-transition-old(*),
-  ::view-transition-new(*) {
-    animation: none !important;
-  }
 
   /* Disable all custom animations */
   *,
@@ -777,4 +593,80 @@ input {
     animation: none;
     background: var(--neutral-100);
   }
+}
+
+/* ===========================================
+   AUTH ERROR PAGE
+   Shown when network/server error during auth check
+   =========================================== */
+
+.auth-error-page {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-base);
+  padding: var(--space-xl);
+}
+
+.auth-error-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  max-width: 300px;
+}
+
+.auth-error-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius-full);
+  background: var(--neutral-100);
+  color: var(--text-tertiary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  font-weight: 700;
+  margin-bottom: var(--space-xl);
+}
+
+.auth-error-content h1 {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 var(--space-sm);
+}
+
+.auth-error-content p {
+  font-size: 15px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 0 0 var(--space-xl);
+}
+
+.auth-error-retry-btn {
+  padding: var(--space-md) var(--space-2xl);
+  background: var(--neutral-900);
+  color: white;
+  border-radius: var(--radius-lg);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.auth-error-retry-btn.pressed {
+  transform: scale(0.98);
+  opacity: 0.9;
+}
+
+/* === GLOBAL ICON CONSISTENCY === */
+/* Standardize Lucide icon stroke width across the app */
+.lucide {
+  stroke-width: 1.5px;
+}
+
+/* Exception for larger display icons (used in features/hero sections) */
+.icon-lg .lucide {
+  stroke-width: 2px;
 }

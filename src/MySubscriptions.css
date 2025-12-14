@@ -1,0 +1,212 @@
+/* =============================================
+   MY SUBSCRIPTIONS PAGE
+   Based on Subscribers.css design patterns
+   ============================================= */
+
+/* === HEADER === */
+.my-subs-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-lg);
+    padding-top: calc(env(safe-area-inset-top, 0px) + var(--space-lg));
+    background: var(--surface);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.my-subs-header h1 {
+    flex: 1;
+    font-size: 20px;
+    font-weight: 600;
+    margin: 0;
+}
+
+.my-subs-subtitle {
+    color: var(--text-secondary);
+    padding: 0 var(--space-lg) var(--space-md);
+    margin: 0;
+    font-size: 14px;
+}
+
+/* === FILTER TABS === */
+.my-subs-filters {
+    display: flex;
+    gap: var(--space-sm);
+    padding: 0 var(--space-lg) var(--space-lg);
+}
+
+.my-subs-filter-btn {
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-pill);
+    border: none;
+    background: var(--neutral-100);
+    color: var(--text-secondary);
+    font-weight: 500;
+    font-size: 14px;
+    text-transform: capitalize;
+}
+
+.my-subs-filter-btn.active {
+    background: var(--neutral-900);
+    color: white;
+}
+
+.my-subs-filter-btn.pressed {
+    transform: scale(0.96);
+}
+
+/* === EMPTY STATE === */
+.my-subs-empty {
+    text-align: center;
+    padding: var(--space-3xl) var(--space-lg);
+    color: var(--text-secondary);
+}
+
+.my-subs-empty p {
+    margin: 0;
+}
+
+.my-subs-empty .secondary {
+    font-size: 14px;
+    margin-top: var(--space-sm);
+}
+
+/* === LIST === */
+.my-subs-list {
+    display: flex;
+    flex-direction: column;
+}
+
+/* === CARD === */
+.my-sub-card {
+    padding: var(--space-lg);
+    border-bottom: 1px solid var(--border-light);
+}
+
+.my-sub-main {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    margin-bottom: var(--space-md);
+}
+
+.my-sub-avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.my-sub-avatar-placeholder {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: var(--neutral-100);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    color: var(--text-secondary);
+    flex-shrink: 0;
+}
+
+.my-sub-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.my-sub-name {
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.my-sub-username {
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+.my-sub-pricing {
+    text-align: right;
+    flex-shrink: 0;
+}
+
+.my-sub-amount {
+    font-weight: 600;
+}
+
+.my-sub-interval {
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-weight: 400;
+}
+
+.my-sub-status {
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.my-sub-status.active {
+    color: var(--success);
+}
+
+.my-sub-status.past_due {
+    color: var(--warning);
+}
+
+.my-sub-status.canceled,
+.my-sub-status.canceling {
+    color: var(--error);
+}
+
+/* === META INFO === */
+.my-sub-meta {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: var(--space-md);
+}
+
+/* === ACTIONS === */
+.my-sub-actions {
+    display: flex;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+}
+
+.my-sub-action-btn {
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    background: white;
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.my-sub-action-btn.pressed {
+    transform: scale(0.96);
+    opacity: 0.9;
+}
+
+.my-sub-action-btn.primary {
+    border: none;
+    background: var(--neutral-900);
+    color: white;
+}
+
+.my-sub-action-btn.danger {
+    border: none;
+    background: var(--error);
+    color: white;
+}
+
+/* === ERROR STATE === */
+.my-subs-error {
+    text-align: center;
+    padding: var(--space-3xl) var(--space-lg);
+    color: var(--text-secondary);
+}

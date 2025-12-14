@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Check, Crown, Sparkles, Zap, AlertCircle } from 'lucide-react'
-import { Pressable, useToast } from './components'
+import { Pressable, useToast, LoadingButton } from './components'
 import { useBillingStatus, useCreateBillingCheckout, useCreateBillingPortal } from './api/hooks'
 import './Billing.css'
 
@@ -27,7 +27,7 @@ export default function Billing() {
     const navigate = useNavigate()
     const [searchParams, setSearchParams] = useSearchParams()
     const toast = useToast()
-    const { data: billingData, isLoading, refetch } = useBillingStatus()
+    const { data: billingData, isLoading, isError, refetch } = useBillingStatus()
     const { mutate: createCheckout, isPending: isCheckoutLoading } = useCreateBillingCheckout()
     const { mutate: createPortal, isPending: isPortalLoading } = useCreateBillingPortal()
 
@@ -72,6 +72,30 @@ export default function Billing() {
                 </header>
                 <div className="billing-content">
                     <div className="billing-loading">Loading...</div>
+                </div>
+            </div>
+        )
+    }
+
+    if (isError) {
+        return (
+            <div className="billing-page">
+                <header className="billing-header">
+                    <Pressable className="back-btn" onClick={() => navigate(-1)}>
+                        <ArrowLeft size={20} />
+                    </Pressable>
+                    <img src="/logo.svg" alt="NatePay" className="header-logo" />
+                    <div className="header-spacer" />
+                </header>
+                <div className="billing-content">
+                    <div className="billing-error">
+                        <AlertCircle size={32} />
+                        <h2>Unable to load billing</h2>
+                        <p>Please check your connection and try again.</p>
+                        <Pressable className="billing-retry-btn" onClick={() => refetch()}>
+                            Try Again
+                        </Pressable>
+                    </div>
                 </div>
             </div>
         )
@@ -243,21 +267,24 @@ export default function Billing() {
 
                         {/* Action Button */}
                         {!hasSubscription ? (
-                            <Pressable
+                            <LoadingButton
                                 className="billing-cta-btn"
                                 onClick={handleStartTrial}
-                                disabled={isCheckoutLoading}
+                                loading={isCheckoutLoading}
+                                fullWidth
                             >
-                                <span>{isCheckoutLoading ? 'Loading...' : 'Start Free Trial'}</span>
-                            </Pressable>
+                                Start Free Trial
+                            </LoadingButton>
                         ) : (
-                            <Pressable
+                            <LoadingButton
                                 className="billing-manage-btn"
                                 onClick={handleManageSubscription}
-                                disabled={isPortalLoading}
+                                loading={isPortalLoading}
+                                variant="secondary"
+                                fullWidth
                             >
-                                <span>{isPortalLoading ? 'Loading...' : 'Manage Subscription'}</span>
-                            </Pressable>
+                                Manage Subscription
+                            </LoadingButton>
                         )}
 
                         <p className="billing-footer-note">

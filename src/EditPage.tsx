@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Camera, Plus, GripVertical, Trash2, ExternalLink, Check, X, Loader2 } from 'lucide-react'
-import { Pressable, useToast, Skeleton, VoiceRecorder } from './components'
+import { Pressable, useToast, Skeleton, VoiceRecorder, LoadingButton } from './components'
 import { useProfile, useUpdateProfile, uploadFile, uploadBlob } from './api/hooks'
 import { getCurrencySymbol, formatCompactNumber, centsToDisplayAmount } from './utils/currency'
 import { calculateFeePreview, getPricing } from './utils/pricing'
@@ -633,13 +633,15 @@ export default function EditPage() {
 
       {/* Save Button */}
       <div className="edit-page-footer">
-        <Pressable
-          className={`save-btn ${!hasChanges || isUploading || isVoiceUploading ? 'disabled' : ''}`}
+        <LoadingButton
+          className="save-btn"
           onClick={handleSave}
-          disabled={!hasChanges || isSaving || isUploading || isVoiceUploading}
+          disabled={!hasChanges}
+          loading={isSaving || isUploading || isVoiceUploading}
+          fullWidth
         >
-          {isSaving ? 'Saving...' : isUploading || isVoiceUploading ? 'Uploading...' : 'Save Changes'}
-        </Pressable>
+          Save Changes
+        </LoadingButton>
       </div>
     </div>
   )

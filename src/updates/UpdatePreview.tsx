@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronLeft, Check, Send, Clock, Mail } from 'lucide-react'
-import { Pressable } from '../components'
+import { Pressable, useToast } from '../components'
 import { EmailPreview } from '../email-templates'
 import { useCreateUpdate, useSendUpdate, useMetrics, useProfile } from '../api/hooks'
 import './UpdatePreview.css'
@@ -69,6 +69,7 @@ const polishText = (caption: string): string => {
 
 export default function UpdatePreview() {
   const navigate = useNavigate()
+  const toast = useToast()
 
   // API hooks
   const { data: profileData } = useProfile()
@@ -86,6 +87,7 @@ export default function UpdatePreview() {
   const [isSent, setIsSent] = useState(false)
   const [sentCount, setSentCount] = useState(0)
   const [showEmailPreview, setShowEmailPreview] = useState(false)
+  const [sendError, setSendError] = useState<string | null>(null)
 
   const isSending = createUpdate.isPending || sendUpdate.isPending
 
@@ -109,6 +111,8 @@ export default function UpdatePreview() {
   const handleSend = async () => {
     if (!pendingUpdate) return
 
+    setSendError(null)
+
     try {
       // 1. Create the update draft
       const createResult = await createUpdate.mutateAsync({
@@ -125,8 +129,11 @@ export default function UpdatePreview() {
       sessionStorage.removeItem('pending-update')
       setSentCount(sendResult.recipientCount)
       setIsSent(true)
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to send update:', error)
+      const errorMessage = error?.error || error?.message || 'Failed to send update. Please try again.'
+      setSendError(errorMessage)
+      toast.error(errorMessage)
     }
   }
 
@@ -134,7 +141,7 @@ export default function UpdatePreview() {
     return (
       <div className="update-preview-page">
         <div className="update-success">
-          <div className="update-success-icon">
+          <div className="update-success-icon success-bounce">
             <Check size={32} />
           </div>
           <h1 className="update-success-title">Update Sent!</h1>
@@ -207,6 +214,16 @@ export default function UpdatePreview() {
           </Pressable>
         </div>
       </div>
+
+      {/* Error Display */}
+      {sendError && (
+        <div className="update-send-error">
+          <span>{sendError}</span>
+          <Pressable className="update-retry-btn" onClick={handleSend}>
+            Retry
+          </Pressable>
+        </div>
+      )}
 
       {/* Action Buttons */}
       <div className="action-section">

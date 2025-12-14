@@ -2,13 +2,14 @@ import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { X, Camera, Image, Sparkles, Loader2 } from 'lucide-react'
 import { useMetrics, uploadFile } from '../api/hooks'
-import { Pressable } from '../components'
+import { Pressable, useToast, LoadingButton } from '../components'
 import './NewUpdate.css'
 
 const MAX_CAPTION_LENGTH = 200
 
 export default function NewUpdate() {
   const navigate = useNavigate()
+  const toast = useToast()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const { data: metricsData } = useMetrics()
@@ -36,6 +37,7 @@ export default function NewUpdate() {
         setPhotoUrl(s3Url) // Replace local blob with S3 URL
       } catch (err) {
         console.error('Failed to upload photo:', err)
+        toast.error('Failed to upload photo. Please try again.')
         // Reset on failure
         setPhotoUrl(null)
         if (fileInputRef.current) {
@@ -165,14 +167,16 @@ export default function NewUpdate() {
 
       {/* Action Button */}
       <div className="action-section">
-        <Pressable
+        <LoadingButton
           className="preview-btn"
           onClick={handlePreview}
           disabled={!isValid}
+          loading={isUploading}
+          fullWidth
         >
           <Sparkles size={20} />
-          <span>{isUploading ? 'Uploading...' : 'Preview with AI'}</span>
-        </Pressable>
+          <span>Preview with AI</span>
+        </LoadingButton>
       </div>
     </div>
   )

@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { ChevronLeft } from 'lucide-react'
 import { useOnboardingStore } from './store'
-import { Button, Pressable } from './components'
-import { VoiceRecorder } from '../components'
+import { Pressable } from './components'
+import { VoiceRecorder, LoadingButton } from '../components'
 import { uploadBlob } from '../api/hooks'
 import './onboarding.css'
 
@@ -54,6 +54,15 @@ export default function VoiceIntroStep() {
 
     const hasRecording = audioUrl || audioBlob
 
+    const handleContinue = () => {
+        // If service user has description audio but no new voice intro, persist it
+        // This ensures the audio from ServiceDescriptionStep is used as the voice intro
+        if (!voiceIntroUrl && serviceDescriptionAudioUrl && branch === 'service') {
+            setVoiceIntroUrl(serviceDescriptionAudioUrl)
+        }
+        nextStep()
+    }
+
     return (
         <div className="onboarding">
             <div className="onboarding-logo-header">
@@ -96,15 +105,14 @@ export default function VoiceIntroStep() {
                 </div>
 
                 <div className="step-footer">
-                    <Button
-                        variant="primary"
-                        size="lg"
+                    <LoadingButton
+                        className="onboarding-btn"
+                        onClick={handleContinue}
+                        loading={isUploading}
                         fullWidth
-                        onClick={nextStep}
-                        disabled={isUploading}
                     >
-                        {isUploading ? 'Saving...' : hasRecording ? 'Continue' : 'Skip for now'}
-                    </Button>
+                        {hasRecording ? 'Continue' : 'Skip for now'}
+                    </LoadingButton>
                     {!hasRecording && (
                         <p className="step-hint">You can add this later from your settings</p>
                     )}

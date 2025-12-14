@@ -5,7 +5,7 @@ import { CheckCircle, Building2, Calendar, Copy, Share2, ArrowRight } from 'luci
 import { useProfile } from './api/hooks'
 import { useOnboardingStore } from './onboarding/store'
 import { setPaymentConfirmed } from './App'
-import { Pressable } from './components'
+import { Pressable, LoadingButton } from './components'
 import { getPricing } from './utils/pricing'
 import { getShareableLink } from './utils/constants'
 import './StripeComplete.css' // Reuse Stripe complete styles
@@ -99,7 +99,7 @@ export default function PaystackOnboardingComplete() {
       <div className="stripe-complete-card">
         {/* Success Header */}
         <div className="status-content">
-          <div className="status-icon success">
+          <div className="status-icon success success-bounce">
             <CheckCircle size={32} />
           </div>
           <h2>You're ready to get paid!</h2>
@@ -172,13 +172,14 @@ export default function PaystackOnboardingComplete() {
 
         {/* CTA */}
         <div className="cta-section">
-          <Pressable
+          <LoadingButton
             className="btn-primary"
             onClick={handleContinue}
-            disabled={isNavigating}
+            loading={isNavigating}
+            fullWidth
           >
-            {isNavigating ? 'Loading...' : 'Continue to Dashboard'}
-          </Pressable>
+            Continue to Dashboard
+          </LoadingButton>
         </div>
       </div>
     </div>

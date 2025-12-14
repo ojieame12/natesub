@@ -1,8 +1,8 @@
 import { useState, useRef } from 'react'
 import { ChevronLeft, Camera, User, X, RefreshCw, Loader2 } from 'lucide-react'
 import { useOnboardingStore } from './store'
-import { Button, Pressable } from './components'
-import { InlineError } from '../components'
+import { Pressable } from './components'
+import { InlineError, LoadingButton } from '../components'
 import { uploadFile } from '../api/hooks'
 import '../Dashboard.css'
 import './onboarding.css'
@@ -142,20 +142,14 @@ export default function AvatarUploadStep() {
                 </div>
 
                 <div className="step-footer">
-                    <Button
-                        variant="primary"
-                        size="lg"
-                        fullWidth
+                    <LoadingButton
+                        className="onboarding-btn"
                         onClick={nextStep}
-                        disabled={isUploading}
+                        loading={isUploading}
+                        fullWidth
                     >
-                        {isUploading ? (
-                            <>
-                                <Loader2 size={18} className="spinning" style={{ marginRight: 8 }} />
-                                Uploading...
-                            </>
-                        ) : avatarPreview ? 'Continue' : 'Skip for now'}
-                    </Button>
+                        {avatarPreview ? 'Continue' : 'Skip for now'}
+                    </LoadingButton>
                 </div>
             </div>
         </div>

@@ -11,7 +11,7 @@ import {
     Send,
     Check,
 } from 'lucide-react'
-import { Pressable, Skeleton, SkeletonList, ErrorState } from './components'
+import { Pressable, Skeleton, SkeletonList, ErrorState, LoadingButton } from './components'
 import { useScrolled } from './hooks'
 import { useActivity, useMetrics, useCurrentUser } from './api/hooks'
 import { getCurrencySymbol, formatCompactNumber } from './utils/currency'
@@ -227,13 +227,14 @@ export default function Activity() {
 
                         {/* Load More */}
                         {hasNextPage && (
-                            <Pressable
+                            <LoadingButton
                                 className="load-more-btn"
-                                onClick={() => fetchNextPage()}
-                                disabled={isFetchingNextPage}
+                                onClick={async () => { await fetchNextPage() }}
+                                loading={isFetchingNextPage}
+                                variant="secondary"
                             >
-                                {isFetchingNextPage ? 'Loading...' : 'Load More'}
-                            </Pressable>
+                                Load More
+                            </LoadingButton>
                         )}
 
                         {/* Monthly Summary */}

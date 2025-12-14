@@ -11,7 +11,7 @@ import {
     RefreshCw,
     Filter,
 } from 'lucide-react'
-import { Pressable, useToast, SkeletonList, ErrorState } from './components'
+import { Pressable, useToast, SkeletonList, ErrorState, LoadingButton } from './components'
 import { useRequests, useCurrentUser } from './api/hooks'
 import { getCurrencySymbol, formatCompactNumber } from './utils/currency'
 import './SentRequests.css'
@@ -258,13 +258,14 @@ export default function SentRequests() {
 
                         {/* Load More */}
                         {hasNextPage && (
-                            <Pressable
+                            <LoadingButton
                                 className="load-more-btn"
-                                onClick={() => fetchNextPage()}
-                                disabled={isFetchingNextPage}
+                                onClick={async () => { await fetchNextPage() }}
+                                loading={isFetchingNextPage}
+                                variant="secondary"
                             >
-                                {isFetchingNextPage ? 'Loading...' : 'Load More'}
-                            </Pressable>
+                                Load More
+                            </LoadingButton>
                         )}
                     </div>
                 )}

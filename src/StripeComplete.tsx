@@ -6,7 +6,7 @@ import { api } from './api'
 import { useProfile } from './api/hooks'
 import { useOnboardingStore } from './onboarding/store'
 import { setPaymentConfirmed } from './App'
-import { Pressable } from './components'
+import { Pressable, LoadingButton } from './components'
 import { getShareableLink } from './utils/constants'
 import './StripeComplete.css'
 
@@ -286,7 +286,7 @@ export default function StripeComplete() {
           <>
             {/* Success Header */}
             <div className="status-content">
-              <div className="status-icon success">
+              <div className="status-icon success success-bounce">
                 <CheckCircle size={32} />
               </div>
               <h2>You're ready to get paid!</h2>
@@ -369,20 +369,14 @@ export default function StripeComplete() {
 
             {/* CTAs - NO auto-redirect, user must click */}
             <div className="cta-section">
-              <Pressable
+              <LoadingButton
                 className="btn-primary"
                 onClick={handleContinue}
-                disabled={isNavigating}
+                loading={isNavigating}
+                fullWidth
               >
-                {isNavigating ? (
-                  <>
-                    <Loader2 size={18} className="spin" style={{ marginRight: 8 }} />
-                    Loading...
-                  </>
-                ) : (
-                  `Continue to ${destinationText}`
-                )}
-              </Pressable>
+                Continue to {destinationText}
+              </LoadingButton>
               <Pressable
                 className="btn-secondary"
                 onClick={async () => {
@@ -404,12 +398,34 @@ export default function StripeComplete() {
             <div className="status-icon pending">
               <Loader2 size={32} className="spin" />
             </div>
-            <h2>Verification in Progress</h2>
-            <p>Stripe is reviewing your details. This usually takes a few minutes but can take up to 24 hours for some accounts.</p>
+            <h2>Almost There!</h2>
+            <p>Stripe is verifying your identity. This typically completes within a few minutes.</p>
+
+            {/* What's happening section */}
+            <div style={{
+              background: 'var(--surface)',
+              borderRadius: 12,
+              padding: 16,
+              marginTop: 16,
+              textAlign: 'left',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                <CheckCircle size={16} style={{ color: 'var(--success)' }} />
+                <span style={{ fontSize: 14 }}>Account created successfully</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                <CheckCircle size={16} style={{ color: 'var(--success)' }} />
+                <span style={{ fontSize: 14 }}>Details submitted to Stripe</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Loader2 size={16} className="spin" style={{ color: 'var(--warning)' }} />
+                <span style={{ fontSize: 14 }}>Identity verification in progress</span>
+              </div>
+            </div>
 
             {!pollTimedOut ? (
-              <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 8 }}>
-                Checking automatically... (attempt {pollAttempts + 1} of 12)
+              <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 12 }}>
+                Checking status... ({pollAttempts + 1}/12)
               </p>
             ) : (
               <div style={{
@@ -418,29 +434,26 @@ export default function StripeComplete() {
                 borderRadius: 12,
                 marginTop: 16,
               }}>
-                <p style={{ fontSize: 14, color: 'var(--warning)', margin: 0 }}>
-                  Verification is taking longer than expected. You can continue to the dashboard and we'll notify you when it's complete.
+                <p style={{ fontSize: 14, color: 'var(--warning)', margin: 0, fontWeight: 500 }}>
+                  Taking longer than expected
+                </p>
+                <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '4px 0 0' }}>
+                  Some accounts need extra review (up to 24 hours). We'll send you an email the moment you're approved!
                 </p>
               </div>
             )}
 
             <div className="cta-section">
-              <Pressable
+              <LoadingButton
                 className="btn-primary"
                 onClick={handleProceedAnyway}
-                disabled={isNavigating}
+                loading={isNavigating}
+                fullWidth
               >
-                {isNavigating ? (
-                  <>
-                    <Loader2 size={18} className="spin" style={{ marginRight: 8 }} />
-                    Loading...
-                  </>
-                ) : (
-                  'Continue to Dashboard'
-                )}
-              </Pressable>
+                Continue to Dashboard
+              </LoadingButton>
               <p style={{ fontSize: 12, color: 'var(--text-tertiary)', textAlign: 'center', marginTop: 8 }}>
-                You can use the app while verification completes. We'll notify you when you're ready to accept payments.
+                Start setting up your page while we wait. You'll be notified by email when payments are active.
               </p>
             </div>
           </div>
@@ -485,20 +498,14 @@ export default function StripeComplete() {
             )}
 
             <div className="cta-section">
-              <Pressable
+              <LoadingButton
                 className="btn-primary"
                 onClick={handleRetrySetup}
-                disabled={isRetrying}
+                loading={isRetrying}
+                fullWidth
               >
-                {isRetrying ? (
-                  <>
-                    <Loader2 size={18} className="spin" style={{ marginRight: 8 }} />
-                    Connecting...
-                  </>
-                ) : (
-                  'Complete Setup'
-                )}
-              </Pressable>
+                Complete Setup
+              </LoadingButton>
               <Pressable className="btn-text" onClick={() => navigate(backDestination)}>
                 <ArrowLeft size={16} />
                 <span>Back to {destinationText}</span>
