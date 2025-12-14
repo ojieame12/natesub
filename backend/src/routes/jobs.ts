@@ -6,6 +6,7 @@ import { env } from '../config/env.js'
 import { processRecurringBilling, processRetries } from '../jobs/billing.js'
 import { generatePayrollPeriods } from '../jobs/payroll.js'
 import { sendRenewalReminders, sendDunningEmails, sendCancellationEmails } from '../jobs/notifications.js'
+import { monitorStuckTransfers } from '../jobs/transfers.js'
 
 const jobs = new Hono()
 
@@ -167,11 +168,30 @@ jobs.post('/notifications', async (c) => {
   }
 })
 
+// Monitor stuck transfers (run hourly)
+jobs.post('/transfers', async (c) => {
+  console.log('[jobs] Starting transfer monitoring job')
+
+  try {
+    const result = await monitorStuckTransfers()
+
+    console.log(`[jobs] Transfer monitoring complete: ${result.stuckTransfers} stuck, ${result.alertsSent} alerts sent`)
+
+    return c.json({
+      success: true,
+      ...result,
+    })
+  } catch (error: any) {
+    console.error('[jobs] Transfer monitoring job failed:', error.message)
+    return c.json({ error: 'Transfer monitoring job failed', message: error.message }, 500)
+  }
+})
+
 // Health check for job system
 jobs.get('/health', async (c) => {
   return c.json({
     status: 'ok',
-    jobs: ['billing', 'retries', 'payroll', 'reminders', 'dunning', 'cancellations', 'notifications'],
+    jobs: ['billing', 'retries', 'payroll', 'reminders', 'dunning', 'cancellations', 'notifications', 'transfers'],
     timestamp: new Date().toISOString(),
   })
 })

@@ -9,6 +9,7 @@ import { Hono } from 'hono'
 import { HTTPException } from 'hono/http-exception'
 import dlq from '../services/dlq.js'
 import { db } from '../db/client.js'
+import { getStuckTransfers, getTransferStats } from '../jobs/transfers.js'
 
 const admin = new Hono()
 
@@ -141,6 +142,85 @@ admin.get('/metrics', async (c) => {
     profiles: totalProfiles,
     activeSubscriptions,
     monthlyRecurringRevenue: totalRevenue._sum.amount || 0,
+  })
+})
+
+// ============================================
+// TRANSFER MONITORING (Paystack OTP)
+// ============================================
+
+/**
+ * GET /admin/transfers/stats
+ * Get transfer statistics including stuck OTP transfers
+ */
+admin.get('/transfers/stats', async (c) => {
+  const stats = await getTransferStats()
+  return c.json(stats)
+})
+
+/**
+ * GET /admin/transfers/stuck
+ * List all transfers stuck in otp_pending status
+ */
+admin.get('/transfers/stuck', async (c) => {
+  const minAgeHours = c.req.query('minAge') ? parseInt(c.req.query('minAge')!) : undefined
+  const transfers = await getStuckTransfers(minAgeHours)
+
+  return c.json({
+    count: transfers.length,
+    transfers,
+    warning: transfers.length > 0
+      ? 'These transfers require OTP finalization. Either disable OTP in Paystack dashboard or manually approve.'
+      : null,
+  })
+})
+
+/**
+ * GET /admin/transfers/all-pending
+ * List all pending transfers (both pending and otp_pending)
+ */
+admin.get('/transfers/all-pending', async (c) => {
+  const transfers = await db.payment.findMany({
+    where: {
+      type: 'payout',
+      status: { in: ['pending', 'otp_pending'] },
+    },
+    include: {
+      subscription: {
+        include: {
+          creator: {
+            select: {
+              email: true,
+              profile: {
+                select: {
+                  displayName: true,
+                  username: true,
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    orderBy: { createdAt: 'asc' },
+    take: 100,
+  })
+
+  return c.json({
+    count: transfers.length,
+    transfers: transfers.map(t => ({
+      id: t.id,
+      creatorId: t.creatorId,
+      creatorName: t.subscription?.creator?.profile?.displayName
+        || t.subscription?.creator?.profile?.username
+        || 'Unknown',
+      amountCents: t.amountCents,
+      netCents: t.netCents,
+      currency: t.currency,
+      status: t.status,
+      transferCode: t.paystackTransferCode,
+      createdAt: t.createdAt,
+    })),
   })
 })
 
