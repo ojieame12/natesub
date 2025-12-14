@@ -68,17 +68,24 @@ const allowedOrigins = [
   'http://localhost:5174',      // Local dev alt port
 ]
 
+// Normalize origin - handles non-http protocols like capacitor://
+function normalizeOrigin(o: string): string | null {
+  if (!o) return null
+  const trimmed = o.trim()
+  // For capacitor:// and other non-http schemes, URL.origin returns 'null'
+  // So we handle them specially
+  if (trimmed.startsWith('capacitor://')) return trimmed
+  try {
+    const origin = new URL(trimmed).origin
+    return origin !== 'null' ? origin : trimmed
+  } catch {
+    return null
+  }
+}
+
 const allowedOriginSet = new Set(
   allowedOrigins
-    .map(o => o.trim())
-    .filter(Boolean)
-    .map((o) => {
-      try {
-        return new URL(o).origin
-      } catch {
-        return null
-      }
-    })
+    .map(normalizeOrigin)
     .filter((o): o is string => Boolean(o))
 )
 
@@ -86,22 +93,21 @@ function resolveAllowedOrigin(origin: string): string | null {
   // `hono/cors` passes an empty string when Origin is missing.
   if (!origin) return null
 
-  let url: URL
-  try {
-    url = new URL(origin)
-  } catch {
-    return null
-  }
-
-  const normalized = url.origin
+  const normalized = normalizeOrigin(origin)
+  if (!normalized) return null
 
   // Exact origin allowlist.
   if (allowedOriginSet.has(normalized)) return normalized
 
   // Allow any localhost port when `http://localhost` is allowlisted.
   // This supports Capacitor/Android and local dev without unsafe prefix matching.
-  if (url.protocol === 'http:' && url.hostname === 'localhost' && allowedOriginSet.has('http://localhost')) {
-    return normalized
+  try {
+    const url = new URL(origin)
+    if (url.protocol === 'http:' && url.hostname === 'localhost' && allowedOriginSet.has('http://localhost')) {
+      return normalized
+    }
+  } catch {
+    // Not a valid URL, skip localhost check
   }
 
   return null
