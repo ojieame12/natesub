@@ -119,12 +119,28 @@ stripeRoutes.get('/connect/status', requireAuth, async (c) => {
   try {
     const status = await getAccountStatus(profile.stripeAccountId)
 
+    // Check if this is a cross-border account (e.g., Nigeria)
+    // Cross-border accounts don't have chargesEnabled - only payoutsEnabled matters
+    const isCrossBorder = isStripeCrossBorderSupported(profile.countryCode)
+
     // Update payout status in our database
+    // Cross-border: only payoutsEnabled required
+    // Native: both chargesEnabled and payoutsEnabled required
     let payoutStatus: 'pending' | 'active' | 'restricted' = 'pending'
-    if (status.chargesEnabled && status.payoutsEnabled) {
-      payoutStatus = 'active'
-    } else if (status.requirements?.disabledReason) {
-      payoutStatus = 'restricted'
+    if (isCrossBorder) {
+      // Cross-border accounts: only need payoutsEnabled (transfers capability)
+      if (status.payoutsEnabled) {
+        payoutStatus = 'active'
+      } else if (status.requirements?.disabledReason) {
+        payoutStatus = 'restricted'
+      }
+    } else {
+      // Native accounts: need both chargesEnabled and payoutsEnabled
+      if (status.chargesEnabled && status.payoutsEnabled) {
+        payoutStatus = 'active'
+      } else if (status.requirements?.disabledReason) {
+        payoutStatus = 'restricted'
+      }
     }
 
     if (profile.payoutStatus !== payoutStatus) {
@@ -138,6 +154,7 @@ stripeRoutes.get('/connect/status', requireAuth, async (c) => {
       connected: true,
       status: payoutStatus,
       details: status,
+      crossBorder: isCrossBorder,
     })
   } catch (error) {
     console.error('Status check error:', error)

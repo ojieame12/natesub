@@ -12,6 +12,7 @@ import { initiateTransfer, createTransferRecipient } from '../services/paystack.
 import { decryptAccountNumber, encryptAuthorizationCode } from '../utils/encryption.js'
 import { webhookRateLimit } from '../middleware/rateLimit.js'
 import { withLock } from '../services/lock.js'
+import { isStripeCrossBorderSupported } from '../utils/constants.js'
 import {
   validateCheckoutMetadata,
   validatePaystackMetadata,
@@ -1339,11 +1340,26 @@ async function handleAccountUpdated(event: Stripe.Event) {
 
   if (!profile) return
 
+  // Check if this is a cross-border account (e.g., Nigeria)
+  // Cross-border accounts don't have charges_enabled - only payouts_enabled matters
+  const isCrossBorder = isStripeCrossBorderSupported(profile.countryCode)
+
   let payoutStatus: 'pending' | 'active' | 'restricted' = 'pending'
-  if (account.charges_enabled && account.payouts_enabled) {
-    payoutStatus = 'active'
-  } else if (account.requirements?.disabled_reason) {
-    payoutStatus = 'restricted'
+
+  if (isCrossBorder) {
+    // Cross-border accounts: only need payouts_enabled (transfers capability)
+    if (account.payouts_enabled) {
+      payoutStatus = 'active'
+    } else if (account.requirements?.disabled_reason) {
+      payoutStatus = 'restricted'
+    }
+  } else {
+    // Native accounts: need both charges_enabled and payouts_enabled
+    if (account.charges_enabled && account.payouts_enabled) {
+      payoutStatus = 'active'
+    } else if (account.requirements?.disabled_reason) {
+      payoutStatus = 'restricted'
+    }
   }
 
   await db.profile.update({

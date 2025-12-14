@@ -48,6 +48,7 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
         paymentProvider,
         paymentsReady,
         feeMode,
+        crossBorder,
     } = profile
 
     // Determine if this is a service page vs personal
@@ -760,6 +761,11 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
                                     <span>To {name}</span>
                                     <span className="sub-payment-to">{formatAmountWithSeparators(feePreview.creatorReceives, currency)}</span>
                                 </div>
+                                {crossBorder && (
+                                    <div className="sub-payment-crossborder-note">
+                                        Payments are processed in USD
+                                    </div>
+                                )}
                             </div>
 
                             {canceled && (

@@ -820,6 +820,15 @@
     padding: var(--space-md) var(--space-lg);
 }
 
+.template-boundary .sub-payment-crossborder-note {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    text-align: center;
+    padding: var(--space-sm) var(--space-lg);
+    border-top: 1px solid var(--border-subtle);
+    background: var(--bg-subtle);
+}
+
 .template-boundary .sub-payment-methods {
     display: flex;
     flex-direction: column;

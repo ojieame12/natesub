@@ -7,6 +7,7 @@ import { checkoutRateLimit, publicRateLimit } from '../middleware/rateLimit.js'
 import { createCheckoutSession, getAccountStatus } from '../services/stripe.js'
 import { initializePaystackCheckout, generateReference, isPaystackSupported, type PaystackCountry } from '../services/paystack.js'
 import { calculateServiceFee, type FeeCalculation, type FeeMode } from '../services/fees.js'
+import { isStripeCrossBorderSupported } from '../utils/constants.js'
 import { env } from '../config/env.js'
 import { maskEmail } from '../utils/pii.js'
 
@@ -179,16 +180,35 @@ checkout.post(
         return c.json({ error: 'Payment account not connected' }, 400)
       }
 
+      // Check if this is a cross-border account (e.g., Nigeria)
+      // Cross-border accounts don't have chargesEnabled since they only receive payouts
+      const isCrossBorder = isStripeCrossBorderSupported(profile.countryCode)
+
       // Verify Stripe account can accept payments and transfers
       const stripeStatus = await getAccountStatus(profile.stripeAccountId)
-      if (!stripeStatus.chargesEnabled || !stripeStatus.payoutsEnabled) {
-        const issue = !stripeStatus.chargesEnabled
-          ? 'cannot accept payments'
-          : 'cannot receive transfers'
-        return c.json({
-          error: `Payment account ${issue}. Please ask them to complete their payment setup.`
-        }, 400)
+
+      // For cross-border: only require payoutsEnabled (no chargesEnabled needed)
+      // For native: require both chargesEnabled and payoutsEnabled
+      if (isCrossBorder) {
+        if (!stripeStatus.payoutsEnabled) {
+          return c.json({
+            error: 'Payment account cannot receive transfers. Please complete your payment setup.'
+          }, 400)
+        }
+      } else {
+        if (!stripeStatus.chargesEnabled || !stripeStatus.payoutsEnabled) {
+          const issue = !stripeStatus.chargesEnabled
+            ? 'cannot accept payments'
+            : 'cannot receive transfers'
+          return c.json({
+            error: `Payment account ${issue}. Please complete your payment setup.`
+          }, 400)
+        }
       }
+
+      // Cross-border accounts: payments are collected in USD and converted to local currency
+      // Native accounts: use the profile's currency
+      const checkoutCurrency = isCrossBorder ? 'USD' : profile.currency
 
       const session = await createCheckoutSession({
         creatorId: profile.userId,
@@ -197,7 +217,7 @@ checkout.post(
         grossAmount: feeCalc.grossCents,   // What subscriber pays
         netAmount: feeCalc.netCents,       // What creator receives
         serviceFee: feeCalc.feeCents,      // Platform fee
-        currency: profile.currency,
+        currency: checkoutCurrency,
         interval,
         successUrl: `${env.APP_URL}/${profile.username}?success=true&provider=stripe`,
         cancelUrl: `${env.APP_URL}/${profile.username}?canceled=true`,
@@ -210,8 +230,8 @@ checkout.post(
         },
       })
 
-      // Build breakdown for response
-      const breakdown = buildBreakdown(feeCalc, profile.currency)
+      // Build breakdown for response (use checkout currency, not profile currency)
+      const breakdown = buildBreakdown(feeCalc, checkoutCurrency)
 
       return c.json({
         provider: 'stripe',

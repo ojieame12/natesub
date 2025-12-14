@@ -5,6 +5,7 @@ import { db } from '../db/client.js'
 import { optionalAuth } from '../middleware/auth.js'
 import { publicRateLimit } from '../middleware/rateLimit.js'
 import { centsToDisplayAmount } from '../utils/currency.js'
+import { isStripeCrossBorderSupported } from '../utils/constants.js'
 
 const users = new Hono()
 
@@ -43,6 +44,7 @@ users.get(
         paymentProvider: true,
         template: true, // For rendering correct template
         feeMode: true, // For fee breakdown display
+        countryCode: true, // For cross-border detection
         // Check payment readiness without exposing IDs
         stripeAccountId: true,
         paystackSubaccountCode: true,
@@ -109,9 +111,17 @@ users.get(
       }
     }
 
+    // Check if this is a cross-border Stripe account (e.g., Nigeria)
+    // Cross-border accounts collect payments in USD, payouts convert to local currency
+    const isCrossBorder = profile.paymentProvider === 'stripe' &&
+      isStripeCrossBorderSupported(profile.countryCode)
+
     // Convert cents to display amount, handling zero-decimal currencies
     // Include profile ID for analytics, template for rendering, feeMode for fee display
-    const currency = profile.currency || 'USD'
+    // Cross-border accounts: display prices in USD (what subscribers pay)
+    const profileCurrency = profile.currency || 'USD'
+    const displayCurrency = isCrossBorder ? 'USD' : profileCurrency
+
     const publicProfile = {
       id: profile.id, // For analytics tracking
       username: profile.username,
@@ -121,19 +131,20 @@ users.get(
       voiceIntroUrl: profile.voiceIntroUrl,
       purpose: profile.purpose,
       pricingModel: profile.pricingModel,
-      singleAmount: profile.singleAmount ? centsToDisplayAmount(profile.singleAmount, currency) : null,
+      singleAmount: profile.singleAmount ? centsToDisplayAmount(profile.singleAmount, displayCurrency) : null,
       tiers: profile.tiers ? (profile.tiers as any[]).map(t => ({
         ...t,
-        amount: centsToDisplayAmount(t.amount, currency),
+        amount: centsToDisplayAmount(t.amount, displayCurrency),
       })) : null,
       perks: profile.perks,
       impactItems: profile.impactItems,
-      currency: currency,
+      currency: displayCurrency, // Use checkout currency (USD for cross-border)
       shareUrl: profile.shareUrl,
       paymentProvider: profile.paymentProvider,
       template: profile.template || 'boundary', // Default to boundary
       feeMode: profile.feeMode || 'pass_to_subscriber', // Default behavior
       paymentsReady,
+      crossBorder: isCrossBorder, // Flag for frontend to show cross-border info
     }
 
     return c.json({

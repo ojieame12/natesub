@@ -63,6 +63,7 @@ export interface Profile {
   template?: 'boundary' | 'liquid' | 'minimal' | 'editorial' // Subscribe page template
   paymentsReady?: boolean // For public profiles - indicates if checkout will work
   feeMode?: 'absorb' | 'pass_to_subscriber' // Who pays the platform fee
+  crossBorder?: boolean // True if Stripe cross-border account (payments in USD, payouts in local currency)
 }
 
 export interface Tier {
