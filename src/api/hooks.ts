@@ -589,16 +589,30 @@ export async function uploadFile(
         uploadBlob = await compressImage(file, maxWidth, 0.85)
         mimeType = 'image/jpeg'
       } catch (compressError) {
-        console.warn('Image compression failed, using original:', compressError)
-        // Fall back to original file if compression fails
-        uploadBlob = file
-        mimeType = file.type
+        console.warn('Image compression failed:', compressError)
+        // If original is already a supported format, use it
+        if (['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+          uploadBlob = file
+          mimeType = file.type
+        } else {
+          // HEIC or other unsupported format that couldn't be converted
+          throw new Error('Could not process this image. Please try a JPG or PNG file.')
+        }
       }
     }
   }
 
   // Get signed URL with the correct mime type
-  const { uploadUrl, publicUrl } = await api.media.getUploadUrl(type, mimeType)
+  let uploadUrl: string
+  let publicUrl: string
+  try {
+    const result = await api.media.getUploadUrl(type, mimeType)
+    uploadUrl = result.uploadUrl
+    publicUrl = result.publicUrl
+  } catch (err: any) {
+    console.error('Failed to get upload URL:', err)
+    throw new Error(err?.error || 'Failed to prepare upload. Please try again.')
+  }
 
   // Upload to R2/S3
   const response = await fetch(uploadUrl, {
