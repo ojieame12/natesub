@@ -7,11 +7,18 @@ export default function Privacy() {
     const navigate = useNavigate()
 
     const handleBack = () => {
-        // If there's history, go back; otherwise go to onboarding
-        if (window.history.length > 1) {
-            navigate(-1)
+        // These pages are typically opened in new tabs (target="_blank")
+        // Try to close the tab first, fall back to navigation
+        if (window.opener || window.history.length <= 2) {
+            // Opened in new tab - try to close it
+            window.close()
+            // If close didn't work (some browsers block it), navigate away
+            setTimeout(() => {
+                navigate('/onboarding')
+            }, 100)
         } else {
-            navigate('/onboarding')
+            // Opened via normal navigation - go back
+            navigate(-1)
         }
     }
 
