@@ -4,6 +4,7 @@ import { nanoid } from 'nanoid'
 import { env } from '../config/env.js'
 
 // Cloudflare R2 client (S3-compatible)
+// Disable request checksums - they cause CORS issues with R2 presigned URLs
 const r2 = new S3Client({
   region: 'auto',
   endpoint: `https://${env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
@@ -11,6 +12,9 @@ const r2 = new S3Client({
     accessKeyId: env.R2_ACCESS_KEY_ID,
     secretAccessKey: env.R2_SECRET_ACCESS_KEY,
   },
+  // Disable automatic checksum calculation for R2 compatibility
+  requestChecksumCalculation: 'WHEN_REQUIRED',
+  responseChecksumValidation: 'WHEN_REQUIRED',
 })
 
 // Allowed file types
@@ -54,13 +58,18 @@ export async function getSignedUploadUrl(
   const key = `${type}s/${userId}/${nanoid()}.${ext}`
 
   // Create signed URL (expires in 10 minutes)
+  // Note: Don't include ChecksumAlgorithm - it causes CORS issues with R2
   const command = new PutObjectCommand({
     Bucket: env.R2_BUCKET,
     Key: key,
     ContentType: mimeType,
   })
 
-  const uploadUrl = await getSignedUrl(r2, command, { expiresIn: 600 })
+  // Disable checksum headers in signed URL to avoid CORS issues
+  const uploadUrl = await getSignedUrl(r2, command, {
+    expiresIn: 600,
+    unhoistableHeaders: new Set(['x-amz-checksum-crc32']),
+  })
   const expiresAt = new Date(Date.now() + 600 * 1000)
   const publicUrl = `${env.R2_PUBLIC_URL}/${key}`
 

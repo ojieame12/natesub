@@ -51,9 +51,10 @@ export default function AvatarUploadStep() {
             setAvatarUrl(publicUrl)
             // Clean up local preview URL
             URL.revokeObjectURL(localPreview)
-        } catch (err) {
+        } catch (err: any) {
             console.error('Avatar upload failed:', err)
-            setError('Failed to upload image. Please try again.')
+            const errorMsg = err?.message || err?.error || 'Failed to upload image. Please try again.'
+            setError(errorMsg)
             setAvatarPreview(null)
             setAvatarUrl(null)
             URL.revokeObjectURL(localPreview)
