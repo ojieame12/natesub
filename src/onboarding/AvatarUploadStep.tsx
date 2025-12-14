@@ -134,7 +134,7 @@ export default function AvatarUploadStep() {
                                 </div>
                             </div>
                             <span className="avatar-upload-text">Tap to add photo</span>
-                            <span className="avatar-upload-hint">JPG, PNG up to 5MB</span>
+                            <span className="avatar-upload-hint">JPG, PNG up to 10MB</span>
                         </Pressable>
                     )}
 
