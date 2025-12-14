@@ -11,6 +11,13 @@ const resend = new Resend(env.RESEND_API_KEY)
 const MAX_RETRIES = 3
 const RETRY_DELAYS_MS = [1000, 3000, 5000] // 1s, 3s, 5s
 
+// Logo configuration - uses multiple fallback strategies for maximum compatibility
+// Primary: Hosted image, Fallback: Styled text logo
+const LOGO_URL = `${env.APP_URL}/logo-email.png` // 200x50px recommended, PNG with transparency
+const BRAND_NAME = 'Nate'
+const BRAND_COLOR = '#FF941A'
+const BRAND_COLOR_DARK = '#E8850F'
+
 // Track email send attempts for monitoring
 interface EmailResult {
   success: boolean
@@ -109,6 +116,251 @@ function formatAmountForEmail(amountCents: number, currency: string): string {
 }
 
 // ============================================
+// BASE EMAIL TEMPLATE
+// ============================================
+
+interface BaseTemplateOptions {
+  preheader?: string           // Hidden preview text shown in inbox
+  headline: string             // Main heading
+  body: string                 // Main content (can include HTML)
+  ctaText?: string            // Button text
+  ctaUrl?: string             // Button URL
+  ctaColor?: string           // Button color (default: brand orange)
+  footerText?: string         // Additional footer text
+  showUnsubscribe?: boolean   // Show unsubscribe link (for marketing emails)
+}
+
+/**
+ * Base email template with consistent branding
+ * Uses bulletproof logo rendering with multiple fallback strategies:
+ * 1. Hosted image (most visual)
+ * 2. Alt text fallback (if images blocked)
+ * 3. Text-based logo backup in header background
+ */
+function baseTemplate(options: BaseTemplateOptions): string {
+  const {
+    preheader,
+    headline,
+    body,
+    ctaText,
+    ctaUrl,
+    ctaColor = BRAND_COLOR,
+    footerText,
+    showUnsubscribe = false,
+  } = options
+
+  const currentYear = new Date().getFullYear()
+
+  // Preheader - hidden text that appears in email preview
+  const preheaderHtml = preheader ? `
+    <!--[if mso]><table role="presentation" width="0" style="display:none;"><tr><td><![endif]-->
+    <div style="display: none; max-height: 0px; overflow: hidden; mso-hide: all;">
+      ${escapeHtml(preheader)}
+      ${'&nbsp;'.repeat(100)}
+    </div>
+    <!--[if mso]></td></tr></table><![endif]-->
+  ` : ''
+
+  // CTA Button with Outlook compatibility
+  const ctaHtml = ctaText && ctaUrl ? `
+    <table role="presentation" cellpadding="0" cellspacing="0" style="margin: 24px 0;">
+      <tr>
+        <td style="border-radius: 8px; background-color: ${ctaColor};">
+          <!--[if mso]>
+          <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="${escapeHtml(ctaUrl)}" style="height: 48px; width: 200px; v-text-anchor: middle;" arcsize="17%" strokecolor="${ctaColor}" fillcolor="${ctaColor}">
+          <w:anchorlock/>
+          <center style="color: #ffffff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 16px; font-weight: 600;">
+            ${escapeHtml(ctaText)}
+          </center>
+          </v:roundrect>
+          <![endif]-->
+          <!--[if !mso]><!-->
+          <a href="${escapeHtml(ctaUrl)}" style="display: inline-block; background-color: ${ctaColor}; color: #ffffff !important; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 600; font-size: 16px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; mso-padding-alt: 14px 32px;">
+            ${escapeHtml(ctaText)}
+          </a>
+          <!--<![endif]-->
+        </td>
+      </tr>
+    </table>
+  ` : ''
+
+  // Footer with optional unsubscribe
+  const unsubscribeHtml = showUnsubscribe ? `
+    <p style="margin: 0 0 8px 0;">
+      <a href="${env.APP_URL}/unsubscribe" style="color: #888888; text-decoration: underline;">Unsubscribe</a>
+    </p>
+  ` : ''
+
+  const footerExtraHtml = footerText ? `
+    <p style="margin: 0 0 16px 0; color: #666666;">${escapeHtml(footerText)}</p>
+  ` : ''
+
+  return `
+<!DOCTYPE html>
+<html lang="en" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="x-apple-disable-message-reformatting">
+  <meta name="format-detection" content="telephone=no, date=no, address=no, email=no">
+  <title>${escapeHtml(headline)}</title>
+  <!--[if mso]>
+  <noscript>
+    <xml>
+      <o:OfficeDocumentSettings>
+        <o:PixelsPerInch>96</o:PixelsPerInch>
+      </o:OfficeDocumentSettings>
+    </xml>
+  </noscript>
+  <![endif]-->
+  <style>
+    /* Reset styles */
+    body, table, td, p, a, li, blockquote { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+    table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+    img { -ms-interpolation-mode: bicubic; border: 0; height: auto; line-height: 100%; outline: none; text-decoration: none; }
+    body { margin: 0 !important; padding: 0 !important; width: 100% !important; }
+
+    /* Dark mode support */
+    @media (prefers-color-scheme: dark) {
+      .dark-mode-bg { background-color: #1a1a1a !important; }
+      .dark-mode-text { color: #ffffff !important; }
+      .dark-mode-text-secondary { color: #cccccc !important; }
+    }
+
+    /* Mobile styles */
+    @media screen and (max-width: 600px) {
+      .mobile-padding { padding: 24px 16px !important; }
+      .mobile-full-width { width: 100% !important; }
+    }
+  </style>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f5f5f5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+  ${preheaderHtml}
+
+  <!-- Email wrapper -->
+  <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f5f5f5;">
+    <tr>
+      <td align="center" style="padding: 24px 16px;">
+
+        <!-- Email container -->
+        <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width: 520px; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+
+          <!-- Logo Header -->
+          <tr>
+            <td align="center" style="padding: 32px 24px 24px 24px; border-bottom: 1px solid #f0f0f0;">
+              <!--[if mso]>
+              <table role="presentation" cellpadding="0" cellspacing="0" width="100%"><tr><td align="center">
+              <![endif]-->
+
+              <!-- Logo with multiple fallback strategies -->
+              <!-- Strategy 1: Hosted image -->
+              <a href="${env.APP_URL}" style="text-decoration: none; display: inline-block;">
+                <!--[if mso]>
+                <img src="${LOGO_URL}" alt="${BRAND_NAME}" width="100" height="32" style="display: block; border: 0;">
+                <![endif]-->
+                <!--[if !mso]><!-->
+                <img src="${LOGO_URL}"
+                     alt="${BRAND_NAME}"
+                     width="100"
+                     height="32"
+                     style="display: block; border: 0; max-width: 100px; height: auto;"
+                     onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                <!-- Fallback: Styled text logo (shown if image fails) -->
+                <div style="display: none; font-size: 28px; font-weight: 700; color: ${BRAND_COLOR}; letter-spacing: -0.5px;">
+                  ${BRAND_NAME}
+                </div>
+                <!--<![endif]-->
+              </a>
+
+              <!--[if mso]>
+              </td></tr></table>
+              <![endif]-->
+            </td>
+          </tr>
+
+          <!-- Main Content -->
+          <tr>
+            <td class="mobile-padding" style="padding: 32px 40px 40px 40px;">
+
+              <!-- Headline -->
+              <h1 style="margin: 0 0 20px 0; font-size: 24px; font-weight: 600; color: #1a1a1a; line-height: 1.3;">
+                ${headline}
+              </h1>
+
+              <!-- Body Content -->
+              <div style="font-size: 16px; color: #4a4a4a; line-height: 1.6;">
+                ${body}
+              </div>
+
+              <!-- CTA Button -->
+              ${ctaHtml}
+
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 24px 40px; background-color: #fafafa; border-top: 1px solid #f0f0f0;">
+              <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
+                <tr>
+                  <td align="center" style="font-size: 13px; color: #888888; line-height: 1.5;">
+                    ${footerExtraHtml}
+                    ${unsubscribeHtml}
+                    <p style="margin: 0 0 8px 0;">
+                      <a href="${env.APP_URL}/help" style="color: #888888; text-decoration: none;">Help</a>
+                      &nbsp;&middot;&nbsp;
+                      <a href="${env.APP_URL}/privacy" style="color: #888888; text-decoration: none;">Privacy</a>
+                      &nbsp;&middot;&nbsp;
+                      <a href="${env.APP_URL}/terms" style="color: #888888; text-decoration: none;">Terms</a>
+                    </p>
+                    <p style="margin: 0; color: #aaaaaa;">
+                      &copy; ${currentYear} ${BRAND_NAME}. All rights reserved.
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+        </table>
+        <!-- End email container -->
+
+      </td>
+    </tr>
+  </table>
+  <!-- End email wrapper -->
+
+</body>
+</html>
+  `.trim()
+}
+
+// Helper to create highlighted card/box for amounts
+function amountCard(label: string, amount: string, color: string = '#1a1a1a'): string {
+  return `
+    <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin: 20px 0;">
+      <tr>
+        <td style="background-color: #f8f8f8; border-radius: 12px; padding: 20px; text-align: center;">
+          <p style="margin: 0 0 8px 0; font-size: 14px; color: #888888;">${escapeHtml(label)}</p>
+          <p style="margin: 0; font-size: 32px; font-weight: 700; color: ${color};">${escapeHtml(amount)}</p>
+        </td>
+      </tr>
+    </table>
+  `
+}
+
+// Helper for info rows (label: value pairs)
+function infoRow(label: string, value: string): string {
+  return `
+    <p style="margin: 0 0 8px 0;">
+      <span style="color: #888888;">${escapeHtml(label)}:</span>
+      <strong style="color: #1a1a1a;">${escapeHtml(value)}</strong>
+    </p>
+  `
+}
+
+// ============================================
 // TEST / HEALTH CHECK
 // ============================================
 
@@ -120,14 +372,18 @@ export async function sendTestEmail(to: string): Promise<EmailResult> {
     resend.emails.send({
       from: env.EMAIL_FROM,
       to,
-      subject: 'NatePay Email Test',
-      html: `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 500px; margin: 0 auto; padding: 40px 20px;">
-          <h1 style="font-size: 24px; font-weight: 600; margin-bottom: 24px; color: #16a34a;">Email Working!</h1>
-          <p style="font-size: 16px; color: #4a4a4a; margin-bottom: 16px;">This is a test email from NatePay to verify email delivery is working correctly.</p>
-          <p style="font-size: 14px; color: #888;">Sent at: ${new Date().toISOString()}</p>
-        </div>
-      `,
+      subject: `${BRAND_NAME} Email Test`,
+      html: baseTemplate({
+        preheader: 'This is a test email to verify delivery is working.',
+        headline: 'Email Working!',
+        body: `
+          <p style="margin: 0 0 16px 0;">This is a test email from ${BRAND_NAME} to verify email delivery is working correctly.</p>
+          <p style="margin: 0; font-size: 14px; color: #888888;">Sent at: ${new Date().toISOString()}</p>
+        `,
+        ctaText: 'Go to Dashboard',
+        ctaUrl: `${env.APP_URL}/dashboard`,
+        ctaColor: '#16a34a',
+      }),
     })
   )
 }
@@ -150,7 +406,7 @@ export async function checkEmailHealth(): Promise<{ healthy: boolean; error?: st
 }
 
 // ============================================
-// EMAIL TEMPLATES
+// AUTHENTICATION EMAILS
 // ============================================
 
 export async function sendOtpEmail(to: string, otp: string): Promise<EmailResult> {
@@ -158,20 +414,31 @@ export async function sendOtpEmail(to: string, otp: string): Promise<EmailResult
     resend.emails.send({
       from: env.EMAIL_FROM,
       to,
-      subject: sanitizeEmailSubject(`${otp} is your Nate verification code`),
-      html: `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 500px; margin: 0 auto; padding: 40px 20px;">
-          <h1 style="font-size: 24px; font-weight: 600; margin-bottom: 24px; color: #1a1a1a;">Your verification code</h1>
-          <p style="font-size: 16px; color: #4a4a4a; margin-bottom: 24px;">Enter this code in the app to sign in:</p>
-          <div style="background-color: #f5f5f5; border-radius: 12px; padding: 24px; text-align: center; margin-bottom: 24px;">
-            <span style="font-size: 36px; font-weight: 700; letter-spacing: 8px; color: #1a1a1a;">${escapeHtml(otp)}</span>
-          </div>
-          <p style="font-size: 14px; color: #888;">This code expires in 15 minutes. If you didn't request this, you can safely ignore it.</p>
-        </div>
-      `,
+      subject: sanitizeEmailSubject(`${otp} is your ${BRAND_NAME} verification code`),
+      html: baseTemplate({
+        preheader: `Your verification code is ${otp}. It expires in 15 minutes.`,
+        headline: 'Your verification code',
+        body: `
+          <p style="margin: 0 0 20px 0;">Enter this code in the app to sign in:</p>
+          <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin: 0 0 20px 0;">
+            <tr>
+              <td style="background-color: #f5f5f5; border-radius: 12px; padding: 24px; text-align: center;">
+                <span style="font-size: 36px; font-weight: 700; letter-spacing: 8px; color: #1a1a1a; font-family: 'SF Mono', Monaco, 'Courier New', monospace;">
+                  ${escapeHtml(otp)}
+                </span>
+              </td>
+            </tr>
+          </table>
+          <p style="margin: 0; font-size: 14px; color: #888888;">This code expires in 15 minutes. If you didn't request this, you can safely ignore it.</p>
+        `,
+      }),
     })
   )
 }
+
+// ============================================
+// ONBOARDING EMAILS
+// ============================================
 
 export async function sendWelcomeEmail(to: string, displayName: string): Promise<EmailResult> {
   const safeName = escapeHtml(displayName)
@@ -179,17 +446,90 @@ export async function sendWelcomeEmail(to: string, displayName: string): Promise
     resend.emails.send({
       from: env.EMAIL_FROM,
       to,
-      subject: 'Welcome to Nate!',
-      html: `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 500px; margin: 0 auto; padding: 40px 20px;">
-          <h1 style="font-size: 24px; font-weight: 600; margin-bottom: 24px; color: #1a1a1a;">Welcome, ${safeName}!</h1>
-          <p style="font-size: 16px; color: #4a4a4a; margin-bottom: 24px;">Your page is live. Share it with your supporters and start receiving subscriptions.</p>
-          <a href="${env.APP_URL}/dashboard" style="display: inline-block; background-color: #FF941A; color: white; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: 600; font-size: 16px;">Go to Dashboard</a>
-        </div>
-      `,
+      subject: `Welcome to ${BRAND_NAME}!`,
+      html: baseTemplate({
+        preheader: `Welcome ${displayName}! Your page is live and ready to receive payments.`,
+        headline: `Welcome, ${safeName}!`,
+        body: `
+          <p style="margin: 0 0 16px 0;">Your page is live. Share it with your clients and start receiving payments.</p>
+          <p style="margin: 0; font-size: 14px; color: #888888;">Need help getting started? Check out our quick start guide.</p>
+        `,
+        ctaText: 'Go to Dashboard',
+        ctaUrl: `${env.APP_URL}/dashboard`,
+      }),
     })
   )
 }
+
+export async function sendOnboardingIncompleteEmail(
+  to: string,
+  isSecondReminder: boolean = false
+): Promise<EmailResult> {
+  const subject = isSecondReminder
+    ? "Don't forget to finish setting up your page"
+    : `Finish setting up your ${BRAND_NAME} page`
+
+  return sendWithRetry(() =>
+    resend.emails.send({
+      from: env.EMAIL_FROM,
+      to,
+      subject: sanitizeEmailSubject(subject),
+      html: baseTemplate({
+        preheader: 'Complete your profile to start receiving payments.',
+        headline: isSecondReminder ? 'Your page is waiting' : 'Almost there!',
+        body: `
+          <p style="margin: 0 0 16px 0;">You started setting up your ${BRAND_NAME} page but didn't finish. Complete your profile to start receiving payments.</p>
+          <p style="margin: 0; font-size: 14px; color: #888888;">It only takes a few minutes to complete.</p>
+        `,
+        ctaText: 'Continue Setup',
+        ctaUrl: `${env.APP_URL}/onboarding`,
+      }),
+    })
+  )
+}
+
+export async function sendNoSubscribersEmail(
+  to: string,
+  displayName: string,
+  shareUrl: string
+): Promise<EmailResult> {
+  const safeName = escapeHtml(displayName)
+  const safeShareUrl = escapeHtml(shareUrl)
+
+  return sendWithRetry(() =>
+    resend.emails.send({
+      from: env.EMAIL_FROM,
+      to,
+      subject: sanitizeEmailSubject('Tips to get your first client'),
+      html: baseTemplate({
+        preheader: 'Your page is ready! Here are tips to get your first payment.',
+        headline: 'Ready to share your page?',
+        body: `
+          <p style="margin: 0 0 16px 0;">Hey ${safeName}, your page is set up and ready to go! Here are some tips to get your first client:</p>
+          <ul style="margin: 0 0 20px 0; padding-left: 20px; color: #4a4a4a;">
+            <li style="margin-bottom: 8px;">Share your link on social media</li>
+            <li style="margin-bottom: 8px;">Send it directly to clients</li>
+            <li style="margin-bottom: 8px;">Add it to your email signature</li>
+          </ul>
+          <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin: 0 0 20px 0;">
+            <tr>
+              <td style="background-color: #f5f5f5; border-radius: 8px; padding: 16px;">
+                <p style="margin: 0 0 8px 0; font-size: 14px; color: #888888;">Your page link:</p>
+                <a href="${safeShareUrl}" style="font-size: 16px; color: ${BRAND_COLOR}; word-break: break-all; text-decoration: none;">${safeShareUrl}</a>
+              </td>
+            </tr>
+          </table>
+        `,
+        ctaText: 'Go to Dashboard',
+        ctaUrl: `${env.APP_URL}/dashboard`,
+      }),
+    })
+  )
+}
+
+// ============================================
+// SUBSCRIBER/PAYMENT EMAILS
+// ============================================
 
 export async function sendNewSubscriberEmail(
   to: string,
@@ -202,73 +542,29 @@ export async function sendNewSubscriberEmail(
   const safeSubscriberName = escapeHtml(subscriberName)
   const safeTierName = tierName ? escapeHtml(tierName) : null
 
+  const tierText = safeTierName ? ` to ${safeTierName}` : ''
+
   return sendWithRetry(() =>
     resend.emails.send({
       from: env.EMAIL_FROM,
       to,
       subject: sanitizeEmailSubject(`New subscriber: ${subscriberName}`),
-      html: `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 500px; margin: 0 auto; padding: 40px 20px;">
-          <h1 style="font-size: 24px; font-weight: 600; margin-bottom: 24px; color: #1a1a1a;">You have a new subscriber!</h1>
-          <p style="font-size: 16px; color: #4a4a4a; margin-bottom: 16px;"><strong>${safeSubscriberName}</strong> just subscribed${safeTierName ? ` to ${safeTierName}` : ''} for <strong>${escapeHtml(formattedAmount)}/month</strong>.</p>
-          <a href="${env.APP_URL}/subscribers" style="display: inline-block; background-color: #FF941A; color: white; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: 600; font-size: 16px;">View Subscribers</a>
-        </div>
-      `,
+      html: baseTemplate({
+        preheader: `${subscriberName} just subscribed for ${formattedAmount}/month.`,
+        headline: 'You have a new subscriber!',
+        body: `
+          <p style="margin: 0 0 16px 0;">
+            <strong>${safeSubscriberName}</strong> just subscribed${tierText} for <strong>${escapeHtml(formattedAmount)}/month</strong>.
+          </p>
+        `,
+        ctaText: 'View Subscribers',
+        ctaUrl: `${env.APP_URL}/subscribers`,
+        ctaColor: '#16a34a',
+      }),
     })
   )
 }
 
-export async function sendRequestEmail(
-  to: string,
-  senderName: string,
-  message: string | null,
-  requestLink: string
-): Promise<EmailResult> {
-  const safeSenderName = escapeHtml(senderName)
-  const safeMessage = message ? escapeHtml(message) : null
-  const safeRequestLink = escapeHtml(requestLink)
-  return sendWithRetry(() =>
-    resend.emails.send({
-      from: env.EMAIL_FROM,
-      to,
-      subject: sanitizeEmailSubject(`${senderName} sent you a request`),
-      html: `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 500px; margin: 0 auto; padding: 40px 20px;">
-          <h1 style="font-size: 24px; font-weight: 600; margin-bottom: 24px; color: #1a1a1a;">${safeSenderName} sent you a request</h1>
-          ${safeMessage ? `<p style="font-size: 16px; color: #4a4a4a; margin-bottom: 24px; font-style: italic;">&quot;${safeMessage}&quot;</p>` : ''}
-          <a href="${safeRequestLink}" style="display: inline-block; background-color: #FF941A; color: white; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: 600; font-size: 16px;">View Request</a>
-        </div>
-      `,
-    })
-  )
-}
-
-export async function sendUpdateEmail(
-  to: string,
-  creatorName: string,
-  title: string | null,
-  body: string
-): Promise<EmailResult> {
-  const safeCreatorName = escapeHtml(creatorName)
-  const safeTitle = title ? escapeHtml(title) : null
-  const safeBody = escapeHtml(body)
-  return sendWithRetry(() =>
-    resend.emails.send({
-      from: env.EMAIL_FROM,
-      to,
-      subject: sanitizeEmailSubject(title || `New update from ${creatorName}`),
-      html: `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 500px; margin: 0 auto; padding: 40px 20px;">
-          <p style="font-size: 14px; color: #888; margin-bottom: 8px;">Update from ${safeCreatorName}</p>
-          ${safeTitle ? `<h1 style="font-size: 24px; font-weight: 600; margin-bottom: 24px; color: #1a1a1a;">${safeTitle}</h1>` : ''}
-          <p style="font-size: 16px; color: #4a4a4a; margin-bottom: 24px; white-space: pre-wrap;">${safeBody}</p>
-        </div>
-      `,
-    })
-  )
-}
-
-// Payment reminder - sent 3 days before renewal
 export async function sendRenewalReminderEmail(
   to: string,
   creatorName: string,
@@ -278,7 +574,6 @@ export async function sendRenewalReminderEmail(
 ): Promise<EmailResult> {
   const formattedAmount = formatAmountForEmail(amount, currency)
   const safeCreatorName = escapeHtml(creatorName)
-
   const formattedDate = renewalDate.toLocaleDateString('en-US', {
     month: 'long',
     day: 'numeric',
@@ -290,19 +585,25 @@ export async function sendRenewalReminderEmail(
       from: env.EMAIL_FROM,
       to,
       subject: sanitizeEmailSubject(`Subscription renewal reminder - ${creatorName}`),
-      html: `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 500px; margin: 0 auto; padding: 40px 20px;">
-          <h1 style="font-size: 24px; font-weight: 600; margin-bottom: 24px; color: #1a1a1a;">Your subscription renews soon</h1>
-          <p style="font-size: 16px; color: #4a4a4a; margin-bottom: 16px;">Your subscription to <strong>${safeCreatorName}</strong> will renew on <strong>${escapeHtml(formattedDate)}</strong> for <strong>${escapeHtml(formattedAmount)}</strong>.</p>
-          <p style="font-size: 14px; color: #888; margin-bottom: 24px;">No action needed if you'd like to continue your subscription. If you need to update your payment method or cancel, visit your account settings.</p>
-          <a href="${env.APP_URL}/settings" style="display: inline-block; background-color: #1a1a1a; color: white; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: 600; font-size: 16px;">Manage Subscription</a>
-        </div>
-      `,
+      html: baseTemplate({
+        preheader: `Your subscription to ${creatorName} renews on ${formattedDate}.`,
+        headline: 'Your subscription renews soon',
+        body: `
+          <p style="margin: 0 0 16px 0;">
+            Your subscription to <strong>${safeCreatorName}</strong> will renew on <strong>${escapeHtml(formattedDate)}</strong> for <strong>${escapeHtml(formattedAmount)}</strong>.
+          </p>
+          <p style="margin: 0; font-size: 14px; color: #888888;">
+            No action needed if you'd like to continue. To update your payment method or cancel, visit your account settings.
+          </p>
+        `,
+        ctaText: 'Manage Subscription',
+        ctaUrl: `${env.APP_URL}/settings`,
+        ctaColor: '#1a1a1a',
+      }),
     })
   )
 }
 
-// Payment failed - dunning email
 export async function sendPaymentFailedEmail(
   to: string,
   creatorName: string,
@@ -314,27 +615,31 @@ export async function sendPaymentFailedEmail(
   const safeCreatorName = escapeHtml(creatorName)
 
   const retryMessage = retryDate
-    ? `We'll automatically retry charging your card on ${retryDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}.`
+    ? `We'll automatically retry on ${retryDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}.`
     : 'Please update your payment method to continue your subscription.'
 
   return sendWithRetry(() =>
     resend.emails.send({
       from: env.EMAIL_FROM,
       to,
-      subject: sanitizeEmailSubject(`Action required: Payment failed for ${creatorName} subscription`),
-      html: `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 500px; margin: 0 auto; padding: 40px 20px;">
-          <h1 style="font-size: 24px; font-weight: 600; margin-bottom: 24px; color: #dc2626;">Payment failed</h1>
-          <p style="font-size: 16px; color: #4a4a4a; margin-bottom: 16px;">We couldn't process your ${escapeHtml(formattedAmount)} payment for your subscription to <strong>${safeCreatorName}</strong>.</p>
-          <p style="font-size: 14px; color: #888; margin-bottom: 24px;">${escapeHtml(retryMessage)}</p>
-          <a href="${env.APP_URL}/settings" style="display: inline-block; background-color: #FF941A; color: white; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: 600; font-size: 16px;">Update Payment Method</a>
-        </div>
-      `,
+      subject: sanitizeEmailSubject(`Action required: Payment failed for ${creatorName}`),
+      html: baseTemplate({
+        preheader: `We couldn't process your ${formattedAmount} payment. Please update your payment method.`,
+        headline: 'Payment failed',
+        body: `
+          <p style="margin: 0 0 16px 0;">
+            We couldn't process your <strong>${escapeHtml(formattedAmount)}</strong> payment for your subscription to <strong>${safeCreatorName}</strong>.
+          </p>
+          <p style="margin: 0; font-size: 14px; color: #888888;">${escapeHtml(retryMessage)}</p>
+        `,
+        ctaText: 'Update Payment Method',
+        ctaUrl: `${env.APP_URL}/settings`,
+        ctaColor: '#dc2626',
+      }),
     })
   )
 }
 
-// Subscription canceled - supports different cancellation reasons
 export async function sendSubscriptionCanceledEmail(
   to: string,
   creatorName: string,
@@ -342,7 +647,6 @@ export async function sendSubscriptionCanceledEmail(
 ): Promise<EmailResult> {
   const safeCreatorName = escapeHtml(creatorName)
 
-  // Different messages based on reason
   let reasonMessage: string
   switch (reason) {
     case 'payment_failed':
@@ -352,7 +656,7 @@ export async function sendSubscriptionCanceledEmail(
       reasonMessage = 'has been canceled as requested'
       break
     case 'creator_deactivated':
-      reasonMessage = 'has ended because the creator deactivated their account'
+      reasonMessage = 'has ended because the service provider deactivated their account'
       break
     default:
       reasonMessage = 'has ended'
@@ -363,23 +667,66 @@ export async function sendSubscriptionCanceledEmail(
       from: env.EMAIL_FROM,
       to,
       subject: sanitizeEmailSubject(`Subscription to ${creatorName} has ended`),
-      html: `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 500px; margin: 0 auto; padding: 40px 20px;">
-          <h1 style="font-size: 24px; font-weight: 600; margin-bottom: 24px; color: #1a1a1a;">Your subscription has ended</h1>
-          <p style="font-size: 16px; color: #4a4a4a; margin-bottom: 16px;">Your subscription to <strong>${safeCreatorName}</strong> ${reasonMessage}.</p>
-          <p style="font-size: 14px; color: #888; margin-bottom: 24px;">You can resubscribe anytime to continue supporting ${safeCreatorName}.</p>
-          <a href="${env.APP_URL}" style="display: inline-block; background-color: #FF941A; color: white; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: 600; font-size: 16px;">Resubscribe</a>
-        </div>
-      `,
+      html: baseTemplate({
+        preheader: `Your subscription to ${creatorName} ${reasonMessage}.`,
+        headline: 'Your subscription has ended',
+        body: `
+          <p style="margin: 0 0 16px 0;">
+            Your subscription to <strong>${safeCreatorName}</strong> ${reasonMessage}.
+          </p>
+          <p style="margin: 0; font-size: 14px; color: #888888;">
+            You can resubscribe anytime to continue supporting ${safeCreatorName}.
+          </p>
+        `,
+        ctaText: 'Resubscribe',
+        ctaUrl: env.APP_URL,
+      }),
     })
   )
 }
 
 // ============================================
-// REQUEST/INVOICE REMINDER EMAILS
+// REQUEST EMAILS
 // ============================================
 
-// Request not opened reminder (sent to recipient)
+export async function sendRequestEmail(
+  to: string,
+  senderName: string,
+  message: string | null,
+  requestLink: string
+): Promise<EmailResult> {
+  const safeSenderName = escapeHtml(senderName)
+  const safeMessage = message ? escapeHtml(message) : null
+
+  const messageHtml = safeMessage
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin: 16px 0;">
+        <tr>
+          <td style="background-color: #f8f8f8; border-radius: 8px; padding: 16px; border-left: 4px solid ${BRAND_COLOR};">
+            <p style="margin: 0; font-style: italic; color: #4a4a4a;">"${safeMessage}"</p>
+          </td>
+        </tr>
+      </table>`
+    : ''
+
+  return sendWithRetry(() =>
+    resend.emails.send({
+      from: env.EMAIL_FROM,
+      to,
+      subject: sanitizeEmailSubject(`${senderName} sent you a request`),
+      html: baseTemplate({
+        preheader: `${senderName} sent you a payment request.`,
+        headline: `${safeSenderName} sent you a request`,
+        body: `
+          ${messageHtml}
+          <p style="margin: 0; font-size: 14px; color: #888888;">Click below to view the details and respond.</p>
+        `,
+        ctaText: 'View Request',
+        ctaUrl: requestLink,
+      }),
+    })
+  )
+}
+
 export async function sendRequestUnopenedEmail(
   to: string,
   senderName: string,
@@ -387,7 +734,6 @@ export async function sendRequestUnopenedEmail(
   isSecondReminder: boolean = false
 ): Promise<EmailResult> {
   const safeSenderName = escapeHtml(senderName)
-  const safeRequestLink = escapeHtml(requestLink)
   const subject = isSecondReminder
     ? `Reminder: ${senderName} is waiting for your response`
     : `${senderName} sent you a request`
@@ -397,19 +743,22 @@ export async function sendRequestUnopenedEmail(
       from: env.EMAIL_FROM,
       to,
       subject: sanitizeEmailSubject(subject),
-      html: `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 500px; margin: 0 auto; padding: 40px 20px;">
-          <h1 style="font-size: 24px; font-weight: 600; margin-bottom: 24px; color: #1a1a1a;">${isSecondReminder ? 'Friendly reminder' : 'You have a request'}</h1>
-          <p style="font-size: 16px; color: #4a4a4a; margin-bottom: 24px;"><strong>${safeSenderName}</strong> sent you a request${isSecondReminder ? ' and is waiting for your response' : ''}.</p>
-          <a href="${safeRequestLink}" style="display: inline-block; background-color: #FF941A; color: white; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: 600; font-size: 16px;">View Request</a>
-          <p style="font-size: 14px; color: #888; margin-top: 24px;">This request will expire if not responded to.</p>
-        </div>
-      `,
+      html: baseTemplate({
+        preheader: `${senderName} sent you a request${isSecondReminder ? ' and is waiting for your response' : ''}.`,
+        headline: isSecondReminder ? 'Friendly reminder' : 'You have a request',
+        body: `
+          <p style="margin: 0 0 16px 0;">
+            <strong>${safeSenderName}</strong> sent you a request${isSecondReminder ? ' and is waiting for your response' : ''}.
+          </p>
+          <p style="margin: 0; font-size: 14px; color: #888888;">This request will expire if not responded to.</p>
+        `,
+        ctaText: 'View Request',
+        ctaUrl: requestLink,
+      }),
     })
   )
 }
 
-// Request opened but not paid reminder (sent to recipient)
 export async function sendRequestUnpaidEmail(
   to: string,
   senderName: string,
@@ -419,50 +768,59 @@ export async function sendRequestUnpaidEmail(
 ): Promise<EmailResult> {
   const formattedAmount = formatAmountForEmail(amount, currency)
   const safeSenderName = escapeHtml(senderName)
-  const safeRequestLink = escapeHtml(requestLink)
 
   return sendWithRetry(() =>
     resend.emails.send({
       from: env.EMAIL_FROM,
       to,
       subject: sanitizeEmailSubject(`Complete your payment to ${senderName}`),
-      html: `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 500px; margin: 0 auto; padding: 40px 20px;">
-          <h1 style="font-size: 24px; font-weight: 600; margin-bottom: 24px; color: #1a1a1a;">Complete your payment</h1>
-          <p style="font-size: 16px; color: #4a4a4a; margin-bottom: 16px;">You viewed a request from <strong>${safeSenderName}</strong> for <strong>${escapeHtml(formattedAmount)}</strong> but haven't completed the payment yet.</p>
-          <a href="${safeRequestLink}" style="display: inline-block; background-color: #FF941A; color: white; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: 600; font-size: 16px;">Complete Payment</a>
-        </div>
-      `,
+      html: baseTemplate({
+        preheader: `You viewed a request for ${formattedAmount} but haven't completed payment.`,
+        headline: 'Complete your payment',
+        body: `
+          <p style="margin: 0 0 16px 0;">
+            You viewed a request from <strong>${safeSenderName}</strong> for <strong>${escapeHtml(formattedAmount)}</strong> but haven't completed the payment yet.
+          </p>
+        `,
+        ctaText: 'Complete Payment',
+        ctaUrl: requestLink,
+      }),
     })
   )
 }
 
-// Request expiring soon reminder (sent to recipient)
 export async function sendRequestExpiringEmail(
   to: string,
   senderName: string,
   requestLink: string
 ): Promise<EmailResult> {
   const safeSenderName = escapeHtml(senderName)
-  const safeRequestLink = escapeHtml(requestLink)
 
   return sendWithRetry(() =>
     resend.emails.send({
       from: env.EMAIL_FROM,
       to,
       subject: sanitizeEmailSubject(`Request from ${senderName} expires soon`),
-      html: `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 500px; margin: 0 auto; padding: 40px 20px;">
-          <h1 style="font-size: 24px; font-weight: 600; margin-bottom: 24px; color: #dc2626;">Request expiring soon</h1>
-          <p style="font-size: 16px; color: #4a4a4a; margin-bottom: 24px;">The request from <strong>${safeSenderName}</strong> will expire in 24 hours. After that, you won't be able to respond.</p>
-          <a href="${safeRequestLink}" style="display: inline-block; background-color: #FF941A; color: white; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: 600; font-size: 16px;">Respond Now</a>
-        </div>
-      `,
+      html: baseTemplate({
+        preheader: `The request from ${senderName} will expire in 24 hours.`,
+        headline: 'Request expiring soon',
+        body: `
+          <p style="margin: 0 0 16px 0;">
+            The request from <strong>${safeSenderName}</strong> will expire in <strong>24 hours</strong>. After that, you won't be able to respond.
+          </p>
+        `,
+        ctaText: 'Respond Now',
+        ctaUrl: requestLink,
+        ctaColor: '#dc2626',
+      }),
     })
   )
 }
 
-// Invoice due soon reminder (sent to recipient)
+// ============================================
+// INVOICE EMAILS
+// ============================================
+
 export async function sendInvoiceDueEmail(
   to: string,
   senderName: string,
@@ -474,13 +832,11 @@ export async function sendInvoiceDueEmail(
 ): Promise<EmailResult> {
   const formattedAmount = formatAmountForEmail(amount, currency)
   const safeSenderName = escapeHtml(senderName)
-  const safeRequestLink = escapeHtml(requestLink)
   const formattedDate = dueDate.toLocaleDateString('en-US', {
     month: 'long',
     day: 'numeric',
     year: 'numeric',
   })
-
   const urgencyText = daysUntilDue === 1 ? 'tomorrow' : `in ${daysUntilDue} days`
 
   return sendWithRetry(() =>
@@ -488,18 +844,21 @@ export async function sendInvoiceDueEmail(
       from: env.EMAIL_FROM,
       to,
       subject: sanitizeEmailSubject(`Invoice from ${senderName} due ${urgencyText}`),
-      html: `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 500px; margin: 0 auto; padding: 40px 20px;">
-          <h1 style="font-size: 24px; font-weight: 600; margin-bottom: 24px; color: #1a1a1a;">Invoice due ${urgencyText}</h1>
-          <p style="font-size: 16px; color: #4a4a4a; margin-bottom: 16px;">Your invoice from <strong>${safeSenderName}</strong> for <strong>${escapeHtml(formattedAmount)}</strong> is due on <strong>${escapeHtml(formattedDate)}</strong>.</p>
-          <a href="${safeRequestLink}" style="display: inline-block; background-color: #FF941A; color: white; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: 600; font-size: 16px;">Pay Now</a>
-        </div>
-      `,
+      html: baseTemplate({
+        preheader: `Your invoice for ${formattedAmount} is due ${urgencyText}.`,
+        headline: `Invoice due ${urgencyText}`,
+        body: `
+          <p style="margin: 0 0 16px 0;">
+            Your invoice from <strong>${safeSenderName}</strong> for <strong>${escapeHtml(formattedAmount)}</strong> is due on <strong>${escapeHtml(formattedDate)}</strong>.
+          </p>
+        `,
+        ctaText: 'Pay Now',
+        ctaUrl: requestLink,
+      }),
     })
   )
 }
 
-// Invoice overdue reminder (sent to recipient)
 export async function sendInvoiceOverdueEmail(
   to: string,
   senderName: string,
@@ -511,7 +870,6 @@ export async function sendInvoiceOverdueEmail(
 ): Promise<EmailResult> {
   const formattedAmount = formatAmountForEmail(amount, currency)
   const safeSenderName = escapeHtml(senderName)
-  const safeRequestLink = escapeHtml(requestLink)
   const formattedDate = dueDate.toLocaleDateString('en-US', {
     month: 'long',
     day: 'numeric',
@@ -522,22 +880,59 @@ export async function sendInvoiceOverdueEmail(
       from: env.EMAIL_FROM,
       to,
       subject: sanitizeEmailSubject(`Overdue: Invoice from ${senderName}`),
-      html: `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 500px; margin: 0 auto; padding: 40px 20px;">
-          <h1 style="font-size: 24px; font-weight: 600; margin-bottom: 24px; color: #dc2626;">Invoice overdue</h1>
-          <p style="font-size: 16px; color: #4a4a4a; margin-bottom: 16px;">Your invoice from <strong>${safeSenderName}</strong> for <strong>${escapeHtml(formattedAmount)}</strong> was due on ${escapeHtml(formattedDate)} (${daysOverdue} day${daysOverdue > 1 ? 's' : ''} ago).</p>
-          <a href="${safeRequestLink}" style="display: inline-block; background-color: #dc2626; color: white; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: 600; font-size: 16px;">Pay Now</a>
-        </div>
-      `,
+      html: baseTemplate({
+        preheader: `Your invoice for ${formattedAmount} is ${daysOverdue} days overdue.`,
+        headline: 'Invoice overdue',
+        body: `
+          <p style="margin: 0 0 16px 0;">
+            Your invoice from <strong>${safeSenderName}</strong> for <strong>${escapeHtml(formattedAmount)}</strong> was due on ${escapeHtml(formattedDate)} <strong>(${daysOverdue} day${daysOverdue > 1 ? 's' : ''} ago)</strong>.
+          </p>
+        `,
+        ctaText: 'Pay Now',
+        ctaUrl: requestLink,
+        ctaColor: '#dc2626',
+      }),
     })
   )
 }
 
 // ============================================
-// PAYOUT NOTIFICATION EMAILS
+// UPDATE EMAILS
 // ============================================
 
-// Payout completed - money hit their bank (sent to creator)
+export async function sendUpdateEmail(
+  to: string,
+  creatorName: string,
+  title: string | null,
+  body: string
+): Promise<EmailResult> {
+  const safeCreatorName = escapeHtml(creatorName)
+  const safeTitle = title ? escapeHtml(title) : null
+  const safeBody = escapeHtml(body)
+
+  const headlineText = safeTitle || `New update from ${safeCreatorName}`
+
+  return sendWithRetry(() =>
+    resend.emails.send({
+      from: env.EMAIL_FROM,
+      to,
+      subject: sanitizeEmailSubject(title || `New update from ${creatorName}`),
+      html: baseTemplate({
+        preheader: body.substring(0, 100) + (body.length > 100 ? '...' : ''),
+        headline: headlineText,
+        body: `
+          <p style="margin: 0 0 8px 0; font-size: 14px; color: #888888;">From ${safeCreatorName}</p>
+          <p style="margin: 0; white-space: pre-wrap; line-height: 1.6;">${safeBody}</p>
+        `,
+      }),
+    })
+  )
+}
+
+// ============================================
+// PAYOUT EMAILS
+// ============================================
+
 export async function sendPayoutCompletedEmail(
   to: string,
   displayName: string,
@@ -547,26 +942,31 @@ export async function sendPayoutCompletedEmail(
 ): Promise<EmailResult> {
   const formattedAmount = formatAmountForEmail(amount, currency)
   const safeName = escapeHtml(displayName)
-  const bankInfo = bankLast4 ? ` ending in ${escapeHtml(bankLast4)}` : ''
+  const bankInfo = bankLast4 ? ` ending in ****${escapeHtml(bankLast4)}` : ''
 
   return sendWithRetry(() =>
     resend.emails.send({
       from: env.EMAIL_FROM,
       to,
       subject: sanitizeEmailSubject(`${formattedAmount} deposited to your account`),
-      html: `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 500px; margin: 0 auto; padding: 40px 20px;">
-          <h1 style="font-size: 24px; font-weight: 600; margin-bottom: 24px; color: #16a34a;">Money on the way!</h1>
-          <p style="font-size: 16px; color: #4a4a4a; margin-bottom: 16px;">Hey ${safeName}, <strong>${escapeHtml(formattedAmount)}</strong> has been deposited to your bank account${bankInfo}.</p>
-          <p style="font-size: 14px; color: #888; margin-bottom: 24px;">Funds typically arrive within 1-2 business days.</p>
-          <a href="${env.APP_URL}/dashboard" style="display: inline-block; background-color: #FF941A; color: white; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: 600; font-size: 16px;">View Dashboard</a>
-        </div>
-      `,
+      html: baseTemplate({
+        preheader: `${formattedAmount} has been deposited to your bank account.`,
+        headline: 'Money on the way!',
+        body: `
+          <p style="margin: 0 0 16px 0;">
+            Hey ${safeName}, <strong>${escapeHtml(formattedAmount)}</strong> has been deposited to your bank account${bankInfo}.
+          </p>
+          ${amountCard('Amount deposited', formattedAmount, '#16a34a')}
+          <p style="margin: 0; font-size: 14px; color: #888888;">Funds typically arrive within 1-2 business days.</p>
+        `,
+        ctaText: 'View Dashboard',
+        ctaUrl: `${env.APP_URL}/dashboard`,
+        ctaColor: '#16a34a',
+      }),
     })
   )
 }
 
-// Payout failed (sent to creator)
 export async function sendPayoutFailedEmail(
   to: string,
   displayName: string,
@@ -581,23 +981,60 @@ export async function sendPayoutFailedEmail(
       from: env.EMAIL_FROM,
       to,
       subject: sanitizeEmailSubject('Payout failed - action required'),
-      html: `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 500px; margin: 0 auto; padding: 40px 20px;">
-          <h1 style="font-size: 24px; font-weight: 600; margin-bottom: 24px; color: #dc2626;">Payout failed</h1>
-          <p style="font-size: 16px; color: #4a4a4a; margin-bottom: 16px;">Hey ${safeName}, we couldn't complete your payout of <strong>${escapeHtml(formattedAmount)}</strong>.</p>
-          <p style="font-size: 14px; color: #888; margin-bottom: 24px;">Please check that your bank details are correct. We'll retry the transfer automatically.</p>
-          <a href="${env.APP_URL}/settings" style="display: inline-block; background-color: #FF941A; color: white; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: 600; font-size: 16px;">Check Bank Details</a>
-        </div>
-      `,
+      html: baseTemplate({
+        preheader: `We couldn't complete your payout of ${formattedAmount}.`,
+        headline: 'Payout failed',
+        body: `
+          <p style="margin: 0 0 16px 0;">
+            Hey ${safeName}, we couldn't complete your payout of <strong>${escapeHtml(formattedAmount)}</strong>.
+          </p>
+          <p style="margin: 0; font-size: 14px; color: #888888;">
+            Please check that your bank details are correct. We'll retry the transfer automatically.
+          </p>
+        `,
+        ctaText: 'Check Bank Details',
+        ctaUrl: `${env.APP_URL}/settings`,
+        ctaColor: '#dc2626',
+      }),
+    })
+  )
+}
+
+export async function sendBankSetupIncompleteEmail(
+  to: string,
+  displayName: string,
+  pendingAmount: number,
+  currency: string
+): Promise<EmailResult> {
+  const formattedAmount = formatAmountForEmail(pendingAmount, currency)
+  const safeName = escapeHtml(displayName)
+
+  return sendWithRetry(() =>
+    resend.emails.send({
+      from: env.EMAIL_FROM,
+      to,
+      subject: sanitizeEmailSubject('Add bank details to receive your earnings'),
+      html: baseTemplate({
+        preheader: `You have ${formattedAmount} ready to be paid out.`,
+        headline: 'Your earnings are waiting',
+        body: `
+          <p style="margin: 0 0 16px 0;">
+            Hey ${safeName}, you have <strong>${escapeHtml(formattedAmount)}</strong> ready to be paid out, but we need your bank details first.
+          </p>
+          ${amountCard('Pending payout', formattedAmount, BRAND_COLOR)}
+        `,
+        ctaText: 'Add Bank Details',
+        ctaUrl: `${env.APP_URL}/settings`,
+        ctaColor: '#dc2626',
+      }),
     })
   )
 }
 
 // ============================================
-// PAYROLL NOTIFICATION EMAILS
+// PAYROLL EMAILS
 // ============================================
 
-// New pay statement available (sent to creator)
 export async function sendPayrollReadyEmail(
   to: string,
   displayName: string,
@@ -614,108 +1051,20 @@ export async function sendPayrollReadyEmail(
     resend.emails.send({
       from: env.EMAIL_FROM,
       to,
-      subject: sanitizeEmailSubject(`Your pay statement is ready`),
-      html: `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 500px; margin: 0 auto; padding: 40px 20px;">
-          <h1 style="font-size: 24px; font-weight: 600; margin-bottom: 24px; color: #1a1a1a;">Pay statement ready</h1>
-          <p style="font-size: 16px; color: #4a4a4a; margin-bottom: 16px;">Hey ${safeName}, your pay statement for <strong>${escapeHtml(periodLabel)}</strong> is now available.</p>
-          <div style="background-color: #f5f5f5; border-radius: 12px; padding: 20px; margin-bottom: 24px;">
-            <p style="font-size: 14px; color: #888; margin: 0 0 8px 0;">Net earnings</p>
-            <p style="font-size: 28px; font-weight: 700; color: #1a1a1a; margin: 0;">${escapeHtml(formattedAmount)}</p>
-          </div>
-          <a href="${env.APP_URL}/payroll" style="display: inline-block; background-color: #FF941A; color: white; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: 600; font-size: 16px;">View Statement</a>
-          <p style="font-size: 14px; color: #888; margin-top: 24px;">Use this statement for income verification, taxes, or your records.</p>
-        </div>
-      `,
-    })
-  )
-}
-
-// ============================================
-// ONBOARDING/SETUP REMINDER EMAILS
-// ============================================
-
-// Incomplete onboarding reminder (sent to creator)
-export async function sendOnboardingIncompleteEmail(
-  to: string,
-  isSecondReminder: boolean = false
-): Promise<EmailResult> {
-  const subject = isSecondReminder
-    ? "Don't forget to finish setting up your page"
-    : 'Finish setting up your Nate page'
-
-  return sendWithRetry(() =>
-    resend.emails.send({
-      from: env.EMAIL_FROM,
-      to,
-      subject: sanitizeEmailSubject(subject),
-      html: `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 500px; margin: 0 auto; padding: 40px 20px;">
-          <h1 style="font-size: 24px; font-weight: 600; margin-bottom: 24px; color: #1a1a1a;">${isSecondReminder ? 'Your page is waiting' : 'Almost there!'}</h1>
-          <p style="font-size: 16px; color: #4a4a4a; margin-bottom: 24px;">You started setting up your Nate page but didn't finish. Complete your profile to start receiving payments.</p>
-          <a href="${env.APP_URL}/onboarding" style="display: inline-block; background-color: #FF941A; color: white; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: 600; font-size: 16px;">Continue Setup</a>
-        </div>
-      `,
-    })
-  )
-}
-
-// Bank setup incomplete - blocking payouts (sent to creator)
-export async function sendBankSetupIncompleteEmail(
-  to: string,
-  displayName: string,
-  pendingAmount: number,
-  currency: string
-): Promise<EmailResult> {
-  const formattedAmount = formatAmountForEmail(pendingAmount, currency)
-  const safeName = escapeHtml(displayName)
-
-  return sendWithRetry(() =>
-    resend.emails.send({
-      from: env.EMAIL_FROM,
-      to,
-      subject: sanitizeEmailSubject('Add bank details to receive your earnings'),
-      html: `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 500px; margin: 0 auto; padding: 40px 20px;">
-          <h1 style="font-size: 24px; font-weight: 600; margin-bottom: 24px; color: #dc2626;">Your earnings are waiting</h1>
-          <p style="font-size: 16px; color: #4a4a4a; margin-bottom: 16px;">Hey ${safeName}, you have <strong>${escapeHtml(formattedAmount)}</strong> ready to be paid out, but we need your bank details first.</p>
-          <a href="${env.APP_URL}/settings" style="display: inline-block; background-color: #FF941A; color: white; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: 600; font-size: 16px;">Add Bank Details</a>
-        </div>
-      `,
-    })
-  )
-}
-
-// No subscribers after 7 days (sent to creator)
-export async function sendNoSubscribersEmail(
-  to: string,
-  displayName: string,
-  shareUrl: string
-): Promise<EmailResult> {
-  const safeName = escapeHtml(displayName)
-  const safeShareUrl = escapeHtml(shareUrl)
-
-  return sendWithRetry(() =>
-    resend.emails.send({
-      from: env.EMAIL_FROM,
-      to,
-      subject: sanitizeEmailSubject('Tips to get your first subscriber'),
-      html: `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 500px; margin: 0 auto; padding: 40px 20px;">
-          <h1 style="font-size: 24px; font-weight: 600; margin-bottom: 24px; color: #1a1a1a;">Ready to share your page?</h1>
-          <p style="font-size: 16px; color: #4a4a4a; margin-bottom: 16px;">Hey ${safeName}, your page is set up and ready to go! Here are some tips to get your first subscriber:</p>
-          <ul style="font-size: 16px; color: #4a4a4a; margin-bottom: 24px; padding-left: 20px;">
-            <li style="margin-bottom: 8px;">Share your link on social media</li>
-            <li style="margin-bottom: 8px;">Send it directly to clients or supporters</li>
-            <li style="margin-bottom: 8px;">Add it to your email signature</li>
-          </ul>
-          <div style="background-color: #f5f5f5; border-radius: 8px; padding: 16px; margin-bottom: 24px;">
-            <p style="font-size: 14px; color: #888; margin: 0 0 8px 0;">Your page link:</p>
-            <a href="${safeShareUrl}" style="font-size: 16px; color: #FF941A; word-break: break-all;">${safeShareUrl}</a>
-          </div>
-          <a href="${env.APP_URL}/dashboard" style="display: inline-block; background-color: #FF941A; color: white; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: 600; font-size: 16px;">Go to Dashboard</a>
-        </div>
-      `,
+      subject: sanitizeEmailSubject('Your pay statement is ready'),
+      html: baseTemplate({
+        preheader: `Your pay statement for ${periodLabel} is ready. Net earnings: ${formattedAmount}`,
+        headline: 'Pay statement ready',
+        body: `
+          <p style="margin: 0 0 16px 0;">
+            Hey ${safeName}, your pay statement for <strong>${escapeHtml(periodLabel)}</strong> is now available.
+          </p>
+          ${amountCard('Net earnings', formattedAmount, '#16a34a')}
+          <p style="margin: 0; font-size: 14px; color: #888888;">Use this statement for income verification, taxes, or your records.</p>
+        `,
+        ctaText: 'View Statement',
+        ctaUrl: `${env.APP_URL}/payroll`,
+      }),
     })
   )
 }
