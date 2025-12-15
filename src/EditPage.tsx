@@ -82,7 +82,168 @@ export default function EditPage() {
     setHasChanges(changed)
   }, [displayName, bio, avatarUrl, voiceIntroUrl, pricingModel, singleAmount, tiers, perks, impactItems, feeMode, isPublic, profile])
 
-  // ... (avatar handlers omitted for brevity) ...
+  // Avatar upload handler
+  const handleAvatarClick = () => {
+    fileInputRef.current?.click()
+  }
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const isImage = file.type.startsWith('image/') ||
+                   file.type === 'image/heic' ||
+                   file.type === 'image/heif' ||
+                   file.name.toLowerCase().endsWith('.heic') ||
+                   file.name.toLowerCase().endsWith('.heif')
+
+    if (!isImage) {
+      toast.error('Please upload an image file')
+      return
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('Image must be less than 10MB')
+      return
+    }
+
+    setIsUploading(true)
+    try {
+      const url = await uploadFile(file, 'avatar')
+      setAvatarUrl(url)
+      toast.success('Avatar uploaded')
+    } catch (err: any) {
+      toast.error(err?.error || err?.message || 'Failed to upload avatar')
+    } finally {
+      setIsUploading(false)
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+    }
+  }
+
+  // Voice intro handlers
+  const handleVoiceRecorded = async (blob: Blob, _duration: number) => {
+    setVoiceBlob(blob)
+    setIsVoiceUploading(true)
+    try {
+      const url = await uploadBlob(blob, 'voice')
+      setVoiceIntroUrl(url)
+      setVoiceBlob(null)
+      toast.success('Voice intro saved')
+    } catch (err: any) {
+      toast.error(err?.error || 'Failed to upload voice intro')
+      setVoiceBlob(null)
+    } finally {
+      setIsVoiceUploading(false)
+    }
+  }
+
+  const handleVoiceRemove = () => {
+    setVoiceBlob(null)
+    setVoiceIntroUrl(null)
+  }
+
+  // Tier handlers
+  const handleAddTier = () => {
+    const newTier: Tier = {
+      id: Date.now().toString(),
+      name: 'New Tier',
+      amount: 15,
+      perks: [],
+    }
+    setTiers([...tiers, newTier])
+  }
+
+  const handleUpdateTier = (id: string, field: keyof Tier, value: string | number | string[]) => {
+    setTiers(tiers.map(tier =>
+      tier.id === id ? { ...tier, [field]: value } : tier
+    ))
+  }
+
+  const handleDeleteTier = (id: string) => {
+    if (tiers.length > 1) {
+      setTiers(tiers.filter(tier => tier.id !== id))
+    }
+  }
+
+  // Tier perk handlers
+  const handleAddTierPerk = (tierId: string) => {
+    setTiers(tiers.map(tier => {
+      if (tier.id === tierId) {
+        return { ...tier, perks: [...(tier.perks || []), ''] }
+      }
+      return tier
+    }))
+  }
+
+  const handleUpdateTierPerk = (tierId: string, perkIndex: number, value: string) => {
+    setTiers(tiers.map(tier => {
+      if (tier.id === tierId) {
+        const newPerks = [...(tier.perks || [])]
+        newPerks[perkIndex] = value
+        return { ...tier, perks: newPerks }
+      }
+      return tier
+    }))
+  }
+
+  const handleDeleteTierPerk = (tierId: string, perkIndex: number) => {
+    setTiers(tiers.map(tier => {
+      if (tier.id === tierId) {
+        const newPerks = [...(tier.perks || [])]
+        newPerks.splice(perkIndex, 1)
+        return { ...tier, perks: newPerks }
+      }
+      return tier
+    }))
+  }
+
+  // Perk handlers
+  const handleAddPerk = () => {
+    const newPerk: Perk = {
+      id: Date.now().toString(),
+      title: 'New perk',
+      enabled: true,
+    }
+    setPerks([...perks, newPerk])
+  }
+
+  const handleUpdatePerk = (id: string, field: keyof Perk, value: string | boolean) => {
+    setPerks(perks.map(perk =>
+      perk.id === id ? { ...perk, [field]: value } : perk
+    ))
+  }
+
+  const handleDeletePerk = (id: string) => {
+    setPerks(perks.filter(perk => perk.id !== id))
+  }
+
+  // Impact item handlers
+  const handleAddImpact = () => {
+    const newItem: ImpactItem = {
+      id: Date.now().toString(),
+      title: '',
+      subtitle: '',
+    }
+    setImpactItems([...impactItems, newItem])
+  }
+
+  const handleUpdateImpact = (id: string, field: keyof ImpactItem, value: string) => {
+    setImpactItems(impactItems.map(item =>
+      item.id === id ? { ...item, [field]: value } : item
+    ))
+  }
+
+  const handleDeleteImpact = (id: string) => {
+    setImpactItems(impactItems.filter(item => item.id !== id))
+  }
+
+  const handlePreview = () => {
+    if (profile?.username) {
+      window.open(`/${profile.username}`, '_blank')
+    }
+  }
 
   const handleSave = async () => {
     if (!profile) return
@@ -115,7 +276,55 @@ export default function EditPage() {
     }
   }
 
-  // ... (render logic) ...
+  if (isLoading) {
+    return (
+      <div className="edit-page">
+        <header className="edit-page-header">
+          <Pressable className="back-btn" onClick={() => navigate(-1)}>
+            <ArrowLeft size={20} />
+          </Pressable>
+          <img src="/logo.svg" alt="NatePay" className="header-logo" />
+          <div style={{ width: 36 }} />
+        </header>
+        <div className="edit-page-content">
+          <section className="edit-section">
+            <Skeleton width={80} height={16} style={{ marginBottom: 16 }} />
+            <div className="profile-card">
+              <Skeleton width={80} height={80} borderRadius="50%" />
+              <div className="profile-fields" style={{ flex: 1 }}>
+                <Skeleton width="100%" height={40} style={{ marginBottom: 12 }} />
+                <Skeleton width="100%" height={80} />
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+    )
+  }
+
+  if (error || !profile) {
+    return (
+      <div className="edit-page">
+        <header className="edit-page-header">
+          <Pressable className="back-btn" onClick={() => navigate(-1)}>
+            <ArrowLeft size={20} />
+          </Pressable>
+          <img src="/logo.svg" alt="NatePay" className="header-logo" />
+          <div style={{ width: 36 }} />
+        </header>
+        <div className="edit-page-content">
+          <div className="edit-error">
+            <p>Failed to load profile. Please try again.</p>
+            <Pressable className="retry-btn" onClick={() => window.location.reload()}>
+              Retry
+            </Pressable>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  const isService = profile.purpose === 'service'
 
   return (
     <div className="edit-page">
