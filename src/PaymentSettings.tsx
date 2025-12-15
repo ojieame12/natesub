@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Building2, Check, Loader2, AlertCircle, CreditCard, ExternalLink } from 'lucide-react'
 import { Pressable } from './components'
 import { Skeleton } from './components/Skeleton'
@@ -7,6 +8,7 @@ import { api } from './api'
 import type { PaystackConnectionStatus } from './api/client'
 import { useProfile } from './api/hooks'
 import { getCurrencySymbol, formatNumberWithSeparators } from './utils/currency'
+import { setPaymentConfirmed } from './utils/paymentConfirmed'
 import './PaymentSettings.css'
 
 const payoutSchedules = [
@@ -55,6 +57,7 @@ interface Payout {
 export default function PaymentSettings() {
   const navigate = useNavigate()
   const location = useLocation()
+  const queryClient = useQueryClient()
   const [loading, setLoading] = useState(true)
   const [connecting, setConnecting] = useState(false)
   const [completingSetup, setCompletingSetup] = useState(false)
@@ -99,6 +102,55 @@ export default function PaymentSettings() {
           if (isCancelled) return
           setStripeStatus(status)
 
+          // If Stripe returned us here (misconfigured return_url), redirect to the intended destination.
+          const onboardingSource = sessionStorage.getItem('stripe_onboarding_source')
+          const startedAtMs = Number.parseInt(sessionStorage.getItem('stripe_onboarding_started_at') || '', 10)
+          const isRecentOnboardingReturn = Boolean(onboardingSource) && Number.isFinite(startedAtMs) && (Date.now() - startedAtMs) < 30 * 60 * 1000
+
+          if (isRecentOnboardingReturn && status.connected && status.status === 'active') {
+            // Prevent AuthRedirect bounce while webhooks catch up
+            setPaymentConfirmed()
+
+            // Optimistically update caches (same approach as StripeComplete)
+            queryClient.setQueryData(['currentUser'], (oldData: any) => {
+              if (!oldData) return oldData
+              return {
+                ...oldData,
+                onboarding: {
+                  ...oldData.onboarding,
+                  hasActivePayment: true,
+                },
+              }
+            })
+            queryClient.setQueryData(['profile'], (oldData: any) => {
+              if (!oldData?.profile) return oldData
+              return {
+                ...oldData,
+                profile: {
+                  ...oldData.profile,
+                  payoutStatus: 'active',
+                },
+              }
+            })
+
+            // Clear onboarding flags so we don't redirect again later
+            sessionStorage.removeItem('stripe_onboarding_source')
+            sessionStorage.removeItem('stripe_onboarding_started_at')
+
+            const returnTo = sessionStorage.getItem('stripe_return_to')
+            if (returnTo) sessionStorage.removeItem('stripe_return_to')
+
+            // Navigate away immediately; skip extra balance/payout calls.
+            navigate(returnTo || '/dashboard', { replace: true })
+            return
+          }
+
+          // Clear stale onboarding flags (>30m old) to avoid surprising redirects
+          if (onboardingSource && (!Number.isFinite(startedAtMs) || (Date.now() - startedAtMs) >= 30 * 60 * 1000)) {
+            sessionStorage.removeItem('stripe_onboarding_source')
+            sessionStorage.removeItem('stripe_onboarding_started_at')
+          }
+
           if (status.connected && status.status === 'active') {
             // Fetch balance and payouts
             const [balanceResult, payoutsResult] = await Promise.all([
@@ -142,6 +194,7 @@ export default function PaymentSettings() {
     if (returnTo) {
       sessionStorage.setItem('stripe_return_to', returnTo)
     }
+    sessionStorage.setItem('stripe_onboarding_started_at', Date.now().toString())
 
     setConnecting(true)
     setError(null)
@@ -570,6 +623,7 @@ export default function PaymentSettings() {
                   if (result.onboardingUrl) {
                     // Store source for redirect handling when user returns from Stripe
                     sessionStorage.setItem('stripe_onboarding_source', 'settings')
+                    sessionStorage.setItem('stripe_onboarding_started_at', Date.now().toString())
                     window.location.href = result.onboardingUrl
                   } else {
                     setError('Unable to get onboarding link. Please try again.')

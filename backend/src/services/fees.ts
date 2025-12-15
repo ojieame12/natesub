@@ -37,6 +37,18 @@ export interface FeeCalculation {
   purposeType: 'service' | 'personal'
 }
 
+// Fixed fee buffer to cover payment processor fixed costs (e.g. Stripe 30c)
+function getFixedBuffer(currency: string): number {
+  const c = currency.toUpperCase()
+  switch (c) {
+    case 'NGN': return 10000 // 100 Naira
+    case 'KES': return 5000  // 50 KES
+    case 'ZAR': return 500   // 5 ZAR
+    case 'JPY': return 30    // 30 Yen
+    default: return 30       // 30 cents/pence/etc for USD, EUR, GBP
+  }
+}
+
 /**
  * Calculate service fee based on creator's fee mode
  *
@@ -85,8 +97,8 @@ export function calculateServiceFee(
     }
   }
 
-  // Calculate fee based on mode
-  const feeCents = Math.round(amountCents * rate)
+  // Calculate fee based on mode (Percentage + Fixed Buffer)
+  const feeCents = Math.round(amountCents * rate) + getFixedBuffer(normalizedCurrency)
 
   if (feeMode === 'absorb') {
     // Creator absorbs: subscriber pays exact price, creator gets price - fee
@@ -162,7 +174,8 @@ export function calculateLegacyFee(
   purpose: 'personal' | 'service' | null
 ): { feeCents: number; netCents: number } {
   const rate = purpose === 'service' ? FEE_RATES.service : FEE_RATES.personal
-  const feeCents = Math.round(amountCents * rate)
+  // Legacy fee model: add buffer to ensure positive margin
+  const feeCents = Math.round(amountCents * rate) + 30
   return {
     feeCents,
     netCents: amountCents - feeCents,

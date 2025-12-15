@@ -46,6 +46,57 @@ function addOneMonth(date: Date): Date {
   return result
 }
 
+function normalizeEmailAddress(email: string): string {
+  return email.trim().toLowerCase()
+}
+
+async function resolveStripeCheckoutCustomer(session: Stripe.Checkout.Session): Promise<{ email: string; name: string | null }> {
+  const directEmail = session.customer_details?.email || session.customer_email || null
+  const directName = session.customer_details?.name || null
+
+  if (directEmail) {
+    return { email: normalizeEmailAddress(directEmail), name: directName }
+  }
+
+  const customerId = typeof session.customer === 'string' ? session.customer : null
+  if (customerId) {
+    try {
+      const customer = await stripe.customers.retrieve(customerId)
+      if (!('deleted' in customer && customer.deleted)) {
+        const email = customer.email || null
+        const name = customer.name || null
+        if (email) {
+          return { email: normalizeEmailAddress(email), name: directName || name }
+        }
+      }
+    } catch (err) {
+      console.error(`[stripe] Failed to retrieve customer ${sanitizeForLog(customerId)} for session ${session.id}:`, err)
+    }
+  }
+
+  throw new Error(`[stripe][checkout] Missing customer email for session ${session.id}`)
+}
+
+async function resolveStripeInvoiceCustomerEmail(invoice: Stripe.Invoice, context: string): Promise<string> {
+  const anyInvoice = invoice as any
+  const directEmail: string | undefined = anyInvoice.customer_email || anyInvoice.customerEmail
+  if (directEmail) return normalizeEmailAddress(directEmail)
+
+  const customerId = typeof invoice.customer === 'string' ? invoice.customer : null
+  if (!customerId) {
+    throw new Error(`[stripe][${context}] Missing invoice.customer`)
+  }
+
+  const customer = await stripe.customers.retrieve(customerId)
+  if ('deleted' in customer && customer.deleted) {
+    throw new Error(`[stripe][${context}] Customer deleted: ${sanitizeForLog(customerId)}`)
+  }
+  if (!customer.email) {
+    throw new Error(`[stripe][${context}] Customer email missing: ${sanitizeForLog(customerId)}`)
+  }
+  return normalizeEmailAddress(customer.email)
+}
+
 // Helper to identify platform subscription events
 // Returns true if this event should be handled by platformSubscription service
 async function isPlatformSubscriptionEvent(event: Stripe.Event): Promise<boolean> {
@@ -368,20 +419,20 @@ async function handleCheckoutCompleted(event: Stripe.Event) {
     }
   }
 
-  // Get or create subscriber user
-  let subscriber = await db.user.findUnique({
-    where: { email: session.customer_details?.email || '' },
-  })
+  const { email: subscriberEmail, name: subscriberName } = await resolveStripeCheckoutCustomer(session)
 
-  if (!subscriber && session.customer_details?.email) {
-    subscriber = await db.user.create({
-      data: { email: session.customer_details.email },
-    })
-  }
-
+  // Get or create subscriber user (normalize email to match auth flow)
+  let subscriber = await db.user.findUnique({ where: { email: subscriberEmail } })
   if (!subscriber) {
-    console.error('Could not find or create subscriber')
-    return
+    try {
+      subscriber = await db.user.create({ data: { email: subscriberEmail } })
+    } catch {
+      // Race-safe fallback (unique email)
+      subscriber = await db.user.findUnique({ where: { email: subscriberEmail } })
+    }
+  }
+  if (!subscriber) {
+    throw new Error(`[stripe][checkout] Could not find or create subscriber for session ${session.id}`)
   }
 
   // Get creator profile for tier info
@@ -558,8 +609,8 @@ async function handleCheckoutCompleted(event: Stripe.Event) {
         type: 'subscription_created',
         payload: {
           subscriptionId: newSubscription.id,
-          subscriberEmail: session.customer_details?.email,
-          subscriberName: session.customer_details?.name,
+          subscriberEmail,
+          subscriberName,
           tierName,
           amount: session.amount_total,
           currency: session.currency,
@@ -596,18 +647,18 @@ async function handleCheckoutCompleted(event: Stripe.Event) {
   if (creator) {
     await sendNewSubscriberEmail(
       creator.email,
-      session.customer_details?.name || session.customer_details?.email || 'Someone',
+      subscriberName || subscriberEmail || 'Someone',
       tierName,
       session.amount_total || 0,
       session.currency?.toUpperCase() || 'USD'
     )
 
     // Send confirmation email to subscriber with manage subscription link
-    if (session.customer_details?.email) {
+    if (subscriberEmail) {
       try {
         await sendSubscriptionConfirmationEmail(
-          session.customer_details.email,
-          session.customer_details.name || 'there',
+          subscriberEmail,
+          subscriberName || 'there',
           creator.profile?.displayName || creator.email,
           creator.profile?.username || '',
           tierName,
@@ -716,16 +767,19 @@ async function handleAsyncPaymentSucceeded(event: Stripe.Event) {
     }
   }
 
-  // Get or create subscriber
-  const subscriberEmail = session.customer_details?.email
-  if (!subscriberEmail) {
-    console.error('[async_payment_succeeded] No subscriber email found')
-    return
-  }
+  const { email: subscriberEmail, name: subscriberName } = await resolveStripeCheckoutCustomer(session)
 
+  // Get or create subscriber (normalize email to match auth flow)
   let subscriber = await db.user.findUnique({ where: { email: subscriberEmail } })
   if (!subscriber) {
-    subscriber = await db.user.create({ data: { email: subscriberEmail } })
+    try {
+      subscriber = await db.user.create({ data: { email: subscriberEmail } })
+    } catch {
+      subscriber = await db.user.findUnique({ where: { email: subscriberEmail } })
+    }
+  }
+  if (!subscriber) {
+    throw new Error(`[stripe][async_payment_succeeded] Could not find or create subscriber for session ${session.id}`)
   }
 
   // Get tier info
@@ -846,7 +900,7 @@ async function handleAsyncPaymentSucceeded(event: Stripe.Event) {
   if (creator) {
     await sendNewSubscriberEmail(
       creator.email,
-      session.customer_details?.name || session.customer_details?.email || 'Someone',
+      subscriberName || subscriberEmail || 'Someone',
       tierName,
       session.amount_total || 0,
       session.currency?.toUpperCase() || 'USD'
@@ -928,6 +982,102 @@ async function handleInvoiceCreated(event: Stripe.Event) {
   }
 }
 
+async function backfillStripeSubscriptionForInvoicePaid(invoice: Stripe.Invoice, stripeSubscriptionId: string) {
+  const stripeSubscription = await stripe.subscriptions.retrieve(stripeSubscriptionId)
+
+  const metadataValidation = validateCheckoutMetadata(stripeSubscription.metadata as Record<string, string>)
+  if (!metadataValidation.valid) {
+    throw new Error(`[invoice.paid] Missing/invalid subscription metadata for ${stripeSubscriptionId}: ${metadataValidation.error}`)
+  }
+
+  const meta = metadataValidation.data!
+  const creatorId = meta.creatorId
+  const tierId = meta.tierId || null
+
+  const feeModel = meta.feeModel || null
+  const feeMode = meta.feeMode || null
+  const netAmount = parseMetadataAmount(meta.netAmount)
+  const serviceFee = parseMetadataAmount(meta.serviceFee)
+  const grossAmount = parseMetadataAmount(meta.grossAmount) || invoice.amount_paid
+  const basePrice = (feeMode === 'absorb' ? grossAmount : netAmount) || grossAmount
+
+  const subscriberEmail = await resolveStripeInvoiceCustomerEmail(invoice, 'invoice.paid')
+
+  let subscriber = await db.user.findUnique({ where: { email: subscriberEmail } })
+  if (!subscriber) {
+    try {
+      subscriber = await db.user.create({ data: { email: subscriberEmail } })
+    } catch {
+      subscriber = await db.user.findUnique({ where: { email: subscriberEmail } })
+    }
+  }
+  if (!subscriber) {
+    throw new Error(`[invoice.paid] Could not find or create subscriber`)
+  }
+
+  // Get tier name (best-effort)
+  const creatorProfile = await db.profile.findUnique({
+    where: { userId: creatorId },
+    select: { tiers: true },
+  })
+
+  let tierName: string | null = null
+  if (tierId && creatorProfile?.tiers) {
+    const tiers = creatorProfile.tiers as any[]
+    const tier = tiers.find(t => t.id === tierId)
+    tierName = tier?.name || null
+  }
+
+  const periodEnd = invoice.lines.data[0]?.period?.end
+    ? new Date(invoice.lines.data[0].period.end * 1000)
+    : null
+
+  const stripeCustomerId = typeof stripeSubscription.customer === 'string'
+    ? stripeSubscription.customer
+    : null
+
+  // Create the subscription record so invoice.paid can proceed normally.
+  // Use pending first, then invoice.paid will activate + update period/LTV.
+  await db.subscription.upsert({
+    where: {
+      subscriberId_creatorId_interval: {
+        subscriberId: subscriber.id,
+        creatorId,
+        interval: 'month',
+      },
+    },
+    create: {
+      creatorId,
+      subscriberId: subscriber.id,
+      tierId,
+      tierName,
+      amount: basePrice,
+      currency: invoice.currency.toUpperCase(),
+      interval: 'month',
+      status: 'pending',
+      stripeSubscriptionId: stripeSubscriptionId,
+      stripeCustomerId,
+      feeModel,
+      feeMode,
+      currentPeriodEnd: periodEnd,
+    },
+    update: {
+      status: 'pending',
+      tierId,
+      tierName,
+      amount: basePrice,
+      currency: invoice.currency.toUpperCase(),
+      stripeSubscriptionId: stripeSubscriptionId,
+      stripeCustomerId,
+      feeModel,
+      feeMode,
+      canceledAt: null,
+      cancelAtPeriodEnd: false,
+      currentPeriodEnd: periodEnd,
+    },
+  })
+}
+
 // Handle invoice.paid (recurring payments)
 export async function handleInvoicePaid(event: Stripe.Event) {
   const invoice = event.data.object as Stripe.Invoice
@@ -950,14 +1100,27 @@ export async function handleInvoicePaid(event: Stripe.Event) {
       return true
     }
 
-    const subscription = await db.subscription.findUnique({
-    where: { stripeSubscriptionId: subscriptionId },
-    include: {
-      creator: {
-        include: { profile: { select: { purpose: true } } },
+    let subscription = await db.subscription.findUnique({
+      where: { stripeSubscriptionId: subscriptionId },
+      include: {
+        creator: {
+          include: { profile: { select: { purpose: true } } },
+        },
       },
-    },
-  })
+    })
+
+    // If checkout.session.completed was missed or failed, reconstruct from Stripe subscription metadata.
+    if (!subscription) {
+      await backfillStripeSubscriptionForInvoicePaid(invoice, subscriptionId)
+      subscription = await db.subscription.findUnique({
+        where: { stripeSubscriptionId: subscriptionId },
+        include: {
+          creator: {
+            include: { profile: { select: { purpose: true } } },
+          },
+        },
+      })
+    }
 
     if (!subscription) return true // Nothing to process
 

@@ -81,6 +81,7 @@ export default function StripeComplete() {
     setSource(storedSource || 'unknown')
     // Clear it so we don't reuse stale state
     sessionStorage.removeItem('stripe_onboarding_source')
+    sessionStorage.removeItem('stripe_onboarding_started_at')
   }, [])
 
   // Cleanup intervals on unmount
@@ -245,7 +246,7 @@ export default function StripeComplete() {
   }
 
   // Manual continue - trust the optimistic update, don't refetch
-  const handleContinue = () => {
+  const handleContinue = useCallback(() => {
     setIsNavigating(true)
     const returnTo = sessionStorage.getItem('stripe_return_to')
     
@@ -255,7 +256,21 @@ export default function StripeComplete() {
     } else {
       navigate('/dashboard', { replace: true })
     }
-  }
+  }, [navigate])
+
+  // Auto-continue after success for a smoother flow (especially on mobile).
+  // Only do this when user came from a known flow, so manual visits don't instantly redirect away.
+  useEffect(() => {
+    if (status !== 'success') return
+    if (source === 'unknown') return
+    if (isNavigating) return
+
+    const timer = window.setTimeout(() => {
+      handleContinue()
+    }, 1200)
+
+    return () => window.clearTimeout(timer)
+  }, [status, source, isNavigating, handleContinue])
 
   // Allow user to proceed to dashboard even while pending
   const handleProceedAnyway = async () => {
