@@ -304,6 +304,7 @@ export default function StripeComplete() {
       if (result.onboardingUrl) {
         // Preserve the source for when they return
         sessionStorage.setItem('stripe_onboarding_source', source)
+        sessionStorage.setItem('stripe_onboarding_started_at', Date.now().toString())
         window.location.href = result.onboardingUrl
       } else {
         setRetryError('Unable to get onboarding link. Please try again.')
@@ -438,7 +439,7 @@ export default function StripeComplete() {
                 onClick={async () => {
                   try {
                     const result = await api.stripe.getDashboardLink()
-                    if (result.url) window.open(result.url, '_blank')
+                    if (result.url) window.open(result.url, '_blank', 'noopener,noreferrer')
                   } catch {}
                 }}
               >

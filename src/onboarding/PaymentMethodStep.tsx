@@ -186,6 +186,7 @@ export default function PaymentMethodStep() {
                     if (result.onboardingUrl) {
                         // Store source for redirect handling when user returns from Stripe
                         sessionStorage.setItem('stripe_onboarding_source', 'onboarding')
+                        sessionStorage.setItem('stripe_onboarding_started_at', Date.now().toString())
                         // Profile is saved - redirect to Stripe onboarding
                         // Don't reset() here - AuthRedirect will route properly when user returns
                         window.location.href = result.onboardingUrl

@@ -619,18 +619,66 @@ export default function PaymentSettings() {
                 setCompletingSetup(true)
                 setError(null)
                 try {
+                  // Pending usually means Stripe is verifying identity; don't bounce them back to Stripe.
+                  // Instead, force-refresh status from Stripe.
+                  if (stripeStatus.status === 'pending') {
+                    const refreshed = await api.stripe.getStatus({ refresh: true })
+                    setStripeStatus(refreshed)
+
+                    if (refreshed.connected && refreshed.status === 'active') {
+                      // Prevent AuthRedirect bounce while webhooks catch up
+                      setPaymentConfirmed()
+
+                      // Optimistically update caches (same approach as StripeComplete)
+                      queryClient.setQueryData(['currentUser'], (oldData: any) => {
+                        if (!oldData) return oldData
+                        return {
+                          ...oldData,
+                          onboarding: {
+                            ...oldData.onboarding,
+                            hasActivePayment: true,
+                          },
+                        }
+                      })
+                      queryClient.setQueryData(['profile'], (oldData: any) => {
+                        if (!oldData?.profile) return oldData
+                        return {
+                          ...oldData,
+                          profile: {
+                            ...oldData.profile,
+                            payoutStatus: 'active',
+                          },
+                        }
+                      })
+
+                      const [balanceResult, payoutsResult] = await Promise.all([
+                        api.stripe.getBalance().catch(() => ({ balance: { available: 0, pending: 0 } })),
+                        api.stripe.getPayouts().catch(() => ({ payouts: [] })),
+                      ])
+                      setBalance(balanceResult.balance)
+                      setPayoutHistory(payoutsResult.payouts)
+                    }
+
+                    return
+                  }
+
                   const result = await api.stripe.refreshOnboarding()
                   if (result.onboardingUrl) {
                     // Store source for redirect handling when user returns from Stripe
                     sessionStorage.setItem('stripe_onboarding_source', 'settings')
                     sessionStorage.setItem('stripe_onboarding_started_at', Date.now().toString())
                     window.location.href = result.onboardingUrl
-                  } else {
-                    setError('Unable to get onboarding link. Please try again.')
-                    setCompletingSetup(false)
+                    return
                   }
+
+                  setError('Unable to get onboarding link. Please try again.')
                 } catch (err: any) {
-                  setError(err?.error || 'Failed to get onboarding link')
+                  setError(
+                    err?.error || (stripeStatus.status === 'pending'
+                      ? 'Failed to refresh Stripe status'
+                      : 'Failed to get onboarding link')
+                  )
+                } finally {
                   setCompletingSetup(false)
                 }
               }}
@@ -647,7 +695,7 @@ export default function PaymentSettings() {
               {completingSetup ? (
                 <>
                   <Loader2 size={18} className="spin" style={{ marginRight: 8, display: 'inline' }} />
-                  Connecting...
+                  {stripeStatus.status === 'pending' ? 'Checking...' : 'Connecting...'}
                 </>
               ) : (
                 stripeStatus.status === 'pending' ? 'Check Status' : 'Complete Setup'
@@ -689,7 +737,7 @@ export default function PaymentSettings() {
             onClick={async () => {
               try {
                 const result = await api.stripe.getDashboardLink()
-                if (result.url) window.open(result.url, '_blank')
+                if (result.url) window.open(result.url, '_blank', 'noopener,noreferrer')
               } catch {}
             }}
           >
@@ -719,7 +767,7 @@ export default function PaymentSettings() {
                 try {
                   const result = await api.stripe.getDashboardLink()
                   if (result.url) {
-                    window.open(result.url, '_blank')
+                    window.open(result.url, '_blank', 'noopener,noreferrer')
                   }
                 } catch (err) {
                   setError('Failed to open dashboard')
@@ -769,7 +817,7 @@ export default function PaymentSettings() {
               onClick={async () => {
                 try {
                   const result = await api.stripe.getDashboardLink()
-                  if (result.url) window.open(result.url, '_blank')
+                  if (result.url) window.open(result.url, '_blank', 'noopener,noreferrer')
                 } catch {}
               }}
               style={{ color: 'var(--primary)', fontWeight: 500, display: 'inline' }}

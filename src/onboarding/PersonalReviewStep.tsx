@@ -187,6 +187,7 @@ export default function PersonalReviewStep() {
                     } else if (stripeResult.onboardingUrl) {
                         // Mark source for when we return from Stripe
                         sessionStorage.setItem('stripe_onboarding_source', 'onboarding')
+                        sessionStorage.setItem('stripe_onboarding_started_at', Date.now().toString())
                         // Redirect to Stripe for onboarding
                         window.location.href = stripeResult.onboardingUrl
                         return // Don't navigate to dashboard yet - return early!

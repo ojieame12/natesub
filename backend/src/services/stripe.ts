@@ -23,6 +23,8 @@ export const stripe = new Stripe(env.STRIPE_SECRET_KEY, {
   apiVersion: '2025-11-17.clover',
 })
 
+type AccountLinkType = Stripe.AccountLinkCreateParams['type']
+
 // Create Express account for a user
 // Supports both native Stripe countries and cross-border payout countries
 export async function createExpressAccount(
@@ -35,11 +37,20 @@ export async function createExpressAccount(
   const profile = await db.profile.findUnique({ where: { userId } })
 
   if (profile?.stripeAccountId) {
-    // Return existing account link if not fully onboarded
     const account = await stripe.accounts.retrieve(profile.stripeAccountId)
 
-    if (!account.details_submitted) {
-      const accountLink = await createAccountLink(profile.stripeAccountId, country)
+    const needsOnboarding = !account.details_submitted
+    const currentlyDue = account.requirements?.currently_due || []
+    const disabledReason = account.requirements?.disabled_reason || null
+    const needsUpdate = currentlyDue.length > 0 || Boolean(disabledReason)
+
+    if (needsOnboarding) {
+      const accountLink = await createAccountLink(profile.stripeAccountId, { type: 'account_onboarding' })
+      return { accountId: profile.stripeAccountId, accountLink }
+    }
+
+    if (needsUpdate) {
+      const accountLink = await createAccountLink(profile.stripeAccountId, { type: 'account_update' })
       return { accountId: profile.stripeAccountId, accountLink }
     }
 
@@ -103,28 +114,37 @@ export async function createExpressAccount(
   })
 
   // Create account link for onboarding
-  const accountLink = await createAccountLink(account.id, country)
+  const accountLink = await createAccountLink(account.id, { type: 'account_onboarding' })
 
   return { accountId: account.id, accountLink, crossBorder: isCrossBorder }
 }
 
 // Create account link for onboarding
-export async function createAccountLink(accountId: string, country?: string) {
-  // Check if cross-border country for proper collection options
-  const isCrossBorder = country ? isStripeCrossBorderSupported(country) : false
-
+export async function createAccountLink(accountId: string, options: { type?: AccountLinkType } = {}) {
   const accountLink = await stripe.accountLinks.create({
     account: accountId,
     refresh_url: env.STRIPE_ONBOARDING_REFRESH_URL,
     return_url: env.STRIPE_ONBOARDING_RETURN_URL,
-    type: 'account_onboarding',
+    type: options.type ?? 'account_onboarding',
     // Collect all required fields upfront, not just minimum
     collection_options: {
       fields: 'eventually_due', // Collect all fields that will eventually be required
     },
   })
 
-  return accountLink.url
+  // Hardening: only ever redirect users to Stripe-hosted URLs.
+  const url = accountLink.url
+  try {
+    const parsed = new URL(url)
+    if (parsed.protocol !== 'https:' || !parsed.hostname.endsWith('stripe.com')) {
+      throw new Error(`Unexpected Stripe account link host: ${parsed.hostname}`)
+    }
+  } catch (err) {
+    console.error('[stripe] Invalid account link URL returned by Stripe:', err)
+    throw new Error('Failed to generate Stripe onboarding link')
+  }
+
+  return url
 }
 
 // Get account status with detailed requirements
@@ -164,8 +184,6 @@ export async function getAccountStatus(stripeAccountId: string, options: { skipB
   let bankAccount: {
     bankName: string | null
     last4: string | null
-    accountHolderName: string | null
-    routingNumber: string | null
   } | null = null
 
   if (account.external_accounts?.data?.length) {
@@ -178,8 +196,6 @@ export async function getAccountStatus(stripeAccountId: string, options: { skipB
       bankAccount = {
         bankName: bank.bank_name || null,
         last4: bank.last4 || null,
-        accountHolderName: bank.account_holder_name || null,
-        routingNumber: bank.routing_number || null,
       }
     }
   }
