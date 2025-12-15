@@ -127,15 +127,18 @@ app.get('/health', async (c) => {
     redis: false,
   }
 
-  // Check database
+  // Check database (with timeout)
   try {
-    await db.$queryRaw`SELECT 1`
+    await Promise.race([
+      db.$queryRaw`SELECT 1`,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000))
+    ])
     checks.database = true
   } catch (err) {
     console.error('[health] Database check failed:', err)
   }
 
-  // Check Redis
+  // Check Redis (optional)
   try {
     const pong = await redis.ping()
     checks.redis = pong === 'PONG'
@@ -143,14 +146,15 @@ app.get('/health', async (c) => {
     console.error('[health] Redis check failed:', err)
   }
 
-  const allHealthy = checks.database && checks.redis
-  const status = allHealthy ? 'ok' : 'degraded'
+  // Only fail if DATABASE is down. Redis is optional/cache.
+  const isHealthy = checks.database
+  const status = isHealthy ? (checks.redis ? 'ok' : 'degraded') : 'down'
 
   return c.json({
     status,
     timestamp: new Date().toISOString(),
     checks,
-  }, allHealthy ? 200 : 503)
+  }, isHealthy ? 200 : 503)
 })
 
 // Lightweight liveness probe (for k8s)
