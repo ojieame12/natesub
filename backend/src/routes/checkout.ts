@@ -56,9 +56,20 @@ checkout.post(
       return c.json({ error: 'You cannot subscribe to your own page.' }, 400)
     }
 
-    // Check if service provider has payment set up
-    const hasStripe = profile.paymentProvider === 'stripe' && profile.stripeAccountId
-    const hasPaystack = profile.paymentProvider === 'paystack' && profile.paystackSubaccountCode
+    // Check if service provider has payment set up.
+    // NOTE: paymentProvider may be null (e.g., new "naked onboarding"), so infer from stored IDs.
+    const hasStripeAccount = Boolean(profile.stripeAccountId)
+    const hasPaystackAccount = Boolean(profile.paystackSubaccountCode)
+
+    let inferredProvider = profile.paymentProvider as 'stripe' | 'paystack' | 'flutterwave' | null
+    if (inferredProvider === 'stripe' && !hasStripeAccount) inferredProvider = null
+    if (inferredProvider === 'paystack' && !hasPaystackAccount) inferredProvider = null
+    if (!inferredProvider) {
+      inferredProvider = hasStripeAccount ? 'stripe' : hasPaystackAccount ? 'paystack' : null
+    }
+
+    const hasStripe = inferredProvider === 'stripe' && hasStripeAccount
+    const hasPaystack = inferredProvider === 'paystack' && hasPaystackAccount
 
     if (!hasStripe && !hasPaystack) {
       return c.json({ error: 'This service provider has not set up payments yet' }, 400)

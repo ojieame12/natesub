@@ -37,6 +37,14 @@ export async function createExpressAccount(
   const profile = await db.profile.findUnique({ where: { userId } })
 
   if (profile?.stripeAccountId) {
+    // Ensure provider is set (new "naked onboarding" may leave this null)
+    if (!profile.paymentProvider) {
+      await db.profile.update({
+        where: { userId },
+        data: { paymentProvider: 'stripe' },
+      })
+    }
+
     const account = await stripe.accounts.retrieve(profile.stripeAccountId)
 
     const needsOnboarding = !account.details_submitted
@@ -109,6 +117,7 @@ export async function createExpressAccount(
     where: { userId },
     data: {
       stripeAccountId: account.id,
+      paymentProvider: 'stripe',
       payoutStatus: 'pending',
     },
   })

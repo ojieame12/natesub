@@ -66,10 +66,16 @@ users.get(
       return c.json({ error: 'This profile is private' }, 403)
     }
 
+    // Infer payment provider for older/newer profiles where the field may be null.
+    // Stripe/Paystack connection records live on the profile, so presence of IDs is authoritative.
+    const inferredPaymentProvider =
+      profile.paymentProvider ||
+      (profile.stripeAccountId ? 'stripe' : profile.paystackSubaccountCode ? 'paystack' : null)
+
     // Check if payments are ready (has provider connected AND is active)
     const hasPaymentProvider =
-      (profile.paymentProvider === 'stripe' && profile.stripeAccountId) ||
-      (profile.paymentProvider === 'paystack' && profile.paystackSubaccountCode)
+      (inferredPaymentProvider === 'stripe' && profile.stripeAccountId) ||
+      (inferredPaymentProvider === 'paystack' && profile.paystackSubaccountCode)
 
     // Service providers must have active/trialing platform subscription
     const validSubStatuses = ['trialing', 'active']
@@ -127,7 +133,7 @@ users.get(
 
     // Check if this is a cross-border Stripe account (e.g., Nigeria)
     // Cross-border accounts collect payments in USD, payouts convert to local currency
-    const isCrossBorder = profile.paymentProvider === 'stripe' &&
+    const isCrossBorder = inferredPaymentProvider === 'stripe' &&
       isStripeCrossBorderSupported(profile.countryCode)
 
     // Convert cents to display amount, handling zero-decimal currencies
@@ -154,7 +160,7 @@ users.get(
       impactItems: profile.impactItems,
       currency: displayCurrency, // Use checkout currency (USD for cross-border)
       shareUrl: profile.shareUrl,
-      paymentProvider: profile.paymentProvider,
+      paymentProvider: inferredPaymentProvider,
       template: profile.template || 'boundary', // Default to boundary
       feeMode: profile.feeMode || 'pass_to_subscriber', // Default behavior
       paymentsReady,
