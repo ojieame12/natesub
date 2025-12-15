@@ -12,6 +12,8 @@ import { db } from '../db/client.js'
 import { getStuckTransfers, getTransferStats } from '../jobs/transfers.js'
 import { getMissingTransactions, reconcilePaystackTransactions } from '../jobs/reconciliation.js'
 import { checkEmailHealth, sendTestEmail } from '../services/email.js'
+import { stripe } from '../services/stripe.js'
+import { handleInvoicePaid } from './webhooks.js'
 
 const admin = new Hono()
 
@@ -307,6 +309,42 @@ admin.post('/reconciliation/run', async (c) => {
     success: true,
     ...result,
   })
+})
+
+/**
+ * POST /admin/reconciliation/stripe
+ * Manually trigger Stripe reconciliation (sync missing payments)
+ */
+admin.post('/reconciliation/stripe', async (c) => {
+  const limit = parseInt(c.req.query('limit') || '100')
+  console.log(`[reconciliation] Starting Stripe sync (limit: ${limit})`)
+
+  try {
+    // Fetch recent invoice.paid events
+    const events = await stripe.events.list({
+      type: 'invoice.paid',
+      limit,
+    })
+
+    let processed = 0
+
+    for (const event of events.data) {
+      // Re-run the webhook handler logic
+      // It has built-in idempotency (checks db.payment), so it's safe to replay
+      await handleInvoicePaid(event)
+      processed++
+    }
+
+    return c.json({
+      success: true,
+      scanned: events.data.length,
+      processed,
+      message: 'Stripe events replayed successfully. Check logs for details.'
+    })
+  } catch (err: any) {
+    console.error('[reconciliation] Stripe sync failed:', err)
+    return c.json({ error: err.message }, 500)
+  }
 })
 
 export default admin

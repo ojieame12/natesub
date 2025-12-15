@@ -14,7 +14,15 @@ try {
   // process.exit(1) // Don't crash on startup
 }
 
-const port = parseInt(env.PORT)
+const port = Number.parseInt(env.PORT, 10)
+if (!Number.isFinite(port) || port <= 0) {
+  throw new Error(`Invalid PORT: ${env.PORT}`)
+}
+
+// Railway/containers need an externally reachable bind address.
+// In dev, keep the default host binding (more compatible with local setups).
+// In production, prefer IPv4-any to avoid IPv6-only bind issues on some hosts/proxies.
+const hostname = process.env.HOST || (env.NODE_ENV === 'production' ? '0.0.0.0' : undefined)
 
 console.log(`
 ╔═══════════════════════════════════════╗
@@ -29,9 +37,10 @@ App URL: ${env.APP_URL}
 const server = serve({
   fetch: app.fetch,
   port,
+  ...(hostname ? { hostname } : {}),
 })
 
-console.log(`✅ Server running on http://localhost:${port}`)
+console.log(`✅ Server running on http://${hostname || 'localhost'}:${port}`)
 
 // Graceful shutdown handler
 let isShuttingDown = false

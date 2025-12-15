@@ -1,12 +1,25 @@
 import { z } from 'zod'
 
+function normalizeUrlEnv(value: unknown): unknown {
+  if (typeof value !== 'string') return value
+  const trimmed = value.trim()
+  if (!trimmed) return trimmed
+  // If already has a scheme, keep as-is.
+  if (/^[a-zA-Z][a-zA-Z\\d+.-]*:\/\//.test(trimmed)) return trimmed
+
+  // Default to https for production-ish hostnames; use http for localhost.
+  const isLocalhost = /^(localhost|127\\.0\\.0\\.1|0\\.0\\.0\\.0)(:|$)/.test(trimmed)
+  const protocol = isLocalhost ? 'http://' : 'https://'
+  return `${protocol}${trimmed}`
+}
+
 const envSchema = z.object({
   // App
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   PORT: z.string().default('3001'),
-  APP_URL: z.string().url(),
-  API_URL: z.string().url(),
-  PUBLIC_PAGE_URL: z.string().url().default('https://natepay.co'), // Public creator pages
+  APP_URL: z.preprocess(normalizeUrlEnv, z.string().url()),
+  API_URL: z.preprocess(normalizeUrlEnv, z.string().url()),
+  PUBLIC_PAGE_URL: z.preprocess(normalizeUrlEnv, z.string().url()).default('https://natepay.co'), // Public creator pages
 
   // Database
   DATABASE_URL: z.string(),
@@ -24,8 +37,8 @@ const envSchema = z.object({
   STRIPE_SECRET_KEY: z.string().startsWith('sk_'),
   STRIPE_WEBHOOK_SECRET: z.string().startsWith('whsec_'),
   STRIPE_WEBHOOK_SECRET_CONNECT: z.string().startsWith('whsec_').optional(), // For connected accounts webhook
-  STRIPE_ONBOARDING_RETURN_URL: z.string().url(),
-  STRIPE_ONBOARDING_REFRESH_URL: z.string().url(),
+  STRIPE_ONBOARDING_RETURN_URL: z.preprocess(normalizeUrlEnv, z.string().url()),
+  STRIPE_ONBOARDING_REFRESH_URL: z.preprocess(normalizeUrlEnv, z.string().url()),
 
   // Paystack (for NG, KE, ZA)
   PAYSTACK_SECRET_KEY: z.string().startsWith('sk_').optional(),
@@ -39,14 +52,14 @@ const envSchema = z.object({
   // Email
   RESEND_API_KEY: z.string().startsWith('re_'),
   EMAIL_FROM: z.string(),
-  EMAIL_LOGO_URL: z.string().url().optional(),
+  EMAIL_LOGO_URL: z.preprocess(normalizeUrlEnv, z.string().url().optional()),
 
   // Cloudflare R2 Storage
   R2_ACCOUNT_ID: z.string(),
   R2_ACCESS_KEY_ID: z.string(),
   R2_SECRET_ACCESS_KEY: z.string(),
   R2_BUCKET: z.string(),
-  R2_PUBLIC_URL: z.string().url(),
+  R2_PUBLIC_URL: z.preprocess(normalizeUrlEnv, z.string().url()),
 
   // Feature flags
   ENABLE_PAYSTACK: z.string().transform(v => v === 'true').default('false'),

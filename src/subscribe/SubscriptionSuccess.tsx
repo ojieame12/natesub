@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import { CheckCircle, Heart, Loader2, AlertCircle } from 'lucide-react'
 import { Pressable } from '../components'
 import { api } from '../api'
@@ -16,49 +17,60 @@ type VerificationStatus = 'loading' | 'verified' | 'failed'
 export default function SubscriptionSuccess({ profile, provider }: SubscriptionSuccessProps) {
     const navigate = useNavigate()
     const [searchParams] = useSearchParams()
+    const queryClient = useQueryClient()
     const name = profile.displayName || profile.username || 'them'
 
-    // Verification state
-    const [status, setStatus] = useState<VerificationStatus>(
-        provider === 'paystack' ? 'loading' : 'verified' // Stripe verified via webhook
-    )
+    // Verification state - start loading for everyone to check webhook status
+    const [status, setStatus] = useState<VerificationStatus>('loading')
     const [errorMessage, setErrorMessage] = useState<string | null>(null)
+    const pollCount = useRef(0)
 
-    // For Paystack: verify the transaction on mount
+    // Verify Subscription (Stripe & Paystack)
     useEffect(() => {
-        if (provider !== 'paystack') return
+        let isMounted = true
+        let timer: NodeJS.Timeout
 
-        const verifyPayment = async () => {
-            // Get reference from URL (Paystack adds ?reference=xxx or ?trxref=xxx)
-            const reference = searchParams.get('reference') || searchParams.get('trxref')
+        const checkSubscription = async () => {
+            try {
+                // Force network fetch to bypass cache
+                const data = await api.users.getByUsername(profile.username)
+                
+                if (data.viewerSubscription?.isActive) {
+                    if (isMounted) {
+                        setStatus('verified')
+                        // Update global cache
+                        queryClient.invalidateQueries({ queryKey: ['publicProfile', profile.username] })
+                    }
+                    return true
+                }
+            } catch (err) {
+                console.error('Poll error', err)
+            }
+            return false
+        }
 
-            if (!reference) {
-                // No reference - can't verify, but payment might have succeeded via webhook
-                // Give benefit of doubt but log warning
-                console.warn('[subscription] Paystack success without reference - cannot verify')
-                setStatus('verified')
+        const poll = async () => {
+            if (pollCount.current > 5) { // 10 seconds (5 * 2s)
+                // Timeout - Optimistically show success but warn
+                if (isMounted) setStatus('verified')
                 return
             }
 
-            try {
-                const result = await api.paystack.verifyTransaction(reference)
-
-                if (result.verified) {
-                    setStatus('verified')
-                } else {
-                    setStatus('failed')
-                    setErrorMessage(result.error || 'Payment could not be verified')
-                }
-            } catch (err: any) {
-                console.error('[subscription] Paystack verification error:', err)
-                // On network error, give benefit of doubt (webhook handles actual payment)
-                // But show a soft warning
-                setStatus('verified')
+            const success = await checkSubscription()
+            if (!success && isMounted) {
+                pollCount.current++
+                timer = setTimeout(poll, 2000)
             }
         }
 
-        verifyPayment()
-    }, [provider, searchParams])
+        // Start polling
+        poll()
+
+        return () => {
+            isMounted = false
+            clearTimeout(timer)
+        }
+    }, [profile.username, queryClient])
 
     // Loading state
     if (status === 'loading') {
@@ -68,9 +80,9 @@ export default function SubscriptionSuccess({ profile, provider }: SubscriptionS
                     <div className="sub-success-icon" style={{ color: 'var(--text-secondary)' }}>
                         <Loader2 size={64} className="spin" />
                     </div>
-                    <h1 className="sub-success-title">Verifying payment...</h1>
+                    <h1 className="sub-success-title">Confirming Payment...</h1>
                     <p className="sub-success-message">
-                        Please wait while we confirm your subscription.
+                        Please wait a moment while we secure your subscription.
                     </p>
                 </div>
             </div>

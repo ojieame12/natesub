@@ -929,7 +929,7 @@ async function handleInvoiceCreated(event: Stripe.Event) {
 }
 
 // Handle invoice.paid (recurring payments)
-async function handleInvoicePaid(event: Stripe.Event) {
+export async function handleInvoicePaid(event: Stripe.Event) {
   const invoice = event.data.object as Stripe.Invoice
 
   // Get subscription ID from invoice - use subscription_details in newer API versions
