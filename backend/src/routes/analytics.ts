@@ -174,21 +174,21 @@ analytics.get('/stats', requireAuth, async (c) => {
 
     // Get unique visitors (by visitorHash) - use raw SQL for efficient COUNT(DISTINCT)
     const [uniqueToday, uniqueWeek, uniqueMonth] = await Promise.all([
-      db.$queryRaw<[{ count: bigint }]>`
-        SELECT COUNT(DISTINCT visitor_hash) as count
+      db.$queryRaw<[{ count: number }]>`
+        SELECT COUNT(DISTINCT visitor_hash)::int as count
         FROM page_views
         WHERE profile_id = ${profile.id} AND created_at >= ${today}
-      `.then(r => Number(r[0]?.count ?? 0)),
-      db.$queryRaw<[{ count: bigint }]>`
-        SELECT COUNT(DISTINCT visitor_hash) as count
+      `.then(r => r[0]?.count ?? 0),
+      db.$queryRaw<[{ count: number }]>`
+        SELECT COUNT(DISTINCT visitor_hash)::int as count
         FROM page_views
         WHERE profile_id = ${profile.id} AND created_at >= ${thisWeek}
-      `.then(r => Number(r[0]?.count ?? 0)),
-      db.$queryRaw<[{ count: bigint }]>`
-        SELECT COUNT(DISTINCT visitor_hash) as count
+      `.then(r => r[0]?.count ?? 0),
+      db.$queryRaw<[{ count: number }]>`
+        SELECT COUNT(DISTINCT visitor_hash)::int as count
         FROM page_views
         WHERE profile_id = ${profile.id} AND created_at >= ${thisMonth}
-      `.then(r => Number(r[0]?.count ?? 0)),
+      `.then(r => r[0]?.count ?? 0),
     ])
 
     // Conversion funnel (last 30 days)
@@ -237,8 +237,8 @@ analytics.get('/stats', requireAuth, async (c) => {
 
     // Daily views for chart (last 14 days)
     const fourteenDaysAgo = new Date(today.getTime() - 14 * 24 * 60 * 60 * 1000)
-    const dailyViews = await db.$queryRaw<{ date: string; count: bigint }[]>`
-      SELECT DATE(created_at) as date, COUNT(*) as count
+    const dailyViews = await db.$queryRaw<{ date: string; count: number }[]>`
+      SELECT DATE(created_at) as date, COUNT(*)::int as count
       FROM page_views
       WHERE profile_id = ${profile.id}
         AND created_at >= ${fourteenDaysAgo}
@@ -281,7 +281,7 @@ analytics.get('/stats', requireAuth, async (c) => {
       })),
       dailyViews: dailyViews.map(d => ({
         date: d.date,
-        count: Number(d.count),
+        count: d.count,
       })),
     })
   } catch (error) {

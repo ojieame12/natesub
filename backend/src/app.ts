@@ -116,7 +116,7 @@ function resolveAllowedOrigin(origin: string): string | null {
 app.use('*', cors({
   origin: (origin) => resolveAllowedOrigin(origin),
   credentials: true,
-  allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization'],
 }))
 
