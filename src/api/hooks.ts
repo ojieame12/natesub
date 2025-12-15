@@ -216,7 +216,7 @@ export function useStripeConnect() {
 export function useStripeStatus() {
   return useQuery({
     queryKey: ['stripeStatus'],
-    queryFn: api.stripe.getStatus,
+    queryFn: () => api.stripe.getStatus(),
     staleTime: 30 * 1000, // 30 seconds
   })
 }

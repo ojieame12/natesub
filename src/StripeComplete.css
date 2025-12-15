@@ -28,11 +28,36 @@
   top: calc(env(safe-area-inset-top, 20px) + var(--space-lg));
   left: 50%;
   transform: translateX(-50%);
+  width: calc(100% - (var(--space-lg) * 2));
+  max-width: 400px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .stripe-complete-logo {
   height: 28px;
   width: auto;
+}
+
+.stripe-complete-back,
+.stripe-complete-spacer {
+  width: 36px;
+  height: 36px;
+}
+
+.stripe-complete-back {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+}
+
+.stripe-complete-back.pressed {
+  transform: scale(0.96);
 }
 
 .stripe-complete-card {

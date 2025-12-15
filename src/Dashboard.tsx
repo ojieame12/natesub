@@ -25,6 +25,7 @@ import {
   FileText,
   Eye,
   TrendingUp,
+  LayoutTemplate,
 } from 'lucide-react'
 import { Pressable, useToast, Skeleton, SkeletonList, ErrorState, AnimatedCurrency, AnimatedNumber } from './components'
 import { useViewTransition } from './hooks'
@@ -360,9 +361,57 @@ export default function Dashboard() {
             </section>
           </>
         ) : (
-          <>
-            {/* Stats Card */}
-            <section className="stats-card">
+          /* ZERO STATE - Show if profile is not public (Draft Mode) */
+          profile && !profile.isPublic ? (
+              <div className="zero-state-container">
+                <h1 className="zero-state-title">Welcome, {displayName.split(' ')[0]}</h1>
+                <p className="zero-state-subtitle">How would you like to start earning today?</p>
+
+                <div className="zero-state-grid">
+                  {/* Card A: Launch Page */}
+                  <Pressable 
+                    className="zero-state-card launch-card"
+                    onClick={() => navigate('/edit-page')}
+                  >
+                    <div className="zero-card-bg-glow" />
+                    <div className="zero-card-content">
+                      <div className="zero-card-icon-wrapper">
+                        <LayoutTemplate size={24} />
+                      </div>
+                      <h3 className="zero-card-title">Launch My Page</h3>
+                      <p className="zero-card-desc">
+                        Set up a recurring income stream. Great for creators, agencies, and monthly retainers.
+                      </p>
+                      <div className="zero-card-arrow">
+                        <ChevronRight size={20} />
+                      </div>
+                    </div>
+                  </Pressable>
+
+                  {/* Card B: New Request */}
+                  <Pressable 
+                    className="zero-state-card request-card"
+                    onClick={() => navigate('/new-request')}
+                  >
+                    <div className="zero-card-content">
+                      <div className="zero-card-icon-wrapper">
+                        <Send size={24} />
+                      </div>
+                      <h3 className="zero-card-title">Send a Request</h3>
+                      <p className="zero-card-desc">
+                        Send a one-time invoice or bill a client instantly for a specific project.
+                      </p>
+                      <div className="zero-card-arrow">
+                        <ChevronRight size={20} />
+                      </div>
+                    </div>
+                  </Pressable>
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* Stats Card */}
+                <section className="stats-card">
               <div className="stats-primary">
                 <span className="stats-label">Monthly Recurring Revenue</span>
                 <span className="stats-mrr">
@@ -542,7 +591,7 @@ export default function Dashboard() {
               </div>
             </section>
           </>
-        )}
+        ))}
       </main>
     </div>
   )

@@ -8,6 +8,7 @@
 // Map route paths to their import functions
 // These must match the lazy() imports in App.tsx
 const routeImports: Record<string, () => Promise<unknown>> = {
+  '/dashboard': () => import('../Dashboard'),
   '/activity': () => import('../Activity'),
   '/subscribers': () => import('../Subscribers'),
   '/profile': () => import('../Profile'),

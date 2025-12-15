@@ -114,6 +114,11 @@ stripeRoutes.post('/connect/refresh', requireAuth, paymentRateLimit, async (c) =
 stripeRoutes.get('/connect/status', requireAuth, async (c) => {
   const userId = c.get('userId')
 
+  // Skip bank details for faster initial load (e.g., StripeComplete page)
+  const quick = c.req.query('quick') === 'true'
+  // Force refresh to bypass cache (use after returning from Stripe onboarding)
+  const refresh = c.req.query('refresh') === 'true'
+
   const profile = await db.profile.findUnique({ where: { userId } })
 
   if (!profile?.stripeAccountId) {
@@ -123,13 +128,25 @@ stripeRoutes.get('/connect/status', requireAuth, async (c) => {
     })
   }
 
+  // Fast path: when quick is requested and refresh is false, return the last known DB status
+  // without calling Stripe (avoids slow Stripe API on cold starts / return redirects).
+  const isCrossBorder = isStripeCrossBorderSupported(profile.countryCode)
+  if (quick && !refresh) {
+    return c.json({
+      connected: true,
+      status: profile.payoutStatus || 'pending',
+      crossBorder: isCrossBorder,
+    })
+  }
+
   try {
-    const status = await getAccountStatus(profile.stripeAccountId)
+    const status = await getAccountStatus(profile.stripeAccountId, {
+      skipBankDetails: quick,
+      forceRefresh: refresh,
+    })
 
     // Check if this is a cross-border account (e.g., Nigeria)
     // Cross-border accounts don't have chargesEnabled - only payoutsEnabled matters
-    const isCrossBorder = isStripeCrossBorderSupported(profile.countryCode)
-
     // Update payout status in our database
     // Cross-border: only payoutsEnabled required
     // Native: both chargesEnabled and payoutsEnabled required

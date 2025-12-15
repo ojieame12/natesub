@@ -23,6 +23,7 @@ const envSchema = z.object({
   // Stripe
   STRIPE_SECRET_KEY: z.string().startsWith('sk_'),
   STRIPE_WEBHOOK_SECRET: z.string().startsWith('whsec_'),
+  STRIPE_WEBHOOK_SECRET_CONNECT: z.string().startsWith('whsec_').optional(), // For connected accounts webhook
   STRIPE_ONBOARDING_RETURN_URL: z.string().url(),
   STRIPE_ONBOARDING_REFRESH_URL: z.string().url(),
 
@@ -38,6 +39,7 @@ const envSchema = z.object({
   // Email
   RESEND_API_KEY: z.string().startsWith('re_'),
   EMAIL_FROM: z.string(),
+  EMAIL_LOGO_URL: z.string().url().optional(),
 
   // Cloudflare R2 Storage
   R2_ACCOUNT_ID: z.string(),

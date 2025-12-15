@@ -59,8 +59,10 @@ users.get(
       return c.json({ error: 'User not found' }, 404)
     }
 
+    const isOwner = Boolean(viewerId && viewerId === profile.userId)
+
     // Enforce privacy setting - only show profile if public or viewer is the owner
-    if (profile.isPublic === false && viewerId !== profile.userId) {
+    if (profile.isPublic === false && !isOwner) {
       return c.json({ error: 'This profile is private' }, 403)
     }
 
@@ -91,7 +93,7 @@ users.get(
       currentPeriodEnd: string | null
     } | null = null
 
-    if (viewerId && viewerId !== profile.userId) {
+    if (viewerId && !isOwner) {
       // Don't check if viewing own profile
       // Only check for recurring subscriptions (not one-time payments)
       const subscription = await db.subscription.findFirst({
@@ -162,6 +164,7 @@ users.get(
     return c.json({
       profile: publicProfile,
       viewerSubscription, // null if not logged in or not subscribed
+      isOwner,
     })
   }
 )

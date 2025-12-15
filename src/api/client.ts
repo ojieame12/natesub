@@ -81,6 +81,7 @@ export interface Profile {
   feeMode?: 'absorb' | 'pass_to_subscriber' // Who pays the platform fee
   crossBorder?: boolean // True if Stripe cross-border account (payments in USD, payouts in local currency)
   notificationPrefs?: NotificationPrefs // Email/push notification preferences
+  isPublic?: boolean // True if profile is visible to public (published)
 }
 
 export interface Tier {
@@ -201,8 +202,19 @@ async function apiFetch<T>(
 
   // Build headers with optional Authorization token
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
     ...(options.headers as Record<string, string>),
+  }
+
+  // Avoid triggering CORS preflights on simple GETs by only sending Content-Type when needed.
+  // (Authorization and non-simple Content-Type values will still preflight when present.)
+  if (!('Accept' in headers)) {
+    headers['Accept'] = 'application/json'
+  }
+
+  const hasBody = options.body !== undefined && options.body !== null
+  const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData
+  if (hasBody && !isFormData && !('Content-Type' in headers)) {
+    headers['Content-Type'] = 'application/json'
   }
 
   // Add Bearer token if available (for mobile apps)
@@ -449,7 +461,7 @@ export const profile = {
 
 export const users = {
   getByUsername: (username: string) =>
-    apiFetch<{ profile: Profile; viewerSubscription: ViewerSubscription | null }>(`/users/${username}`),
+    apiFetch<{ profile: Profile; viewerSubscription: ViewerSubscription | null; isOwner: boolean }>(`/users/${username}`),
 }
 
 // ============================================
@@ -488,10 +500,15 @@ export const stripe = {
       method: 'POST',
     }),
 
-  getStatus: () =>
-    apiFetch<{ connected: boolean; status: string; details?: StripeStatusDetails }>(
-      '/stripe/connect/status'
-    ),
+  getStatus: (options: { quick?: boolean; refresh?: boolean } = {}) => {
+    const params = new URLSearchParams()
+    if (options.quick) params.set('quick', 'true')
+    if (options.refresh) params.set('refresh', 'true')
+    const queryString = params.toString()
+    return apiFetch<{ connected: boolean; status: string; details?: StripeStatusDetails }>(
+      `/stripe/connect/status${queryString ? `?${queryString}` : ''}`
+    )
+  },
 
   getBalance: () =>
     apiFetch<{ balance: { available: number; pending: number } }>('/stripe/balance'),

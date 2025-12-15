@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { ArrowLeft, Building2, Check, Loader2, AlertCircle, CreditCard, ExternalLink } from 'lucide-react'
 import { Pressable } from './components'
 import { Skeleton } from './components/Skeleton'
@@ -54,6 +54,7 @@ interface Payout {
 
 export default function PaymentSettings() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [loading, setLoading] = useState(true)
   const [connecting, setConnecting] = useState(false)
   const [completingSetup, setCompletingSetup] = useState(false)
@@ -136,6 +137,12 @@ export default function PaymentSettings() {
   }, [paymentProvider])
 
   async function handleConnectStripe() {
+    // Persist return URL for post-Stripe redirection
+    const returnTo = (location.state as any)?.returnTo
+    if (returnTo) {
+      sessionStorage.setItem('stripe_return_to', returnTo)
+    }
+
     setConnecting(true)
     setError(null)
 

@@ -1,29 +1,37 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Check, Play, Pause, Banknote, Briefcase, X, ChevronLeft, Loader2, ArrowRight } from 'lucide-react'
+import { Check, Play, Pause, Banknote, Briefcase, Pencil, X, ChevronLeft, Loader2, ArrowRight } from 'lucide-react'
 import { Pressable } from '../components'
 import { useCreateCheckout, useRecordPageView, useUpdatePageView } from '../api/hooks'
 import type { Profile } from '../api/client'
-import { getCurrencySymbol, formatCompactNumber, formatAmountWithSeparators, calculateFeePreview } from '../utils/currency'
+import { getCurrencySymbol, formatCompactNumber, formatAmountWithSeparators, calculateFeePreview, displayAmountToCents } from '../utils/currency'
 import './template-one.css'
 
 type ViewType = 'welcome' | 'impact' | 'perks' | 'tiers' | 'payment'
 
-// TEMPORARY: Force all subscriptions to use Stripe until Paystack live keys are ready
-// Set to true to re-enable Paystack for creators who have it configured
-const PAYSTACK_ENABLED = false
-
 interface SubscribeBoundaryProps {
     profile: Profile
     canceled?: boolean
+    isOwner?: boolean
 }
 
-export default function SubscribeBoundary({ profile, canceled }: SubscribeBoundaryProps) {
+export default function SubscribeBoundary({ profile, canceled, isOwner }: SubscribeBoundaryProps) {
     const navigate = useNavigate()
     const [searchParams] = useSearchParams()
 
-    // Only show back button if there's browser history (not a direct link)
-    const canGoBack = typeof window !== 'undefined' && window.history.length > 1
+    // Only show back button when this page was reached via in-app navigation.
+    // `history.length` is unreliable on shared links (it can be > 1 even on a direct entry).
+    const canGoBack = (() => {
+        if (typeof window === 'undefined') return false
+        const idx = (window.history.state as any)?.idx
+        if (typeof idx === 'number') return idx > 0
+        try {
+            if (!document.referrer) return false
+            return new URL(document.referrer).origin === window.location.origin
+        } catch {
+            return false
+        }
+    })()
 
     const { mutateAsync: createCheckout, isPending: isCheckoutLoading } = useCreateCheckout()
     const { mutateAsync: recordPageView } = useRecordPageView()
@@ -53,13 +61,14 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
     // Determine if this is a service page vs personal
     const isService = purpose === 'service'
     const currencySymbol = getCurrencySymbol(currency)
-    const isPaystack = PAYSTACK_ENABLED && paymentProvider === 'paystack'
+    const isPaystack = paymentProvider === 'paystack'
 
     // State
     const [currentView, setCurrentView] = useState<ViewType>('welcome')
     const [slideDirection, setSlideDirection] = useState<'left' | 'right' | null>(null)
+    const [entryDirection, setEntryDirection] = useState<'left' | 'right' | null>(null)
     const [isAnimating, setIsAnimating] = useState(false)
-    const pendingViewRef = useRef<ViewType | null>(null)
+    const animationTimeoutRef = useRef<number | null>(null)
     const [isPlaying, setIsPlaying] = useState(false)
     const [audioDuration, setAudioDuration] = useState(0)
     const [audioCurrentTime, setAudioCurrentTime] = useState(0)
@@ -122,6 +131,9 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
     // Swipe handling
     const touchStartX = useRef<number>(0)
     const touchEndX = useRef<number>(0)
+    const touchStartY = useRef<number>(0)
+    const touchEndY = useRef<number>(0)
+    const ignoreSwipeRef = useRef(false)
 
     const name = displayName || username || 'Someone'
     const selectedTier = hasTiers ? tiers?.find(t => t.id === selectedTierId) : null
@@ -180,6 +192,11 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
         setCheckoutError(null)
         setEmailError(null)
 
+        if (isOwner) {
+            setCheckoutError('You cannot subscribe to your own page.')
+            return
+        }
+
         // Check for network connection
         if (!navigator.onLine) {
             setCheckoutError("You're offline. Please check your internet connection and try again.")
@@ -216,7 +233,7 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
 
         try {
             // Convert to cents for backend (currentAmount is in dollars from public profile)
-            const amountInCents = Math.round(currentAmount * 100)
+            const amountInCents = displayAmountToCents(currentAmount, currency)
             const result = await createCheckout({
                 creatorUsername: username,
                 amount: amountInCents,
@@ -246,30 +263,40 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
         }
     }
 
-    // Animated view transition using animationend events for precise timing
+    // Animated view transition.
+    // Uses timeouts instead of animationend because many children have their own animations
+    // and (prefers-reduced-motion) can disable animations entirely.
     const changeView = (newView: ViewType, direction: 'left' | 'right') => {
         if (isAnimating || newView === currentView) return
-        pendingViewRef.current = newView
+
+        if (animationTimeoutRef.current) {
+            window.clearTimeout(animationTimeoutRef.current)
+            animationTimeoutRef.current = null
+        }
+
+        // Swiping left (next) means the new view enters from the right.
+        const incoming = direction === 'left' ? 'right' : 'left'
+        setEntryDirection(incoming)
+        setCurrentView(newView)
         setSlideDirection(direction)
         setIsAnimating(true)
-    }
 
-    // Handle animation end on the content container
-    const handleAnimationEnd = (e: React.AnimationEvent) => {
-        // Only handle animations on the content div itself, not bubbled from children
-        if (e.target !== e.currentTarget) return
-
-        // If there's a pending view, switch to it (exit animation just finished)
-        if (pendingViewRef.current) {
-            setCurrentView(pendingViewRef.current)
-            pendingViewRef.current = null
-            // Keep isAnimating true - enter animation will now play
-        } else {
-            // Enter animation finished, reset state
+        // Match CSS: view enter animation is 0.5s
+        animationTimeoutRef.current = window.setTimeout(() => {
             setIsAnimating(false)
             setSlideDirection(null)
-        }
+            setEntryDirection(null)
+            animationTimeoutRef.current = null
+        }, 550)
     }
+
+    useEffect(() => {
+        return () => {
+            if (animationTimeoutRef.current) {
+                window.clearTimeout(animationTimeoutRef.current)
+            }
+        }
+    }, [])
 
     const handleDotClick = (index: number) => {
         const targetView = viewSequence[index]
@@ -292,19 +319,37 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
 
     // Swipe handlers
     const handleTouchStart = (e: React.TouchEvent) => {
+        const target = e.target as HTMLElement | null
+        // Don't let swipe navigation interfere with buttons/inputs (especially during checkout interactions)
+        if (target?.closest('input, textarea, select, button, a, [role="button"], .sub-slide-container')) {
+            ignoreSwipeRef.current = true
+            return
+        }
+        ignoreSwipeRef.current = false
         touchStartX.current = e.touches[0].clientX
+        touchEndX.current = touchStartX.current
+        touchStartY.current = e.touches[0].clientY
+        touchEndY.current = touchStartY.current
     }
 
     const handleTouchMove = (e: React.TouchEvent) => {
+        if (ignoreSwipeRef.current) return
         touchEndX.current = e.touches[0].clientX
+        touchEndY.current = e.touches[0].clientY
     }
 
     const handleTouchEnd = () => {
+        if (ignoreSwipeRef.current) {
+            ignoreSwipeRef.current = false
+            return
+        }
         const swipeThreshold = 50
-        const diff = touchStartX.current - touchEndX.current
+        const diffX = touchStartX.current - touchEndX.current
+        const diffY = touchStartY.current - touchEndY.current
 
-        if (Math.abs(diff) > swipeThreshold) {
-            if (diff > 0) {
+        // Only treat as a swipe if horizontal movement dominates (prevents accidental swipes while scrolling)
+        if (Math.abs(diffX) > swipeThreshold && Math.abs(diffX) > Math.abs(diffY)) {
+            if (diffX > 0) {
                 // Swiped left - go next
                 handleNext()
             } else {
@@ -312,6 +357,10 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
                 handlePrev()
             }
         }
+    }
+
+    const handleTouchCancel = () => {
+        ignoreSwipeRef.current = false
     }
 
     // Note: Success/verification states are handled by UserPage (shows SubscriptionSuccess component)
@@ -329,7 +378,13 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
                         <div className="sub-header-spacer" />
                     )}
                     <img src="/logo.svg" alt="nate" className="sub-logo-img" />
-                    <div className="sub-header-spacer" />
+                    {isOwner ? (
+                        <Pressable className="sub-back-btn" onClick={() => navigate('/edit-page')}>
+                            <Pencil size={18} />
+                        </Pressable>
+                    ) : (
+                        <div className="sub-header-spacer" />
+                    )}
                 </div>
 
                 <div className="sub-card">
@@ -362,11 +417,21 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
                                     <span className="sub-welcome-highlight">Coming Soon</span>
                                 </h1>
                                 <p className="sub-welcome-text">
-                                    {name} is still setting up their subscription page. Check back soon!
+                                    {isOwner
+                                        ? "Your page isn't ready for subscribers yet. Finish setup to start accepting payments."
+                                        : `${name} is still setting up their subscription page. Check back soon!`}
                                 </p>
                             </div>
                         </div>
                     </div>
+                    {isOwner && (
+                        <div className="sub-button-wrapper">
+                            <Pressable className="sub-subscribe-btn" onClick={() => navigate('/edit-page')}>
+                                <span className="sub-btn-text">Edit Page</span>
+                                <ArrowRight size={20} className="sub-btn-arrow" />
+                            </Pressable>
+                        </div>
+                    )}
                 </div>
             </div>
         )
@@ -384,7 +449,13 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
                     <div className="sub-header-spacer" />
                 )}
                 <img src="/logo.svg" alt="nate" className="sub-logo-img" />
-                <div className="sub-header-spacer" />
+                {isOwner ? (
+                    <Pressable className="sub-back-btn" onClick={() => navigate('/edit-page')}>
+                        <Pencil size={18} />
+                    </Pressable>
+                ) : (
+                    <div className="sub-header-spacer" />
+                )}
             </div>
 
             {/* Main Card */}
@@ -420,15 +491,19 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
 
                 {/* Content Area - Swipeable */}
                 <div
-                    className={`sub-content ${isAnimating ? `sub-animating sub-slide-${slideDirection}` : ''}`}
+                    className={[
+                        'sub-content',
+                        isAnimating ? 'sub-animating' : '',
+                        slideDirection ? `sub-slide-${slideDirection}` : '',
+                    ].filter(Boolean).join(' ')}
                     onTouchStart={handleTouchStart}
                     onTouchMove={handleTouchMove}
                     onTouchEnd={handleTouchEnd}
-                    onAnimationEnd={handleAnimationEnd}
+                    onTouchCancel={handleTouchCancel}
                 >
                     {/* Welcome View */}
                     {currentView === 'welcome' && (
-                        <div className="sub-view sub-view-welcome">
+                        <div className={`sub-view sub-view-welcome${entryDirection ? ` slide-from-${entryDirection}` : ''}`}>
                             <div className="sub-welcome-content">
                                 <h1 className="sub-welcome-title">
                                     {isService ? (
@@ -487,7 +562,7 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
 
                     {/* Impact View */}
                     {currentView === 'impact' && (
-                        <div className="sub-view sub-view-impact">
+                        <div className={`sub-view sub-view-impact${entryDirection ? ` slide-from-${entryDirection}` : ''}`}>
                             <h2 className="sub-section-title">
                                 {isService ? 'Why Work With Me' : 'How it would Help Me'}
                             </h2>
@@ -508,7 +583,7 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
 
                     {/* Perks View */}
                     {currentView === 'perks' && (
-                        <div className="sub-view sub-view-perks">
+                        <div className={`sub-view sub-view-perks${entryDirection ? ` slide-from-${entryDirection}` : ''}`}>
                             <h2 className="sub-section-title">
                                 {isService ? "What's Included" : 'What You would Get'}
                             </h2>
@@ -537,7 +612,7 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
 
                     {/* Tiers View - For service accounts with multiple tiers */}
                     {currentView === 'tiers' && hasTiers && tiers && (
-                        <div className="sub-view sub-view-tiers">
+                        <div className={`sub-view sub-view-tiers${entryDirection ? ` slide-from-${entryDirection}` : ''}`}>
                             <h2 className="sub-section-title">Choose Your Plan</h2>
 
                             <div className="sub-tiers-list">
@@ -589,7 +664,7 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
                         const feePreview = calculateFeePreview(currentAmount, currency, purpose, feeMode)
 
                         return (
-                        <div className="sub-view sub-view-payment">
+                        <div className={`sub-view sub-view-payment${entryDirection ? ` slide-from-${entryDirection}` : ''}`}>
                             <h2 className="sub-section-title">Complete Subscription</h2>
 
                             <div className="sub-payment-summary">
@@ -629,7 +704,7 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
                             )}
 
                             {/* Email input for Paystack (required) */}
-                            {isPaystack && (
+                            {!isOwner && isPaystack && (
                                 <div className="sub-email-input-wrapper">
                                     <input
                                         type="email"
@@ -654,7 +729,26 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
                             )}
 
                             <div className="sub-payment-methods">
-                                {isPaystack ? (
+                                {isOwner ? (
+                                    <>
+                                        <div className="sub-owner-notice">
+                                            You're viewing your own page. Subscribers will complete checkout here.
+                                        </div>
+                                        <Pressable
+                                            className="sub-payment-btn sub-payment-stripe"
+                                            onClick={() => navigate('/edit-page')}
+                                        >
+                                            <Pencil size={18} />
+                                            <span>Edit Page</span>
+                                        </Pressable>
+                                        <Pressable
+                                            className="sub-payment-btn sub-payment-stripe"
+                                            onClick={() => navigate('/settings/payments')}
+                                        >
+                                            <span>Payment Settings</span>
+                                        </Pressable>
+                                    </>
+                                ) : isPaystack ? (
                                     <Pressable
                                         className="sub-payment-btn sub-payment-paystack"
                                         onClick={handleSubscribe}
@@ -734,13 +828,10 @@ export default function SubscribeBoundary({ profile, canceled }: SubscribeBounda
                 {/* Subscribe Button - Hidden on payment view */}
                 {currentView !== 'payment' && (
                     <div className="sub-button-wrapper">
-                        <Pressable
-                            className="sub-subscribe-btn"
-                            onClick={(currentView === 'perks' || currentView === 'tiers') ? () => setCurrentView('payment') : handleNext}
-                        >
-                            <span className="sub-btn-text">Subscribe Now</span>
-                            <ArrowRight size={20} className="sub-btn-arrow" />
-                        </Pressable>
+                            <Pressable className="sub-subscribe-btn" onClick={handleNext}>
+                                <span className="sub-btn-text">{isOwner ? 'Next' : 'Subscribe Now'}</span>
+                                <ArrowRight size={20} className="sub-btn-arrow" />
+                            </Pressable>
                     </div>
                 )}
             </div>

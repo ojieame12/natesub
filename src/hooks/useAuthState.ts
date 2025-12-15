@@ -15,6 +15,7 @@ import { useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api/client'
 import { getAuthToken, hasAuthSession, clearAuthSession } from '../api/client'
+import { hasRecentPaymentConfirmation } from '../utils/paymentConfirmed'
 
 export type AuthStatus =
   | 'unknown'        // Initial state, haven't checked yet
@@ -145,7 +146,9 @@ export function useAuthState(): AuthState {
   // Derive convenience booleans
   const isReady = status === 'authenticated' || status === 'unauthenticated' || status === 'error'
   const hasProfile = user?.onboarding?.hasProfile ?? false
-  const hasActivePayment = user?.onboarding?.hasActivePayment ?? false
+  // In Stripe/Paystack onboarding flows, webhooks can lag the user return redirect.
+  // Treat a recent local "payment confirmed" flag as active payment to avoid yo-yo UX.
+  const hasActivePayment = (user?.onboarding?.hasActivePayment ?? false) || hasRecentPaymentConfirmation()
   const isFullySetUp = hasProfile && hasActivePayment
   const needsPaymentSetup = hasProfile && !hasActivePayment
   const needsOnboarding = !hasProfile

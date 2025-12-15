@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronLeft, MessageSquare, Mail, Link2, Check, Mic, Plus, Calendar } from 'lucide-react'
+import { ChevronLeft, MessageSquare, Mail, Link2, Check, Mic, Plus, Calendar, CreditCard } from 'lucide-react'
 import { useRequestStore, getRelationshipLabel, type RelationshipType } from './store'
 import { useCreateRequest, useSendRequest, useCurrentUser } from '../api/hooks'
-import { getCurrencySymbol, formatCompactNumber } from '../utils/currency'
+import { getCurrencySymbol, formatCompactNumber, displayAmountToCents } from '../utils/currency'
 import { Pressable } from '../components'
 import './request.css'
 
@@ -82,6 +82,9 @@ export default function RequestPreview() {
     const canSendSMS = phoneNumber.length >= 10
     const canSendEmail = emailAddress.includes('@')
 
+    // Payout Interceptor State
+    const [showPayoutWall, setShowPayoutWall] = useState(false)
+
     const handleSelectMethod = (method: SendMethod) => {
         setSendMethod(method)
         // Open edit mode if selecting a method without contact info
@@ -98,6 +101,13 @@ export default function RequestPreview() {
     }
 
     const handleSend = async () => {
+        // Intercept: Check if payouts are active
+        const payoutStatus = userData?.profile?.payoutStatus
+        if (payoutStatus !== 'active') {
+            setShowPayoutWall(true)
+            return
+        }
+
         // Validate before sending
         if (sendMethod === 'sms' && !canSendSMS) {
             setEditingPhone(true)
@@ -108,6 +118,10 @@ export default function RequestPreview() {
             return
         }
 
+        performSend()
+    }
+
+    const performSend = async () => {
         setIsSending(true)
         setError(null)
 
@@ -118,7 +132,7 @@ export default function RequestPreview() {
                 recipientEmail: sendMethod === 'email' ? emailAddress : undefined,
                 recipientPhone: sendMethod === 'sms' ? phoneNumber : undefined,
                 relationship: mapRelationshipToBackend(relationship),
-                amountCents: Math.round(amount * 100),
+                amountCents: displayAmountToCents(amount, currency),
                 currency,  // Use creator's currency
                 isRecurring,
                 message: message || undefined,
@@ -269,7 +283,7 @@ export default function RequestPreview() {
                             onClick={() => handleSelectMethod('sms')}
                         >
                             <MessageSquare size={20} />
-                            <span>SMS</span>
+                            <span>Text (Copy Link)</span>
                             {phoneNumber ? (
                                 <span className="request-send-detail">{phoneNumber}</span>
                             ) : (
@@ -385,6 +399,63 @@ export default function RequestPreview() {
                     )}
                 </Pressable>
             </div>
+
+            {/* PAYOUT INTERCEPTOR MODAL */}
+            {showPayoutWall && (
+                <div style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    background: 'rgba(0,0,0,0.8)',
+                    zIndex: 1000,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: 20
+                }}>
+                    <div style={{
+                        background: 'var(--surface)',
+                        border: '1px solid var(--border)',
+                        borderRadius: 24,
+                        padding: 24,
+                        width: '100%',
+                        maxWidth: 360,
+                        textAlign: 'center'
+                    }}>
+                        <div style={{ 
+                            width: 64, 
+                            height: 64, 
+                            borderRadius: '50%', 
+                            background: 'var(--bg-root)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            margin: '0 auto 16px'
+                        }}>
+                            <CreditCard size={32} />
+                        </div>
+                        <h3 style={{ fontSize: 20, marginBottom: 8 }}>Connect Payouts</h3>
+                        <p style={{ fontSize: 15, color: 'var(--text-secondary)', marginBottom: 24, lineHeight: 1.5 }}>
+                            To receive this {currencySymbol}{amount}, you need to connect a bank account first.
+                        </p>
+                        <Pressable 
+                            className="btn-primary"
+                            style={{ width: '100%', marginBottom: 12 }}
+                            onClick={() => navigate('/settings/payments', { state: { returnTo: '/request/preview' } })}
+                        >
+                            Connect Now
+                        </Pressable>
+                        <Pressable 
+                            className="btn-text"
+                            onClick={() => setShowPayoutWall(false)}
+                        >
+                            Cancel
+                        </Pressable>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }

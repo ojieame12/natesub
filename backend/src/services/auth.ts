@@ -109,8 +109,8 @@ export function computeOnboardingState(user: {
     // Fully complete - go to dashboard
     redirectTo = '/dashboard'
   } else if (hasProfile && !hasActivePayment) {
-    // Profile exists but payment not set up - go to payment settings
-    redirectTo = '/settings/payments'
+    // Profile exists but payment not set up - allow dashboard access (Zero State will handle setup)
+    redirectTo = '/dashboard'
   } else if (user.onboardingStep !== null && user.onboardingStep >= 3) {
     // Has progress - resume from saved step
     redirectTo = `/onboarding?step=${user.onboardingStep}`

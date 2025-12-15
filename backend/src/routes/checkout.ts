@@ -3,6 +3,7 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { db } from '../db/client.js'
 import { redis } from '../db/redis.js'
+import { optionalAuth } from '../middleware/auth.js'
 import { checkoutRateLimit, publicRateLimit } from '../middleware/rateLimit.js'
 import { createCheckoutSession, getAccountStatus } from '../services/stripe.js'
 import { initializePaystackCheckout, generateReference, isPaystackSupported, type PaystackCountry } from '../services/paystack.js'
@@ -27,6 +28,7 @@ const PAYSTACK_CURRENCIES: Record<PaystackCountry, string> = {
 checkout.post(
   '/session',
   checkoutRateLimit,
+  optionalAuth,
   zValidator('json', z.object({
     creatorUsername: z.string(),
     tierId: z.string().optional(),
@@ -46,6 +48,12 @@ checkout.post(
 
     if (!profile) {
       return c.json({ error: 'User not found' }, 404)
+    }
+
+    // Prevent creators from subscribing to themselves (common when previewing own public page)
+    const viewerId = c.get('userId')
+    if (viewerId && viewerId === profile.userId) {
+      return c.json({ error: 'You cannot subscribe to your own page.' }, 400)
     }
 
     // Check if service provider has payment set up

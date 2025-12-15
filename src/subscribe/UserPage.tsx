@@ -134,10 +134,17 @@ export default function UserPage() {
   }
 
   let content: ReactNode
+  const isOwner = Boolean(data.isOwner)
 
   // Show success page after payment
   if (isSuccess) {
     content = <SubscriptionSuccess profile={data.profile} provider={provider} />
+  } else if (isOwner) {
+    // Owner preview mode - show the public page but disable checkout actions
+    const templateToUse = data.profile.template || 'boundary'
+    content = templateToUse === 'liquid'
+      ? <SubscriptionLiquid profile={data.profile} canceled={isCanceled} isOwner />
+      : <SubscribeBoundary profile={data.profile} canceled={isCanceled} isOwner />
   } else if (data.viewerSubscription?.isActive) {
     // Show "Already Subscribed" if viewer has active subscription
     content = (

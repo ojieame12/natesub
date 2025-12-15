@@ -129,21 +129,30 @@ export async function createAccountLink(accountId: string, country?: string) {
 
 // Get account status with detailed requirements
 // Uses Redis cache to reduce Stripe API calls (5-minute TTL)
-export async function getAccountStatus(stripeAccountId: string) {
+// forceRefresh: bypass cache (use after returning from Stripe onboarding)
+// skipBankDetails: don't expand external_accounts (faster response)
+export async function getAccountStatus(stripeAccountId: string, options: { skipBankDetails?: boolean; forceRefresh?: boolean } = {}) {
+  const { skipBankDetails = false, forceRefresh = false } = options
   const cacheKey = `stripe:status:${stripeAccountId}`
 
-  // Check cache first
-  try {
-    const cached = await redis.get(cacheKey)
-    if (cached) {
-      return JSON.parse(cached)
+  // Check cache first (unless forceRefresh is true)
+  if (!forceRefresh) {
+    try {
+      const cached = await Promise.race([
+        redis.get(cacheKey),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 500)) // 500ms timeout
+      ])
+      if (cached && typeof cached === 'string') {
+        return JSON.parse(cached)
+      }
+    } catch (err) {
+      // Cache miss or error - continue to API call
     }
-  } catch (err) {
-    // Cache miss or error - continue to API call
   }
 
+  // Only expand external_accounts if we need bank details (not on initial status check)
   const account = await stripe.accounts.retrieve(stripeAccountId, {
-    expand: ['external_accounts'],
+    expand: skipBankDetails ? [] : ['external_accounts'],
   })
 
   // Parse requirements into user-friendly format

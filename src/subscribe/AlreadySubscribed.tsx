@@ -13,8 +13,19 @@ interface AlreadySubscribedProps {
 export default function AlreadySubscribed({ profile, subscription }: AlreadySubscribedProps) {
     const navigate = useNavigate()
 
-    // Only show back button if there's browser history (not a direct link)
-    const canGoBack = typeof window !== 'undefined' && window.history.length > 1
+    // Only show back button when this page was reached via in-app navigation.
+    // `history.length` is unreliable on shared links (it can be > 1 even on a direct entry).
+    const canGoBack = (() => {
+        if (typeof window === 'undefined') return false
+        const idx = (window.history.state as any)?.idx
+        if (typeof idx === 'number') return idx > 0
+        try {
+            if (!document.referrer) return false
+            return new URL(document.referrer).origin === window.location.origin
+        } catch {
+            return false
+        }
+    })()
 
     const name = profile.displayName || profile.username || 'them'
 

@@ -1,18 +1,14 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Check, Play, Pause, Banknote, Briefcase, X, ChevronLeft, Loader2, ArrowRight } from 'lucide-react'
+import { Check, Play, Pause, Banknote, Briefcase, Pencil, X, ChevronLeft, Loader2, ArrowRight } from 'lucide-react'
 import { Pressable } from '../components'
 import { useCreateCheckout, useRecordPageView, useUpdatePageView } from '../api/hooks'
 import { useHaptics } from '../hooks/useHaptics'
 import type { Profile } from '../api/client'
-import { getCurrencySymbol, formatCompactNumber, formatAmountWithSeparators, calculateFeePreview } from '../utils/currency'
+import { getCurrencySymbol, formatCompactNumber, formatAmountWithSeparators, calculateFeePreview, displayAmountToCents } from '../utils/currency'
 import './template-one.css'
 
 type ViewType = 'welcome' | 'impact' | 'perks' | 'tiers' | 'payment'
-
-// TEMPORARY: Force all subscriptions to use Stripe until Paystack live keys are ready
-// Set to true to re-enable Paystack for creators who have it configured
-const PAYSTACK_ENABLED = false
 
 // Curated palette of "Premium" colors - defined outside component for stability
 const ACCENT_COLORS = [
@@ -40,9 +36,10 @@ function getSafeColor(str: string): string {
 interface SubscribeBoundaryProps {
     profile: Profile
     canceled?: boolean
+    isOwner?: boolean
 }
 
-export default function SubscriptionLiquid({ profile, canceled }: SubscribeBoundaryProps) {
+export default function SubscriptionLiquid({ profile, canceled, isOwner }: SubscribeBoundaryProps) {
     // Memoize accent color and derived values to prevent recalculation on every render
     const accentColor = useMemo(() => getSafeColor(profile.username || 'default'), [profile.username])
     const contentGlow = useMemo(() => `radial-gradient(circle at 50% -20%, ${accentColor}15 0%, transparent 60%)`, [accentColor])
@@ -51,8 +48,19 @@ export default function SubscriptionLiquid({ profile, canceled }: SubscribeBound
     const navigate = useNavigate()
     const [searchParams] = useSearchParams()
 
-    // Only show back button if there's browser history (not a direct link)
-    const canGoBack = typeof window !== 'undefined' && window.history.length > 1
+    // Only show back button when this page was reached via in-app navigation.
+    // `history.length` is unreliable on shared links (it can be > 1 even on a direct entry).
+    const canGoBack = (() => {
+        if (typeof window === 'undefined') return false
+        const idx = (window.history.state as any)?.idx
+        if (typeof idx === 'number') return idx > 0
+        try {
+            if (!document.referrer) return false
+            return new URL(document.referrer).origin === window.location.origin
+        } catch {
+            return false
+        }
+    })()
 
     const { mutateAsync: createCheckout, isPending: isCheckoutLoading } = useCreateCheckout()
     const { mutateAsync: recordPageView } = useRecordPageView()
@@ -83,13 +91,14 @@ export default function SubscriptionLiquid({ profile, canceled }: SubscribeBound
     // Determine if this is a service page vs personal
     const isService = purpose === 'service'
     const currencySymbol = getCurrencySymbol(currency)
-    const isPaystack = PAYSTACK_ENABLED && paymentProvider === 'paystack'
+    const isPaystack = paymentProvider === 'paystack'
 
     // State
     const [currentView, setCurrentView] = useState<ViewType>('welcome')
     const [slideDirection, setSlideDirection] = useState<'left' | 'right' | null>(null)
     const [entryDirection, setEntryDirection] = useState<'left' | 'right' | null>(null) // Direction new view enters from
     const [isAnimating, setIsAnimating] = useState(false)
+    const animationTimeoutRef = useRef<number | null>(null)
     const [isPlaying, setIsPlaying] = useState(false)
     const [audioDuration, setAudioDuration] = useState(0)
     const [audioCurrentTime, setAudioCurrentTime] = useState(0)
@@ -152,6 +161,9 @@ export default function SubscriptionLiquid({ profile, canceled }: SubscribeBound
     // Swipe handling
     const touchStartX = useRef<number>(0)
     const touchEndX = useRef<number>(0)
+    const touchStartY = useRef<number>(0)
+    const touchEndY = useRef<number>(0)
+    const ignoreSwipeRef = useRef(false)
 
     const name = displayName || username || 'Someone'
     const selectedTier = hasTiers ? tiers?.find(t => t.id === selectedTierId) : null
@@ -210,6 +222,11 @@ export default function SubscriptionLiquid({ profile, canceled }: SubscribeBound
         setCheckoutError(null)
         setEmailError(null)
 
+        if (isOwner) {
+            setCheckoutError('You cannot subscribe to your own page.')
+            return
+        }
+
         // Check for network connection
         if (!navigator.onLine) {
             setCheckoutError("You're offline. Please check your internet connection and try again.")
@@ -245,8 +262,8 @@ export default function SubscriptionLiquid({ profile, canceled }: SubscribeBound
         }
 
         try {
-            // Convert to cents for backend (currentAmount is in dollars from public profile)
-            const amountInCents = Math.round(currentAmount * 100)
+            // Convert to smallest unit for backend (handles zero-decimal currencies)
+            const amountInCents = displayAmountToCents(currentAmount, currency)
             const result = await createCheckout({
                 creatorUsername: username,
                 amount: amountInCents,
@@ -281,9 +298,12 @@ export default function SubscriptionLiquid({ profile, canceled }: SubscribeBound
     const [isDragging, setIsDragging] = useState(false)
     const slideTrackRef = useRef<HTMLDivElement>(null)
     const slideStartX = useRef(0)
+    const SLIDE_TRIGGER_THRESHOLD = 0.7
 
     // Unified pointer handlers for both touch and mouse (desktop support)
     const handleSlideStart = (e: React.TouchEvent | React.MouseEvent) => {
+        e.stopPropagation()
+        if (!('touches' in e)) e.preventDefault()
         if (isCheckoutLoading || isRedirecting) return
         if (isPaystack && !subscriberEmail.trim()) return // Disable if email missing
 
@@ -293,6 +313,8 @@ export default function SubscriptionLiquid({ profile, canceled }: SubscribeBound
     }
 
     const handleSlideMove = (e: React.TouchEvent | React.MouseEvent) => {
+        e.stopPropagation()
+        if (!('touches' in e)) e.preventDefault()
         if (!isDragging || !slideTrackRef.current) return
 
         const trackWidth = slideTrackRef.current.offsetWidth
@@ -310,11 +332,13 @@ export default function SubscriptionLiquid({ profile, canceled }: SubscribeBound
         setSlideOffset(percentage)
     }
 
-    const handleSlideEnd = () => {
+    const handleSlideEnd = (e?: React.TouchEvent | React.MouseEvent) => {
+        e?.stopPropagation()
+        if (e && !('touches' in e)) e.preventDefault()
         if (!isDragging) return
         setIsDragging(false)
 
-        if (slideOffset > 0.85) {
+        if (slideOffset > SLIDE_TRIGGER_THRESHOLD) {
             // Snap to end and trigger action
             setSlideOffset(1)
             // Haptic feedback using Capacitor (works on native, gracefully no-ops on web)
@@ -338,25 +362,35 @@ export default function SubscriptionLiquid({ profile, canceled }: SubscribeBound
     // Animated view transition
     const changeView = (newView: ViewType, direction: 'left' | 'right') => {
         if (isAnimating || newView === currentView) return
+
+        if (animationTimeoutRef.current) {
+            window.clearTimeout(animationTimeoutRef.current)
+            animationTimeoutRef.current = null
+        }
+
+        // Swiping left (next) means the new view enters from the right.
+        const incoming = direction === 'left' ? 'right' : 'left'
+        setEntryDirection(incoming)
+        setCurrentView(newView)
         setSlideDirection(direction)
         setIsAnimating(true)
 
-        // Short delay for exit animation, then switch view
-        setTimeout(() => {
-            // Set entry direction (opposite of slide direction)
-            // Sliding left = next = new view enters from right
-            // Sliding right = prev = new view enters from left
-            setEntryDirection(direction === 'left' ? 'right' : 'left')
-            setCurrentView(newView)
-
-            // Reset animation state after enter animation completes
-            setTimeout(() => {
-                setIsAnimating(false)
-                setSlideDirection(null)
-                setEntryDirection(null)
-            }, 500) // Match CSS animation duration
-        }, 100) // Brief exit animation
+        // Match CSS: view enter animation is 0.5s
+        animationTimeoutRef.current = window.setTimeout(() => {
+            setIsAnimating(false)
+            setSlideDirection(null)
+            setEntryDirection(null)
+            animationTimeoutRef.current = null
+        }, 550)
     }
+
+    useEffect(() => {
+        return () => {
+            if (animationTimeoutRef.current) {
+                window.clearTimeout(animationTimeoutRef.current)
+            }
+        }
+    }, [])
 
     const handleDotClick = (index: number) => {
         const targetView = viewSequence[index]
@@ -391,21 +425,37 @@ export default function SubscriptionLiquid({ profile, canceled }: SubscribeBound
 
     // Swipe handlers
     const handleTouchStart = (e: React.TouchEvent) => {
+        const target = e.target as HTMLElement | null
+        // Don't let swipe navigation interfere with buttons/inputs (especially during checkout interactions)
+        if (target?.closest('input, textarea, select, button, a, [role="button"], .sub-slide-container')) {
+            ignoreSwipeRef.current = true
+            return
+        }
+        ignoreSwipeRef.current = false
         touchStartX.current = e.touches[0].clientX
+        touchEndX.current = touchStartX.current
+        touchStartY.current = e.touches[0].clientY
+        touchEndY.current = touchStartY.current
     }
 
     const handleTouchMove = (e: React.TouchEvent) => {
-        // ... (existing code)
+        if (ignoreSwipeRef.current) return
         touchEndX.current = e.touches[0].clientX
+        touchEndY.current = e.touches[0].clientY
     }
 
     const handleTouchEnd = () => {
-        // ... (existing code)
+        if (ignoreSwipeRef.current) {
+            ignoreSwipeRef.current = false
+            return
+        }
         const swipeThreshold = 50
-        const diff = touchStartX.current - touchEndX.current
+        const diffX = touchStartX.current - touchEndX.current
+        const diffY = touchStartY.current - touchEndY.current
 
-        if (Math.abs(diff) > swipeThreshold) {
-            if (diff > 0) {
+        // Only treat as a swipe if horizontal movement dominates (prevents accidental swipes while scrolling)
+        if (Math.abs(diffX) > swipeThreshold && Math.abs(diffX) > Math.abs(diffY)) {
+            if (diffX > 0) {
                 // Swiped left - go next
                 handleNext()
             } else {
@@ -413,6 +463,10 @@ export default function SubscriptionLiquid({ profile, canceled }: SubscribeBound
                 handlePrev()
             }
         }
+    }
+
+    const handleTouchCancel = () => {
+        ignoreSwipeRef.current = false
     }
 
     // Note: Success/verification states are handled by UserPage (shows SubscriptionSuccess component)
@@ -430,7 +484,13 @@ export default function SubscriptionLiquid({ profile, canceled }: SubscribeBound
                         <div className="sub-header-spacer" />
                     )}
                     <img src="/logo.svg" alt="nate" className="sub-logo-img" />
-                    <div className="sub-header-spacer" />
+                    {isOwner ? (
+                        <Pressable className="sub-back-btn" onClick={() => navigate('/edit-page')}>
+                            <Pencil size={18} />
+                        </Pressable>
+                    ) : (
+                        <div className="sub-header-spacer" />
+                    )}
                 </div>
 
                 <div className="sub-card">
@@ -463,11 +523,21 @@ export default function SubscriptionLiquid({ profile, canceled }: SubscribeBound
                                     <span className="sub-welcome-highlight">Coming Soon</span>
                                 </h1>
                                 <p className="sub-welcome-text">
-                                    {name} is still setting up their subscription page. Check back soon!
+                                    {isOwner
+                                        ? "Your page isn't ready for subscribers yet. Finish setup to start accepting payments."
+                                        : `${name} is still setting up their subscription page. Check back soon!`}
                                 </p>
                             </div>
                         </div>
                     </div>
+                    {isOwner && (
+                        <div className="sub-button-wrapper">
+                            <Pressable className="sub-subscribe-btn" onClick={() => navigate('/edit-page')}>
+                                <span className="sub-btn-text">Edit Page</span>
+                                <ArrowRight size={20} className="sub-btn-arrow" />
+                            </Pressable>
+                        </div>
+                    )}
                 </div>
             </div>
         )
@@ -485,7 +555,13 @@ export default function SubscriptionLiquid({ profile, canceled }: SubscribeBound
                     <div className="sub-header-spacer" />
                 )}
                 <img src="/logo.svg" alt="nate" className="sub-logo-img" />
-                <div className="sub-header-spacer" />
+                {isOwner ? (
+                    <Pressable className="sub-back-btn" onClick={() => navigate('/edit-page')}>
+                        <Pencil size={18} />
+                    </Pressable>
+                ) : (
+                    <div className="sub-header-spacer" />
+                )}
             </div>
 
             {/* Main Card with Ambient Glow */}
@@ -545,6 +621,7 @@ export default function SubscriptionLiquid({ profile, canceled }: SubscribeBound
                     onTouchStart={handleTouchStart}
                     onTouchMove={handleTouchMove}
                     onTouchEnd={handleTouchEnd}
+                    onTouchCancel={handleTouchCancel}
                 >
                     {/* Welcome View */}
                     {currentView === 'welcome' && (
@@ -749,7 +826,7 @@ export default function SubscriptionLiquid({ profile, canceled }: SubscribeBound
                                 )}
 
                                 {/* Email input for Paystack (required) */}
-                                {isPaystack && (
+                                {!isOwner && isPaystack && (
                                     <div className="sub-email-input-wrapper">
                                         <input
                                             type="email"
@@ -774,115 +851,139 @@ export default function SubscriptionLiquid({ profile, canceled }: SubscribeBound
                                 )}
 
                                 <div className="sub-payment-methods">
-                                    {/* Slide to Subscribe - Same experience for both Stripe & Paystack */}
-                                    <div
-                                        className={`sub-slide-container ${isCheckoutLoading ? 'loading' : ''} ${isDragging ? 'dragging' : ''}`}
-                                        ref={slideTrackRef}
-                                        style={{
-                                            position: 'relative',
-                                            height: '56px',
-                                            borderRadius: '28px',
-                                            background: '#F3F4F6', // neutral-100
-                                            overflow: 'hidden',
-                                            marginTop: '24px',
-                                            transition: 'transform 0.1s ease',
-                                            transform: isDragging ? 'scale(0.98)' : 'scale(1)',
-                                            // Disable if Paystack and no email entered
-                                            ...(isPaystack && !subscriberEmail.trim() ? { opacity: 0.5, pointerEvents: 'none' } : {})
-                                        }}
-                                        // Touch events (mobile)
-                                        onTouchStart={handleSlideStart}
-                                        onTouchMove={handleSlideMove}
-                                        onTouchEnd={handleSlideEnd}
-                                        // Mouse events (desktop)
-                                        onMouseDown={handleSlideStart}
-                                        onMouseMove={isDragging ? handleSlideMove : undefined}
-                                        onMouseUp={handleSlideEnd}
-                                        onMouseLeave={isDragging ? handleSlideEnd : undefined}
-                                    >
-                                        {/* Background Track Text */}
-                                        <div style={{
-                                            position: 'absolute',
-                                            top: 0,
-                                            left: 0,
-                                            width: '100%',
-                                            height: '100%',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            zIndex: 1,
-                                            opacity: Math.max(0, 1 - slideOffset * 1.5), // Fade out as we slide
-                                            transition: 'opacity 0.2s ease',
-                                        }}>
-                                            <span style={{
-                                                fontSize: '16px',
-                                                fontWeight: 600,
-                                                color: '#6B7280', // text-secondary
-                                                letterSpacing: '-0.2px'
-                                            }}>
-                                                Slide to Subscribe
-                                            </span>
-                                            <div style={{ marginLeft: 8, opacity: 0.5 }}>
-                                                <ChevronLeft size={16} style={{ transform: 'rotate(180deg)' }} />
+                                    {isOwner ? (
+                                        <>
+                                            <div className="sub-owner-notice">
+                                                You're viewing your own page. Subscribers will complete checkout here.
                                             </div>
-                                        </div>
+                                            <Pressable
+                                                className="sub-payment-btn sub-payment-stripe"
+                                                onClick={() => navigate('/edit-page')}
+                                            >
+                                                <Pencil size={18} />
+                                                <span>Edit Page</span>
+                                            </Pressable>
+                                            <Pressable
+                                                className="sub-payment-btn sub-payment-stripe"
+                                                onClick={() => navigate('/settings/payments')}
+                                            >
+                                                <span>Payment Settings</span>
+                                            </Pressable>
+                                        </>
+                                    ) : (
+                                        <>
+                                            {/* Slide to Subscribe - Same experience for both Stripe & Paystack */}
+                                            <div
+                                                className={`sub-slide-container ${isCheckoutLoading ? 'loading' : ''} ${isDragging ? 'dragging' : ''}`}
+                                                ref={slideTrackRef}
+                                                style={{
+                                                    position: 'relative',
+                                                    height: '56px',
+                                                    borderRadius: '28px',
+                                                    background: '#F3F4F6', // neutral-100
+                                                    overflow: 'hidden',
+                                                    marginTop: '24px',
+                                                    transition: 'transform 0.1s ease',
+                                                    transform: isDragging ? 'scale(0.98)' : 'scale(1)',
+                                                    // Disable if Paystack and no email entered
+                                                    ...(isPaystack && !subscriberEmail.trim() ? { opacity: 0.5, pointerEvents: 'none' } : {})
+                                                }}
+                                                // Touch events (mobile)
+                                                onTouchStart={handleSlideStart}
+                                                onTouchMove={handleSlideMove}
+                                                onTouchEnd={handleSlideEnd}
+                                                onTouchCancel={handleSlideEnd}
+                                                // Mouse events (desktop)
+                                                onMouseDown={handleSlideStart}
+                                                onMouseMove={isDragging ? handleSlideMove : undefined}
+                                                onMouseUp={handleSlideEnd}
+                                                onMouseLeave={isDragging ? handleSlideEnd : undefined}
+                                            >
+                                                {/* Background Track Text */}
+                                                <div style={{
+                                                    position: 'absolute',
+                                                    top: 0,
+                                                    left: 0,
+                                                    width: '100%',
+                                                    height: '100%',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    zIndex: 1,
+                                                    opacity: Math.max(0, 1 - slideOffset * 1.5), // Fade out as we slide
+                                                    transition: 'opacity 0.2s ease',
+                                                }}>
+                                                    <span style={{
+                                                        fontSize: '16px',
+                                                        fontWeight: 600,
+                                                        color: '#6B7280', // text-secondary
+                                                        letterSpacing: '-0.2px'
+                                                    }}>
+                                                        Slide to Subscribe
+                                                    </span>
+                                                    <div style={{ marginLeft: 8, opacity: 0.5 }}>
+                                                        <ChevronLeft size={16} style={{ transform: 'rotate(180deg)' }} />
+                                                    </div>
+                                                </div>
 
-                                        {/* Active Fill (Colored Track) */}
-                                        <div style={{
-                                            position: 'absolute',
-                                            top: 0,
-                                            left: 0,
-                                            height: '100%',
-                                            width: `${slideOffset * 100}%`,
-                                            background: `${accentColor}20`, // 10-20% opacity of accent
-                                            zIndex: 0,
-                                            transition: isDragging ? 'none' : 'width 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)'
-                                        }} />
+                                                {/* Active Fill (Colored Track) */}
+                                                <div style={{
+                                                    position: 'absolute',
+                                                    top: 0,
+                                                    left: 0,
+                                                    height: '100%',
+                                                    width: `${slideOffset * 100}%`,
+                                                    background: `${accentColor}20`, // 10-20% opacity of accent
+                                                    zIndex: 0,
+                                                    transition: isDragging ? 'none' : 'width 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)'
+                                                }} />
 
-                                        {/* Draggable Handle */}
-                                        <div style={{
-                                            position: 'absolute',
-                                            top: '4px',
-                                            height: '48px',
-                                            width: '48px',
-                                            borderRadius: '50%',
-                                            background: accentColor,
-                                            boxShadow: isDragging ? '0 4px 12px rgba(0,0,0,0.2)' : buttonGlow,
-                                            zIndex: 2,
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            color: 'white',
-                                            // Use calculated left position for the slide
-                                            left: `calc(4px + ${slideOffset} * (100% - 56px))`,
-                                            transition: isDragging ? 'none' : 'left 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)'
-                                        }}>
-                                            {isCheckoutLoading ? (
-                                                <Loader2 size={24} className="spin" />
-                                            ) : (
-                                                <ArrowRight size={24} className="sub-slide-arrow" />
-                                            )}
-                                        </div>
-                                    </div>
+                                                {/* Draggable Handle */}
+                                                <div style={{
+                                                    position: 'absolute',
+                                                    top: '4px',
+                                                    height: '48px',
+                                                    width: '48px',
+                                                    borderRadius: '50%',
+                                                    background: accentColor,
+                                                    boxShadow: isDragging ? '0 4px 12px rgba(0,0,0,0.2)' : buttonGlow,
+                                                    zIndex: 2,
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    color: 'white',
+                                                    // Use calculated left position for the slide
+                                                    left: `calc(4px + ${slideOffset} * (100% - 56px))`,
+                                                    transition: isDragging ? 'none' : 'left 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)'
+                                                }}>
+                                                    {isCheckoutLoading ? (
+                                                        <Loader2 size={24} className="spin" />
+                                                    ) : (
+                                                        <ArrowRight size={24} className="sub-slide-arrow" />
+                                                    )}
+                                                </div>
+                                            </div>
 
-                                    {/* Provider badge - subtle indicator */}
-                                    <div style={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        gap: '6px',
-                                        marginTop: '12px',
-                                        opacity: 0.5,
-                                        fontSize: '12px',
-                                        color: '#6B7280'
-                                    }}>
-                                        <span>Secured by</span>
-                                        {isPaystack ? (
-                                            <span style={{ fontWeight: 600 }}>Paystack</span>
-                                        ) : (
-                                            <img src="/stripe-logo.svg" alt="Stripe" style={{ height: '14px' }} />
-                                        )}
-                                    </div>
+                                            {/* Provider badge - subtle indicator */}
+                                            <div style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: '6px',
+                                                marginTop: '12px',
+                                                opacity: 0.5,
+                                                fontSize: '12px',
+                                                color: '#6B7280'
+                                            }}>
+                                                <span>Secured by</span>
+                                                {isPaystack ? (
+                                                    <span style={{ fontWeight: 600 }}>Paystack</span>
+                                                ) : (
+                                                    <img src="/stripe-logo.svg" alt="Stripe" style={{ height: '14px' }} />
+                                                )}
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
 
                                 <p className="sub-payment-note">
@@ -931,7 +1032,7 @@ export default function SubscriptionLiquid({ profile, canceled }: SubscribeBound
                             className="sub-subscribe-btn"
                             onClick={(currentView === 'perks' || currentView === 'tiers') ? () => setCurrentView('payment') : handleNext}
                         >
-                            <span className="sub-btn-text">Subscribe Now</span>
+                            <span className="sub-btn-text">{isOwner ? 'Next' : 'Subscribe Now'}</span>
                             <ArrowRight size={20} className="sub-btn-arrow" />
                         </Pressable>
                     </div>

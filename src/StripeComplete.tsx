@@ -5,7 +5,7 @@ import { CheckCircle, AlertCircle, Loader2, Building2, Calendar, Copy, Share2, E
 import { api } from './api'
 import { useProfile } from './api/hooks'
 import { useOnboardingStore } from './onboarding/store'
-import { setPaymentConfirmed } from './App'
+import { setPaymentConfirmed } from './utils/paymentConfirmed'
 import { Pressable, LoadingButton } from './components'
 import { getShareableLink } from './utils/constants'
 import './StripeComplete.css'
@@ -59,7 +59,7 @@ export default function StripeComplete() {
   const profile = profileData?.profile
   const { reset: resetOnboarding } = useOnboardingStore()
 
-  const [status, setStatus] = useState<'loading' | 'success' | 'pending' | 'error'>('loading')
+  const [status, setStatus] = useState<'loading' | 'success' | 'pending' | 'restricted' | 'network_error'>('loading')
   const [details, setDetails] = useState<StripeDetails | null>(null)
   const [copied, setCopied] = useState(false)
   const [isNavigating, setIsNavigating] = useState(false)
@@ -91,28 +91,53 @@ export default function StripeComplete() {
   }, [])
 
   // Check Stripe status
-  const checkStatus = useCallback(async () => {
-    try {
-      const result = await api.stripe.getStatus()
-      setDetails(result.details || null)
+  // refresh: bypass cache (critical after returning from Stripe onboarding)
+  // quick: skip bank details expansion (faster response)
+  const checkStatus = useCallback(async (options: { quick?: boolean; refresh?: boolean } = {}) => {
+    const result = await api.stripe.getStatus(options)
+    setDetails(result.details || null)
 
-      if (result.status === 'active') {
-        setStatus('success')
-      } else if (result.status === 'pending') {
-        setStatus('pending')
-      } else if (result.status === 'restricted') {
-        setStatus('error')
-      } else {
-        setStatus('pending')
-      }
-    } catch (err) {
-      setStatus('error')
+    if (result.status === 'active') {
+      setStatus('success')
+    } else if (result.status === 'restricted') {
+      setStatus('restricted')
+    } else {
+      // pending or any other state → treat as pending
+      setStatus('pending')
     }
+
+    return result
   }, [])
 
   // Initial status check
+  // 1) Quick, DB/cached status to render immediately (fast even on cold starts)
+  // 2) Forced refresh from Stripe (authoritative) if not already active
   useEffect(() => {
-    checkStatus()
+    let cancelled = false
+    setRetryError(null)
+
+    ;(async () => {
+      try {
+        const quickResult = await checkStatus({ quick: true, refresh: false })
+        if (cancelled) return
+        if (quickResult.status !== 'active') {
+          try {
+            await checkStatus({ quick: true, refresh: true })
+          } catch (err: any) {
+            // Don't downgrade a valid quick status just because the refresh call failed.
+            setRetryError(err?.error || 'Unable to verify Stripe status right now. Please try again.')
+          }
+        }
+      } catch (err: any) {
+        if (cancelled) return
+        setStatus('network_error')
+        setRetryError(err?.error || 'Unable to verify Stripe status right now. Please try again.')
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
   }, [checkStatus])
 
   // Handle success state - optimistic cache update to prevent webhook race condition
@@ -174,13 +199,14 @@ export default function StripeComplete() {
         })
 
         try {
-          const result = await api.stripe.getStatus()
+          // Polling: always refresh to get latest status, quick to skip bank details
+          const result = await api.stripe.getStatus({ quick: true, refresh: true })
           setDetails(result.details || null)
           if (result.status === 'active') {
             setStatus('success')
             if (pollIntervalRef.current) clearInterval(pollIntervalRef.current)
           } else if (result.status === 'restricted') {
-            setStatus('error')
+            setStatus('restricted')
             if (pollIntervalRef.current) clearInterval(pollIntervalRef.current)
           }
         } catch {
@@ -219,11 +245,16 @@ export default function StripeComplete() {
   }
 
   // Manual continue - trust the optimistic update, don't refetch
-  // Refetching would overwrite optimistic cache with stale DB data (webhook race)
   const handleContinue = () => {
     setIsNavigating(true)
-    const destination = source === 'settings' ? '/settings/payments' : '/dashboard'
-    navigate(destination, { replace: true })
+    const returnTo = sessionStorage.getItem('stripe_return_to')
+    
+    if (returnTo) {
+      sessionStorage.removeItem('stripe_return_to')
+      navigate(returnTo, { replace: true })
+    } else {
+      navigate('/dashboard', { replace: true })
+    }
   }
 
   // Allow user to proceed to dashboard even while pending
@@ -240,7 +271,14 @@ export default function StripeComplete() {
         },
       }
     })
-    navigate('/dashboard', { replace: true })
+    
+    const returnTo = sessionStorage.getItem('stripe_return_to')
+    if (returnTo) {
+      sessionStorage.removeItem('stripe_return_to')
+      navigate(returnTo, { replace: true })
+    } else {
+      navigate('/dashboard', { replace: true })
+    }
   }
 
   const handleRetrySetup = async () => {
@@ -262,14 +300,17 @@ export default function StripeComplete() {
     }
   }
 
-  // Destination text based on source
-  const destinationText = source === 'settings' ? 'Payment Settings' : 'Dashboard'
-  const backDestination = source === 'settings' ? '/settings/payments' : '/dashboard'
+  const destinationText = 'Dashboard'
+  const backDestination = '/dashboard'
 
   return (
     <div className="stripe-complete-page">
       <div className="stripe-complete-header">
+        <Pressable className="stripe-complete-back" onClick={() => navigate(backDestination, { replace: true })}>
+          <ArrowLeft size={20} />
+        </Pressable>
         <img src="/logo.svg" alt="NatePay" className="stripe-complete-logo" />
+        <div className="stripe-complete-spacer" />
       </div>
       <div className="stripe-complete-card">
         {status === 'loading' && (
@@ -459,7 +500,58 @@ export default function StripeComplete() {
           </div>
         )}
 
-        {status === 'error' && (
+        {status === 'network_error' && (
+          <div className="status-content">
+            <div className="status-icon error">
+              <AlertCircle size={32} />
+            </div>
+            <h2>Couldn't verify right now</h2>
+            <p>We’re having trouble reaching our servers. Please try again.</p>
+
+            {retryError && (
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '12px 16px',
+                background: 'rgba(239, 68, 68, 0.1)',
+                borderRadius: 12,
+                marginBottom: 16,
+              }}>
+                <AlertCircle size={18} color="var(--error)" />
+                <span style={{ fontSize: 14, color: 'var(--error)' }}>{retryError}</span>
+              </div>
+            )}
+
+            <div className="cta-section">
+              <LoadingButton
+                className="btn-primary"
+                onClick={async () => {
+                  setIsRetrying(true)
+                  setRetryError(null)
+                  try {
+                    await checkStatus({ quick: true, refresh: true })
+                  } catch (err: any) {
+                    setStatus('network_error')
+                    setRetryError(err?.error || 'Unable to verify Stripe status right now. Please try again.')
+                  } finally {
+                    setIsRetrying(false)
+                  }
+                }}
+                loading={isRetrying}
+                fullWidth
+              >
+                Try Again
+              </LoadingButton>
+              <Pressable className="btn-text" onClick={() => navigate(backDestination)}>
+                <ArrowLeft size={16} />
+                <span>Back to {destinationText}</span>
+              </Pressable>
+            </div>
+          </div>
+        )}
+
+        {status === 'restricted' && (
           <div className="status-content">
             <div className="status-icon error">
               <AlertCircle size={32} />

@@ -6,137 +6,87 @@ import StartStep from './StartStep'
 import EmailStep from './EmailStep'
 import OtpStep from './OtpStep'
 import IdentityStep from './IdentityStep'
-import BranchSelectorStep from './BranchSelectorStep'
-import PersonalPricingStep from './PersonalPricingStep'
 import PersonalUsernameStep from './PersonalUsernameStep'
-import AvatarUploadStep from './AvatarUploadStep'
-import VoiceIntroStep from './VoiceIntroStep'
-import PaymentMethodStep from './PaymentMethodStep'
-import ServiceDescriptionStep from './ServiceDescriptionStep'
-import AIGeneratingStep from './AIGeneratingStep'
-import AIReviewStep from './AIReviewStep'
+import CreateProfileStep from './components/CreateProfileStep'
 import './onboarding.css'
-
-// Step configuration for progress tracking
-const COMMON_STEP_COUNT = 5  // Start, Email, OTP, Identity, Branch
-const PERSONAL_STEP_COUNT = 5  // Pricing, Username, Avatar, VoiceIntro, Payment
-const SERVICE_STEP_COUNT = 8  // Description, AI Gen, AI Review, Pricing, Username, Avatar, VoiceIntro, Payment
 
 export default function OnboardingFlow() {
     const location = useLocation()
     const { onboarding, status } = useAuthState()
-    const { currentStep, branch, hydrateFromServer } = useOnboardingStore()
+    const { currentStep, hydrateFromServer } = useOnboardingStore()
     const [direction, setDirection] = useState<'forward' | 'back'>('forward')
     const [isAnimating, setIsAnimating] = useState(false)
     const prevStepRef = useRef(currentStep)
     const hasHydrated = useRef(false)
+    const shouldSkipNextAnimation = useRef(false)
+
+    // "Naked Onboarding" Steps
+    const steps = [
+        <StartStep key="start" />,
+        <EmailStep key="email" />,
+        <OtpStep key="otp" />,
+        <IdentityStep key="identity" />,
+        <PersonalUsernameStep key="username" />,
+        <CreateProfileStep key="create" />,
+    ]
 
     // Hydrate onboarding state from URL ?step= param or server state
-    // This handles resuming onboarding from where user left off
     useEffect(() => {
         if (hasHydrated.current) return
         if (status !== 'authenticated') return
 
-        // Parse ?step= from URL (server emits this redirect)
         const params = new URLSearchParams(location.search)
         const urlStep = params.get('step')
 
-        // Hydrate from URL param if present and current step is 0
         if (urlStep && currentStep === 0) {
             hasHydrated.current = true
+            shouldSkipNextAnimation.current = true
             hydrateFromServer({
                 step: parseInt(urlStep, 10),
-                branch: onboarding?.branch,
+                branch: null,
                 data: onboarding?.data,
             })
             return
         }
 
-        // Hydrate from server state if we have saved progress
         if (onboarding?.step && onboarding.step > 0 && currentStep === 0) {
             hasHydrated.current = true
+            shouldSkipNextAnimation.current = true
+            // Map old/out-of-bounds steps to the Username step (index 4) so they can review before creating
+            const safeStep = onboarding.step >= steps.length ? 4 : onboarding.step
+
             hydrateFromServer({
-                step: onboarding.step,
-                branch: onboarding.branch,
+                step: safeStep,
+                branch: null,
                 data: onboarding.data,
             })
         }
     }, [location.search, status, onboarding, currentStep, hydrateFromServer])
 
-    // Track direction of navigation
+    // Step transitions (CSS-driven) - animate only on user navigation.
     useEffect(() => {
-        if (currentStep > prevStepRef.current) {
-            setDirection('forward')
-        } else if (currentStep < prevStepRef.current) {
-            setDirection('back')
+        const prevStep = prevStepRef.current
+        if (prevStep === currentStep) return
+
+        if (shouldSkipNextAnimation.current) {
+            shouldSkipNextAnimation.current = false
+            prevStepRef.current = currentStep
+            return
         }
+
+        setDirection(currentStep > prevStep ? 'forward' : 'back')
         setIsAnimating(true)
-        const timer = setTimeout(() => setIsAnimating(false), 300)
         prevStepRef.current = currentStep
+
+        const timer = setTimeout(() => setIsAnimating(false), 450)
         return () => clearTimeout(timer)
     }, [currentStep])
 
-    // Calculate total steps based on branch
-    const getTotalSteps = () => {
-        if (currentStep < COMMON_STEP_COUNT) {
-            // Before branch selection, assume personal (shorter)
-            return COMMON_STEP_COUNT + PERSONAL_STEP_COUNT
-        }
-        return branch === 'service'
-            ? COMMON_STEP_COUNT + SERVICE_STEP_COUNT
-            : COMMON_STEP_COUNT + PERSONAL_STEP_COUNT
-    }
-
-    // Calculate progress percentage
-    const totalSteps = getTotalSteps()
-    const progress = Math.min(((currentStep + 1) / totalSteps) * 100, 100)
-
-    // Don't show progress on start screen
-    const showProgress = currentStep > 0
-
-    // Common steps (0-4)
-    const commonSteps = [
-        <StartStep key="start" />,
-        <EmailStep key="email" />,
-        <OtpStep key="otp" />,
-        <IdentityStep key="identity" />,
-        <BranchSelectorStep key="branch" />,
-    ]
-
-    // Personal branch steps
-    const personalSteps = [
-        <PersonalPricingStep key="pricing" />,
-        <PersonalUsernameStep key="username" />,
-        <AvatarUploadStep key="avatar" />,
-        <VoiceIntroStep key="voice" />,
-        <PaymentMethodStep key="payment" />,
-    ]
-
-    // Service branch steps
-    const serviceSteps = [
-        <ServiceDescriptionStep key="service-desc" />,
-        <AIGeneratingStep key="ai-generating" />,
-        <AIReviewStep key="ai-review" />,
-        <PersonalPricingStep key="pricing" />,
-        <PersonalUsernameStep key="username" />,
-        <AvatarUploadStep key="avatar" />,
-        <VoiceIntroStep key="voice" />,
-        <PaymentMethodStep key="payment" />,
-    ]
-
-    // Build steps array
-    const getSteps = () => {
-        if (currentStep < COMMON_STEP_COUNT) {
-            return commonSteps
-        }
-        if (branch === 'service') {
-            return [...commonSteps, ...serviceSteps]
-        }
-        return [...commonSteps, ...personalSteps]
-    }
-
-    const steps = getSteps()
     const currentStepComponent = steps[currentStep] || <StartStep />
+
+    // Progress bar logic
+    const progress = Math.min(((currentStep + 1) / steps.length) * 100, 100)
+    const showProgress = currentStep > 0 && currentStep < steps.length - 1
 
     return (
         <div className="onboarding-wrapper">

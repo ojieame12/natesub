@@ -16,14 +16,12 @@ import './index.css'
 // App layout is used by multiple authenticated routes - load eagerly for smooth navigation
 import AppLayout from './AppLayout'
 
-// EAGERLY LOADED - main tab bar routes for instant navigation (no flicker)
-import Dashboard from './Dashboard'
-import Activity from './Activity'
-import Profile from './Profile'
-import Subscribers from './Subscribers'
-import Settings from './Settings'
-
-// Lazy-loaded routes (less frequently accessed)
+// Lazy-loaded routes (chunk-split for faster cold boot / Stripe returns)
+const Dashboard = lazy(() => import('./Dashboard'))
+const Activity = lazy(() => import('./Activity'))
+const Profile = lazy(() => import('./Profile'))
+const Subscribers = lazy(() => import('./Subscribers'))
+const Settings = lazy(() => import('./Settings'))
 const OnboardingFlow = lazy(() => import('./onboarding'))
 const PaystackConnect = lazy(() => import('./onboarding/PaystackConnect'))
 const PaystackOnboardingComplete = lazy(() => import('./PaystackOnboardingComplete'))
@@ -36,6 +34,7 @@ const RequestDetails = lazy(() => import('./request/RequestDetails'))
 const PersonalizeRequest = lazy(() => import('./request/PersonalizeRequest'))
 const RequestPreview = lazy(() => import('./request/RequestPreview'))
 const EditPage = lazy(() => import('./EditPage'))
+const PageSetupWizard = lazy(() => import('./wizards/PageSetupWizard'))
 const Templates = lazy(() => import('./Templates'))
 const PaymentSettings = lazy(() => import('./PaymentSettings'))
 const Billing = lazy(() => import('./Billing'))
@@ -82,6 +81,16 @@ function isPublicRoute(pathname: string): boolean {
   )
 }
 
+function shouldBypassSplash(pathname: string): boolean {
+  // These routes are still protected, but showing the splash screen here can feel like
+  // an infinite load (e.g., after returning from Stripe which triggers a full reload).
+  // We render the route skeleton quickly instead and let RequireAuth handle gating.
+  return (
+    pathname === '/settings/payments/complete' ||
+    pathname === '/settings/payments/refresh'
+  )
+}
+
 // Global auth error handler - listens for 401 errors during active sessions
 function AuthErrorHandler() {
   const navigate = useNavigate()
@@ -121,28 +130,6 @@ function AuthErrorHandler() {
   return null
 }
 
-// Storage key for payment confirmation flags (survives page refresh)
-const PAYMENT_CONFIRMED_KEY = 'natepay_payment_confirmed'
-
-export function setPaymentConfirmed() {
-  try {
-    localStorage.setItem(PAYMENT_CONFIRMED_KEY, Date.now().toString())
-  } catch { /* ignore */ }
-}
-
-function checkAndClearPaymentConfirmed(): boolean {
-  try {
-    const timestamp = localStorage.getItem(PAYMENT_CONFIRMED_KEY)
-    if (timestamp) {
-      localStorage.removeItem(PAYMENT_CONFIRMED_KEY)
-      // Only valid for 5 minutes (handles webhook race condition)
-      const age = Date.now() - parseInt(timestamp, 10)
-      return age < 5 * 60 * 1000
-    }
-  } catch { /* ignore */ }
-  return false
-}
-
 /**
  * RootRedirect - Smart root route that checks auth before redirecting
  *
@@ -179,11 +166,8 @@ function RootRedirect() {
       return <Navigate to="/dashboard" replace />
     }
     if (needsPaymentSetup) {
-      // Check for payment confirmation (handles webhook race condition)
-      if (checkAndClearPaymentConfirmed()) {
-        return <Navigate to="/dashboard" replace />
-      }
-      return <Navigate to="/settings/payments" replace />
+      // Allow dashboard access (Zero State will handle setup)
+      return <Navigate to="/dashboard" replace />
     }
     // needsOnboarding - go to onboarding
     return <Navigate to="/onboarding" replace />
@@ -258,12 +242,7 @@ function InitialRouteRedirect() {
       // Honor returnTo if present, otherwise go to dashboard
       navigate(returnTo || '/dashboard', { replace: true })
     } else if (needsPaymentSetup) {
-      // Check for payment confirmation (handles webhook race condition)
-      if (checkAndClearPaymentConfirmed()) {
-        navigate('/dashboard', { replace: true })
-      } else {
-        navigate('/settings/payments', { replace: true })
-      }
+      navigate('/dashboard', { replace: true })
     }
     // needsOnboarding: Stay on /onboarding - the flow handles this
   }, [isOnboardingPath, status, isFullySetUp, needsPaymentSetup, currentStep, onboarding, navigate, resetOnboarding, hydrateFromServer])
@@ -290,7 +269,7 @@ function InitialRouteRedirect() {
  * - Render children if fully set up
  */
 function RequireAuth({ children }: { children: React.ReactNode }) {
-  const { status, needsOnboarding, needsPaymentSetup, refetch } = useAuthState()
+  const { status, needsOnboarding, onboarding, refetch } = useAuthState()
   const location = useLocation()
 
   // Still checking - show skeleton to prevent content flash
@@ -321,21 +300,11 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   }
 
   // Authenticated but needs to complete profile - redirect to onboarding
-  // (unless already on a settings route where they might be fixing things)
-  if (needsOnboarding && !location.pathname.startsWith('/settings')) {
-    return <Navigate to="/onboarding" replace />
+  // (unless on settings or my-subscriptions - subscriber-only users can manage their subscriptions)
+  if (needsOnboarding && !location.pathname.startsWith('/onboarding')) {
+    return <Navigate to={onboarding?.redirectTo || '/onboarding'} replace />
   }
 
-  // Has profile but needs payment setup - redirect to payment settings
-  // (unless already on settings routes)
-  if (needsPaymentSetup && !location.pathname.startsWith('/settings')) {
-    // Check for payment confirmation (handles webhook race condition)
-    if (!checkAndClearPaymentConfirmed()) {
-      return <Navigate to="/settings/payments" replace />
-    }
-  }
-
-  // Fully authenticated and set up - render children
   return <>{children}</>
 }
 
@@ -394,16 +363,17 @@ function AppShell() {
     }
   }, [isReady, minTimeElapsed])
 
-  // For public routes, skip splash after minimum time
+  // For public routes (and a few protected return routes), skip splash after minimum time
   const isPublic = isPublicRoute(location.pathname)
+  const bypassSplash = isPublic || shouldBypassSplash(location.pathname)
   useEffect(() => {
-    if (isPublic && minTimeElapsed) {
+    if (bypassSplash && minTimeElapsed) {
       setShowSplash(false)
     }
-  }, [isPublic, minTimeElapsed])
+  }, [bypassSplash, minTimeElapsed])
 
   // Show splash while checking auth (except for public routes after min time)
-  if (showSplash && !isPublic) {
+  if (showSplash && !bypassSplash) {
     return <SplashScreen />
   }
 
@@ -460,6 +430,7 @@ function AppShell() {
           <Route path="/new-request" element={<RequireAuth><SelectRecipient /></RequireAuth>} />
 
           <Route path="/edit-page" element={<RequireAuth><EditPage /></RequireAuth>} />
+          <Route path="/setup-page" element={<RequireAuth><PageSetupWizard /></RequireAuth>} />
           <Route path="/templates" element={<RequireAuth><Templates /></RequireAuth>} />
           <Route path="/settings/payments" element={<RequireAuth><PaymentSettings /></RequireAuth>} />
           <Route path="/settings/payments/complete" element={<RequireAuth><StripeComplete /></RequireAuth>} />

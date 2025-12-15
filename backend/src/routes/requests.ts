@@ -301,11 +301,6 @@ requests.post(
     const userId = c.get('userId')
     const data = c.req.valid('json')
 
-    // Must have email or phone
-    if (!data.recipientEmail && !data.recipientPhone) {
-      return c.json({ error: 'Recipient email or phone is required' }, 400)
-    }
-
     const request = await db.request.create({
       data: {
         creatorId: userId,

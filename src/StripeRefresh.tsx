@@ -5,19 +5,9 @@ import { api } from './api'
 import { Pressable } from './components'
 import './StripeComplete.css'
 
-type FlowSource = 'onboarding' | 'settings' | 'unknown'
-
 export default function StripeRefresh() {
   const navigate = useNavigate()
   const [error, setError] = useState<string | null>(null)
-  const [source, setSource] = useState<FlowSource>('unknown')
-
-  // Read source from sessionStorage on mount
-  useEffect(() => {
-    const storedSource = sessionStorage.getItem('stripe_onboarding_source') as FlowSource | null
-    setSource(storedSource || 'unknown')
-    // Don't clear it - we'll pass it along to the new redirect
-  }, [])
 
   useEffect(() => {
     refreshOnboarding()
@@ -36,8 +26,8 @@ export default function StripeRefresh() {
     }
   }
 
-  const destinationText = source === 'settings' ? 'Payment Settings' : 'Dashboard'
-  const backDestination = source === 'settings' ? '/settings/payments' : '/dashboard'
+  const destinationText = 'Dashboard'
+  const backDestination = '/dashboard'
 
   if (error) {
     return (
