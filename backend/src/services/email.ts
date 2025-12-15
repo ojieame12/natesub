@@ -16,7 +16,30 @@ const BRAND_NAME = 'Nate'
 const BRAND_COLOR = '#FF941A'
 const BRAND_COLOR_DARK = '#E8850F'
 
-const EMAIL_LOGO_URL = env.EMAIL_LOGO_URL ?? new URL('/logo-email.png', env.APP_URL).toString()
+function resolveEmailLogoUrl(): string {
+  // Prefer a publicly reachable origin. Public pages are typically unauthenticated and safe for image hosting.
+  const fallback = new URL('/logo-email.png', env.PUBLIC_PAGE_URL).toString()
+  const configured = env.EMAIL_LOGO_URL?.trim()
+  if (!configured) return fallback
+
+  const lower = configured.toLowerCase()
+
+  // Gmail blocks/strips `data:` image URIs, so base64 logos won't render.
+  if (lower.startsWith('data:')) {
+    console.warn('[email] EMAIL_LOGO_URL uses a data: URI; Gmail blocks this. Falling back to hosted logo-email.png.')
+    return fallback
+  }
+
+  // Gmail frequently blocks SVG images in <img>. Prefer PNG.
+  if (lower.endsWith('.svg')) {
+    console.warn('[email] EMAIL_LOGO_URL points to an SVG; Gmail may block this. Falling back to hosted logo-email.png.')
+    return fallback
+  }
+
+  return configured
+}
+
+const EMAIL_LOGO_URL = resolveEmailLogoUrl()
 
 // Track email send attempts for monitoring
 interface EmailResult {

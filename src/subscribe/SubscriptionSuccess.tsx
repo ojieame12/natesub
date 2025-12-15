@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { CheckCircle, Heart, Loader2, AlertCircle } from 'lucide-react'
+import { CheckCircle, Heart, Loader2 } from 'lucide-react'
 import { Pressable } from '../components'
 import { api } from '../api'
 import type { Profile } from '../api/client'
@@ -12,27 +12,25 @@ interface SubscriptionSuccessProps {
     provider: string | null
 }
 
-type VerificationStatus = 'loading' | 'verified' | 'failed'
+type VerificationStatus = 'loading' | 'verified'
 
 export default function SubscriptionSuccess({ profile, provider }: SubscriptionSuccessProps) {
     const navigate = useNavigate()
-    const [searchParams] = useSearchParams()
     const queryClient = useQueryClient()
     const name = profile.displayName || profile.username || 'them'
 
     // Verification state - start loading for everyone to check webhook status
     const [status, setStatus] = useState<VerificationStatus>('loading')
-    const [errorMessage, setErrorMessage] = useState<string | null>(null)
     const pollCount = useRef(0)
 
     // Verify Subscription (Stripe & Paystack)
     useEffect(() => {
         let isMounted = true
-        let timer: NodeJS.Timeout
+        let timer: number | null = null
+        pollCount.current = 0
 
         const checkSubscription = async () => {
             try {
-                // Force network fetch to bypass cache
                 const data = await api.users.getByUsername(profile.username)
                 
                 if (data.viewerSubscription?.isActive) {
@@ -59,7 +57,7 @@ export default function SubscriptionSuccess({ profile, provider }: SubscriptionS
             const success = await checkSubscription()
             if (!success && isMounted) {
                 pollCount.current++
-                timer = setTimeout(poll, 2000)
+                timer = window.setTimeout(poll, 2000)
             }
         }
 
@@ -68,7 +66,7 @@ export default function SubscriptionSuccess({ profile, provider }: SubscriptionS
 
         return () => {
             isMounted = false
-            clearTimeout(timer)
+            if (timer !== null) window.clearTimeout(timer)
         }
     }, [profile.username, queryClient])
 
@@ -84,31 +82,6 @@ export default function SubscriptionSuccess({ profile, provider }: SubscriptionS
                     <p className="sub-success-message">
                         Please wait a moment while we secure your subscription.
                     </p>
-                </div>
-            </div>
-        )
-    }
-
-    // Error state
-    if (status === 'failed') {
-        return (
-            <div className="sub-page template-boundary">
-                <div className="sub-success-container">
-                    <div className="sub-success-icon" style={{ color: 'var(--error)' }}>
-                        <AlertCircle size={64} />
-                    </div>
-                    <h1 className="sub-success-title">Payment Issue</h1>
-                    <p className="sub-success-message">
-                        {errorMessage || 'We could not verify your payment. Please try again or contact support.'}
-                    </p>
-                    <div className="sub-success-actions">
-                        <Pressable
-                            className="sub-success-btn primary"
-                            onClick={() => navigate(`/${profile.username}`, { replace: true })}
-                        >
-                            Try Again
-                        </Pressable>
-                    </div>
                 </div>
             </div>
         )
