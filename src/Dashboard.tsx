@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { api } from './api/client'
 import { getShareableLink } from './utils/constants'
@@ -121,10 +121,10 @@ export default function Dashboard() {
   const [copied, setCopied] = useState(false)
 
   // Real API hooks
-  const { data: profileData, isLoading: profileLoading } = useProfile()
+  const { data: profileData, isLoading: profileLoading, refetch: refetchProfile } = useProfile()
   const { data: metricsData, isLoading: metricsLoading, isError: metricsError, refetch: refetchMetrics } = useMetrics()
   const { data: activityData, isLoading: activityLoading, isError: activityError, refetch: refetchActivity } = useActivity(5)
-  const { data: analyticsData } = useAnalyticsStats()
+  const { data: analyticsData, refetch: refetchAnalytics } = useAnalyticsStats()
 
   const profile = profileData?.profile
   const metrics = metricsData?.metrics
@@ -139,10 +139,154 @@ export default function Dashboard() {
   const isLoading = profileLoading || metricsLoading || activityLoading
   const hasError = metricsError || activityError
 
+  // ============================================
+  // Pull-to-refresh + Manual Refresh
+  // ============================================
+
+  const PULL_MAX_PX = 120
+  const PULL_TRIGGER_PX = 72
+  const PULL_HOLD_PX = 56
+  const PULL_RESISTANCE = 0.5
+
+  const [pullOffsetPx, setPullOffsetPxState] = useState(0)
+  const pullOffsetPxRef = useRef(0)
+  const setPullOffsetPx = useCallback((next: number) => {
+    pullOffsetPxRef.current = next
+    setPullOffsetPxState(next)
+  }, [])
+
+  const [isPulling, setIsPulling] = useState(false)
+
+  const [isRefreshing, setIsRefreshingState] = useState(false)
+  const isRefreshingRef = useRef(false)
+  const setIsRefreshing = useCallback((next: boolean) => {
+    isRefreshingRef.current = next
+    setIsRefreshingState(next)
+  }, [])
+
+  const isMountedRef = useRef(true)
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [])
+
+  const refreshDashboard = useCallback(async (source: 'manual' | 'pull' = 'manual') => {
+    if (isRefreshingRef.current) return
+
+    setIsRefreshing(true)
+
+    // If this refresh was triggered by pulling, snap to a stable "hold" height.
+    if (source === 'pull') {
+      setPullOffsetPx(PULL_HOLD_PX)
+    }
+
+    try {
+      await Promise.all([
+        refetchProfile(),
+        refetchMetrics(),
+        refetchActivity(),
+        refetchAnalytics(),
+      ])
+    } catch (err) {
+      console.error('[dashboard] refresh failed:', err)
+      toast.error('Failed to refresh')
+    } finally {
+      if (!isMountedRef.current) return
+      setIsRefreshing(false)
+      if (source === 'pull') {
+        setPullOffsetPx(0)
+      }
+    }
+  }, [refetchActivity, refetchAnalytics, refetchMetrics, refetchProfile, setIsRefreshing, setPullOffsetPx, toast])
+
   const loadData = useCallback(() => {
-    refetchMetrics()
-    refetchActivity()
-  }, [refetchMetrics, refetchActivity])
+    void refreshDashboard('manual')
+  }, [refreshDashboard])
+
+  useEffect(() => {
+    const container = document.querySelector('.app-content') as HTMLElement | null
+    if (!container) return
+
+    const startYRef = { current: null as number | null }
+    const pullingRef = { current: false }
+
+    const getTouchY = (event: TouchEvent) => event.touches[0]?.clientY ?? 0
+
+    const resetPull = () => {
+      startYRef.current = null
+      pullingRef.current = false
+      setIsPulling(false)
+      setPullOffsetPx(0)
+    }
+
+    const handleTouchStart = (event: TouchEvent) => {
+      if (isRefreshingRef.current) return
+      if (container.scrollTop > 0) return
+      startYRef.current = getTouchY(event)
+      pullingRef.current = false
+    }
+
+    const handleTouchMove = (event: TouchEvent) => {
+      const startY = startYRef.current
+      if (startY == null) return
+
+      // If user started scrolling, abort pulling.
+      if (container.scrollTop > 0) {
+        resetPull()
+        return
+      }
+
+      const currentY = getTouchY(event)
+      const deltaY = currentY - startY
+
+      // Only handle downward pull
+      if (deltaY <= 0) {
+        if (pullOffsetPxRef.current !== 0) {
+          setPullOffsetPx(0)
+        }
+        return
+      }
+
+      const nextPull = Math.min(PULL_MAX_PX, deltaY * PULL_RESISTANCE)
+      if (!pullingRef.current) {
+        pullingRef.current = true
+        setIsPulling(true)
+      }
+      setPullOffsetPx(nextPull)
+
+      // Prevent native overscroll while we render our own elastic pull.
+      event.preventDefault()
+    }
+
+    const handleTouchEnd = () => {
+      const pulled = pullOffsetPxRef.current
+      const shouldRefresh = pulled >= PULL_TRIGGER_PX
+
+      startYRef.current = null
+      pullingRef.current = false
+      setIsPulling(false)
+
+      if (shouldRefresh) {
+        void refreshDashboard('pull')
+        return
+      }
+
+      setPullOffsetPx(0)
+    }
+
+    container.addEventListener('touchstart', handleTouchStart, { passive: true })
+    container.addEventListener('touchmove', handleTouchMove, { passive: false })
+    container.addEventListener('touchend', handleTouchEnd, { passive: true })
+    container.addEventListener('touchcancel', handleTouchEnd, { passive: true })
+
+    return () => {
+      container.removeEventListener('touchstart', handleTouchStart)
+      container.removeEventListener('touchmove', handleTouchMove as any)
+      container.removeEventListener('touchend', handleTouchEnd)
+      container.removeEventListener('touchcancel', handleTouchEnd)
+    }
+  }, [refreshDashboard, setPullOffsetPx])
 
   // Memoized handlers to prevent unnecessary re-renders
   const openMenu = useCallback(() => setMenuOpen(true), [])
@@ -223,6 +367,24 @@ export default function Dashboard() {
           </Pressable>
         </div>
       </header>
+
+      {/* Pull-to-refresh indicator (Dashboard only) */}
+      <div className="ptr-indicator" aria-hidden={!isPulling && !isRefreshing && pullOffsetPx <= 0}>
+        <div className={`ptr-indicator-inner ${(isPulling || isRefreshing || pullOffsetPx > 0) ? 'visible' : ''}`}>
+          <RefreshCw
+            size={16}
+            className={isRefreshing ? 'ptr-spinning' : ''}
+            style={!isRefreshing ? { transform: `rotate(${Math.min(180, (pullOffsetPx / PULL_TRIGGER_PX) * 180)}deg)` } : undefined}
+          />
+          <span>
+            {isRefreshing
+              ? 'Refreshing…'
+              : pullOffsetPx >= PULL_TRIGGER_PX
+                ? 'Release to refresh'
+                : 'Pull to refresh'}
+          </span>
+        </div>
+      </div>
 
       {/* Slide-out Menu */}
       <div className={`menu-overlay ${menuOpen ? 'open' : ''}`} onClick={closeMenu} />
@@ -317,7 +479,14 @@ export default function Dashboard() {
       )}
 
       {/* Main Content */}
-      <main className="main">
+      <main
+        className="main"
+        style={{
+          transform: pullOffsetPx ? `translateY(${pullOffsetPx}px)` : undefined,
+          transition: isPulling ? 'none' : 'transform 220ms var(--ease-out, ease-out)',
+          willChange: (isPulling || isRefreshing) ? 'transform' : undefined,
+        }}
+      >
         {hasError ? (
           <ErrorState
             title="Couldn't load dashboard"
@@ -373,7 +542,7 @@ export default function Dashboard() {
                   {/* Card A: Launch Page */}
                   <Pressable 
                     className="zero-state-card launch-card"
-                    onClick={() => navigate('/edit-page')}
+                    onClick={() => navigate('/edit-page?launch=1')}
                   >
                     <div className="zero-card-bg-glow" />
                     <div className="zero-card-content">

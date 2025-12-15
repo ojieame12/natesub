@@ -136,6 +136,52 @@
     border: 2px solid white;
 }
 
+/* === PULL TO REFRESH (Dashboard) === */
+.ptr-indicator {
+    position: fixed;
+    top: calc(env(safe-area-inset-top, 12px) + 60px);
+    left: 0;
+    right: 0;
+    max-width: 430px;
+    margin: 0 auto;
+    display: flex;
+    justify-content: center;
+    pointer-events: none;
+    z-index: 49; /* under fixed header (50) */
+}
+
+.ptr-indicator-inner {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: 8px 12px;
+    border-radius: var(--radius-full);
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(10px) saturate(150%);
+    -webkit-backdrop-filter: blur(10px) saturate(150%);
+    border: 1px solid var(--border-subtle);
+    box-shadow: var(--shadow-sm);
+    font-size: 13px;
+    color: var(--text-secondary);
+    opacity: 0;
+    transform: translateY(-6px);
+    transition: opacity 160ms ease, transform 160ms ease;
+}
+
+.ptr-indicator-inner.visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.ptr-spinning {
+    animation: ptrSpin 1s linear infinite;
+}
+
+@keyframes ptrSpin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
 /* === MAIN CONTENT === */
 .main {
     padding: var(--space-xl);

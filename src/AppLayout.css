@@ -17,6 +17,10 @@
     flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
+    /* iOS: enable momentum + elastic scrolling */
+    -webkit-overflow-scrolling: touch;
+    /* Prevent scroll chaining to the document (helps custom pull-to-refresh UX) */
+    overscroll-behavior-y: contain;
 }
 
 /* === TAB BAR === */
