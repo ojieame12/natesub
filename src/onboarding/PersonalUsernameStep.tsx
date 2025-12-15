@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { ChevronLeft, Loader2 } from 'lucide-react'
+import { ChevronLeft, Loader2, Check, X } from 'lucide-react'
 import { useOnboardingStore } from './store'
 import { Button, Pressable } from './components'
 import { useCheckUsername } from '../api/hooks'
@@ -29,6 +29,14 @@ export default function PersonalUsernameStep() {
     // Can continue only if format valid AND API confirms available (no errors)
     const canContinue = isFormatValid && isAvailable && !isChecking && !isError
 
+    const renderStatusIcon = () => {
+        if (!username || !isFormatValid) return null
+        if (isChecking) return <Loader2 size={18} className="spin" style={{ color: 'var(--text-tertiary)' }} />
+        if (isTaken) return <X size={18} style={{ color: 'var(--status-error)' }} />
+        if (isAvailable) return <Check size={18} style={{ color: 'var(--status-success)' }} />
+        return null
+    }
+
     return (
         <div className="onboarding">
             <div className="onboarding-logo-header">
@@ -47,7 +55,7 @@ export default function PersonalUsernameStep() {
                 </div>
 
                 <div className="step-body">
-                    <div className="username-wrapper">
+                    <div className={`username-wrapper ${isTaken ? 'input-error' : ''}`}>
                         <span className="username-prefix">{PUBLIC_DOMAIN}/</span>
                         <input
                             className="input"
@@ -57,40 +65,34 @@ export default function PersonalUsernameStep() {
                             maxLength={20}
                             autoFocus
                         />
-                    </div>
-                    {username && !isFormatValid && (
-                        <p style={{ fontSize: 14, color: 'var(--status-error)', marginTop: 8 }}>
-                            At least 3 characters, letters, numbers, or underscores only
-                        </p>
-                    )}
-                    {isFormatValid && isChecking && (
-                        <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginTop: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <Loader2 size={14} className="spin" />
-                            Checking availability...
-                        </p>
-                    )}
-                    {isFormatValid && !isChecking && isAvailable && (
-                        <p style={{ fontSize: 14, color: 'var(--status-success)', marginTop: 8 }}>
-                            {PUBLIC_DOMAIN}/{username} is available
-                        </p>
-                    )}
-                    {isFormatValid && !isChecking && isTaken && (
-                        <p style={{ fontSize: 14, color: 'var(--status-error)', marginTop: 8 }}>
-                            {PUBLIC_DOMAIN}/{username} is already taken
-                        </p>
-                    )}
-                    {isFormatValid && !isChecking && isError && (
-                        <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <p style={{ fontSize: 14, color: 'var(--status-error)', margin: 0 }}>
-                                Couldn't check availability
-                            </p>
-                            <Pressable onClick={() => refetch()}>
-                                <span style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 600 }}>
-                                    Retry
-                                </span>
-                            </Pressable>
+                        <div className="username-status-icon">
+                            {renderStatusIcon()}
                         </div>
-                    )}
+                    </div>
+
+                    {/* Helper text - unified styling, no layout shift */}
+                    <div className="username-helper">
+                        {username && !isFormatValid && (
+                            <span className="username-helper-error">
+                                3-20 characters, letters, numbers, or underscores only.
+                            </span>
+                        )}
+                        {isFormatValid && isTaken && (
+                            <span className="username-helper-error">
+                                This username is already taken.
+                            </span>
+                        )}
+                        {isFormatValid && isAvailable && (
+                            <span className="username-helper-success">
+                                ✓ Available
+                            </span>
+                        )}
+                        {isFormatValid && !isChecking && isError && (
+                            <span className="username-helper-error">
+                                Couldn't check availability. <Pressable onClick={() => refetch()} style={{ display: 'inline' }}><span style={{ fontWeight: 600, textDecoration: 'underline' }}>Retry</span></Pressable>
+                            </span>
+                        )}
+                    </div>
                 </div>
 
                 <div className="step-footer">
