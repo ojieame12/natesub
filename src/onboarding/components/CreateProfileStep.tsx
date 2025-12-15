@@ -9,19 +9,28 @@ export default function CreateProfileStep() {
   const navigate = useNavigate()
   const { refetch } = useAuthState()
   const [error, setError] = useState<string | null>(null)
-  
+
   // Get data from store
   const username = useOnboardingStore(state => state.username)
   const name = useOnboardingStore(state => state.name)
   const country = useOnboardingStore(state => state.country)
   const countryCode = useOnboardingStore(state => state.countryCode)
   const currency = useOnboardingStore(state => state.currency)
+  const goToStep = useOnboardingStore(state => state.goToStep)
 
   useEffect(() => {
     const createProfile = async () => {
       try {
-        if (!username || !countryCode) {
-          throw new Error('Missing required information')
+        if (!countryCode) {
+          // Missing country - go back to IdentityStep (index 3)
+          goToStep(3)
+          return
+        }
+
+        if (!username) {
+          // Missing username - go back to UsernameStep (index 4)
+          goToStep(4)
+          return
         }
 
         // 1. Create profile with safe defaults
@@ -32,7 +41,7 @@ export default function CreateProfileStep() {
           country: country || 'United States',
           countryCode,
           currency: currency || 'USD',
-          purpose: 'support', 
+          purpose: 'support',
           pricingModel: 'single',
           bio: '',
         })
@@ -42,31 +51,36 @@ export default function CreateProfileStep() {
 
         // Force auth refresh to pick up new profile
         await refetch()
-        
+
         // Clear onboarding state
         await api.auth.saveOnboardingProgress({ step: 4, data: {} }) // Mark as done on backend
-        
+
         // Redirect to dashboard
         navigate('/dashboard', { replace: true })
-        
+
       } catch (err: any) {
         console.error('Failed to create profile:', err)
-        setError(err.message || 'Failed to create account')
+        setError(err?.error || err?.message || 'Failed to create account')
       }
     }
 
     createProfile()
-  }, [username, name, country, countryCode, currency, navigate, refetch])
+  }, [username, name, country, countryCode, currency, navigate, refetch, goToStep])
 
   if (error) {
     return (
       <div className="onboarding-step">
-         <div className="onboarding-error">
-           <p>{error}</p>
-           <button onClick={() => window.location.reload()} className="btn-primary" style={{ marginTop: 16 }}>
-             Try Again
-           </button>
-         </div>
+        <div className="onboarding-error">
+          <p>{error}</p>
+          <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 16, flexWrap: 'wrap' }}>
+            <button onClick={() => goToStep(4)} className="btn-secondary">
+              Back
+            </button>
+            <button onClick={() => window.location.reload()} className="btn-primary">
+              Try Again
+            </button>
+          </div>
+        </div>
       </div>
     )
   }

@@ -23,14 +23,18 @@ export default function PersonalUsernameStep() {
     const { data: availabilityData, isLoading: isChecking, isError, refetch } = useCheckUsername(debouncedUsername)
 
     const isFormatValid = username.length >= 3 && /^[a-z0-9_]+$/.test(username)
-    const isAvailable = availabilityData?.available === true
-    const isTaken = availabilityData?.available === false
+    const isWaitingForDebounce = isFormatValid && debouncedUsername !== username
+    const canShowCheckResult = isFormatValid && !isWaitingForDebounce && !isChecking && !isError
+    const isAvailable = canShowCheckResult && availabilityData?.available === true
+    const isTaken = canShowCheckResult && availabilityData?.available === false
 
-    // Can continue only if format valid AND API confirms available (no errors)
-    const canContinue = isFormatValid && isAvailable && !isChecking && !isError
+    // IMPORTANT: Only trust availability for the debounced (checked) username.
+    // Otherwise users can type a new username and click continue before the check runs.
+    const canContinue = isAvailable
 
     const renderStatusIcon = () => {
         if (!username || !isFormatValid) return null
+        if (isWaitingForDebounce) return <Loader2 size={18} className="spin" style={{ color: 'var(--text-tertiary)' }} />
         if (isChecking) return <Loader2 size={18} className="spin" style={{ color: 'var(--text-tertiary)' }} />
         if (isTaken) return <X size={18} style={{ color: 'var(--status-error)' }} />
         if (isAvailable) return <Check size={18} style={{ color: 'var(--status-success)' }} />
@@ -77,6 +81,11 @@ export default function PersonalUsernameStep() {
                                 3-20 characters, letters, numbers, or underscores only.
                             </span>
                         )}
+                        {isFormatValid && (isWaitingForDebounce || isChecking) && (
+                            <span style={{ color: 'var(--text-secondary)' }}>
+                                Checking availability...
+                            </span>
+                        )}
                         {isFormatValid && isTaken && (
                             <span className="username-helper-error">
                                 This username is already taken.
@@ -87,7 +96,7 @@ export default function PersonalUsernameStep() {
                                 ✓ Available
                             </span>
                         )}
-                        {isFormatValid && !isChecking && isError && (
+                        {isFormatValid && !isWaitingForDebounce && !isChecking && isError && (
                             <span className="username-helper-error">
                                 Couldn't check availability. <Pressable onClick={() => refetch()} style={{ display: 'inline' }}><span style={{ fontWeight: 600, textDecoration: 'underline' }}>Retry</span></Pressable>
                             </span>
