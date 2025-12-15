@@ -169,8 +169,20 @@ export function useUpdateSettings() {
 
   return useMutation({
     mutationFn: api.profile.updateSettings,
-    onSuccess: (data) => {
+    onSuccess: (data, variables) => {
       queryClient.setQueryData(['settings'], data.settings)
+      // Keep the profile cache in sync for fields that also live on the Profile model (e.g., isPublic).
+      queryClient.setQueryData(['profile'], (oldData: any) => {
+        if (!oldData?.profile) return oldData
+        return {
+          ...oldData,
+          profile: {
+            ...oldData.profile,
+            ...(variables?.isPublic !== undefined ? { isPublic: data.settings.isPublic } : null),
+            ...(variables?.notificationPrefs !== undefined ? { notificationPrefs: data.settings.notificationPrefs } : null),
+          },
+        }
+      })
     },
   })
 }

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Camera, Plus, GripVertical, Trash2, ExternalLink, Check, X, Loader2 } from 'lucide-react'
 import { Pressable, useToast, Skeleton, VoiceRecorder, LoadingButton } from './components'
 import { useProfile, useUpdateProfile, useUpdateSettings, uploadFile, uploadBlob } from './api/hooks'
@@ -10,6 +10,7 @@ import './EditPage.css'
 
 export default function EditPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const toast = useToast()
   const { data: profileData, isLoading, error } = useProfile()
   const { mutateAsync: updateProfile, isPending: isSaving } = useUpdateProfile()
@@ -34,6 +35,11 @@ export default function EditPage() {
   const [isUploading, setIsUploading] = useState(false)
   const [isVoiceUploading, setIsVoiceUploading] = useState(false)
   const [voiceBlob, setVoiceBlob] = useState<Blob | null>(null)
+  const [isContinuing, setIsContinuing] = useState(false)
+
+  // When navigating from the dashboard "Launch My Page" card, we enter a guided flow:
+  // save/publish → connect payments (if needed) → return to dashboard.
+  const isLaunchFlow = new URLSearchParams(location.search).get('launch') === '1'
 
   // Hydrate local state from profile
   useEffect(() => {
@@ -245,8 +251,9 @@ export default function EditPage() {
     }
   }
 
-  const handleSave = async () => {
+  const saveProfileAndSettings = async (options: { showSuccessToast?: boolean } = {}) => {
     if (!profile) return
+    const { showSuccessToast = true } = options
 
     try {
       // 1. Update Profile Data
@@ -269,10 +276,48 @@ export default function EditPage() {
         await updateSettings({ isPublic })
       }
 
-      toast.success('Changes saved')
       setHasChanges(false)
+      if (showSuccessToast) toast.success('Changes saved')
+      return true
     } catch (err: any) {
       toast.error(err?.error || 'Failed to save changes')
+      return false
+    }
+  }
+
+  const handleSave = async () => {
+    await saveProfileAndSettings({ showSuccessToast: true })
+  }
+
+  const handleContinue = async () => {
+    if (!profile) return
+
+    // Prevent accidental "launch" without publishing.
+    if (!isPublic) {
+      toast.error('Turn on Page Visibility to launch your page.')
+      return
+    }
+
+    setIsContinuing(true)
+    let didNavigate = false
+    try {
+      // Save any pending edits first (including publishing via settings).
+      const ok = hasChanges ? await saveProfileAndSettings({ showSuccessToast: false }) : true
+      if (!ok) return
+
+      // If payments are not active yet, guide user to connect/finish payments next.
+      if (profile.payoutStatus !== 'active') {
+        toast.info('Next: connect payments to start earning.')
+        didNavigate = true
+        navigate('/settings/payments', { state: { returnTo: '/dashboard' } })
+        return
+      }
+
+      toast.success('Your page is live!')
+      didNavigate = true
+      navigate('/dashboard')
+    } finally {
+      if (!didNavigate) setIsContinuing(false)
     }
   }
 
@@ -670,12 +715,16 @@ export default function EditPage() {
       <div className="edit-page-footer">
         <LoadingButton
           className="save-btn"
-          onClick={handleSave}
-          disabled={!hasChanges}
-          loading={isSaving || isUploading || isVoiceUploading}
+          onClick={isLaunchFlow ? handleContinue : handleSave}
+          disabled={isLaunchFlow ? false : !hasChanges}
+          loading={isSaving || isUploading || isVoiceUploading || isContinuing}
           fullWidth
         >
-          Save Changes
+          {isLaunchFlow
+            ? (!isPublic
+              ? 'Launch Page'
+              : (profile.payoutStatus === 'active' ? 'Continue to Dashboard' : 'Continue to Payments'))
+            : 'Save Changes'}
         </LoadingButton>
       </div>
     </div>
