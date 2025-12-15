@@ -250,7 +250,6 @@ export default function SubscriptionLiquid({ profile, canceled, isOwner }: Subsc
                 setEmailError('Please enter a valid email address')
                 return
             }
-        }
 
         // Track checkout start
         if (viewIdRef.current) {
