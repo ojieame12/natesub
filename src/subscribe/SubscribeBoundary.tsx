@@ -209,18 +209,16 @@ export default function SubscribeBoundary({ profile, canceled, isOwner }: Subscr
             return
         }
 
-        // Validate email for Paystack (required)
-        if (isPaystack) {
-            if (!subscriberEmail.trim()) {
-                setEmailError('Email is required to proceed')
-                return
-            }
-            // Basic email validation
-            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-            if (!emailRegex.test(subscriberEmail.trim())) {
-                setEmailError('Please enter a valid email address')
-                return
-            }
+        // Validate email (required for everyone now to ensure account access)
+        if (!subscriberEmail.trim()) {
+            setEmailError('Email is required to proceed')
+            return
+        }
+        // Basic email validation
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+        if (!emailRegex.test(subscriberEmail.trim())) {
+            setEmailError('Please enter a valid email address')
+            return
         }
 
         // Track checkout start
@@ -703,30 +701,28 @@ export default function SubscribeBoundary({ profile, canceled, isOwner }: Subscr
                                 </div>
                             )}
 
-                            {/* Email input for Paystack (required) */}
-                            {!isOwner && isPaystack && (
-                                <div className="sub-email-input-wrapper">
-                                    <input
-                                        type="email"
-                                        className={`sub-email-input ${emailError ? 'error' : ''}`}
-                                        placeholder="Enter your email"
-                                        value={subscriberEmail}
-                                        onChange={(e) => {
-                                            setSubscriberEmail(e.target.value)
-                                            if (emailError) setEmailError(null)
-                                        }}
-                                        onKeyDown={(e) => {
-                                            if (e.key === 'Enter' && subscriberEmail.trim() && !isCheckoutLoading && !isRedirecting) {
-                                                e.preventDefault()
-                                                handleSubscribe()
-                                            }
-                                        }}
-                                    />
-                                    {emailError && (
-                                        <span className="sub-email-error">{emailError}</span>
-                                    )}
-                                </div>
-                            )}
+                            {/* Email input - required for all */}
+                            <div className="sub-email-input-wrapper">
+                                <input
+                                    type="email"
+                                    className={`sub-email-input ${emailError ? 'error' : ''}`}
+                                    placeholder="Enter your email"
+                                    value={subscriberEmail}
+                                    onChange={(e) => {
+                                        setSubscriberEmail(e.target.value)
+                                        if (emailError) setEmailError(null)
+                                    }}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' && subscriberEmail.trim() && !isCheckoutLoading && !isRedirecting) {
+                                            e.preventDefault()
+                                            handleSubscribe()
+                                        }
+                                    }}
+                                />
+                                {emailError && (
+                                    <span className="sub-email-error">{emailError}</span>
+                                )}
+                            </div>
 
                             <div className="sub-payment-methods">
                                 {isOwner ? (

@@ -239,9 +239,8 @@ export default function SubscriptionLiquid({ profile, canceled, isOwner }: Subsc
             return
         }
 
-        // Validate email for Paystack (required)
-        if (isPaystack) {
-            if (!subscriberEmail.trim()) {
+        // Validate email (required for everyone)
+        if (!subscriberEmail.trim()) {
                 setEmailError('Email is required to proceed')
                 return
             }
@@ -825,8 +824,8 @@ export default function SubscriptionLiquid({ profile, canceled, isOwner }: Subsc
                                     </div>
                                 )}
 
-                                {/* Email input for Paystack (required) */}
-                                {!isOwner && isPaystack && (
+                                {/* Email input - required for all */}
+                                {!isOwner && (
                                     <div className="sub-email-input-wrapper">
                                         <input
                                             type="email"
