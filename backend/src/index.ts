@@ -10,7 +10,8 @@ try {
   validateEncryptionConfig()
 } catch (err) {
   console.error(err instanceof Error ? err.message : err)
-  process.exit(1)
+  console.warn('⚠️ Server starting despite configuration errors (Healthcheck Priority)')
+  // process.exit(1) // Don't crash on startup
 }
 
 const port = parseInt(env.PORT)

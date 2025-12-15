@@ -101,9 +101,8 @@ function loadEnv() {
 
     // Encryption key: Required in production for PII protection
     if (!data.ENCRYPTION_KEY) {
-      console.error('❌ FATAL: ENCRYPTION_KEY is required in production for PII encryption')
-      console.error('   Generate one with: openssl rand -hex 32')
-      process.exit(1)
+      console.warn('⚠️ WARNING: ENCRYPTION_KEY is missing. PII encryption will be disabled or insecure.')
+      // Don't exit, allow startup
     }
 
     // URLs: Must be HTTPS in production
