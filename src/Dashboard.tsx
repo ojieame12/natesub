@@ -26,6 +26,7 @@ import {
   Eye,
   TrendingUp,
   LayoutTemplate,
+  Heart,
 } from 'lucide-react'
 import { Pressable, useToast, Skeleton, SkeletonList, ErrorState, AnimatedCurrency, AnimatedNumber } from './components'
 import { useViewTransition } from './hooks'
@@ -36,6 +37,7 @@ import './Dashboard.css'
 // Menu items are built dynamically based on service vs personal branch
 const getMenuItems = (isService: boolean) => [
   { id: 'subscribers', title: isService ? 'Clients' : 'Subscribers', icon: UserPlus, path: '/subscribers' },
+  { id: 'my-subs', title: 'Following', icon: Heart, path: '/my-subscriptions' },
   { id: 'new-request', title: isService ? 'New Invoice' : 'New Request', icon: DollarSign, path: '/new-request' },
   { id: 'sent-requests', title: isService ? 'Sent Invoices' : 'Sent Requests', icon: Clock, path: '/requests' },
   // Payroll for service, Updates for personal
