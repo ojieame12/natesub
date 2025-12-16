@@ -145,11 +145,11 @@ export const authMagicLinkRateLimit = rateLimit({
 /**
  * Auth verify rate limiter - IP-based
  * Prevents brute force OTP guessing
- * 5 attempts per 15 minutes per IP
+ * 15 attempts per 15 minutes per IP (enough for retries during network issues)
  */
 export const authVerifyRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000,  // 15 minutes
-  maxRequests: 5,
+  maxRequests: 15,
   keyPrefix: 'auth_verify_ratelimit',
   keyGenerator: (c) => {
     const ip = c.req.header('x-forwarded-for')?.split(',')[0]?.trim()
@@ -157,7 +157,7 @@ export const authVerifyRateLimit = rateLimit({
       || 'unknown'
     return `auth_verify_ratelimit:${ip}`
   },
-  message: 'Too many verification attempts. Please wait 15 minutes before trying again.',
+  message: 'Too many verification attempts. Please wait a few minutes before trying again.',
 })
 
 /**

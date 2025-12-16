@@ -263,21 +263,23 @@ function baseTemplate(options: BaseTemplateOptions): string {
     <tr>
       <td align="center" style="padding: 24px 16px;">
 
-        <!-- Email container -->
-        <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width: 520px; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+	        <!-- Email container -->
+	        <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width: 520px; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
 
-	          <!-- Logo Header -->
-	          <tr>
-	            <td align="center" style="padding: 32px 24px 24px 24px; border-bottom: 1px solid #f0f0f0;">
-	              <a href="${env.APP_URL}" style="text-decoration: none; display: inline-block;">
-	                <img src="${escapeHtml(EMAIL_LOGO_URL)}"
-	                     alt="${BRAND_NAME}"
-	                     width="85"
-	                     height="29"
-	                     style="display: block; border: 0; width: 85px; height: 29px;">
-	              </a>
-            </td>
-          </tr>
+		          <!-- Logo Header -->
+		          <tr>
+		            <td align="center" bgcolor="#000000" style="padding: 24px; background-color: #000000;">
+		              <a href="${env.APP_URL}" style="text-decoration: none; display: inline-block; background-color: #ffffff; border-radius: 999px; padding: 10px 14px;">
+		                <img
+		                  src="${escapeHtml(EMAIL_LOGO_URL)}"
+		                  alt="${BRAND_NAME}"
+		                  width="85"
+		                  height="29"
+		                  style="display: block; border: 0; width: 85px; height: 29px;"
+		                >
+		              </a>
+	            </td>
+	          </tr>
 
           <!-- Main Content -->
           <tr>
