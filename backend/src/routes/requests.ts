@@ -90,7 +90,9 @@ requests.get(
           username: request.creator.profile?.username,
         },
         recipientName: request.recipientName,
-        amount: request.amountCents / 100,
+        // Privacy: Don't return email, just boolean flag
+        hasRecipientEmail: !!request.recipientEmail,
+        amount: request.amountCents, // Return raw cents for precise currency handling
         currency: request.currency,
         isRecurring: request.isRecurring,
         message: request.message,
@@ -110,11 +112,11 @@ requests.post(
   publicRateLimit,  // Prevent abuse - expensive Stripe API calls
   zValidator('param', z.object({ token: z.string() })),
   zValidator('json', z.object({
-    email: z.string().email(),
+    email: z.string().email().optional(),
   })),
   async (c) => {
     const { token } = c.req.valid('param')
-    const { email } = c.req.valid('json')
+    const { email: inputEmail } = c.req.valid('json')
     const tokenHash = hashToken(token)
 
     const request = await db.request.findUnique({
@@ -146,12 +148,19 @@ requests.post(
     // Enforce platform debit cap for service providers ($30 max = 6 months)
     const PLATFORM_DEBIT_CAP_CENTS = 3000
     if (request.creator.profile?.purpose === 'service' &&
-        (request.creator.profile.platformDebitCents || 0) >= PLATFORM_DEBIT_CAP_CENTS) {
+      (request.creator.profile.platformDebitCents || 0) >= PLATFORM_DEBIT_CAP_CENTS) {
       return c.json({
         error: 'Outstanding platform balance must be cleared before accepting new payments.',
         code: 'PLATFORM_DEBIT_CAP_REACHED',
         debitCents: request.creator.profile.platformDebitCents,
       }, 402)
+    }
+
+    // Use input email OR stored recipient email (Targeted Flow)
+    const email = inputEmail || request.recipientEmail
+
+    if (!email) {
+      return c.json({ error: 'Email is required' }, 400)
     }
 
     try {

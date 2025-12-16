@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, ChevronRight, Mail, Bell, Eye, Download, Trash2, LogOut, CreditCard, Loader2 } from 'lucide-react'
+import { ArrowLeft, ChevronRight, Mail, Bell, Eye, Download, Trash2, LogOut, CreditCard, Loader2, MapPin, X, Check } from 'lucide-react'
 import { Pressable, useToast, Toggle } from './components'
-import { useCurrentUser, useLogout, useDeleteAccount, useSettings, useUpdateSettings, useBillingStatus } from './api/hooks'
+import { useCurrentUser, useLogout, useDeleteAccount, useSettings, useUpdateSettings, useBillingStatus, useUpdateProfile } from './api/hooks'
 import { useOnboardingStore } from './onboarding/store'
 import { getPricing } from './utils/pricing'
 
@@ -15,6 +15,110 @@ function getTrialDaysRemaining(trialEndsAt: string | null): number {
   const end = new Date(trialEndsAt)
   const diff = end.getTime() - now.getTime()
   return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)))
+}
+
+function BillingAddressSection({ user }: { user: any }) {
+  const [isEditing, setIsEditing] = useState(false)
+  const [address, setAddress] = useState(user?.profile?.address || '')
+  const [city, setCity] = useState(user?.profile?.city || '')
+  const [state, setState] = useState(user?.profile?.state || '')
+  const [zip, setZip] = useState(user?.profile?.zip || '')
+
+  const { mutateAsync: updateProfile, isPending } = useUpdateProfile()
+  const toast = useToast()
+
+  // Sync with user prop changes
+  useEffect(() => {
+    if (!isEditing && user?.profile) {
+      setAddress(user.profile.address || '')
+      setCity(user.profile.city || '')
+      setState(user.profile.state || '')
+      setZip(user.profile.zip || '')
+    }
+  }, [user, isEditing])
+
+  const handleSave = async () => {
+    try {
+      await updateProfile({
+        address,
+        city,
+        state,
+        zip
+      })
+      toast.success('Address updated')
+      setIsEditing(false)
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update address')
+    }
+  }
+
+  const hasAddress = user?.profile?.address || user?.profile?.city
+  const displayAddress = hasAddress
+    ? `${user.profile.address || ''}, ${user.profile.city || ''} ${user.profile.state || ''} ${user.profile.zip || ''}`
+    : 'Not set'
+
+  if (isEditing) {
+    return (
+      <div className="settings-row column">
+        <div className="settings-row-header">
+          <div className="settings-info">
+            <span className="settings-row-title">Billing Address</span>
+          </div>
+          <div className="row-actions">
+            <Pressable onClick={() => setIsEditing(false)} disabled={isPending}>
+              <X size={18} className="settings-icon-subtle" />
+            </Pressable>
+            <Pressable onClick={handleSave} disabled={isPending}>
+              {isPending ? <Loader2 size={18} className="spin" /> : <Check size={18} className="settings-icon-primary" />}
+            </Pressable>
+          </div>
+        </div>
+
+        <div className="address-form">
+          <input
+            className="settings-input"
+            placeholder="Street Address"
+            value={address}
+            onChange={e => setAddress(e.target.value)}
+          />
+          <div className="form-row">
+            <input
+              className="settings-input"
+              placeholder="City"
+              value={city}
+              onChange={e => setCity(e.target.value)}
+              style={{ flex: 2 }}
+            />
+            <input
+              className="settings-input"
+              placeholder="State"
+              value={state}
+              onChange={e => setState(e.target.value)}
+              style={{ flex: 1 }}
+            />
+          </div>
+          <input
+            className="settings-input"
+            placeholder="ZIP / Postal Code"
+            value={zip}
+            onChange={e => setZip(e.target.value)}
+            style={{ width: '100px' }}
+          />
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <Pressable className="settings-row" onClick={() => setIsEditing(true)}>
+      <MapPin size={20} className="settings-icon" />
+      <div className="settings-info">
+        <span className="settings-row-title">Billing Address</span>
+        <span className="settings-row-value truncate">{displayAddress}</span>
+      </div>
+      <ChevronRight size={18} className="settings-chevron" />
+    </Pressable>
+  )
 }
 
 export default function Settings() {
@@ -153,6 +257,8 @@ export default function Settings() {
                 <span className="settings-row-value">{user?.email || 'Not set'}</span>
               </div>
             </div>
+
+            <BillingAddressSection user={user} />
           </div>
         </section>
 

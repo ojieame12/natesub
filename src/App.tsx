@@ -29,9 +29,7 @@ const ActivityDetail = lazy(() => import('./ActivityDetail'))
 const SubscriberDetail = lazy(() => import('./SubscriberDetail'))
 const SentRequests = lazy(() => import('./SentRequests'))
 const SelectRecipient = lazy(() => import('./request/SelectRecipient'))
-const SelectRelationship = lazy(() => import('./request/SelectRelationship'))
-const RequestDetails = lazy(() => import('./request/RequestDetails'))
-const PersonalizeRequest = lazy(() => import('./request/PersonalizeRequest'))
+
 const RequestPreview = lazy(() => import('./request/RequestPreview'))
 const EditPage = lazy(() => import('./EditPage'))
 const PageSetupWizard = lazy(() => import('./wizards/PageSetupWizard'))
@@ -56,7 +54,7 @@ const Privacy = lazy(() => import('./legal/Privacy'))
 const Unsubscribe = lazy(() => import('./Unsubscribe'))
 const MySubscriptions = lazy(() => import('./MySubscriptions'))
 const NotFound = lazy(() => import('./NotFound'))
-const ReceiptDesign = lazy(() => import('./experiments/ReceiptDesign'))
+
 
 function isPublicCreatorPage(pathname: string): boolean {
   // Creator pages are single-segment vanity URLs like "/username"
@@ -428,9 +426,7 @@ function AppShell() {
 
           {/* Targeted Request Flow */}
           <Route path="/request/new" element={<RequireAuth><SelectRecipient /></RequireAuth>} />
-          <Route path="/request/relationship" element={<RequireAuth><SelectRelationship /></RequireAuth>} />
-          <Route path="/request/details" element={<RequireAuth><RequestDetails /></RequireAuth>} />
-          <Route path="/request/personalize" element={<RequireAuth><PersonalizeRequest /></RequireAuth>} />
+
           <Route path="/request/preview" element={<RequireAuth><RequestPreview /></RequireAuth>} />
           <Route path="/new-request" element={<RequireAuth><SelectRecipient /></RequireAuth>} />
 
@@ -470,8 +466,7 @@ function AppShell() {
           <Route path="/r/:token" element={<PublicRequestPage />} />
           <Route path="/r/:token/success" element={<PublicRequestPage />} />
 
-          {/* Design Experiments */}
-          <Route path="/experiment/receipt" element={<ReceiptDesign />} />
+
 
           {/* Vanity URLs - natepay.co/username */}
           {/* This must be LAST before the catch-all */}

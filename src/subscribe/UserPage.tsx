@@ -9,7 +9,7 @@ import { Skeleton, SkeletonAvatar, Pressable } from '../components'
 // It checks if the username is valid and renders the subscribe page
 
 const SubscribeBoundary = lazy(() => import('./SubscribeBoundary'))
-const SubscriptionLiquid = lazy(() => import('./SubscriptionLiquid'))
+const SubscribeMidnight = lazy(() => import('./SubscribeMidnight'))
 const SubscriptionSuccess = lazy(() => import('./SubscriptionSuccess'))
 const AlreadySubscribed = lazy(() => import('./AlreadySubscribed'))
 
@@ -136,14 +136,17 @@ export default function UserPage() {
   let content: ReactNode
   const isOwner = Boolean(data.isOwner)
 
-  // Show success page after payment
-  if (isSuccess) {
+  const templateToUse = data.profile.template || 'boundary'
+
+  // Show success page after payment (Legacy support for other templates)
+  // 'boundary' template handles its own success state with the new Receipt verification flow
+  if (isSuccess && templateToUse !== 'boundary') {
     content = <SubscriptionSuccess profile={data.profile} provider={provider} />
   } else if (isOwner) {
     // Owner preview mode - show the public page but disable checkout actions
     const templateToUse = data.profile.template || 'boundary'
-    content = templateToUse === 'liquid'
-      ? <SubscriptionLiquid profile={data.profile} canceled={isCanceled} isOwner />
+    content = templateToUse === 'midnight'
+      ? <SubscribeMidnight profile={data.profile} canceled={isCanceled} isOwner />
       : <SubscribeBoundary profile={data.profile} canceled={isCanceled} isOwner />
   } else if (data.viewerSubscription?.isActive) {
     // Show "Already Subscribed" if viewer has active subscription
@@ -156,8 +159,8 @@ export default function UserPage() {
   } else {
     // Use the profile's saved template preference (default to 'boundary')
     const templateToUse = data.profile.template || 'boundary'
-    content = templateToUse === 'liquid'
-      ? <SubscriptionLiquid profile={data.profile} canceled={isCanceled} />
+    content = templateToUse === 'midnight'
+      ? <SubscribeMidnight profile={data.profile} canceled={isCanceled} />
       : <SubscribeBoundary profile={data.profile} canceled={isCanceled} />
   }
 

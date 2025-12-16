@@ -8,8 +8,8 @@ import * as api from '../api/client'
 import type { Profile } from '../api/client'
 import { calculateFeePreview, displayAmountToCents, formatCurrency } from '../utils/currency'
 
-// --- SLIDE BUTTON ---
-function SlideToPay({ onComplete, disabled }: { onComplete: () => void, disabled?: boolean }) {
+// --- SLIDE TO PAY (DARK VARIANT WITH SHIMMER) ---
+function SlideToPayDark({ onComplete, disabled }: { onComplete: () => void, disabled?: boolean }) {
     const [dragWidth, setDragWidth] = useState(0)
     const [isDragging, setIsDragging] = useState(false)
     const [completed, setCompleted] = useState(false)
@@ -24,7 +24,6 @@ function SlideToPay({ onComplete, disabled }: { onComplete: () => void, disabled
 
     const handleMove = (clientX: number) => {
         if (!isDragging || !containerRef.current) return
-
         const rect = containerRef.current.getBoundingClientRect()
         const maxDrag = rect.width - 44
         const offsetX = clientX - startX.current
@@ -47,80 +46,115 @@ function SlideToPay({ onComplete, disabled }: { onComplete: () => void, disabled
 
     const onMouseDown = (e: React.MouseEvent) => handleStart(e.clientX)
     const onMouseMove = (e: React.MouseEvent) => handleMove(e.clientX)
-    // const onMouseUp = () => handleEnd() // Unused
     const onTouchStart = (e: React.TouchEvent) => handleStart(e.touches[0].clientX)
     const onTouchMove = (e: React.TouchEvent) => handleMove(e.touches[0].clientX)
     const onTouchEnd = () => handleEnd()
 
     useEffect(() => {
         if (isDragging) {
-            window.addEventListener('mouseup', handleEnd); window.addEventListener('touchend', handleEnd)
+            window.addEventListener('mouseup', handleEnd)
+            window.addEventListener('touchend', handleEnd)
         } else {
-            window.removeEventListener('mouseup', handleEnd); window.removeEventListener('touchend', handleEnd)
+            window.removeEventListener('mouseup', handleEnd)
+            window.removeEventListener('touchend', handleEnd)
         }
-        return () => { window.removeEventListener('mouseup', handleEnd); window.removeEventListener('touchend', handleEnd) }
+        return () => {
+            window.removeEventListener('mouseup', handleEnd)
+            window.removeEventListener('touchend', handleEnd)
+        }
     }, [isDragging])
 
     return (
         <div
             ref={containerRef}
             style={{
-                background: '#f1f1ee', height: 48, position: 'relative', overflow: 'hidden',
-                userSelect: 'none', touchAction: 'none',
+                background: '#0d0d0f',
+                height: 48,
+                position: 'relative',
+                overflow: 'hidden',
+                userSelect: 'none',
+                touchAction: 'none',
                 cursor: disabled ? 'not-allowed' : 'pointer',
-                opacity: disabled ? 0.6 : 1, border: '1px solid #e5e5e5',
+                opacity: disabled ? 0.6 : 1,
+                border: '1px solid #2a2a30',
+                borderRadius: 4,
             }}
             onMouseMove={isDragging ? onMouseMove : undefined}
         >
+            {/* SHIMMER OVERLAY */}
             <div style={{
-                position: 'absolute', left: 0, top: 0, bottom: 0, width: dragWidth + 44,
+                position: 'absolute',
+                inset: 0,
+                background: 'linear-gradient(90deg, transparent, rgba(255, 210, 8, 0.1), transparent)',
+                animation: 'shimmer 2s infinite',
+                pointerEvents: 'none',
+            }} />
+
+            {/* BRAND GRADIENT FILL */}
+            <div style={{
+                position: 'absolute',
+                left: 0, top: 0, bottom: 0,
+                width: dragWidth + 44,
                 background: 'linear-gradient(135deg, #FFD208 0%, #FF941A 100%)',
                 transition: isDragging ? 'none' : 'width 0.3s ease',
             }} />
+
+            {/* Label */}
             <div style={{
-                position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                color: completed ? 'white' : '#666', fontWeight: 600, fontSize: 11, letterSpacing: 1.5, textTransform: 'uppercase',
-                pointerEvents: 'none', opacity: Math.max(0, 1 - (dragWidth / 100))
+                position: 'absolute', inset: 0,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: completed ? 'white' : '#888',
+                fontWeight: 600, fontSize: 11, letterSpacing: 1.5, textTransform: 'uppercase',
+                pointerEvents: 'none',
+                opacity: Math.max(0, 1 - (dragWidth / 100))
             }}>
                 {completed ? 'PROCESSING' : 'SLIDE TO PAY'}
             </div>
+
+            {/* Thumb - Dark */}
             <div
-                onMouseDown={onMouseDown} onTouchStart={onTouchStart} onTouchMove={onTouchMove as any} onTouchEnd={onTouchEnd}
+                onMouseDown={onMouseDown}
+                onTouchStart={onTouchStart}
+                onTouchMove={onTouchMove as any}
+                onTouchEnd={onTouchEnd}
                 style={{
-                    height: 46, width: 44, top: 0, left: 0, position: 'absolute',
-                    background: completed ? 'white' : '#fff',
+                    height: 46, width: 44,
+                    top: 0, left: 0, position: 'absolute',
+                    background: completed ? '#FFD208' : '#1f1f24',
                     transform: `translateX(${dragWidth}px)`,
                     transition: isDragging ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    borderRight: '1px solid #e5e5e5', zIndex: 2, cursor: 'grab',
-                    boxShadow: '4px 0 15px rgba(0,0,0,0.1)'
+                    borderRight: '1px solid #2a2a30',
+                    zIndex: 2, cursor: 'grab',
+                    boxShadow: '4px 0 15px rgba(255, 210, 8, 0.3)'
                 }}
             >
                 <div style={{ animation: !completed ? 'slide-bounce 1.5s infinite' : 'none', display: 'flex', alignItems: 'center' }}>
-                    {completed ? <Check size={20} color="#10b981" /> : <ChevronsRight size={20} color="#333" />}
+                    {completed ? <Check size={20} color="#fff" /> : <ChevronsRight size={20} color="#FFD208" />}
                 </div>
             </div>
-            <style>{`@keyframes slide-bounce { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(3px); } }`}</style>
+
+            <style>{`
+                @keyframes slide-bounce { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(3px); } }
+                @keyframes shimmer { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
+            `}</style>
         </div>
     )
 }
 
-// --- MAIN ENHANCED COMPONENT ---
-interface SubscribeBoundaryProps {
+// --- MAIN DARK MODE COMPONENT ---
+interface SubscribeMidnightProps {
     profile: Profile
     canceled?: boolean
     isOwner?: boolean
 }
 
-export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundaryProps) {
+export default function SubscribeMidnight({ profile, isOwner }: SubscribeMidnightProps) {
     const navigate = useNavigate()
     const toast = useToast()
     const [searchParams] = useSearchParams()
 
-    // Check for success param (Stripe Return)
     const isSuccessReturn = searchParams.get('success') === 'true'
-
-    // Derived State for ResetKey (To reset slider on error)
     const [resetKey, setResetKey] = useState(0)
 
     // Hooks
@@ -140,8 +174,6 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
     // Data
     const isService = profile.purpose === 'service'
     const hasTiers = isService && profile.pricingModel === 'tiers' && !!profile.tiers && profile.tiers.length > 0
-
-    // Tier Selection State
     const [selectedTierId, setSelectedTierId] = useState<string | undefined>(hasTiers && profile.tiers ? profile.tiers[0].id : undefined)
 
     // Calculate Amount
@@ -152,16 +184,12 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
     }
 
     const currency = profile.currency || 'USD'
-
-    // Validation Guards
-    const paymentsReady = profile.payoutStatus === 'active' || profile.paymentsReady // Ensure backend flag is favored
+    const paymentsReady = profile.payoutStatus === 'active' || profile.paymentsReady
     const isReadyToPay = paymentsReady && currentAmount > 0
     const isValidEmail = subscriberEmail.trim().length > 3 && subscriberEmail.includes('@')
 
-    // Fee Calculations (Parity with Display Component)
+    // Fee Calculations
     const feePreview = calculateFeePreview(currentAmount, currency, profile.purpose, feeMode)
-
-    // Derived Visuals
     const subscriberPaysFee = feeMode === 'pass_to_subscriber'
     const feeToDisplay = subscriberPaysFee ? feePreview.serviceFee : 0
     const total = currentAmount + feeToDisplay
@@ -169,7 +197,6 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
     useEffect(() => {
         setMount(true)
 
-        // Handle Session Verification
         if (isSuccessReturn) {
             const sessionId = searchParams.get('session_id')
             if (sessionId) {
@@ -177,8 +204,6 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                     .then(result => {
                         if (result.verified) {
                             setStatus('success')
-                            // Clear query params to prevent re-verification on refresh
-                            // navigate(location.pathname, { replace: true }) 
                         } else {
                             setStatus('idle')
                             toast.error('Payment verification failed')
@@ -189,8 +214,6 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                         toast.error('Could not verify payment')
                     })
             } else {
-                // Fallback for legacy/spoofed URLs without session_id
-                // For security, we should PROBABLY reject these, but for transition we might show error
                 setStatus('idle')
                 toast.error('Invalid payment session')
             }
@@ -199,18 +222,18 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                 .then(res => viewIdRef.current = res.viewId)
                 .catch(console.error)
         }
-    }, [profile.id, recordPageView, isSuccessReturn, searchParams, navigate, toast])
+    }, [profile.id, recordPageView, isSuccessReturn, searchParams, toast])
 
     // Handlers
     const handleFeeToggle = async () => {
         if (!isOwner) return
         const newMode = feeMode === 'absorb' ? 'pass_to_subscriber' : 'absorb'
-        setFeeMode(newMode) // Optimistic
+        setFeeMode(newMode)
         try {
             await updateSettings({ feeMode: newMode })
             toast.success('Fee preference updated')
         } catch {
-            setFeeMode(feeMode) // Revert
+            setFeeMode(feeMode)
             toast.error('Failed to update')
         }
     }
@@ -226,7 +249,7 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
     }
 
     const handleSubscribe = async () => {
-        setStatus('processing') // Lock UI
+        setStatus('processing')
         try {
             if (viewIdRef.current) {
                 updatePageView({ viewId: viewIdRef.current, data: { reachedPayment: true, startedCheckout: true } }).catch(() => { })
@@ -251,15 +274,15 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
         } catch (err: any) {
             console.error(err)
             setStatus('idle')
-            setResetKey(prev => prev + 1) // Reset slider
+            setResetKey(prev => prev + 1)
             toast.error(err?.message || 'Payment failed')
         }
     }
 
-    // --- STYLES ---
+    // --- DARK MODE STYLES ---
     const containerStyle: React.CSSProperties = {
         minHeight: '100vh',
-        background: '#fffcf8',
+        background: '#0c0c0e',
         backgroundImage: `
             radial-gradient(at 80% 0%, rgba(255, 210, 8, 0.15) 0px, transparent 50%),
             radial-gradient(at 0% 50%, rgba(255, 148, 26, 0.12) 0px, transparent 50%),
@@ -267,22 +290,29 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
         `,
         display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
         padding: '20px', position: 'relative', overflow: 'hidden',
-        fontFamily: 'var(--font-primary)'
+        fontFamily: 'var(--font-primary)',
+        color: '#f0f0f0',
     }
 
     const receiptStyle: React.CSSProperties = {
         width: '100%', maxWidth: 350,
-        backgroundColor: '#ffffff',
-        maskImage: `radial-gradient(circle at 10px calc(100% + 5px), transparent 12px, black 13px)`,
-        WebkitMaskImage: `radial-gradient(circle at 10px calc(100% + 5px), transparent 12px, black 13px)`,
-        WebkitMaskSize: '20px 100%', WebkitMaskPosition: '-10px 0', WebkitMaskRepeat: 'repeat-x',
-        padding: '30px 24px 50px',
-        boxShadow: '0 30px 60px -15px rgba(0, 0, 0, 0.3)',
+        background: 'linear-gradient(135deg, #1a1a1f 0%, #121215 100%)',
+        border: '1px solid rgba(255, 210, 8, 0.2)',
+        borderRadius: 16,
+        padding: '30px 24px 40px',
+        boxShadow: `
+            0 0 0 1px rgba(255, 255, 255, 0.05),
+            inset 0 1px 0 rgba(255, 255, 255, 0.03),
+            0 20px 50px -10px rgba(0, 0, 0, 0.8),
+            0 0 60px -20px rgba(255, 210, 8, 0.3)
+        `,
         transform: mount ? 'translateY(0)' : 'translateY(50px)',
-        opacity: mount ? 1 : 0, transition: 'all 0.6s ease-out'
+        opacity: mount ? 1 : 0,
+        transition: 'all 0.6s ease-out',
+        position: 'relative',
+        overflow: 'hidden',
     }
 
-    // Success Animation Override
     if (status === 'success') {
         receiptStyle.transform = 'translateY(150%) rotate(2deg)'
         receiptStyle.opacity = 0
@@ -293,20 +323,21 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
 
     return (
         <div style={containerStyle}>
-            {/* Noise & Back Button */}
-            <div style={{ position: 'fixed', inset: 0, opacity: 0.03, pointerEvents: 'none', backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")` }} />
+            {/* Noise Texture */}
+            <div style={{ position: 'fixed', inset: 0, opacity: 0.04, pointerEvents: 'none', backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")` }} />
 
+            {/* Back Button */}
             <div style={{ position: 'absolute', top: 20, left: 20, zIndex: 10 }}>
                 {canGoBack && (
                     <button
                         onClick={() => navigate(-1)}
                         style={{
-                            background: 'rgba(255,255,255,0.8)', backdropFilter: 'blur(10px)',
-                            border: '1px solid rgba(0,0,0,0.05)', borderRadius: '50%',
+                            background: 'rgba(30, 30, 35, 0.8)', backdropFilter: 'blur(10px)',
+                            border: '1px solid rgba(255,255,255,0.1)', borderRadius: '50%',
                             width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer'
                         }}
                     >
-                        <ArrowLeft size={20} color="#444" />
+                        <ArrowLeft size={20} color="#aaa" />
                     </button>
                 )}
             </div>
@@ -317,9 +348,10 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                     <button
                         onClick={() => navigate('/edit-page')}
                         style={{
-                            background: 'white', border: 'none', borderRadius: 20,
+                            background: '#1f1f24', border: '1px solid rgba(255, 210, 8, 0.3)', borderRadius: 20,
                             padding: '10px 15px', display: 'flex', alignItems: 'center', gap: 6,
-                            boxShadow: '0 4px 12px rgba(0,0,0,0.08)', fontWeight: 600, fontSize: 13, cursor: 'pointer'
+                            boxShadow: '0 4px 12px rgba(0,0,0,0.3)', fontWeight: 600, fontSize: 13, cursor: 'pointer',
+                            color: '#f0f0f0'
                         }}
                     >
                         <Pencil size={14} /> Edit Page
@@ -329,23 +361,32 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
 
             {/* RECEIPT CARD */}
             <div style={receiptStyle}>
+                {/* SHIMMER OVERLAY ON CARD */}
+                <div style={{
+                    position: 'absolute', inset: 0, borderRadius: 16,
+                    background: 'linear-gradient(90deg, transparent, rgba(255, 210, 8, 0.05), transparent)',
+                    animation: 'shimmer 3s infinite',
+                    pointerEvents: 'none',
+                }} />
+
                 {/* Header */}
-                <div style={{ textAlign: 'center', marginBottom: 30 }}>
+                <div style={{ textAlign: 'center', marginBottom: 30, position: 'relative', zIndex: 1 }}>
                     <div style={{ position: 'relative', width: 72, height: 72, margin: '0 auto 20px' }}>
+                        {/* Avatar with Brand Yellow Ring */}
                         <div style={{
                             width: '100%', height: '100%', borderRadius: '50%',
                             backgroundImage: `url(${profile.avatarUrl})`, backgroundSize: 'cover',
-                            filter: 'grayscale(100%) contrast(110%)', border: '1px solid #e5e5e5',
-                            boxShadow: '0 4px 10px rgba(0,0,0,0.1)'
+                            border: '2px solid #FFD208',
+                            boxShadow: '0 0 20px rgba(255, 210, 8, 0.4), 0 4px 10px rgba(0,0,0,0.3)'
                         }} />
                     </div>
 
-                    <div style={{ fontSize: 11, fontWeight: 'bold', letterSpacing: 1, textTransform: 'uppercase', color: '#999' }}>PAID TO</div>
-                    <div style={{ fontSize: 22, fontWeight: 'bold', marginTop: 4 }}>{(profile.displayName || profile.username || 'User').toUpperCase()}</div>
+                    <div style={{ fontSize: 11, fontWeight: 'bold', letterSpacing: 1, textTransform: 'uppercase', color: '#888' }}>PAID TO</div>
+                    <div style={{ fontSize: 22, fontWeight: 'bold', marginTop: 4, color: '#f0f0f0' }}>{(profile.displayName || profile.username || 'User').toUpperCase()}</div>
 
                     <div style={{ display: 'flex', justifyContent: 'center', marginTop: 8 }}>
                         <div style={{
-                            background: '#000', color: 'white', padding: '3px 8px', borderRadius: 4,
+                            background: 'linear-gradient(135deg, #FFD208, #FF941A)', color: 'white', padding: '3px 8px', borderRadius: 4,
                             fontSize: 10, fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 4, letterSpacing: 0.5
                         }}>
                             {isService ? <Briefcase size={10} /> : <Banknote size={10} />}
@@ -354,42 +395,40 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                     </div>
                 </div>
 
+                {/* Divider */}
+                <div style={{ borderBottom: '1px dashed #3a3a40', marginBottom: 25 }} />
+
                 {/* Breakdown */}
-                <div style={{ fontSize: 13, marginBottom: 25 }}>
+                <div style={{ fontSize: 13, marginBottom: 25, position: 'relative', zIndex: 1 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, alignItems: 'center' }}>
-                        <span>Subscription</span>
+                        <span style={{ color: '#aaa' }}>Subscription</span>
                         {hasTiers && profile.tiers ? (
-                            <div style={{ position: 'relative' }}>
-                                <select
-                                    value={selectedTierId}
-                                    onChange={e => setSelectedTierId(e.target.value)}
-                                    disabled={status === 'processing' || !isReadyToPay}
-                                    style={{
-                                        appearance: 'none', background: '#f5f5f5', border: 'none',
-                                        borderRadius: 4, padding: '2px 20px 2px 8px', fontSize: 13, fontWeight: 'bold',
-                                        cursor: 'pointer', fontFamily: 'inherit'
-                                    }}
-                                >
-                                    {profile.tiers.map(t => (
-                                        <option key={t.id} value={t.id}>{t.name}</option>
-                                    ))}
-                                </select>
-                                <div style={{ position: 'absolute', right: 4, top: 4, pointerEvents: 'none', opacity: 0.5 }}>
-                                    <Briefcase size={10} />
-                                </div>
-                            </div>
+                            <select
+                                value={selectedTierId}
+                                onChange={e => setSelectedTierId(e.target.value)}
+                                disabled={status === 'processing' || !isReadyToPay}
+                                style={{
+                                    appearance: 'none', background: '#2a2a30', border: '1px solid #3a3a40', color: '#f0f0f0',
+                                    borderRadius: 4, padding: '2px 20px 2px 8px', fontSize: 13, fontWeight: 'bold',
+                                    cursor: 'pointer', fontFamily: 'inherit'
+                                }}
+                            >
+                                {profile.tiers.map(t => (
+                                    <option key={t.id} value={t.id}>{t.name}</option>
+                                ))}
+                            </select>
                         ) : (
-                            <span>{formatCurrency(currentAmount, currency)}/mo</span>
+                            <span style={{ color: '#f0f0f0' }}>{formatCurrency(currentAmount, currency)}/mo</span>
                         )}
-                        {hasTiers && <span>{formatCurrency(currentAmount, currency)}/mo</span>}
+                        {hasTiers && <span style={{ color: '#f0f0f0' }}>{formatCurrency(currentAmount, currency)}/mo</span>}
                     </div>
 
-                    {/* Fee Row: Hidden if Owner absorbs, OR visible if Owner is viewing to show context */}
                     {(subscriberPaysFee || isOwner) && (
                         <div style={{
                             display: 'flex', justifyContent: 'space-between', marginBottom: 8,
                             opacity: subscriberPaysFee ? 0.7 : 0.4,
-                            textDecoration: !subscriberPaysFee ? 'line-through' : 'none'
+                            textDecoration: !subscriberPaysFee ? 'line-through' : 'none',
+                            color: '#888'
                         }}>
                             <span>Service Fee {!subscriberPaysFee && '(Absorbed)'}</span>
                             <span>+{formatCurrency(feePreview.serviceFee, currency)}</span>
@@ -397,20 +436,20 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                     )}
 
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 15 }}>
-                        <span style={{ fontWeight: 'bold', fontSize: 14, textTransform: 'uppercase' }}>Total Due</span>
-                        <div style={{ fontWeight: 'bold', fontSize: 24, letterSpacing: -1 }}>{formatCurrency(total, currency)}</div>
+                        <span style={{ fontWeight: 'bold', fontSize: 14, textTransform: 'uppercase', color: '#aaa' }}>Total Due</span>
+                        <div style={{ fontWeight: 'bold', fontSize: 24, letterSpacing: -1, color: '#f0f0f0' }}>{formatCurrency(total, currency)}</div>
                     </div>
 
-                    {/* OWNER CONTROLS: Fee Toggle */}
+                    {/* OWNER CONTROLS */}
                     {isOwner && (
-                        <div style={{ marginTop: 15, padding: 10, background: '#f5f5f5', borderRadius: 8, fontSize: 11 }}>
+                        <div style={{ marginTop: 15, padding: 10, background: '#1f1f24', borderRadius: 8, fontSize: 11, border: '1px solid #2a2a30' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <span>Fee Mode:</span>
+                                <span style={{ color: '#888' }}>Fee Mode:</span>
                                 <button
                                     onClick={handleFeeToggle} disabled={isSettingsLoading}
                                     style={{
-                                        border: 'none', background: 'white', padding: '4px 8px', borderRadius: 4,
-                                        boxShadow: '0 1px 3px rgba(0,0,0,0.1)', cursor: 'pointer', fontWeight: 'bold'
+                                        border: '1px solid #3a3a40', background: '#2a2a30', padding: '4px 8px', borderRadius: 4,
+                                        boxShadow: '0 1px 3px rgba(0,0,0,0.2)', cursor: 'pointer', fontWeight: 'bold', color: '#f0f0f0'
                                     }}
                                 >
                                     {feeMode === 'absorb' ? 'I Absorb' : 'User Pays'}
@@ -420,15 +459,15 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                     )}
                 </div>
 
-                <div style={{ borderBottom: '1px dashed #ccc', marginBottom: 25 }} />
+                <div style={{ borderBottom: '1px dashed #3a3a40', marginBottom: 25 }} />
 
-                {/* Email Input (If not owner) */}
+                {/* Email Input */}
                 {!isOwner && (
-                    <div style={{ marginBottom: 30 }}>
+                    <div style={{ marginBottom: 30, position: 'relative', zIndex: 1 }}>
                         <label style={{
                             fontSize: 10, textTransform: 'uppercase', display: 'block', marginBottom: 8,
                             opacity: emailFocused ? 1 : 0.6,
-                            color: emailFocused ? '#FF941A' : '#222',
+                            color: emailFocused ? '#FFD208' : '#888',
                             transition: 'all 0.2s ease', fontWeight: 'bold'
                         }}>
                             Customer Email
@@ -439,40 +478,41 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                             onFocus={() => setEmailFocused(true)} onBlur={() => setEmailFocused(false)}
                             style={{
                                 width: '100%',
-                                border: emailFocused ? '1px solid #000' : '1px solid #e0e0e0',
-                                padding: '14px', background: emailFocused ? '#fff' : '#f9f9f9',
-                                fontFamily: 'inherit', fontSize: 14, outline: 'none', color: '#222', borderRadius: 0,
-                                boxShadow: emailFocused ? '0 0 0 4px rgba(255, 148, 26, 0.1)' : 'inset 0 1px 3px rgba(0,0,0,0.02)',
+                                border: emailFocused ? '1px solid #FFD208' : '1px solid #2a2a30',
+                                padding: '14px', background: emailFocused ? '#1f1f24' : '#0d0d0f',
+                                fontFamily: 'inherit', fontSize: 14, outline: 'none', color: '#f0f0f0', borderRadius: 4,
+                                boxShadow: emailFocused ? '0 0 0 4px rgba(255, 210, 8, 0.15)' : 'none',
                                 transition: 'all 0.2s ease'
                             }}
                         />
                     </div>
                 )}
 
-                {/* Slider (If not owner) vs Share (If owner) */}
-                <div style={{ marginBottom: 35 }}>
+                {/* Slider / Share */}
+                <div style={{ marginBottom: 35, position: 'relative', zIndex: 1 }}>
                     {isOwner ? (
                         <button
                             onClick={handleShare}
                             style={{
-                                width: '100%', height: 48, background: 'black', color: 'white', border: 'none',
-                                fontWeight: 'bold', fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8
+                                width: '100%', height: 48, background: 'linear-gradient(135deg, #FFD208, #FF941A)', color: 'white', border: 'none',
+                                fontWeight: 'bold', fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                                borderRadius: 4
                             }}
                         >
                             Share Page
                         </button>
                     ) : (
                         isReadyToPay ? (
-                            <SlideToPay
-                                key={resetKey} // Force remount on error
+                            <SlideToPayDark
+                                key={resetKey}
                                 onComplete={handleSubscribe}
                                 disabled={!isValidEmail || status === 'processing'}
                             />
                         ) : (
                             <div style={{
-                                width: '100%', height: 48, background: '#f3f4f6', color: '#9ca3af',
+                                width: '100%', height: 48, background: '#1f1f24', color: '#666',
                                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                                fontSize: 13, fontWeight: 500, borderRadius: 0, border: '1px solid #e5e7eb'
+                                fontSize: 13, fontWeight: 500, borderRadius: 4, border: '1px solid #2a2a30'
                             }}>
                                 <AlertCircle size={16} /> Payments Unavailable
                             </div>
@@ -481,10 +521,10 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                 </div>
 
                 {/* Footer */}
-                <div style={{ marginTop: 20, textAlign: 'center', opacity: 0.8 }}>
-                    <div style={{ fontSize: 9, marginBottom: 12, letterSpacing: 1.5, textTransform: 'uppercase' }}>Powered By</div>
-                    <img src="/logo.svg" alt="NatePay" style={{ height: 28 }} />
-                    <div style={{ marginTop: 15, fontSize: 9, opacity: 0.6 }}>
+                <div style={{ marginTop: 20, textAlign: 'center', opacity: 0.6, position: 'relative', zIndex: 1 }}>
+                    <div style={{ fontSize: 9, marginBottom: 12, letterSpacing: 1.5, textTransform: 'uppercase', color: '#666' }}>Powered By</div>
+                    <img src="/logo.svg" alt="NatePay" style={{ height: 28, filter: 'brightness(0) invert(1)' }} />
+                    <div style={{ marginTop: 15, fontSize: 9, color: '#666' }}>
                         <a href="/terms" style={{ color: 'inherit', textDecoration: 'none', marginRight: 10 }}>Terms</a>
                         <a href="/privacy" style={{ color: 'inherit', textDecoration: 'none' }}>Privacy</a>
                     </div>
@@ -504,19 +544,27 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                     }}>
                         <Check size={40} />
                     </div>
-                    <h2 style={{ fontSize: 24, fontWeight: 'bold' }}>Payment Complete</h2>
-                    <p style={{ opacity: 0.6, marginTop: 10 }}>Receipt sent to {subscriberEmail || 'your email'}</p>
+                    <h2 style={{ fontSize: 24, fontWeight: 'bold', color: '#f0f0f0' }}>Payment Complete</h2>
+                    <p style={{ opacity: 0.6, marginTop: 10, color: '#888' }}>Receipt sent to {subscriberEmail || 'your email'}</p>
                     <button
                         onClick={() => { setStatus('idle'); setMount(false); setTimeout(() => setMount(true), 100); navigate(0); }}
-                        style={{ marginTop: 30, textDecoration: 'underline', opacity: 0.6, border: 'none', background: 'transparent', cursor: 'pointer' }}
+                        style={{ marginTop: 30, textDecoration: 'underline', opacity: 0.6, border: 'none', background: 'transparent', cursor: 'pointer', color: '#888' }}
                     >
                         Start New
                     </button>
                     <div style={{ marginTop: 40, opacity: 0.5 }}>
-                        <img src="/logo.svg" alt="NatePay" style={{ height: 24 }} />
+                        <img src="/logo.svg" alt="NatePay" style={{ height: 24, filter: 'brightness(0) invert(1)' }} />
                     </div>
                 </div>
             )}
+
+            {/* Global Keyframes */}
+            <style>{`
+                @keyframes lg-fadeInUp {
+                    from { opacity: 0; transform: translate(-50%, -40%); }
+                    to { opacity: 1; transform: translate(-50%, -50%); }
+                }
+            `}</style>
         </div>
     )
 }

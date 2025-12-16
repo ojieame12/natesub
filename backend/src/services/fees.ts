@@ -60,7 +60,8 @@ export function calculateServiceFee(
   amountCents: number,
   currency: string,
   purpose?: UserPurpose | null,
-  feeMode: FeeMode = 'pass_to_subscriber'
+  feeMode: FeeMode = 'pass_to_subscriber',
+  isCrossBorder: boolean = false
 ): FeeCalculation {
   // Validate input
   if (amountCents < 0) {
@@ -70,7 +71,14 @@ export function calculateServiceFee(
   const normalizedCurrency = currency.toUpperCase()
   const isService = isServicePurpose(purpose)
   const purposeType = isService ? 'service' : 'personal'
-  const rate = isService ? FEE_RATES.service : FEE_RATES.personal
+
+  // Base Rate (8% or 10%)
+  let rate = isService ? FEE_RATES.service : FEE_RATES.personal
+
+  // Smart Buffer: Add 1.5% for cross-border to cover FX/Stripe surcharge
+  if (isCrossBorder) {
+    rate += 0.015
+  }
 
   if (amountCents === 0) {
     return {
@@ -86,7 +94,17 @@ export function calculateServiceFee(
   }
 
   // Calculate fee based on mode (flat percentage)
-  const feeCents = Math.round(amountCents * rate)
+  let feeCents = Math.round(amountCents * rate)
+
+  // Safety Floor: Ensure we collect at least 50 cents (or equivalent) to cover fixed costs
+  // Only apply floor if the transaction amount is reasonably high (> $1) to avoid killing micro-transactions
+  // For micro-transactions (< $1), we accept the loss or take what we can
+  const MIN_FEE_CENTS = 50
+  if (amountCents > 100 && feeCents < MIN_FEE_CENTS) {
+    feeCents = MIN_FEE_CENTS
+    // Recalculate effective rate for metadata
+    rate = feeCents / amountCents
+  }
 
   if (feeMode === 'absorb') {
     // Creator absorbs: subscriber pays exact price, creator gets price - fee

@@ -26,6 +26,13 @@ export interface PayStatementData {
   // Creator info
   creatorName: string
   creatorEmail: string
+  creatorAddress?: {
+    street?: string
+    city?: string
+    state?: string
+    zip?: string
+    country?: string
+  }
 
   // Period info
   periodStart: Date
@@ -166,18 +173,42 @@ export async function generatePayStatement(data: PayStatementData): Promise<Buff
       // CREATOR INFO
       // ==========================================
 
+      let currentY = 180
+
       doc
         .fontSize(12)
         .font('Helvetica-Bold')
         .fillColor('#1a1a1a')
-        .text('Payee Information', 50, 180)
+        .text('Payee Information', 50, currentY)
+
+      currentY += 20
 
       doc
         .fontSize(10)
         .font('Helvetica')
         .fillColor('#333333')
-        .text(data.creatorName, 50, 200)
-        .text(data.creatorEmail, 50, 214)
+        .text(data.creatorName, 50, currentY)
+        .text(data.creatorEmail, 50, currentY + 14)
+
+      currentY += 28
+
+      // Render Address if available
+      if (data.creatorAddress) {
+        const { street, city, state, zip, country } = data.creatorAddress
+
+        if (street) {
+          doc.text(street, 50, currentY); currentY += 14;
+        }
+
+        const cityStateZip = [city, state, zip].filter(Boolean).join(', ')
+        if (cityStateZip) {
+          doc.text(cityStateZip, 50, currentY); currentY += 14;
+        }
+
+        if (country) {
+          doc.text(country, 50, currentY); currentY += 14;
+        }
+      }
 
       // ==========================================
       // PERIOD INFO (right side)

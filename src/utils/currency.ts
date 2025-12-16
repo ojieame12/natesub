@@ -439,7 +439,13 @@ export function calculateFeePreview(
     }
 
     // Calculate fee based on feeMode
-    const serviceFee = amountDollars * rate
+    let serviceFee = amountDollars * rate
+
+    // Apply minimum fee floor ($0.50) if amount > $1.00
+    // This matches backend logic (backend/src/services/fees.ts)
+    if (amountDollars > 1.00) {
+        serviceFee = Math.max(serviceFee, 0.50)
+    }
 
     if (creatorAbsorbsFee) {
         // Creator absorbs fee - subscriber pays base price, creator receives less

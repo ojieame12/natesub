@@ -76,12 +76,18 @@ export interface Profile {
   paymentProvider: string | null
   payoutStatus: 'pending' | 'active' | 'restricted'
   shareUrl: string | null
-  template?: 'boundary' | 'liquid' | 'minimal' | 'editorial' // Subscribe page template
+  template?: 'boundary' | 'midnight' | 'minimal' | 'editorial' // Subscribe page template
   paymentsReady?: boolean // For public profiles - indicates if checkout will work
   feeMode?: 'absorb' | 'pass_to_subscriber' // Who pays the platform fee
   crossBorder?: boolean // True if Stripe cross-border account (payments in USD, payouts in local currency)
   notificationPrefs?: NotificationPrefs // Email/push notification preferences
   isPublic?: boolean // True if profile is visible to public (published)
+
+  // Billing Address
+  address?: string | null
+  city?: string | null
+  state?: string | null
+  zip?: string | null
 }
 
 export interface Tier {
@@ -661,6 +667,17 @@ export const checkout = {
       channel?: string
       error?: string
     }>(`/checkout/verify/${reference}`),
+
+  // Verify Stripe session (Anti-spoofing)
+  verifySession: (sessionId: string, username?: string) =>
+    apiFetch<{
+      verified: boolean
+      status: string
+      maskedEmail?: string | null
+      creatorId?: string
+      amountTotal?: number
+      currency?: string
+    }>(`/checkout/session/${sessionId}/verify${username ? `?username=${username}` : ''}`),
 }
 
 // ============================================
@@ -755,7 +772,7 @@ export const requests = {
   view: (token: string) =>
     apiFetch<{ request: any }>(`/requests/r/${token}`),
 
-  accept: (token: string, email: string) =>
+  accept: (token: string, email?: string) =>
     apiFetch<{ success: boolean; checkoutUrl: string }>(
       `/requests/r/${token}/accept`,
       {

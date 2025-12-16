@@ -454,7 +454,7 @@ export function usePublicRequest(token: string) {
 
 export function useAcceptRequest() {
   return useMutation({
-    mutationFn: ({ token, email }: { token: string; email: string }) =>
+    mutationFn: ({ token, email }: { token: string; email?: string }) =>
       api.requests.accept(token, email),
   })
 }
@@ -605,10 +605,10 @@ export async function uploadFile(
   if (type === 'avatar' || type === 'photo') {
     // Check if it's an image type that needs conversion/compression
     const isImage = file.type.startsWith('image/') ||
-                    file.type === 'image/heic' ||
-                    file.type === 'image/heif' ||
-                    file.name.toLowerCase().endsWith('.heic') ||
-                    file.name.toLowerCase().endsWith('.heif')
+      file.type === 'image/heic' ||
+      file.type === 'image/heif' ||
+      file.name.toLowerCase().endsWith('.heic') ||
+      file.name.toLowerCase().endsWith('.heif')
 
     if (isImage) {
       try {

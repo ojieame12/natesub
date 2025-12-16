@@ -7,7 +7,7 @@
  */
 
 import { useState } from 'react'
-import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
+import { useParams, useSearchParams, useNavigate, useLocation } from 'react-router-dom'
 import { ArrowLeft, CheckCircle, XCircle, Loader2, DollarSign } from 'lucide-react'
 import { Pressable, useToast, Skeleton, AmbientBackground } from '../components'
 import { usePublicRequest, useAcceptRequest, useDeclineRequest } from '../api/hooks'
@@ -23,7 +23,9 @@ export default function PublicRequestPage() {
   // Only show back button if there's browser history (not a direct link)
   const canGoBack = typeof window !== 'undefined' && window.history.length > 1
 
-  const isSuccess = window.location.pathname.endsWith('/success')
+  // Use useLocation for reliable path checks (HashRouter compatible)
+  const location = useLocation()
+  const isSuccess = location.pathname.endsWith('/success')
   const isCanceled = searchParams.get('canceled') === 'true'
 
   const { data, isLoading, isError } = usePublicRequest(token || '')
@@ -38,19 +40,27 @@ export default function PublicRequestPage() {
   const handleAccept = async () => {
     if (!token) return
 
-    // Validate email
-    if (!email.trim()) {
-      setEmailError('Email is required')
-      return
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setEmailError('Please enter a valid email')
-      return
+    // For targeted requests (known recipient), email is optional (handled by backend)
+    const isTargeted = request?.hasRecipientEmail
+
+    // Only validate email if we're not in targeted mode
+    if (!isTargeted) {
+      if (!email.trim()) {
+        setEmailError('Email is required')
+        return
+      }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        setEmailError('Please enter a valid email')
+        return
+      }
     }
     setEmailError('')
 
     try {
-      const result = await acceptRequest({ token, email })
+      const result = await acceptRequest({
+        token,
+        email: isTargeted ? undefined : email // Send undefined if targeted (backend uses stored email)
+      })
       if (result.checkoutUrl) {
         window.location.href = result.checkoutUrl
       }
@@ -186,9 +196,20 @@ export default function PublicRequestPage() {
   // Note: Backend returns 410 error for expired/accepted/declined requests,
   // which triggers isError case above. No need for status check here.
 
+  /* TARGETED REQUEST LOGIC */
+  // Use the privacy-safe boolean flag
+  const isTargeted = request?.hasRecipientEmail
+  const knownName = request?.recipientName
+
+  // No auto-fill needed anymore since we don't show the input for targeted requests
+  // and we don't need the email in frontend state to submit
+
+
   const currencySymbol = getCurrencySymbol(request.currency || 'USD')
-  // Backend returns amount already in dollars (amountCents / 100 done server-side)
-  const amountDollars = request.amount || 0
+  // Backend now returns raw cents (amount) - convert using utility or simple math
+  // For display purposes, we assume standard 100-cent currencies for now unless currency utils handle it
+  // TODO: Use a proper currency formatter that handles zero-decimal currencies (JPY, etc)
+  const amountDollars = (request.amount || 0) / 100
 
   return (
     <>
@@ -216,8 +237,21 @@ export default function PublicRequestPage() {
                 </span>
               )}
             </div>
-            <h1 className="sub-name">{request.creator?.displayName || 'Someone'}</h1>
-            <p className="sub-username">sent you a request</p>
+
+            {/* TARGETED GREETING */}
+            {knownName ? (
+              <>
+                <h1 className="sub-name">Hi {knownName.split(' ')[0]}!</h1>
+                <p className="sub-username">
+                  <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{request.creator?.displayName}</span> request
+                </p>
+              </>
+            ) : (
+              <>
+                <h1 className="sub-name">{request.creator?.displayName || 'Someone'}</h1>
+                <p className="sub-username">sent you a request</p>
+              </>
+            )}
           </div>
 
           {/* Request Details */}
@@ -276,21 +310,23 @@ export default function PublicRequestPage() {
             )}
           </div>
 
-          {/* Email Input */}
-          <div className="sub-email-section" style={{ marginTop: 24 }}>
-            <label className="sub-email-label">Your email</label>
-            <input
-              type="email"
-              className={`sub-email-input ${emailError ? 'error' : ''}`}
-              placeholder="you@example.com"
-              value={email}
-              onChange={(e) => {
-                setEmail(e.target.value)
-                if (emailError) setEmailError('')
-              }}
-            />
-            {emailError && <span className="sub-email-error">{emailError}</span>}
-          </div>
+          {/* Email Input - ONLY SHOW IF UNKNOWN (Public Mode) */}
+          {!isTargeted && (
+            <div className="sub-email-section" style={{ marginTop: 24 }}>
+              <label className="sub-email-label">Your email</label>
+              <input
+                type="email"
+                className={`sub-email-input ${emailError ? 'error' : ''}`}
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => {
+                  setEmail(e.target.value)
+                  if (emailError) setEmailError('')
+                }}
+              />
+              {emailError && <span className="sub-email-error">{emailError}</span>}
+            </div>
+          )}
 
           {/* Action Buttons */}
           <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 12 }}>

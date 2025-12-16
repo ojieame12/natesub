@@ -163,6 +163,12 @@ model Profile {
   countryCode String
   currency    String @default("USD")
 
+  // Billing Address (for invoices/receipts)
+  address     String?
+  city        String?
+  state       String?
+  zip         String?
+
   // Purpose
   purpose Purpose
 

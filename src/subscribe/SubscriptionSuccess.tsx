@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { CheckCircle, Heart, Loader2 } from 'lucide-react'
 import { Pressable } from '../components'
@@ -23,16 +23,39 @@ export default function SubscriptionSuccess({ profile, provider }: SubscriptionS
     const [status, setStatus] = useState<VerificationStatus>('loading')
     const pollCount = useRef(0)
 
+    const [searchParams] = useSearchParams()
+    const sessionId = searchParams.get('session_id')
+
     // Verify Subscription (Stripe & Paystack)
     useEffect(() => {
         let isMounted = true
         let timer: number | null = null
         pollCount.current = 0
 
+        const verifyStripe = async () => {
+            if (!sessionId) return false
+            try {
+                // Verify with username to ensure session belongs to this creator
+                const data = await api.checkout.verifySession(sessionId, profile.username)
+
+                // Backend now performs the ownership check if username is provided
+                if (data.verified) {
+                    if (isMounted) {
+                        setStatus('verified')
+                        queryClient.invalidateQueries({ queryKey: ['publicProfile', profile.username] })
+                    }
+                    return true
+                }
+            } catch (err) {
+                console.error('Stripe verification failed', err)
+            }
+            return false
+        }
+
         const checkSubscription = async () => {
             try {
                 const data = await api.users.getByUsername(profile.username)
-                
+
                 if (data.viewerSubscription?.isActive) {
                     if (isMounted) {
                         setStatus('verified')
@@ -48,6 +71,29 @@ export default function SubscriptionSuccess({ profile, provider }: SubscriptionS
         }
 
         const poll = async () => {
+            // IF STRIPE SESSION EXISTS: Only use verifySession
+            if (sessionId) {
+                const success = await verifyStripe()
+                if (!success && isMounted) {
+                    // Retry verification? Or fail? Verification endpoint is usually immediate.
+                    // But maybe webhook is slow to mark "paid" internally? 
+                    // VerifySession hits Stripe API directly, so it knows if it's paid.
+                    // If it returns false, it's NOT paid.
+                    // We can retry a few times just in case.
+                    if (pollCount.current < 5) {
+                        pollCount.current++
+                        timer = window.setTimeout(poll, 1500)
+                    } else {
+                        // DO NOT set verified if it failed
+                        console.error('Session verification failed after retries')
+                        // Maybe show error state? For now, we leave it loading or let user navigate away.
+                        // Ideally we show an error message.
+                    }
+                }
+                return
+            }
+
+            // PAYSTACK / LEGACY: Use Polling (with timeout fallback - risky but legacy)
             if (pollCount.current > 5) { // 10 seconds (5 * 2s)
                 // Timeout - Optimistically show success but warn
                 if (isMounted) setStatus('verified')
@@ -68,7 +114,7 @@ export default function SubscriptionSuccess({ profile, provider }: SubscriptionS
             isMounted = false
             if (timer !== null) window.clearTimeout(timer)
         }
-    }, [profile.username, queryClient])
+    }, [profile.username, queryClient, sessionId, profile.userId])
 
     // Loading state
     if (status === 'loading') {

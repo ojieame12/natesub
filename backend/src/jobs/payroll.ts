@@ -132,6 +132,10 @@ export async function generatePayrollPeriods(): Promise<PayrollJobResult> {
                 select: {
                   displayName: true,
                   currency: true,
+                  address: true,
+                  city: true,
+                  state: true,
+                  zip: true,
                 },
               },
             },

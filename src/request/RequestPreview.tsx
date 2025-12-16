@@ -34,6 +34,7 @@ export default function RequestPreview() {
         message,
         voiceNoteUrl,
         voiceNoteDuration,
+        setMessage,
         reset,
     } = useRequestStore()
 
@@ -51,6 +52,7 @@ export default function RequestPreview() {
     const [isSent, setIsSent] = useState(false)
     const [requestLink, setRequestLink] = useState<string | null>(null)
     const [error, setError] = useState<string | null>(null)
+    const [existingRequestId, setExistingRequestId] = useState<string | null>(null) // Prevents duplicates on retry
 
     // Editable contact info
     const [phoneNumber, setPhoneNumber] = useState(recipient?.phone || '')
@@ -126,32 +128,38 @@ export default function RequestPreview() {
         setError(null)
 
         try {
-            // Step 1: Create the request in the backend
-            const { request } = await createRequest({
-                recipientName: recipient.name,
-                recipientEmail: sendMethod === 'email' ? emailAddress : undefined,
-                recipientPhone: sendMethod === 'sms' ? phoneNumber : undefined,
-                relationship: mapRelationshipToBackend(relationship),
-                amountCents: displayAmountToCents(amount, currency),
-                currency,  // Use creator's currency
-                isRecurring,
-                message: message || undefined,
-                voiceUrl: voiceNoteUrl || undefined,
-                dueDate: dueDate || undefined,  // Pass invoice due date if set
-                purpose: purpose || undefined,  // Pass purpose if set
-            })
+            let requestId = existingRequestId
 
-            // Step 2: Send via chosen method
-            const apiMethod = sendMethod === 'sms' ? 'link' : sendMethod // SMS uses link for now
+            // Step 1: Create the request (only if not already created)
+            if (!requestId) {
+                const { request } = await createRequest({
+                    recipientName: recipient.name,
+                    recipientEmail: sendMethod === 'email' ? emailAddress : undefined,
+                    recipientPhone: sendMethod === 'sms' ? phoneNumber : undefined,
+                    relationship: mapRelationshipToBackend(relationship),
+                    amountCents: displayAmountToCents(amount, currency),
+                    currency,  // Use creator's currency
+                    isRecurring,
+                    message: message || undefined,
+                    voiceUrl: voiceNoteUrl || undefined,
+                    dueDate: dueDate || undefined,  // Pass invoice due date if set
+                    purpose: purpose || undefined,  // Pass purpose if set
+                })
+                requestId = request.id
+                setExistingRequestId(request.id) // Save ID so retries don't create duplicates
+            }
+
+            // Step 2: Send via chosen method (idempotent / safe to retry)
+            const apiMethod = sendMethod === 'sms' ? 'link' : sendMethod // SMS uses link mechanism
             const { requestLink: link } = await sendRequest({
-                id: request.id,
+                id: requestId,
                 method: apiMethod as 'email' | 'link',
             })
 
             setRequestLink(link)
 
-            // For link method, copy to clipboard
-            if (sendMethod === 'link' && link) {
+            // Auto-copy for Link OR SMS (since SMS just means "copy to paste in text")
+            if ((sendMethod === 'link' || sendMethod === 'sms') && link) {
                 await navigator.clipboard.writeText(link)
             }
 
@@ -258,9 +266,15 @@ export default function RequestPreview() {
                             )}
                         </div>
 
-                        {/* Message Preview */}
-                        <div className="request-preview-message">
-                            <p>{message}</p>
+                        {/* Message Input */}
+                        <div className="request-preview-message editable">
+                            <textarea
+                                value={message}
+                                onChange={(e) => setMessage(e.target.value)}
+                                placeholder="Add a personal message..."
+                                className="request-message-input"
+                                rows={3}
+                            />
                         </div>
 
                         {/* Voice Note Indicator */}
@@ -283,7 +297,7 @@ export default function RequestPreview() {
                             onClick={() => handleSelectMethod('sms')}
                         >
                             <MessageSquare size={20} />
-                            <span>Text (Copy Link)</span>
+                            <span>Copy link to text</span>
                             {phoneNumber ? (
                                 <span className="request-send-detail">{phoneNumber}</span>
                             ) : (
@@ -393,7 +407,7 @@ export default function RequestPreview() {
                             {sendMethod === 'email' && <Mail size={20} />}
                             {sendMethod === 'link' && <Link2 size={20} />}
                             <span>
-                                {sendMethod === 'link' ? 'Copy Link' : `Send ${sendMethod === 'sms' ? 'SMS' : 'Email'}`}
+                                {sendMethod === 'link' ? 'Copy Link' : `Send ${sendMethod === 'sms' ? '(Copy Link)' : 'Email'}`}
                             </span>
                         </>
                     )}
@@ -424,10 +438,10 @@ export default function RequestPreview() {
                         maxWidth: 360,
                         textAlign: 'center'
                     }}>
-                        <div style={{ 
-                            width: 64, 
-                            height: 64, 
-                            borderRadius: '50%', 
+                        <div style={{
+                            width: 64,
+                            height: 64,
+                            borderRadius: '50%',
                             background: 'var(--bg-root)',
                             display: 'flex',
                             alignItems: 'center',
@@ -440,14 +454,14 @@ export default function RequestPreview() {
                         <p style={{ fontSize: 15, color: 'var(--text-secondary)', marginBottom: 24, lineHeight: 1.5 }}>
                             To receive this {currencySymbol}{amount}, you need to connect a bank account first.
                         </p>
-                        <Pressable 
+                        <Pressable
                             className="btn-primary"
                             style={{ width: '100%', marginBottom: 12 }}
                             onClick={() => navigate('/settings/payments', { state: { returnTo: '/request/preview' } })}
                         >
                             Connect Now
                         </Pressable>
-                        <Pressable 
+                        <Pressable
                             className="btn-text"
                             onClick={() => setShowPayoutWall(false)}
                         >

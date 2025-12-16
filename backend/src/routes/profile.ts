@@ -78,6 +78,11 @@ const profileSchema = z.object({
   paymentProvider: z.enum(['stripe', 'paystack', 'flutterwave']).optional().nullable(),
   template: z.enum(['boundary', 'liquid', 'minimal', 'editorial']).optional(),
   feeMode: z.enum(['absorb', 'pass_to_subscriber']).optional(),
+  // Address fields
+  address: z.string().optional().nullable(),
+  city: z.string().optional().nullable(),
+  state: z.string().optional().nullable(),
+  zip: z.string().optional().nullable(),
 })
 
 // Get own profile
@@ -156,6 +161,10 @@ profile.put(
       template: data.template || 'boundary',
       feeMode: data.feeMode || 'pass_to_subscriber', // Default: subscriber pays fee
       shareUrl: `${env.PUBLIC_PAGE_URL || 'https://natepay.co'}/${data.username.toLowerCase()}`,
+      address: data.address || null,
+      city: data.city || null,
+      state: data.state || null,
+      zip: data.zip || null,
     }
 
     // Upsert profile

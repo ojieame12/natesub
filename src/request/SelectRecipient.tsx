@@ -75,8 +75,8 @@ export default function SelectRecipient() {
         setIsRecurring(isRecurring)
         setPurpose(purpose)
 
-        // Skip relationship, go straight to personalize
-        navigate('/request/personalize')
+        // Skip relationship/details/personalize, go straight to preview
+        navigate('/request/preview')
     }
 
     const handleClose = () => {

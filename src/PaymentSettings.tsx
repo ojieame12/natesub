@@ -107,41 +107,10 @@ export default function PaymentSettings() {
           const startedAtMs = Number.parseInt(sessionStorage.getItem('stripe_onboarding_started_at') || '', 10)
           const isRecentOnboardingReturn = Boolean(onboardingSource) && Number.isFinite(startedAtMs) && (Date.now() - startedAtMs) < 30 * 60 * 1000
 
-          if (isRecentOnboardingReturn && status.connected && status.status === 'active') {
-            // Prevent AuthRedirect bounce while webhooks catch up
-            setPaymentConfirmed()
-
-            // Optimistically update caches (same approach as StripeComplete)
-            queryClient.setQueryData(['currentUser'], (oldData: any) => {
-              if (!oldData) return oldData
-              return {
-                ...oldData,
-                onboarding: {
-                  ...oldData.onboarding,
-                  hasActivePayment: true,
-                },
-              }
-            })
-            queryClient.setQueryData(['profile'], (oldData: any) => {
-              if (!oldData?.profile) return oldData
-              return {
-                ...oldData,
-                profile: {
-                  ...oldData.profile,
-                  payoutStatus: 'active',
-                },
-              }
-            })
-
-            // Clear onboarding flags so we don't redirect again later
-            sessionStorage.removeItem('stripe_onboarding_source')
-            sessionStorage.removeItem('stripe_onboarding_started_at')
-
-            const returnTo = sessionStorage.getItem('stripe_return_to')
-            if (returnTo) sessionStorage.removeItem('stripe_return_to')
-
-            // Navigate away immediately; skip extra balance/payout calls.
-            navigate(returnTo || '/dashboard', { replace: true })
+          if (isRecentOnboardingReturn) {
+            // If we land here, it means the Env var is misconfigured (pointing to Settings instead of Complete).
+            // Forward immediately to StripeComplete to handle verification, polling, and final direction.
+            navigate('/settings/payments/complete', { replace: true })
             return
           }
 
@@ -329,22 +298,22 @@ export default function PaymentSettings() {
 
             <Pressable
               onClick={() => navigate('/onboarding/paystack')}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 8,
-                  width: '100%',
-                  padding: '14px 24px',
-                  background: 'linear-gradient(135deg, #00C3F7, #0AA5C2)',
-                  color: 'white',
-                  borderRadius: 12,
-                  fontWeight: 600,
-                  fontSize: 16,
-                }}
-              >
-                {isInactive ? 'Reconnect Payment Method' : 'Connect Payment Method'}
-              </Pressable>
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+                width: '100%',
+                padding: '14px 24px',
+                background: 'linear-gradient(135deg, #00C3F7, #0AA5C2)',
+                color: 'white',
+                borderRadius: 12,
+                fontWeight: 600,
+                fontSize: 16,
+              }}
+            >
+              {isInactive ? 'Reconnect Payment Method' : 'Connect Payment Method'}
+            </Pressable>
           </section>
 
           <p style={{ fontSize: 13, color: 'var(--text-tertiary)', textAlign: 'center', padding: '0 16px' }}>
@@ -738,7 +707,7 @@ export default function PaymentSettings() {
               try {
                 const result = await api.stripe.getDashboardLink()
                 if (result.url) window.open(result.url, '_blank', 'noopener,noreferrer')
-              } catch {}
+              } catch { }
             }}
           >
             View in Stripe
@@ -818,7 +787,7 @@ export default function PaymentSettings() {
                 try {
                   const result = await api.stripe.getDashboardLink()
                   if (result.url) window.open(result.url, '_blank', 'noopener,noreferrer')
-                } catch {}
+                } catch { }
               }}
               style={{ color: 'var(--primary)', fontWeight: 500, display: 'inline' }}
             >

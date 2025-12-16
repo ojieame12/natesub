@@ -5,7 +5,7 @@ import { db } from '../db/client.js'
 import { redis } from '../db/redis.js'
 import { optionalAuth } from '../middleware/auth.js'
 import { checkoutRateLimit, publicRateLimit } from '../middleware/rateLimit.js'
-import { createCheckoutSession, getAccountStatus } from '../services/stripe.js'
+import { createCheckoutSession, getAccountStatus, stripe } from '../services/stripe.js'
 import { initializePaystackCheckout, generateReference, isPaystackSupported, type PaystackCountry } from '../services/paystack.js'
 import { calculateServiceFee, type FeeCalculation, type FeeMode } from '../services/fees.js'
 import { isStripeCrossBorderSupported } from '../utils/constants.js'
@@ -117,13 +117,18 @@ checkout.post(
       }
     }
 
+    // Check if this is a cross-border account (e.g., Nigeria)
+    // Cross-border accounts don't have chargesEnabled since they only receive payouts
+    const isCrossBorder = isStripeCrossBorderSupported(profile.countryCode)
+
     // Calculate service fee based on creator's fee mode setting
     // feeMode: 'absorb' = creator absorbs, 'pass_to_subscriber' = subscriber pays
     const feeCalc = calculateServiceFee(
       amount,
       profile.currency,
       profile.purpose,
-      profile.feeMode as FeeMode
+      profile.feeMode as FeeMode,
+      isCrossBorder
     )
 
     try {
@@ -250,7 +255,8 @@ checkout.post(
         serviceFee: feeCalc.feeCents,      // Platform fee
         currency: checkoutCurrency,
         interval,
-        successUrl: `${env.APP_URL}/${profile.username}?success=true&provider=stripe`,
+        // IMPORTANT: include session_id in URL to prevent spoofing
+        successUrl: `${env.APP_URL}/${profile.username}?success=true&provider=stripe&session_id={CHECKOUT_SESSION_ID}`,
         cancelUrl: `${env.APP_URL}/${profile.username}?canceled=true`,
         subscriberEmail,
         viewId, // Analytics: page view ID for conversion tracking
@@ -312,6 +318,79 @@ checkout.get(
       return c.json({
         verified: false,
         error: 'Unable to verify transaction',
+      }, 400)
+    }
+  }
+)
+
+// Verify Stripe session (Anti-spoofing)
+// Verify Stripe session (Anti-spoofing)
+checkout.get(
+  '/session/:sessionId/verify',
+  publicRateLimit,
+  async (c) => {
+    const { sessionId } = c.req.param()
+    const creatorUsername = c.req.query('username')
+
+    if (!sessionId || !sessionId.startsWith('cs_')) {
+      return c.json({ error: 'Invalid session ID' }, 400)
+    }
+
+    try {
+      // Retrieve session from Stripe
+      const session = await stripe.checkout.sessions.retrieve(sessionId)
+
+      // Check payment status
+      const isPaid = session.payment_status === 'paid'
+
+      // Verification: Check if session belongs to the expected creator
+      if (creatorUsername) {
+        const profile = await db.profile.findUnique({
+          where: { username: creatorUsername.toLowerCase() },
+          select: { userId: true }
+        })
+
+        if (profile && session.metadata?.creatorId) {
+          if (profile.userId !== session.metadata.creatorId) {
+            // SPOOF DETECTED: Valid stripe session, but for WRONG creator
+            return c.json({
+              verified: false,
+              error: 'Session does not belong to this creator',
+              status: 'mismatch'
+            }, 400)
+          }
+        }
+      }
+
+      // Mask email for privacy (e.g. "j***@gmail.com")
+      const email = session.customer_details?.email
+      let maskedEmail = null
+      if (email) {
+        try {
+          maskedEmail = maskEmail(email)
+        } catch (e) {
+          // Fallback if maskEmail fails
+          const [local, domain] = email.split('@')
+          maskedEmail = `${local.charAt(0)}***@${domain}`
+        }
+      }
+
+      return c.json({
+        verified: isPaid,
+        status: session.payment_status,
+        maskedEmail, // NO RAW EMAILS
+        // We don't strictly need to return creatorId now that we verified it server-side, 
+        // but keeping it doesn't hurt (it's internal ID, not sensitive).
+        creatorId: session.metadata?.creatorId,
+        amountTotal: session.amount_total,
+        currency: session.currency,
+        mode: session.mode,
+      })
+    } catch (error: any) {
+      console.error('Stripe verification error:', error)
+      return c.json({
+        verified: false,
+        error: 'Unable to verify session',
       }, 400)
     }
   }
