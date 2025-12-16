@@ -62,6 +62,7 @@ const allowedOrigins = [
   env.APP_URL,
   env.PUBLIC_PAGE_URL,          // Public subscribe pages (natepay.co)
   'https://natepay.co',         // Production vanity domain
+  'https://www.natepay.co',     // Production www subdomain
   'capacitor://localhost',      // iOS Capacitor
   'http://localhost',           // Android Capacitor
   'http://localhost:5173',      // Local dev
