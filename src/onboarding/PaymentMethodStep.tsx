@@ -10,7 +10,7 @@ import './onboarding.css'
 
 // TEMPORARY: Disable Paystack until live keys are ready
 // Set to true to re-enable Paystack for NG/KE/ZA countries
-const PAYSTACK_ENABLED = false
+const PAYSTACK_ENABLED = true
 
 // Paystack supported country codes (primary for Africa)
 const PAYSTACK_COUNTRY_CODES = ['NG', 'KE', 'ZA']
@@ -307,95 +307,51 @@ export default function PaymentMethodStep() {
                         </div>
                     )}
 
-                    {/* Show Paystack for Nigeria, Kenya, South Africa with aligned currency */}
-                    {canUsePaystack && (
-                        <PaymentMethodCard
-                            name="Paystack"
-                            description="Direct bank deposits in NGN, KES, ZAR"
-                            logo="/paystack-logo.svg"
-                            recommended={recommendedMethod === 'paystack'}
-                            selected={selectedMethod === 'paystack'}
-                            onSelect={() => {
-                                setSelectedMethod('paystack')
-                                setError(null)
-                            }}
-                        />
-                    )}
-
-                    {/* Show warning if in Paystack country but currency misaligned */}
-                    {isPaystackCountry && !isCurrencyAligned && (
-                        <div style={{
-                            padding: '12px 16px',
-                            background: 'rgba(245, 158, 11, 0.1)',
-                            borderRadius: 12,
-                            marginBottom: 16,
-                            fontSize: 14,
-                            color: 'var(--text-secondary)'
-                        }}>
-                            Paystack requires {expectedPaystackCurrency} currency for {country}. Your selected currency is {currency?.toUpperCase()}.
-                        </div>
-                    )}
-
-                    {/* Show Stripe if in supported country */}
-                    {isStripeCountry && (
+                    <div className="payment-methods-grid">
+                        {/* 1. Stripe (Foreign Currencies) */}
                         <PaymentMethodCard
                             name="Stripe"
-                            description="Bank deposits, cards, Apple Pay"
+                            description="Accept USD, GBP, EUR (Global Audience)"
                             logo="/stripe-logo.svg"
-                            recommended={recommendedMethod === 'stripe'}
+                            recommended={!isPaystackCountry} // Recommend Stripe if outside Africa
                             selected={selectedMethod === 'stripe'}
                             onSelect={() => setSelectedMethod('stripe')}
                         />
-                    )}
 
-                    {/* Show warning if user selected Stripe but country isn't supported */}
-                    {!isStripeCountry && selectedMethod === 'stripe' && (
-                        <div style={{
-                            padding: '12px 16px',
-                            background: 'rgba(245, 158, 11, 0.1)',
-                            borderRadius: 12,
-                            marginBottom: 16,
-                            fontSize: 14,
-                            color: 'var(--text-secondary)'
-                        }}>
-                            Stripe is not available in {country || 'your country'}. Please choose another option.
-                        </div>
-                    )}
-
-                    {/* Flutterwave - Coming Soon (only show if not using Paystack) */}
-                    {isFlutterwaveCountry && !canUsePaystack && (
-                        <div className="payment-method-card disabled" style={{ opacity: 0.6, cursor: 'not-allowed' }}>
-                            <div className="payment-method-icon">
-                                <CreditCard size={24} />
+                        {/* 2. Africa Divider (Only show if we are in an African context or user is in Africa) */}
+                        {(isPaystackCountry || isFlutterwaveCountry) && (
+                            <div className="paystack-divider">
+                                <span>Africa</span>
                             </div>
-                            <div className="payment-method-info">
-                                <div className="payment-method-name">
-                                    Flutterwave
-                                    <span className="payment-method-badge" style={{ background: 'var(--neutral-200)', color: 'var(--text-secondary)' }}>Coming Soon</span>
-                                </div>
-                                <div className="payment-method-desc">Bank transfers, mobile money</div>
+                        )}
+
+                        {/* 3. Paystack (Local Currencies) */}
+                        {canUsePaystack && (
+                            <PaymentMethodCard
+                                name="Paystack"
+                                description="Accept NGN, KES, ZAR (Local Audience)"
+                                logo="/paystack-logo.svg"
+                                recommended={isPaystackCountry} // Recommend Paystack if inside Africa
+                                selected={selectedMethod === 'paystack'}
+                                onSelect={() => {
+                                    setSelectedMethod('paystack')
+                                    setError(null)
+                                }}
+                            />
+                        )}
+
+                        {/* Warning: Currency Mismatch for Paystack */}
+                        {isPaystackCountry && !isCurrencyAligned && (
+                            <div className="paystack-warning">
+                                <AlertCircle size={14} />
+                                <span>Paystack requires {expectedPaystackCurrency}. You selected {currency?.toUpperCase()}.</span>
                             </div>
-                        </div>
-                    )}
-
-                    {/* If not in Stripe country and can't use Paystack, show Stripe with warning */}
-                    {!isStripeCountry && !canUsePaystack && (
-                        <PaymentMethodCard
-                            name="Stripe"
-                            description="Bank deposits, cards, Apple Pay"
-                            logo="/stripe-logo.svg"
-                            selected={selectedMethod === 'stripe'}
-                            onSelect={() => {
-                                setSelectedMethod('stripe')
-                                setError(`Stripe may not be available in ${country || 'your country'}. You can try, but setup may fail.`)
-                            }}
-                        />
-                    )}
-
+                        )}
+                    </div>
 
                     {country && (
                         <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 16, textAlign: 'center' }}>
-                            Based on your location: {country}
+                            Detected Location: {country}
                         </p>
                     )}
                 </div>

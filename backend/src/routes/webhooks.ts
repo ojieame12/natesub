@@ -302,7 +302,7 @@ webhooks.post('/stripe', async (c) => {
         processedAt: new Date(),
         processingTimeMs: Date.now() - startTime,
       },
-    }).catch(() => {}) // Don't fail if we can't update the event
+    }).catch(() => { }) // Don't fail if we can't update the event
 
     // Critical events should return 500 so Stripe retries on transient failures
     // Non-critical events return 200 to prevent unnecessary retries
@@ -381,7 +381,7 @@ async function handleCheckoutCompleted(event: Stripe.Event) {
     await db.pageView.update({
       where: { id: viewId },
       data: { startedCheckout: true, completedCheckout: true },
-    }).catch(() => {}) // Ignore if view doesn't exist
+    }).catch(() => { }) // Ignore if view doesn't exist
   }
 
   // If this checkout was triggered by a request, finalize it
@@ -490,135 +490,135 @@ async function handleCheckoutCompleted(event: Stripe.Event) {
   const lockKey = `sub:${subscriber.id}:${creatorId}:${subscriptionInterval}`
   const subscription = await withLock(lockKey, 30000, async () => {
     return await db.$transaction(async (tx) => {
-    // UPSERT subscription to handle resubscribe scenarios
-    // Uniqueness constraint: subscriberId_creatorId_interval
-    // This allows a subscriber to resubscribe after cancellation
-    const newSubscription = await tx.subscription.upsert({
-      where: {
-        subscriberId_creatorId_interval: {
-          subscriberId: subscriber.id,
-          creatorId,
-          interval: subscriptionInterval,
+      // UPSERT subscription to handle resubscribe scenarios
+      // Uniqueness constraint: subscriberId_creatorId_interval
+      // This allows a subscriber to resubscribe after cancellation
+      const newSubscription = await tx.subscription.upsert({
+        where: {
+          subscriberId_creatorId_interval: {
+            subscriberId: subscriber.id,
+            creatorId,
+            interval: subscriptionInterval,
+          },
         },
-      },
-      create: {
-        creatorId,
-        subscriberId: subscriber.id,
-        tierId: tierId || null,
-        tierName,
-        amount: basePrice, // Creator's SET PRICE - fees calculated on this for renewals
-        currency: session.currency?.toUpperCase() || 'USD',
-        interval: subscriptionInterval,
-        // Use 'pending' for async payments until payment confirms
-        status: isAsyncPayment ? 'pending' : 'active',
-        stripeSubscriptionId: session.subscription as string || null,
-        stripeCustomerId: session.customer as string || null,
-        feeModel: feeModel || null,
-        feeMode: feeMode || null,
-        // Store async payment follow-up data for invoice.paid to complete
-        asyncViewId: isAsyncPayment ? (viewId || null) : null,
-        asyncRequestId: isAsyncPayment ? (requestId || null) : null,
-      },
-      update: {
-        // Reactivate subscription with new details
-        // Use 'pending' for async payments until payment confirms
-        status: isAsyncPayment ? 'pending' : 'active',
-        tierId: tierId || null,
-        tierName,
-        amount: basePrice,
-        stripeSubscriptionId: session.subscription as string || null,
-        stripeCustomerId: session.customer as string || null,
-        feeModel: feeModel || null,
-        feeMode: feeMode || null,
-        canceledAt: null, // Clear cancellation
-        cancelAtPeriodEnd: false,
-        // Store async payment follow-up data for invoice.paid to complete
-        asyncViewId: isAsyncPayment ? (viewId || null) : null,
-        asyncRequestId: isAsyncPayment ? (requestId || null) : null,
-      },
-    })
-
-    // For SUBSCRIPTIONS: Don't create payment here - invoice.paid handles it
-    // This prevents double-counting the first payment
-    // For ONE-TIME payments: Create payment record here
-    if (!isSubscriptionMode) {
-      // Get charge ID from payment intent if available
-      let stripeChargeId: string | null = null
-      if (session.payment_intent) {
-        try {
-          const paymentIntent = await stripe.paymentIntents.retrieve(session.payment_intent as string)
-          stripeChargeId = paymentIntent.latest_charge as string || null
-        } catch (err) {
-          console.warn('Could not retrieve payment intent for charge ID:', err)
-        }
-      }
-
-      // Create payment record for one-time payments only
-      await tx.payment.create({
-        data: {
-          subscriptionId: newSubscription.id,
+        create: {
           creatorId,
           subscriberId: subscriber.id,
-          grossCents: grossCents,
-          amountCents: grossCents || session.amount_total || 0,
+          tierId: tierId || null,
+          tierName,
+          amount: basePrice, // Creator's SET PRICE - fees calculated on this for renewals
           currency: session.currency?.toUpperCase() || 'USD',
-          feeCents,
-          netCents,
+          interval: subscriptionInterval,
+          // Use 'pending' for async payments until payment confirms
+          status: isAsyncPayment ? 'pending' : 'active',
+          stripeSubscriptionId: session.subscription as string || null,
+          stripeCustomerId: session.customer as string || null,
           feeModel: feeModel || null,
-          feeEffectiveRate: feeEffectiveRate,
-          feeWasCapped: feeWasCapped,
-          platformDebitRecoveredCents: platformDebitRecovered, // Track debit recovery
-          type: 'one_time',
-          status: 'succeeded',
-          stripeEventId: event.id,
-          stripePaymentIntentId: session.payment_intent as string || null,
-          stripeChargeId,
+          feeMode: feeMode || null,
+          // Store async payment follow-up data for invoice.paid to complete
+          asyncViewId: isAsyncPayment ? (viewId || null) : null,
+          asyncRequestId: isAsyncPayment ? (requestId || null) : null,
+        },
+        update: {
+          // Reactivate subscription with new details
+          // Use 'pending' for async payments until payment confirms
+          status: isAsyncPayment ? 'pending' : 'active',
+          tierId: tierId || null,
+          tierName,
+          amount: basePrice,
+          stripeSubscriptionId: session.subscription as string || null,
+          stripeCustomerId: session.customer as string || null,
+          feeModel: feeModel || null,
+          feeMode: feeMode || null,
+          canceledAt: null, // Clear cancellation
+          cancelAtPeriodEnd: false,
+          // Store async payment follow-up data for invoice.paid to complete
+          asyncViewId: isAsyncPayment ? (viewId || null) : null,
+          asyncRequestId: isAsyncPayment ? (requestId || null) : null,
         },
       })
 
-      // Clear platform debit if recovered from this payment
-      if (platformDebitRecovered > 0) {
-        await tx.profile.update({
-          where: { userId: creatorId },
+      // For SUBSCRIPTIONS: Don't create payment here - invoice.paid handles it
+      // This prevents double-counting the first payment
+      // For ONE-TIME payments: Create payment record here
+      if (!isSubscriptionMode) {
+        // Get charge ID from payment intent if available
+        let stripeChargeId: string | null = null
+        if (session.payment_intent) {
+          try {
+            const paymentIntent = await stripe.paymentIntents.retrieve(session.payment_intent as string)
+            stripeChargeId = paymentIntent.latest_charge as string || null
+          } catch (err) {
+            console.warn('Could not retrieve payment intent for charge ID:', err)
+          }
+        }
+
+        // Create payment record for one-time payments only
+        await tx.payment.create({
           data: {
-            platformDebitCents: { decrement: platformDebitRecovered },
+            subscriptionId: newSubscription.id,
+            creatorId,
+            subscriberId: subscriber.id,
+            grossCents: grossCents,
+            amountCents: grossCents || session.amount_total || 0,
+            currency: session.currency?.toUpperCase() || 'USD',
+            feeCents,
+            netCents,
+            feeModel: feeModel || null,
+            feeEffectiveRate: feeEffectiveRate,
+            feeWasCapped: feeWasCapped,
+            platformDebitRecoveredCents: platformDebitRecovered, // Track debit recovery
+            type: 'one_time',
+            status: 'succeeded',
+            stripeEventId: event.id,
+            stripePaymentIntentId: session.payment_intent as string || null,
+            stripeChargeId,
           },
         })
 
-        // Create activity for audit trail
-        await tx.activity.create({
-          data: {
-            userId: creatorId,
-            type: 'platform_debit_recovered',
-            payload: {
-              amountCents: platformDebitRecovered,
-              source: 'stripe_one_time_payment',
-              paymentIntentId: session.payment_intent as string || null,
+        // Clear platform debit if recovered from this payment
+        if (platformDebitRecovered > 0) {
+          await tx.profile.update({
+            where: { userId: creatorId },
+            data: {
+              platformDebitCents: { decrement: platformDebitRecovered },
             },
-          },
-        })
+          })
 
-        console.log(`[checkout] Recovered $${(platformDebitRecovered / 100).toFixed(2)} platform debit from creator ${creatorId}`)
+          // Create activity for audit trail
+          await tx.activity.create({
+            data: {
+              userId: creatorId,
+              type: 'platform_debit_recovered',
+              payload: {
+                amountCents: platformDebitRecovered,
+                source: 'stripe_one_time_payment',
+                paymentIntentId: session.payment_intent as string || null,
+              },
+            },
+          })
+
+          console.log(`[checkout] Recovered $${(platformDebitRecovered / 100).toFixed(2)} platform debit from creator ${creatorId}`)
+        }
       }
-    }
 
-    // Create activity event
-    await tx.activity.create({
-      data: {
-        userId: creatorId,
-        type: 'subscription_created',
-        payload: {
-          subscriptionId: newSubscription.id,
-          subscriberEmail,
-          subscriberName,
-          tierName,
-          amount: session.amount_total,
-          currency: session.currency,
+      // Create activity event
+      await tx.activity.create({
+        data: {
+          userId: creatorId,
+          type: 'subscription_created',
+          payload: {
+            subscriptionId: newSubscription.id,
+            subscriberEmail,
+            subscriberName,
+            tierName,
+            amount: session.amount_total,
+            currency: session.currency,
+          },
         },
-      },
-    })
+      })
 
-    return newSubscription
+      return newSubscription
     })
   })
 
@@ -736,7 +736,7 @@ async function handleAsyncPaymentSucceeded(event: Stripe.Event) {
     await db.pageView.update({
       where: { id: viewId },
       data: { startedCheckout: true, completedCheckout: true },
-    }).catch(() => {})
+    }).catch(() => { })
   }
 
   // If this checkout was triggered by a request, finalize it
@@ -747,7 +747,7 @@ async function handleAsyncPaymentSucceeded(event: Stripe.Event) {
         status: 'accepted',
         respondedAt: new Date(),
       },
-    }).catch(() => {}) // Ignore if request doesn't exist
+    }).catch(() => { }) // Ignore if request doesn't exist
 
     // Get request details for activity logging
     const request = await db.request.findUnique({ where: { id: requestId } })
@@ -1125,354 +1125,354 @@ export async function handleInvoicePaid(event: Stripe.Event) {
     if (!subscription) return true // Nothing to process
 
     // Get actual fee from Stripe invoice (more reliable than recalculating)
-  const invoiceAny = invoice as any
-  const stripeActualFee = invoiceAny.application_fee_amount || 0
+    const invoiceAny = invoice as any
+    const stripeActualFee = invoiceAny.application_fee_amount || 0
 
-  // Calculate fees - use new model if subscription has it, else legacy
-  let feeCents: number
-  let netCents: number
-  let grossCents: number | null = null
-  let feeModel: string | null = null
-  let feeEffectiveRate: number | null = null
-  let feeWasCapped = false
+    // Calculate fees - use new model if subscription has it, else legacy
+    let feeCents: number
+    let netCents: number
+    let grossCents: number | null = null
+    let feeModel: string | null = null
+    let feeEffectiveRate: number | null = null
+    let feeWasCapped = false
 
-  if (subscription.feeModel) {
-    // New fee model (flat or progressive)
-    // IMPORTANT: Calculate fee on CREATOR'S PRICE (subscription.amount), not invoice total
-    const creatorAmount = subscription.amount
-    const creatorPurpose = subscription.creator?.profile?.purpose
-    const feeCalc = calculateServiceFee(creatorAmount, invoice.currency.toUpperCase(), creatorPurpose)
+    if (subscription.feeModel) {
+      // New fee model (flat or progressive)
+      // IMPORTANT: Calculate fee on CREATOR'S PRICE (subscription.amount), not invoice total
+      const creatorAmount = subscription.amount
+      const creatorPurpose = subscription.creator?.profile?.purpose
+      const feeCalc = calculateServiceFee(creatorAmount, invoice.currency.toUpperCase(), creatorPurpose)
 
-    // Use actual Stripe fee if available, otherwise use calculated
-    // This ensures we store what Stripe actually charged, not what we expected
-    if (stripeActualFee > 0) {
-      feeCents = stripeActualFee
-      // Alert if mismatch - this indicates invoice.created webhook may have raced/failed
-      if (stripeActualFee !== feeCalc.feeCents) {
-        const mismatchPct = Math.abs((stripeActualFee - feeCalc.feeCents) / feeCalc.feeCents * 100)
-        console.error(`[ALERT][invoice.paid] Fee mismatch for sub ${subscription.id}: Stripe=${stripeActualFee}, expected=${feeCalc.feeCents} (${mismatchPct.toFixed(1)}% diff) on creator amount ${creatorAmount}`)
-        // Create activity for monitoring/alerting systems
+      // Use actual Stripe fee if available, otherwise use calculated
+      // This ensures we store what Stripe actually charged, not what we expected
+      if (stripeActualFee > 0) {
+        feeCents = stripeActualFee
+        // Alert if mismatch - this indicates invoice.created webhook may have raced/failed
+        if (stripeActualFee !== feeCalc.feeCents) {
+          const mismatchPct = Math.abs((stripeActualFee - feeCalc.feeCents) / feeCalc.feeCents * 100)
+          console.error(`[ALERT][invoice.paid] Fee mismatch for sub ${subscription.id}: Stripe=${stripeActualFee}, expected=${feeCalc.feeCents} (${mismatchPct.toFixed(1)}% diff) on creator amount ${creatorAmount}`)
+          // Create activity for monitoring/alerting systems
+          await db.activity.create({
+            data: {
+              userId: subscription.creatorId,
+              type: 'fee_mismatch_alert',
+              payload: {
+                subscriptionId: subscription.id,
+                invoiceId: invoice.id,
+                stripeActualFee,
+                expectedFee: feeCalc.feeCents,
+                creatorAmount,
+                mismatchPercent: mismatchPct,
+                currency: invoice.currency,
+                feeModel: feeCalc.feeModel,
+              },
+            },
+          })
+        }
+      } else {
+        // Invoice.created webhook may have failed - use calculated fee
+        feeCents = feeCalc.feeCents
+        console.error(`[ALERT][invoice.paid] No application_fee on invoice ${invoice.id}, using calculated: ${feeCents}. Invoice.created webhook may have failed.`)
+        // Create activity for monitoring - this is a critical issue
         await db.activity.create({
           data: {
             userId: subscription.creatorId,
-            type: 'fee_mismatch_alert',
+            type: 'fee_missing_alert',
             payload: {
               subscriptionId: subscription.id,
               invoiceId: invoice.id,
-              stripeActualFee,
-              expectedFee: feeCalc.feeCents,
+              calculatedFee: feeCents,
               creatorAmount,
-              mismatchPercent: mismatchPct,
               currency: invoice.currency,
               feeModel: feeCalc.feeModel,
+              issue: 'invoice.created webhook may have failed to apply fee',
             },
           },
         })
       }
+
+      grossCents = invoice.amount_paid
+      // CRITICAL: In absorb mode, subscription.amount = gross (what subscriber pays)
+      // Creator receives gross - fee. In pass_to_subscriber mode, subscription.amount = net.
+      if (subscription.feeMode === 'absorb') {
+        netCents = creatorAmount - feeCents // Creator pays the fee from their earnings
+      } else {
+        netCents = creatorAmount // Creator receives their full price (fee added on top)
+      }
+      feeModel = feeCalc.feeModel
+      feeEffectiveRate = feeCalc.effectiveRate
+      // feeWasCapped stays false - flat fee model has no caps
     } else {
-      // Invoice.created webhook may have failed - use calculated fee
-      feeCents = feeCalc.feeCents
-      console.error(`[ALERT][invoice.paid] No application_fee on invoice ${invoice.id}, using calculated: ${feeCents}. Invoice.created webhook may have failed.`)
-      // Create activity for monitoring - this is a critical issue
-      await db.activity.create({
-        data: {
-          userId: subscription.creatorId,
-          type: 'fee_missing_alert',
-          payload: {
-            subscriptionId: subscription.id,
-            invoiceId: invoice.id,
-            calculatedFee: feeCents,
-            creatorAmount,
-            currency: invoice.currency,
-            feeModel: feeCalc.feeModel,
-            issue: 'invoice.created webhook may have failed to apply fee',
+      // Legacy model: fee deducted from creator's earnings
+      const purpose = subscription.creator?.profile?.purpose as 'personal' | 'service' | null
+      const legacyFees = calculateLegacyFee(invoice.amount_paid, purpose)
+      feeCents = legacyFees.feeCents
+      netCents = legacyFees.netCents
+    }
+
+    // Update subscription period, LTV, and activate if pending/past_due
+    // IMPORTANT: LTV tracks creator's earnings (netCents), not gross amount paid
+    const needsActivation = subscription.status === 'past_due' || subscription.status === 'pending'
+    await db.subscription.update({
+      where: { id: subscription.id },
+      data: {
+        // ACTIVATION: If subscription was pending (async payment) or past_due, payment success means it's active
+        // This provides activation for async payments and recovery from past_due
+        status: needsActivation ? 'active' : undefined,
+        currentPeriodEnd: invoice.lines.data[0]?.period?.end
+          ? new Date(invoice.lines.data[0].period.end * 1000)
+          : null,
+        ltvCents: { increment: netCents }, // Creator's earnings, not gross
+      },
+    })
+
+    if (needsActivation) {
+      console.log(`[invoice.paid] Activated subscription ${subscription.id} from ${subscription.status} to active`)
+    }
+
+    // Create payment record with charge ID
+    // Use invoice paid_at timestamp for accurate period-based reporting
+    const paidAt = invoiceAny.status_transitions?.paid_at
+      ? new Date(invoiceAny.status_transitions.paid_at * 1000)
+      : new Date()
+
+    await db.payment.create({
+      data: {
+        subscriptionId: subscription.id,
+        creatorId: subscription.creatorId,
+        subscriberId: subscription.subscriberId,
+        grossCents,
+        amountCents: invoice.amount_paid,
+        currency: invoice.currency.toUpperCase(),
+        feeCents,
+        netCents,
+        feeModel,
+        feeEffectiveRate,
+        feeWasCapped,
+        type: 'recurring',
+        status: 'succeeded',
+        occurredAt: paidAt,
+        stripeEventId: event.id,
+        stripePaymentIntentId: invoiceAny.payment_intent as string || null,
+        stripeChargeId: invoiceAny.charge as string || null,
+      },
+    })
+
+    // ASYNC PAYMENT FOLLOW-UP: Complete conversion tracking and request acceptance
+    // These were deferred in checkout.session.completed when payment_status !== 'paid'
+    if (subscription.asyncViewId || subscription.asyncRequestId) {
+      console.log(`[invoice.paid] Processing async payment follow-up for subscription ${subscription.id}`)
+
+      // Complete conversion tracking
+      if (subscription.asyncViewId) {
+        await db.pageView.update({
+          where: { id: subscription.asyncViewId },
+          data: { startedCheckout: true, completedCheckout: true },
+        }).catch(() => { }) // Ignore if view doesn't exist
+
+        console.log(`[invoice.paid] Marked pageView ${subscription.asyncViewId} as converted`)
+      }
+
+      // Accept the request
+      if (subscription.asyncRequestId) {
+        await db.request.update({
+          where: { id: subscription.asyncRequestId },
+          data: {
+            status: 'accepted',
+            respondedAt: new Date(),
           },
+        }).catch(() => { }) // Ignore if request doesn't exist
+
+        // Get request details for activity logging
+        const request = await db.request.findUnique({ where: { id: subscription.asyncRequestId } })
+        if (request) {
+          await db.activity.create({
+            data: {
+              userId: subscription.creatorId,
+              type: 'request_accepted',
+              payload: {
+                requestId: request.id,
+                recipientName: request.recipientName,
+                amount: request.amountCents,
+              },
+            },
+          })
+        }
+
+        console.log(`[invoice.paid] Marked request ${subscription.asyncRequestId} as accepted`)
+      }
+
+      // Clear async follow-up data (one-time action)
+      await db.subscription.update({
+        where: { id: subscription.id },
+        data: {
+          asyncViewId: null,
+          asyncRequestId: null,
         },
       })
     }
 
-    grossCents = invoice.amount_paid
-    // CRITICAL: In absorb mode, subscription.amount = gross (what subscriber pays)
-    // Creator receives gross - fee. In pass_to_subscriber mode, subscription.amount = net.
-    if (subscription.feeMode === 'absorb') {
-      netCents = creatorAmount - feeCents // Creator pays the fee from their earnings
-    } else {
-      netCents = creatorAmount // Creator receives their full price (fee added on top)
-    }
-    feeModel = feeCalc.feeModel
-    feeEffectiveRate = feeCalc.effectiveRate
-    // feeWasCapped stays false - flat fee model has no caps
-  } else {
-    // Legacy model: fee deducted from creator's earnings
-    const purpose = subscription.creator?.profile?.purpose as 'personal' | 'service' | null
-    const legacyFees = calculateLegacyFee(invoice.amount_paid, purpose)
-    feeCents = legacyFees.feeCents
-    netCents = legacyFees.netCents
-  }
-
-  // Update subscription period, LTV, and activate if pending/past_due
-  // IMPORTANT: LTV tracks creator's earnings (netCents), not gross amount paid
-  const needsActivation = subscription.status === 'past_due' || subscription.status === 'pending'
-  await db.subscription.update({
-    where: { id: subscription.id },
-    data: {
-      // ACTIVATION: If subscription was pending (async payment) or past_due, payment success means it's active
-      // This provides activation for async payments and recovery from past_due
-      status: needsActivation ? 'active' : undefined,
-      currentPeriodEnd: invoice.lines.data[0]?.period?.end
-        ? new Date(invoice.lines.data[0].period.end * 1000)
-        : null,
-      ltvCents: { increment: netCents }, // Creator's earnings, not gross
-    },
-  })
-
-  if (needsActivation) {
-    console.log(`[invoice.paid] Activated subscription ${subscription.id} from ${subscription.status} to active`)
-  }
-
-  // Create payment record with charge ID
-  // Use invoice paid_at timestamp for accurate period-based reporting
-  const paidAt = invoiceAny.status_transitions?.paid_at
-    ? new Date(invoiceAny.status_transitions.paid_at * 1000)
-    : new Date()
-
-  await db.payment.create({
-    data: {
-      subscriptionId: subscription.id,
-      creatorId: subscription.creatorId,
-      subscriberId: subscription.subscriberId,
-      grossCents,
-      amountCents: invoice.amount_paid,
-      currency: invoice.currency.toUpperCase(),
-      feeCents,
-      netCents,
-      feeModel,
-      feeEffectiveRate,
-      feeWasCapped,
-      type: 'recurring',
-      status: 'succeeded',
-      occurredAt: paidAt,
-      stripeEventId: event.id,
-      stripePaymentIntentId: invoiceAny.payment_intent as string || null,
-      stripeChargeId: invoiceAny.charge as string || null,
-    },
-  })
-
-  // ASYNC PAYMENT FOLLOW-UP: Complete conversion tracking and request acceptance
-  // These were deferred in checkout.session.completed when payment_status !== 'paid'
-  if (subscription.asyncViewId || subscription.asyncRequestId) {
-    console.log(`[invoice.paid] Processing async payment follow-up for subscription ${subscription.id}`)
-
-    // Complete conversion tracking
-    if (subscription.asyncViewId) {
-      await db.pageView.update({
-        where: { id: subscription.asyncViewId },
-        data: { startedCheckout: true, completedCheckout: true },
-      }).catch(() => {}) // Ignore if view doesn't exist
-
-      console.log(`[invoice.paid] Marked pageView ${subscription.asyncViewId} as converted`)
-    }
-
-    // Accept the request
-    if (subscription.asyncRequestId) {
-      await db.request.update({
-        where: { id: subscription.asyncRequestId },
-        data: {
-          status: 'accepted',
-          respondedAt: new Date(),
-        },
-      }).catch(() => {}) // Ignore if request doesn't exist
-
-      // Get request details for activity logging
-      const request = await db.request.findUnique({ where: { id: subscription.asyncRequestId } })
-      if (request) {
-        await db.activity.create({
-          data: {
-            userId: subscription.creatorId,
-            type: 'request_accepted',
-            payload: {
-              requestId: request.id,
-              recipientName: request.recipientName,
-              amount: request.amountCents,
-            },
-          },
-        })
-      }
-
-      console.log(`[invoice.paid] Marked request ${subscription.asyncRequestId} as accepted`)
-    }
-
-    // Clear async follow-up data (one-time action)
-    await db.subscription.update({
-      where: { id: subscription.id },
+    // Create activity event
+    await db.activity.create({
       data: {
-        asyncViewId: null,
-        asyncRequestId: null,
-      },
-    })
-  }
-
-  // Create activity event
-  await db.activity.create({
-    data: {
-      userId: subscription.creatorId,
-      type: 'payment_received',
-      payload: {
-        subscriptionId: subscription.id,
-        amount: invoice.amount_paid,
-        currency: invoice.currency,
-      },
-    },
-  })
-
-  // PLATFORM DEBIT RECOVERY for subscription renewals
-  // When a service provider's platform subscription fails, we accumulate debit
-  // and recover it from their next client payment via a separate charge
-  // Use lock to prevent concurrent recovery attempts
-  const recoveryLockKey = `debit-recovery:${subscription.creatorId}`
-
-  await withLock(recoveryLockKey, 15000, async () => {
-    // Re-read profile inside lock to get current debit amount
-    const creatorProfile = await db.profile.findUnique({
-      where: { userId: subscription.creatorId },
-      select: {
-        displayName: true,
-        platformDebitCents: true,
-        platformCustomerId: true,
-        purpose: true,
+        userId: subscription.creatorId,
+        type: 'payment_received',
+        payload: {
+          subscriptionId: subscription.id,
+          amount: invoice.amount_paid,
+          currency: invoice.currency,
+        },
       },
     })
 
-    if (!creatorProfile?.purpose ||
+    // PLATFORM DEBIT RECOVERY for subscription renewals
+    // When a service provider's platform subscription fails, we accumulate debit
+    // and recover it from their next client payment via a separate charge
+    // Use lock to prevent concurrent recovery attempts
+    const recoveryLockKey = `debit-recovery:${subscription.creatorId}`
+
+    await withLock(recoveryLockKey, 15000, async () => {
+      // Re-read profile inside lock to get current debit amount
+      const creatorProfile = await db.profile.findUnique({
+        where: { userId: subscription.creatorId },
+        select: {
+          displayName: true,
+          platformDebitCents: true,
+          platformCustomerId: true,
+          purpose: true,
+        },
+      })
+
+      if (!creatorProfile?.purpose ||
         creatorProfile.purpose !== 'service' ||
         !creatorProfile.platformDebitCents ||
         creatorProfile.platformDebitCents <= 0 ||
         !creatorProfile.platformCustomerId) {
-      return // No debit to recover
-    }
+        return // No debit to recover
+      }
 
-    // Recover up to $30 per payment (cap to prevent large unexpected charges)
-    const debitToRecover = Math.min(creatorProfile.platformDebitCents, 3000)
+      // Recover up to $30 per payment (cap to prevent large unexpected charges)
+      const debitToRecover = Math.min(creatorProfile.platformDebitCents, 3000)
 
-    try {
-      // Get the default payment method from the platform customer
-      const customer = await stripe.customers.retrieve(creatorProfile.platformCustomerId)
-      const defaultPaymentMethod = typeof customer !== 'string' && !customer.deleted
-        ? customer.invoice_settings?.default_payment_method
-        : null
+      try {
+        // Get the default payment method from the platform customer
+        const customer = await stripe.customers.retrieve(creatorProfile.platformCustomerId)
+        const defaultPaymentMethod = typeof customer !== 'string' && !customer.deleted
+          ? customer.invoice_settings?.default_payment_method
+          : null
 
-      if (defaultPaymentMethod) {
-        // Create a separate charge to recover the platform debit
-        const paymentIntent = await stripe.paymentIntents.create({
-          amount: debitToRecover,
-          currency: 'usd',
-          customer: creatorProfile.platformCustomerId,
-          payment_method: defaultPaymentMethod as string,
-          confirm: true,
-          off_session: true,
-          description: 'Platform subscription recovery',
-          metadata: {
-            type: 'platform_debit_recovery',
-            userId: subscription.creatorId,
-            originalDebitCents: creatorProfile.platformDebitCents.toString(),
-          },
-        })
-
-        if (paymentIntent.status === 'succeeded') {
-          // Clear the recovered debit
-          await db.profile.update({
-            where: { userId: subscription.creatorId },
-            data: {
-              platformDebitCents: { decrement: debitToRecover },
+        if (defaultPaymentMethod) {
+          // Create a separate charge to recover the platform debit
+          const paymentIntent = await stripe.paymentIntents.create({
+            amount: debitToRecover,
+            currency: 'usd',
+            customer: creatorProfile.platformCustomerId,
+            payment_method: defaultPaymentMethod as string,
+            confirm: true,
+            off_session: true,
+            description: 'Platform subscription recovery',
+            metadata: {
+              type: 'platform_debit_recovery',
+              userId: subscription.creatorId,
+              originalDebitCents: creatorProfile.platformDebitCents.toString(),
             },
           })
 
-          // Create activity for audit trail
+          if (paymentIntent.status === 'succeeded') {
+            // Clear the recovered debit
+            await db.profile.update({
+              where: { userId: subscription.creatorId },
+              data: {
+                platformDebitCents: { decrement: debitToRecover },
+              },
+            })
+
+            // Create activity for audit trail
+            await db.activity.create({
+              data: {
+                userId: subscription.creatorId,
+                type: 'platform_debit_recovered',
+                payload: {
+                  amountCents: debitToRecover,
+                  source: 'stripe_subscription_renewal',
+                  paymentIntentId: paymentIntent.id,
+                  invoiceId: invoice.id,
+                },
+              },
+            })
+
+            // Send recovery notification email
+            const creatorUser = await db.user.findUnique({
+              where: { id: subscription.creatorId },
+              select: { email: true },
+            })
+            if (creatorUser) {
+              const remainingDebit = creatorProfile.platformDebitCents - debitToRecover
+              try {
+                await sendPlatformDebitRecoveredNotification(
+                  creatorUser.email,
+                  creatorProfile.displayName || 'there',
+                  debitToRecover,
+                  Math.max(0, remainingDebit)
+                )
+              } catch (emailErr) {
+                console.error(`[invoice.paid] Failed to send debit recovery email:`, emailErr)
+              }
+            }
+
+            console.log(`[invoice.paid] Recovered $${(debitToRecover / 100).toFixed(2)} platform debit from creator ${subscription.creatorId}`)
+          }
+        } else {
+          console.log(`[invoice.paid] No payment method for debit recovery, debit remains: $${(creatorProfile.platformDebitCents / 100).toFixed(2)}`)
+        }
+      } catch (recoveryErr: any) {
+        // Recovery failed - debit stays, will try again on next payment
+        // Don't fail the webhook - the main payment succeeded
+
+        // Handle SCA authentication required
+        if (recoveryErr.code === 'authentication_required' ||
+          recoveryErr.type === 'StripeCardError' && recoveryErr.code === 'card_declined') {
+          console.log(`[invoice.paid] SCA/authentication required for debit recovery from ${subscription.creatorId}, will retry later`)
+          // Create activity noting SCA requirement
           await db.activity.create({
             data: {
               userId: subscription.creatorId,
-              type: 'platform_debit_recovered',
+              type: 'platform_debit_recovery_sca_required',
               payload: {
                 amountCents: debitToRecover,
                 source: 'stripe_subscription_renewal',
-                paymentIntentId: paymentIntent.id,
                 invoiceId: invoice.id,
+                errorCode: recoveryErr.code,
               },
             },
           })
-
-          // Send recovery notification email
-          const creatorUser = await db.user.findUnique({
-            where: { id: subscription.creatorId },
-            select: { email: true },
-          })
-          if (creatorUser) {
-            const remainingDebit = creatorProfile.platformDebitCents - debitToRecover
-            try {
-              await sendPlatformDebitRecoveredNotification(
-                creatorUser.email,
-                creatorProfile.displayName || 'there',
-                debitToRecover,
-                Math.max(0, remainingDebit)
-              )
-            } catch (emailErr) {
-              console.error(`[invoice.paid] Failed to send debit recovery email:`, emailErr)
-            }
-          }
-
-          console.log(`[invoice.paid] Recovered $${(debitToRecover / 100).toFixed(2)} platform debit from creator ${subscription.creatorId}`)
+          return
         }
-      } else {
-        console.log(`[invoice.paid] No payment method for debit recovery, debit remains: $${(creatorProfile.platformDebitCents / 100).toFixed(2)}`)
-      }
-    } catch (recoveryErr: any) {
-      // Recovery failed - debit stays, will try again on next payment
-      // Don't fail the webhook - the main payment succeeded
 
-      // Handle SCA authentication required
-      if (recoveryErr.code === 'authentication_required' ||
-          recoveryErr.type === 'StripeCardError' && recoveryErr.code === 'card_declined') {
-        console.log(`[invoice.paid] SCA/authentication required for debit recovery from ${subscription.creatorId}, will retry later`)
-        // Create activity noting SCA requirement
+        console.error(`[invoice.paid] Platform debit recovery failed for ${subscription.creatorId}:`, recoveryErr.message)
+
+        // Create activity for visibility
         await db.activity.create({
           data: {
             userId: subscription.creatorId,
-            type: 'platform_debit_recovery_sca_required',
+            type: 'platform_debit_recovery_failed',
             payload: {
-              amountCents: debitToRecover,
-              source: 'stripe_subscription_renewal',
+              attemptedAmountCents: debitToRecover,
+              remainingDebitCents: creatorProfile.platformDebitCents,
+              error: recoveryErr.message,
               invoiceId: invoice.id,
-              errorCode: recoveryErr.code,
             },
           },
         })
-        return
       }
+    })
 
-      console.error(`[invoice.paid] Platform debit recovery failed for ${subscription.creatorId}:`, recoveryErr.message)
+    return true
+  }) // End of withLock
 
-      // Create activity for visibility
-      await db.activity.create({
-        data: {
-          userId: subscription.creatorId,
-          type: 'platform_debit_recovery_failed',
-          payload: {
-            attemptedAmountCents: debitToRecover,
-            remainingDebitCents: creatorProfile.platformDebitCents,
-            error: recoveryErr.message,
-            invoiceId: invoice.id,
-          },
-        },
-      })
-    }
-  })
-
-  return true
-}) // End of withLock
-
-if (!processed) {
-  console.log(`[invoice.paid] Could not acquire lock for invoice ${invoice.id}, will retry`)
-}
+  if (!processed) {
+    console.log(`[invoice.paid] Could not acquire lock for invoice ${invoice.id}, will retry`)
+  }
 }
 
 // Handle invoice.payment_failed
@@ -1515,8 +1515,8 @@ async function handleSubscriptionUpdated(event: Stripe.Event) {
     where: { id: subscription.id },
     data: {
       status: stripeSubscription.status === 'active' ? 'active' :
-              stripeSubscription.status === 'canceled' ? 'canceled' :
-              stripeSubscription.status === 'past_due' ? 'past_due' : 'paused',
+        stripeSubscription.status === 'canceled' ? 'canceled' :
+          stripeSubscription.status === 'past_due' ? 'past_due' : 'paused',
       cancelAtPeriodEnd: stripeSubscription.cancel_at_period_end,
       currentPeriodEnd: currentPeriodEnd ? new Date(currentPeriodEnd * 1000) : null,
     },
@@ -2081,8 +2081,15 @@ webhooks.post('/paystack', async (c) => {
   }
 
   // Legacy idempotency check for payment events
-  const existingPayment = await db.payment.findUnique({
-    where: { paystackEventId: eventId },
+  // Idempotency check: Check both Event ID (webhook) and Transaction Ref (billing job)
+  // This prevents double-processing if the billing job created the record first using the reference
+  const existingPayment = await db.payment.findFirst({
+    where: {
+      OR: [
+        { paystackEventId: eventId },
+        { paystackTransactionRef: data.reference },
+      ],
+    },
   })
 
   if (existingPayment) {
@@ -2164,7 +2171,7 @@ webhooks.post('/paystack', async (c) => {
         processedAt: new Date(),
         processingTimeMs: Date.now() - startTime,
       },
-    }).catch(() => {})
+    }).catch(() => { })
 
     // Critical events should return 500 so Paystack retries on transient failures
     // All payout and refund state transitions are critical - if we fail to record them, state drifts
@@ -2242,7 +2249,7 @@ async function handlePaystackChargeSuccess(data: any, eventId: string) {
     await db.pageView.update({
       where: { id: viewId },
       data: { startedCheckout: true, completedCheckout: true },
-    }).catch(() => {}) // Ignore if view doesn't exist
+    }).catch(() => { }) // Ignore if view doesn't exist
   }
 
   // If this checkout was triggered by a request, finalize it
@@ -2342,86 +2349,86 @@ async function handlePaystackChargeSuccess(data: any, eventId: string) {
   const subscription = await withLock(lockKey, 30000, async () => {
     // Use transaction to ensure atomic creation of subscription + payment + activity
     return await db.$transaction(async (tx) => {
-    // IMPORTANT: Store creator's SET PRICE for fee calculation on renewals
-    // This ensures recurring billing calculates fees correctly regardless of feeMode
-    const newSubscription = await tx.subscription.upsert({
-      where: {
-        subscriberId_creatorId_interval: {
-          subscriberId: subscriber.id,
+      // IMPORTANT: Store creator's SET PRICE for fee calculation on renewals
+      // This ensures recurring billing calculates fees correctly regardless of feeMode
+      const newSubscription = await tx.subscription.upsert({
+        where: {
+          subscriberId_creatorId_interval: {
+            subscriberId: subscriber.id,
+            creatorId,
+            interval: subscriptionInterval,
+          },
+        },
+        create: {
           creatorId,
-          interval: subscriptionInterval,
-        },
-      },
-      create: {
-        creatorId,
-        subscriberId: subscriber.id,
-        tierId: tierId || null,
-        tierName,
-        amount: basePrice, // Creator's SET PRICE - fees calculated on this for renewals
-        currency: currency?.toUpperCase() || 'NGN',
-        interval: subscriptionInterval,
-        status: 'active',
-        ltvCents: netCents, // Initialize LTV with creator's earnings (net)
-        // SECURITY: Encrypt authorization code at rest
-        paystackAuthorizationCode: encryptAuthorizationCode(authorization?.authorization_code || null),
-        paystackCustomerCode: customer?.customer_code || null,
-        feeModel: feeModel || null,
-        feeMode: feeMode || null, // Lock fee mode at subscription creation for consistent renewals
-        currentPeriodEnd: interval === 'month'
-          ? addOneMonth(new Date()) // Proper calendar month, not 30 days
-          : null,
-      },
-      update: {
-        // Note: feeMode is NOT updated - it stays locked to the value at subscription creation
-        // SECURITY: Encrypt authorization code at rest
-        paystackAuthorizationCode: encryptAuthorizationCode(authorization?.authorization_code || null),
-        paystackCustomerCode: customer?.customer_code || null,
-        ltvCents: { increment: netCents }, // LTV is creator's earnings (net)
-        currentPeriodEnd: interval === 'month'
-          ? addOneMonth(new Date()) // Proper calendar month, not 30 days
-          : undefined,
-      },
-    })
-
-    // Create payment record with idempotency key
-    await tx.payment.create({
-      data: {
-        subscriptionId: newSubscription.id,
-        creatorId,
-        subscriberId: subscriber.id,
-        grossCents,
-        amountCents: grossCents || amount,
-        currency: currency?.toUpperCase() || 'NGN',
-        feeCents,
-        netCents,
-        feeModel: feeModel || null,
-        feeEffectiveRate,
-        feeWasCapped,
-        type: subscriptionInterval === 'month' ? 'recurring' : 'one_time',
-        status: 'succeeded',
-        occurredAt,
-        paystackEventId: eventId,
-        paystackTransactionRef: reference,
-      },
-    })
-
-    // Create activity event
-    await tx.activity.create({
-      data: {
-        userId: creatorId,
-        type: 'subscription_created',
-        payload: {
-          subscriptionId: newSubscription.id,
-          subscriberEmail: customer?.email,
+          subscriberId: subscriber.id,
+          tierId: tierId || null,
           tierName,
-          amount: netCents, // Show creator their earnings
-          currency,
-          provider: 'paystack',
+          amount: basePrice, // Creator's SET PRICE - fees calculated on this for renewals
+          currency: currency?.toUpperCase() || 'NGN',
+          interval: subscriptionInterval,
+          status: 'active',
+          ltvCents: netCents, // Initialize LTV with creator's earnings (net)
+          // SECURITY: Encrypt authorization code at rest
+          paystackAuthorizationCode: encryptAuthorizationCode(authorization?.authorization_code || null),
+          paystackCustomerCode: customer?.customer_code || null,
+          feeModel: feeModel || null,
+          feeMode: feeMode || null, // Lock fee mode at subscription creation for consistent renewals
+          currentPeriodEnd: interval === 'month'
+            ? addOneMonth(new Date()) // Proper calendar month, not 30 days
+            : null,
         },
-      },
-    })
+        update: {
+          // Note: feeMode is NOT updated - it stays locked to the value at subscription creation
+          // SECURITY: Encrypt authorization code at rest
+          paystackAuthorizationCode: encryptAuthorizationCode(authorization?.authorization_code || null),
+          paystackCustomerCode: customer?.customer_code || null,
+          ltvCents: { increment: netCents }, // LTV is creator's earnings (net)
+          currentPeriodEnd: interval === 'month'
+            ? addOneMonth(new Date()) // Proper calendar month, not 30 days
+            : undefined,
+        },
+      })
 
-    return newSubscription
+      // Create payment record with idempotency key
+      await tx.payment.create({
+        data: {
+          subscriptionId: newSubscription.id,
+          creatorId,
+          subscriberId: subscriber.id,
+          grossCents,
+          amountCents: grossCents || amount,
+          currency: currency?.toUpperCase() || 'NGN',
+          feeCents,
+          netCents,
+          feeModel: feeModel || null,
+          feeEffectiveRate,
+          feeWasCapped,
+          type: subscriptionInterval === 'month' ? 'recurring' : 'one_time',
+          status: 'succeeded',
+          occurredAt,
+          paystackEventId: eventId,
+          paystackTransactionRef: reference,
+        },
+      })
+
+      // Create activity event
+      await tx.activity.create({
+        data: {
+          userId: creatorId,
+          type: 'subscription_created',
+          payload: {
+            subscriptionId: newSubscription.id,
+            subscriberEmail: customer?.email,
+            tierName,
+            amount: netCents, // Show creator their earnings
+            currency,
+            provider: 'paystack',
+          },
+        },
+      })
+
+      return newSubscription
     })
   })
 

@@ -2710,4 +2710,40 @@ button.btn .spinning {
     text-align: center;
     margin-top: var(--space-lg);
     line-height: 1.5;
+}/* === PAYSTACK STYLES === */
+.payment-methods-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.paystack-divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 8px 0;
+    color: var(--text-tertiary);
+    font-size: 13px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.paystack-divider::before,
+.paystack-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border-subtle);
+}
+
+.paystack-warning {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    background: rgba(245, 158, 11, 0.1);
+    color: var(--text-secondary);
+    font-size: 13px;
+    border-radius: 12px;
 }

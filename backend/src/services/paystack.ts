@@ -354,6 +354,7 @@ export async function initializePaystackCheckout(params: {
       callback_url: params.callbackUrl,
       metadata: params.metadata,
       reference: params.reference,
+      channels: ['card'], // Enforce card only for recurring tokens
     }),
   })
 
@@ -384,6 +385,7 @@ export async function initializeTransaction(params: {
       callback_url: params.callbackUrl,
       metadata: params.metadata,
       reference: params.reference,
+      channels: ['card'], // Enforce card only
     }),
   })
 
@@ -462,8 +464,8 @@ function getRecipientType(currency: string, bankCode?: string, accountNumber?: s
       // Bank accounts typically have 10+ digits
       // M-PESA bank code is typically 'MPESA' or similar
       if (bankCode?.toLowerCase().includes('mpesa') ||
-          bankCode?.toLowerCase().includes('safaricom') ||
-          (accountNumber && /^0?7\d{8}$/.test(accountNumber))) {
+        bankCode?.toLowerCase().includes('safaricom') ||
+        (accountNumber && /^0?7\d{8}$/.test(accountNumber))) {
         return 'mobile_money'
       }
       // For bank accounts in Kenya, use 'authorization' type
