@@ -66,27 +66,8 @@ export default function Templates() {
     if (!profile) return
 
     try {
-      // IMPORTANT: Only send template field, not the whole profile
-      // Spreading ...profile would re-submit cents as dollars → corruption
-      await updateProfile({
-        username: profile.username,
-        displayName: profile.displayName,
-        bio: profile.bio,
-        avatarUrl: profile.avatarUrl,
-        voiceIntroUrl: profile.voiceIntroUrl,
-        country: profile.country,
-        countryCode: profile.countryCode,
-        currency: profile.currency,
-        purpose: profile.purpose,
-        pricingModel: profile.pricingModel,
-        // Convert cents back to dollars for the API (it expects dollars)
-        singleAmount: profile.singleAmount ? profile.singleAmount / 100 : null,
-        tiers: profile.tiers?.map(t => ({ ...t, amount: t.amount / 100 })) || null,
-        perks: profile.perks,
-        impactItems: profile.impactItems,
-        feeMode: profile.feeMode,
-        template: selectedTemplate,
-      })
+      // Only send template field - minimal update to avoid validation issues
+      await updateProfile({ template: selectedTemplate })
       toast.success('Template applied')
       navigate(-1)
     } catch (err: any) {
