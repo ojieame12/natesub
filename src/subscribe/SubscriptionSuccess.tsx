@@ -114,7 +114,7 @@ export default function SubscriptionSuccess({ profile, provider }: SubscriptionS
             isMounted = false
             if (timer !== null) window.clearTimeout(timer)
         }
-    }, [profile.username, queryClient, sessionId, profile.userId])
+    }, [profile.username, queryClient, sessionId, profile.id])
 
     // Loading state
     if (status === 'loading') {

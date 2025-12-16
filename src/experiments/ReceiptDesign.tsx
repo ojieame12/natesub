@@ -62,7 +62,7 @@ function SlideToPay({ onComplete, disabled }: { onComplete: () => void, disabled
     // Event Wrappers
     const onMouseDown = (e: React.MouseEvent) => handleStart(e.clientX)
     const onMouseMove = (e: React.MouseEvent) => handleMove(e.clientX)
-    const onMouseUp = () => handleEnd()
+    // const onMouseUp = () => handleEnd() // Unused - global listener handles this
     const onTouchStart = (e: React.TouchEvent) => handleStart(e.touches[0].clientX)
     const onTouchMove = (e: React.TouchEvent) => handleMove(e.touches[0].clientX)
     const onTouchEnd = () => handleEnd()
