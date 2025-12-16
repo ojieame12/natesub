@@ -28,10 +28,10 @@ import {
 
   Heart,
 } from 'lucide-react'
-import { Pressable, useToast, Skeleton, SkeletonList, ErrorState, AnimatedCurrency, AnimatedNumber } from './components'
+import { Pressable, useToast, Skeleton, SkeletonList, ErrorState, AnimatedNumber } from './components'
 import { useViewTransition } from './hooks'
 import { useCurrentUser, useMetrics, useActivity, useProfile, useAnalyticsStats } from './api/hooks'
-import { getCurrencySymbol, formatCompactNumber } from './utils/currency'
+import { centsToDisplayAmount, getCurrencySymbol, formatCompactNumber, formatSmartAmount } from './utils/currency'
 import './Dashboard.css'
 
 // Menu items are built dynamically based on service vs personal branch
@@ -131,7 +131,7 @@ export default function Dashboard() {
   const metrics = metricsData?.metrics
   const activities = activityData?.pages?.[0]?.activities || []
   const analytics = analyticsData
-  const currencySymbol = getCurrencySymbol(profile?.currency || 'USD')
+  const currencyCode = (profile?.currency || currentUser?.profile?.currency || 'USD').toUpperCase()
   // Avoid "Clients ↔ Subscribers" flicker while /profile loads by using the already-loaded /auth/me profile.
   const isService = (profile?.purpose || currentUser?.profile?.purpose) === 'service'
 
@@ -540,7 +540,7 @@ export default function Dashboard() {
               <div className="stats-primary">
                 <span className="stats-label">Monthly Recurring Revenue</span>
                 <span className="stats-mrr">
-                  <AnimatedCurrency value={metrics?.mrr ?? 0} symbol={currencySymbol} duration={600} />
+                  <AnimatedNumber value={metrics?.mrr ?? 0} duration={600} format={(n) => formatSmartAmount(n, currencyCode, 12)} />
                 </span>
               </div>
               <div className="stats-secondary-row">
@@ -548,11 +548,11 @@ export default function Dashboard() {
                   <div className="stats-metric-value">
                     <AnimatedNumber value={metrics?.subscriberCount ?? 0} duration={500} />
                   </div>
-                  <span className="stats-label">Subscribers</span>
+                  <span className="stats-label">{isService ? 'Clients' : 'Subscribers'}</span>
                 </div>
                 <div className="stats-metric">
                   <div className="stats-metric-value">
-                    <AnimatedCurrency value={metrics?.totalRevenue ?? 0} symbol={currencySymbol} duration={600} />
+                    <AnimatedNumber value={metrics?.totalRevenue ?? 0} duration={600} format={(n) => formatSmartAmount(n, currencyCode, 12)} />
                   </div>
                   <span className="stats-label">Total Revenue</span>
                 </div>
@@ -680,7 +680,9 @@ export default function Dashboard() {
                 ) : (
                   activities.map((activity: any, index: number) => {
                     const payload = activity.payload || {}
-                    const amount = payload.amount ? payload.amount / 100 : 0
+                    const currency = (payload.currency || profile?.currency || currentUser?.profile?.currency || 'USD').toUpperCase()
+                    const currencySymbolForRow = getCurrencySymbol(currency)
+                    const amount = payload.amount ? centsToDisplayAmount(payload.amount, currency) : 0
                     const name = payload.subscriberName || payload.recipientName || ''
                     const tier = payload.tierName || ''
                     const isCanceled = activity.type === 'subscription_canceled'
@@ -704,7 +706,7 @@ export default function Dashboard() {
                         {amount > 0 && (
                           <div className="dash-activity-amount-col">
                             <span className={`dash-activity-amount ${isCanceled ? 'cancelled' : ''}`}>
-                              {isCanceled ? '-' : '+'}{currencySymbol}{formatCompactNumber(amount)}
+                              {isCanceled ? '-' : '+'}{currencySymbolForRow}{formatCompactNumber(amount)}
                             </span>
                             {tier && <span className="dash-activity-tier">{tier}</span>}
                           </div>

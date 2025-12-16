@@ -16,6 +16,9 @@ describe('api/mappers', () => {
     expect(dollarsToCents(10)).toBe(1000)
     expect(dollarsToCents(10.555)).toBe(1056)
     expect(centsToDollars(1056)).toBeCloseTo(10.56, 5)
+    // Zero-decimal currency support
+    expect(dollarsToCents(1234, 'JPY')).toBe(1234)
+    expect(centsToDollars(1234, 'JPY')).toBe(1234)
   })
 
   it('formats amounts for display', () => {
@@ -155,4 +158,3 @@ describe('api/mappers', () => {
     })
   })
 })
-

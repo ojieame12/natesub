@@ -7,7 +7,7 @@ import { Skeleton } from './components/Skeleton'
 import { api } from './api'
 import type { PaystackConnectionStatus } from './api/client'
 import { useProfile } from './api/hooks'
-import { getCurrencySymbol, formatNumberWithSeparators } from './utils/currency'
+import { formatCurrencyFromCents } from './utils/currency'
 import { setPaymentConfirmed } from './utils/paymentConfirmed'
 import './PaymentSettings.css'
 
@@ -66,7 +66,7 @@ export default function PaymentSettings() {
   // Get profile to know which provider they use
   const { data: profileData } = useProfile()
   const paymentProvider = profileData?.profile?.paymentProvider
-  const currencySymbol = getCurrencySymbol(profileData?.profile?.currency || 'USD')
+  const profileCurrency = profileData?.profile?.currency || 'USD'
 
   // Real data from API
   const [stripeStatus, setStripeStatus] = useState<{
@@ -674,11 +674,11 @@ export default function PaymentSettings() {
           <div className="balance-row">
             <div className="balance-item">
               <span className="balance-label">Available</span>
-              <span className="balance-value">{currencySymbol}{formatNumberWithSeparators(balance.available / 100, true)}</span>
+              <span className="balance-value">{formatCurrencyFromCents(balance.available, profileCurrency)}</span>
             </div>
             <div className="balance-item">
               <span className="balance-label">Pending</span>
-              <span className="balance-value pending">{currencySymbol}{formatNumberWithSeparators(balance.pending / 100, true)}</span>
+              <span className="balance-value pending">{formatCurrencyFromCents(balance.pending, profileCurrency)}</span>
             </div>
           </div>
           <Pressable
@@ -819,7 +819,7 @@ export default function PaymentSettings() {
                 <div key={payout.id} className="history-row">
                   <div className="history-info">
                     <span className="history-amount">
-                      {getCurrencySymbol(payout.currency || 'USD')}{formatNumberWithSeparators(payout.amount / 100, true)}
+                      {formatCurrencyFromCents(payout.amount, payout.currency || 'USD')}
                     </span>
                     <span className="history-date">
                       {new Date(payout.arrivalDate).toLocaleDateString('en-US', {

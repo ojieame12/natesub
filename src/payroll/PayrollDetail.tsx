@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Download, CheckCircle, Clock, ExternalLink, Loader2 } from 'lucide-react'
 import { Pressable, Skeleton, ErrorState, useToast } from '../components'
 import { usePayrollPeriod, useCurrentUser } from '../api/hooks'
-import { getCurrencySymbol } from '../utils/currency'
+import { formatCurrencyFromCents } from '../utils/currency'
 import { PUBLIC_DOMAIN } from '../utils/constants'
 import './payroll.css'
 
@@ -27,10 +27,11 @@ export default function PayrollDetail() {
     const { periodId } = useParams<{ periodId: string }>()
     const navigate = useNavigate()
     const { data: userData } = useCurrentUser()
-    const currencySymbol = getCurrencySymbol(userData?.profile?.currency || 'USD')
+    const userCurrency = userData?.profile?.currency || 'USD'
 
     const { data, isLoading, isError, refetch } = usePayrollPeriod(periodId || '')
     const period = data?.period
+    const currency = period?.currency || userCurrency
     const toast = useToast()
     const [downloading, setDownloading] = useState(false)
 
@@ -155,7 +156,7 @@ export default function PayrollDetail() {
                                     <div className="payroll-doc-row">
                                         <span className="payroll-doc-label">Client Payments</span>
                                         <span className="payroll-doc-value">
-                                            {currencySymbol}{(period.grossAmount / 100).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                            {formatCurrencyFromCents(period.grossAmount, currency)}
                                         </span>
                                     </div>
                                     {period.payments && period.payments.length > 0 && (
@@ -163,7 +164,7 @@ export default function PayrollDetail() {
                                             {period.payments.slice(0, 5).map((payment: any) => (
                                                 <div key={payment.id} className="payroll-doc-breakdown-row">
                                                     <span>{payment.clientName || 'Client'}</span>
-                                                    <span>{currencySymbol}{(payment.amount / 100).toFixed(2)}</span>
+                                                    <span>{formatCurrencyFromCents(payment.amount, currency)}</span>
                                                 </div>
                                             ))}
                                             {period.payments.length > 5 && (
@@ -183,7 +184,7 @@ export default function PayrollDetail() {
                                     <div className="payroll-doc-row deduction">
                                         <span className="payroll-doc-label">Platform Fee (8%)</span>
                                         <span className="payroll-doc-value">
-                                            -{currencySymbol}{(period.platformFee / 100).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                            -{formatCurrencyFromCents(period.platformFee, currency)}
                                         </span>
                                     </div>
                                 </div>
@@ -194,7 +195,7 @@ export default function PayrollDetail() {
                                 <div className="payroll-doc-row total">
                                     <span className="payroll-doc-label">NET PAY</span>
                                     <span className="payroll-doc-value">
-                                        {currencySymbol}{(period.netAmount / 100).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                        {formatCurrencyFromCents(period.netAmount, currency)}
                                     </span>
                                 </div>
                             </div>

@@ -12,6 +12,7 @@ import { createCheckoutSession, stripe } from '../services/stripe.js'
 import { scheduleRequestReminders, scheduleRequestUnpaidReminder } from '../jobs/reminders.js'
 import { calculateServiceFee, type FeeMode } from '../services/fees.js'
 import { encrypt } from '../utils/encryption.js'
+import { centsToDisplayAmount } from '../utils/currency.js'
 import { env } from '../config/env.js'
 
 const requests = new Hono()
@@ -371,7 +372,7 @@ requests.get(
         recipientName: r.recipientName,
         recipientEmail: r.recipientEmail,
         relationship: r.relationship,
-        amount: r.amountCents / 100,
+        amount: centsToDisplayAmount(r.amountCents, r.currency),
         currency: r.currency,
         isRecurring: r.isRecurring,
         purpose: r.purpose,

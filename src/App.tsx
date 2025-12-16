@@ -55,6 +55,13 @@ const Unsubscribe = lazy(() => import('./Unsubscribe'))
 const MySubscriptions = lazy(() => import('./MySubscriptions'))
 const NotFound = lazy(() => import('./NotFound'))
 
+// Screenshot / marketing mocks (opt-in)
+const MockIndex = lazy(() => import('./experiments/MockIndex'))
+const MockDashboard = lazy(() => import('./experiments/MockDashboard'))
+const MockProfile = lazy(() => import('./experiments/MockProfile'))
+const MockInvoices = lazy(() => import('./experiments/MockInvoices'))
+const MockPayroll = lazy(() => import('./experiments/MockPayroll'))
+
 
 function isPublicCreatorPage(pathname: string): boolean {
   // Creator pages are single-segment vanity URLs like "/username"
@@ -332,6 +339,8 @@ function AppShell() {
   const navigate = useNavigate()
   const [showSplash, setShowSplash] = useState(true)
   const [minTimeElapsed, setMinTimeElapsed] = useState(false)
+  const enableMockRoutes =
+    import.meta.env.DEV || import.meta.env.VITE_ENABLE_MOCK_ROUTES === 'true'
 
   // Deep link handler for iOS Universal Links / Android App Links
   // When the app is opened via a link (e.g., after Stripe redirect), navigate to the path
@@ -474,6 +483,17 @@ function AppShell() {
           {/* Public Request Pages - for payment/subscription requests */}
           <Route path="/r/:token" element={<PublicRequestPage />} />
           <Route path="/r/:token/success" element={<PublicRequestPage />} />
+
+	          {/* Screenshot / marketing mocks (only when enabled) */}
+	          {enableMockRoutes && (
+	            <>
+	              <Route path="/mock" element={<MockIndex />} />
+	              <Route path="/mock/dashboard" element={<MockDashboard />} />
+	              <Route path="/mock/profile" element={<MockProfile />} />
+	              <Route path="/mock/invoices" element={<MockInvoices />} />
+	              <Route path="/mock/payroll" element={<MockPayroll />} />
+	            </>
+	          )}
 
 
 

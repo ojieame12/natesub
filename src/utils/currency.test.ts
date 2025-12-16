@@ -29,7 +29,7 @@ describe('utils/currency', () => {
     expect(formatCurrency(10, 'USD')).toBe('$10.00')
     expect(formatCurrency(10, 'JPY')).toBe('¥10')
     expect(formatCurrencyFromCents(1000, 'USD')).toBe('$10.00')
-    expect(formatCurrencyFromCents(1000, 'JPY')).toBe('¥1000')
+    expect(formatCurrencyFromCents(1000, 'JPY')).toBe('¥1,000')
   })
 
   it('formats compact numbers without symbols', () => {
@@ -37,6 +37,10 @@ describe('utils/currency', () => {
     expect(formatCompactNumber(1000)).toBe('1,000')
     expect(formatCompactNumber(10_000)).toBe('10K')
     expect(formatCompactNumber(1_500_000)).toBe('1.5M')
+    expect(formatCompactNumber(1_500_000_000)).toBe('1.5B')
+    expect(formatCompactNumber(1_500_000_000_000)).toBe('1.5T')
+    expect(formatCompactNumber(999_950_000)).toBe('1B')
+    expect(formatCompactNumber(-1500)).toBe('-1,500')
+    expect(formatCompactNumber(10.49999997)).toBe('10.5')
   })
 })
-

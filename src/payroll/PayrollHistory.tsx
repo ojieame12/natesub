@@ -3,7 +3,7 @@ import { FileText, ChevronRight, Calendar, ArrowLeft } from 'lucide-react'
 import type { PayPeriod } from '../api/client'
 import { Pressable, Skeleton, ErrorState } from '../components'
 import { usePayrollPeriods, useCurrentUser } from '../api/hooks'
-import { getCurrencySymbol } from '../utils/currency'
+import { formatCurrencyFromCents } from '../utils/currency'
 import './payroll.css'
 
 // Format date range for display
@@ -34,11 +34,11 @@ const groupByMonth = (periods: PayPeriod[]) => {
 export default function PayrollHistory() {
     const navigate = useNavigate()
     const { data: userData } = useCurrentUser()
-    const currencySymbol = getCurrencySymbol(userData?.profile?.currency || 'USD')
+    const currencyCode = userData?.profile?.currency || 'USD'
 
     const { data, isLoading, isError, refetch } = usePayrollPeriods()
     const periods = data?.periods || []
-    const ytdTotal = data?.ytdTotal || 0
+    const ytdTotalCents = data?.ytdTotalCents || 0
     const groupedPeriods = groupByMonth(periods)
 
     return (
@@ -99,7 +99,7 @@ export default function PayrollHistory() {
                         {/* YTD Summary */}
                         <div className="payroll-ytd-card">
                             <span className="payroll-ytd-label">Year to Date</span>
-                            <span className="payroll-ytd-amount">{currencySymbol}{ytdTotal.toLocaleString()}</span>
+                            <span className="payroll-ytd-amount">{formatCurrencyFromCents(ytdTotalCents, currencyCode)}</span>
                         </div>
 
                         {/* Grouped Periods */}
@@ -133,7 +133,7 @@ export default function PayrollHistory() {
                                             </div>
                                             <div className="payroll-period-right">
                                                 <span className="payroll-period-amount">
-                                                    {currencySymbol}{(period.netAmount / 100).toLocaleString()}
+                                                    {formatCurrencyFromCents(period.netAmount, period.currency || currencyCode)}
                                                 </span>
                                                 <ChevronRight size={18} className="payroll-period-chevron" />
                                             </div>

@@ -92,6 +92,9 @@
     font-weight: 700;
     color: white;
     letter-spacing: -1px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 /* === EMPTY STATE === */
@@ -223,6 +226,9 @@
     font-size: 16px;
     font-weight: 600;
     color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .payroll-period-chevron {

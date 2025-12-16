@@ -14,7 +14,7 @@ import {
 } from 'lucide-react'
 import { Pressable, useToast, Skeleton, ErrorState } from './components'
 import { useActivityDetail, useCurrentUser } from './api/hooks'
-import { getCurrencySymbol, formatCompactNumber } from './utils/currency'
+import { centsToDisplayAmount, getCurrencySymbol, formatCompactNumber } from './utils/currency'
 import './ActivityDetail.css'
 
 // Format date
@@ -72,7 +72,6 @@ export default function ActivityDetail() {
     const toast = useToast()
     const { id } = useParams()
     const { data: userData } = useCurrentUser()
-    const currencySymbol = getCurrencySymbol(userData?.profile?.currency || 'USD')
     const isService = userData?.profile?.purpose === 'service'
 
     // Fetch activity from API
@@ -80,6 +79,8 @@ export default function ActivityDetail() {
 
     const activityData = data?.activity
     const payload = activityData?.payload || {}
+    const currencyCode = (payload.currency || userData?.profile?.currency || 'USD').toUpperCase()
+    const currencySymbol = getCurrencySymbol(currencyCode)
 
     // Map API data to UI format
     const activity = activityData ? {
@@ -87,7 +88,7 @@ export default function ActivityDetail() {
         type: activityData.type,
         name: payload.subscriberName || payload.recipientName || 'Unknown',
         email: payload.subscriberEmail || payload.recipientEmail || '',
-        amount: (payload.amount || 0) / 100,
+        amount: centsToDisplayAmount(payload.amount || 0, currencyCode),
         time: formatTime(activityData.createdAt),
         tier: payload.tierName || (isService ? 'Client' : 'Supporter'),
         date: formatDate(activityData.createdAt),

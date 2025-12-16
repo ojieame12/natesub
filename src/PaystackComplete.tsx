@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { CheckCircle, AlertCircle, Loader2, Copy, Share2 } from 'lucide-react'
 import { api } from './api'
 import { Pressable } from './components'
-import { getCurrencySymbol, formatAmountWithSeparators } from './utils/currency'
+import { formatCurrencyFromCents } from './utils/currency'
 import { getShareableLink } from './utils/constants'
 import './StripeComplete.css' // Reuse Stripe complete styles
 
@@ -127,8 +127,7 @@ export default function PaystackComplete() {
                   <div className="detail-info" style={{ textAlign: 'center' }}>
                     <span className="detail-label">Amount Paid</span>
                     <span className="detail-value" style={{ fontSize: 24, fontWeight: 600 }}>
-                      {getCurrencySymbol(verification.currency)}
-                      {formatAmountWithSeparators(verification.amount / 100, verification.currency)}
+                      {formatCurrencyFromCents(verification.amount, verification.currency)}
                     </span>
                   </div>
                 </div>

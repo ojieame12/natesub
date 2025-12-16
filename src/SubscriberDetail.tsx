@@ -17,7 +17,7 @@ import {
 import { Pressable, Skeleton, ErrorState, useToast } from './components'
 import { useAuthState, useViewTransition } from './hooks'
 import { useSubscription, useCancelSubscription } from './api/hooks'
-import { getCurrencySymbol, formatCompactNumber } from './utils/currency'
+import { centsToDisplayAmount, getCurrencySymbol, formatCompactNumber } from './utils/currency'
 import './SubscriberDetail.css'
 
 // Format date
@@ -71,7 +71,7 @@ export default function SubscriberDetail() {
         status: subscription.status as 'active' | 'cancelled',
         since: formatDate(subscription.startedAt),
         nextBilling: formatDate(subscription.currentPeriodEnd),
-        lifetimeValue: (subscription.ltvCents || 0) / 100, // ltvCents is explicitly in cents
+        lifetimeValue: centsToDisplayAmount(subscription.ltvCents || 0, subscription.currency || 'USD'),
         totalPayments: payments.length,
         avatar: subscription.subscriber?.avatarUrl || null,
     } : null

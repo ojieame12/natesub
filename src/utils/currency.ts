@@ -114,13 +114,14 @@ export function formatCurrency(
     const symbol = getCurrencySymbol(currencyCode)
     const code = currencyCode?.toUpperCase() || 'USD'
 
-    // Some currencies don't typically use decimals
-    const noDecimalCurrencies = ['JPY', 'KRW', 'VND', 'IDR', 'HUF']
-    const useDecimals = showDecimals ?? !noDecimalCurrencies.includes(code)
+    // Some currencies don't typically use decimals (for UI cleanliness)
+    const noDecimalCurrencies = ['JPY', 'KRW', 'VND', 'IDR', 'HUF', 'NGN', 'KES'] as const
+    const useDecimals = showDecimals ?? !noDecimalCurrencies.includes(code as any)
 
-    const formattedAmount = useDecimals
-        ? amount.toFixed(2)
-        : Math.round(amount).toString()
+    const formattedAmount = amount.toLocaleString('en-US', {
+        minimumFractionDigits: useDecimals ? 2 : 0,
+        maximumFractionDigits: useDecimals ? 2 : 0,
+    })
 
     // For currencies with symbol after amount
     const symbolAfterCurrencies = ['SEK', 'NOK', 'DKK', 'PLN', 'CZK']
@@ -156,8 +157,8 @@ export function formatAmountWithSeparators(
     const code = currencyCode?.toUpperCase() || 'USD'
 
     // Some currencies don't use decimals
-    const noDecimalCurrencies = ['JPY', 'KRW', 'VND', 'IDR', 'HUF', 'NGN', 'KES']
-    const useDecimals = !noDecimalCurrencies.includes(code)
+    const noDecimalCurrencies = ['JPY', 'KRW', 'VND', 'IDR', 'HUF', 'NGN', 'KES'] as const
+    const useDecimals = !noDecimalCurrencies.includes(code as any)
 
     const formatted = amount.toLocaleString('en-US', {
         minimumFractionDigits: useDecimals ? 2 : 0,
@@ -183,15 +184,36 @@ export function formatCompactAmount(
     currencyCode: string = 'USD'
 ): string {
     const symbol = getCurrencySymbol(currencyCode)
+    const code = currencyCode?.toUpperCase() || 'USD'
+    const symbolAfterCurrencies = ['SEK', 'NOK', 'DKK', 'PLN', 'CZK']
+    const attachSymbol = (formatted: string) => (
+        symbolAfterCurrencies.includes(code) ? `${formatted} ${symbol}` : `${symbol}${formatted}`
+    )
 
     // Thresholds for compact notation
+    if (amount >= 1_000_000_000_000) {
+        const trillions = amount / 1_000_000_000_000
+        const formatted = trillions % 1 === 0
+            ? trillions.toString()
+            : trillions.toFixed(1).replace(/\.0$/, '')
+        return attachSymbol(`${formatted}T`)
+    }
+
+    if (amount >= 1_000_000_000) {
+        const billions = amount / 1_000_000_000
+        const formatted = billions % 1 === 0
+            ? billions.toString()
+            : billions.toFixed(1).replace(/\.0$/, '')
+        return attachSymbol(`${formatted}B`)
+    }
+
     if (amount >= 1_000_000) {
         const millions = amount / 1_000_000
         // Show decimal only if not a whole number
         const formatted = millions % 1 === 0
             ? millions.toString()
             : millions.toFixed(1).replace(/\.0$/, '')
-        return `${symbol}${formatted}M`
+        return attachSymbol(`${formatted}M`)
     }
 
     if (amount >= 10_000) {
@@ -199,16 +221,17 @@ export function formatCompactAmount(
         const formatted = thousands % 1 === 0
             ? thousands.toString()
             : thousands.toFixed(1).replace(/\.0$/, '')
-        return `${symbol}${formatted}K`
+        return attachSymbol(`${formatted}K`)
     }
 
     // Under 10K, show with separators but no decimals for cleaner look
     if (amount >= 1_000) {
-        return `${symbol}${amount.toLocaleString('en-US', { maximumFractionDigits: 0 })}`
+        const formatted = amount.toLocaleString('en-US', { maximumFractionDigits: 0 })
+        return attachSymbol(formatted)
     }
 
     // Small amounts - show as-is
-    return `${symbol}${amount}`
+    return attachSymbol(amount.toString())
 }
 
 /**
@@ -240,25 +263,45 @@ export function formatSmartAmount(
  * e.g., 200000 → "200K", 1500000 → "1.5M"
  */
 export function formatCompactNumber(amount: number): string {
-    if (amount >= 1_000_000) {
-        const millions = amount / 1_000_000
-        return millions % 1 === 0
-            ? `${millions}M`
-            : `${millions.toFixed(1).replace(/\.0$/, '')}M`
+    if (!Number.isFinite(amount)) return '0'
+
+    const sign = amount < 0 ? '-' : ''
+    const absAmount = Math.abs(amount)
+
+    const formatWithUnit = (unitValue: number, suffix: string) => {
+        const scaled = absAmount / unitValue
+        const hasFraction = scaled % 1 !== 0
+        const useDecimal = scaled < 100 && hasFraction
+        const rounded = useDecimal
+            ? Number(scaled.toFixed(1))
+            : Number(scaled.toFixed(0))
+
+        // If rounding pushes to the next unit (e.g., 999.95M → 1000M), bump up.
+        if (rounded >= 1000) {
+            if (suffix === 'K') return formatWithUnit(1_000_000, 'M')
+            if (suffix === 'M') return formatWithUnit(1_000_000_000, 'B')
+            if (suffix === 'B') return formatWithUnit(1_000_000_000_000, 'T')
+        }
+
+        const formatted = useDecimal
+            ? rounded.toFixed(1).replace(/\.0$/, '')
+            : rounded.toString()
+
+        return `${sign}${formatted}${suffix}`
     }
 
-    if (amount >= 10_000) {
-        const thousands = amount / 1_000
-        return thousands % 1 === 0
-            ? `${thousands}K`
-            : `${thousands.toFixed(1).replace(/\.0$/, '')}K`
+    if (absAmount >= 1_000_000_000_000) return formatWithUnit(1_000_000_000_000, 'T')
+    if (absAmount >= 1_000_000_000) return formatWithUnit(1_000_000_000, 'B')
+    if (absAmount >= 1_000_000) return formatWithUnit(1_000_000, 'M')
+    if (absAmount >= 10_000) return formatWithUnit(1_000, 'K')
+
+    // Keep separators for 1,000–9,999, but preserve up to 2 decimals if present.
+    if (absAmount >= 1_000) {
+        return `${sign}${absAmount.toLocaleString('en-US', { maximumFractionDigits: 2 })}`
     }
 
-    if (amount >= 1_000) {
-        return amount.toLocaleString('en-US', { maximumFractionDigits: 0 })
-    }
-
-    return amount.toString()
+    // Avoid long float strings leaking into UI (e.g., 10.49999997)
+    return `${sign}${absAmount.toLocaleString('en-US', { maximumFractionDigits: 2 })}`
 }
 
 /**

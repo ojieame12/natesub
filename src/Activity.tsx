@@ -14,7 +14,7 @@ import {
 import { Pressable, Skeleton, SkeletonList, ErrorState, LoadingButton } from './components'
 import { useScrolled } from './hooks'
 import { useActivity, useMetrics, useCurrentUser } from './api/hooks'
-import { getCurrencySymbol, formatCompactNumber } from './utils/currency'
+import { centsToDisplayAmount, getCurrencySymbol, formatCompactNumber, formatSmartAmount } from './utils/currency'
 import './Activity.css'
 
 // Activity icon helper
@@ -88,7 +88,7 @@ export default function Activity() {
     const navigate = useNavigate()
     const [scrollRef, isScrolled] = useScrolled()
     const { data: userData } = useCurrentUser()
-    const currencySymbol = getCurrencySymbol(userData?.profile?.currency || 'USD')
+    const currencyCode = userData?.profile?.currency || 'USD'
     const isService = userData?.profile?.purpose === 'service'
 
     // Real API hooks
@@ -189,7 +189,9 @@ export default function Activity() {
                                 <div className="activity-group">
                                     {activities.map((activity: any, index: number) => {
                                         const payload = activity.payload || {}
-                                        const amount = payload.amount ? payload.amount / 100 : 0
+                                        const currency = (payload.currency || currencyCode || 'USD').toUpperCase()
+                                        const currencySymbolForRow = getCurrencySymbol(currency)
+                                        const amount = payload.amount ? centsToDisplayAmount(payload.amount, currency) : 0
                                         const name = payload.subscriberName || payload.recipientName || ''
                                         const tier = payload.tierName || ''
                                         const isCanceled = activity.type === 'subscription_canceled'
@@ -213,7 +215,7 @@ export default function Activity() {
                                                 {amount > 0 && (
                                                     <div className="activity-amount-col">
                                                         <span className={`activity-amount ${isCanceled ? 'cancelled' : ''}`}>
-                                                            {isCanceled ? '-' : '+'}{currencySymbol}{formatCompactNumber(amount)}
+                                                            {isCanceled ? '-' : '+'}{currencySymbolForRow}{formatCompactNumber(amount)}
                                                         </span>
                                                         {tier && <span className="activity-tier">{tier}</span>}
                                                     </div>
@@ -247,11 +249,11 @@ export default function Activity() {
                                         <span className="summary-label">{isService ? 'Clients' : 'Subscribers'}</span>
                                     </div>
                                     <div className="summary-stat">
-                                        <span className="summary-value positive">{currencySymbol}{metrics.mrr}</span>
+                                        <span className="summary-value positive">{formatSmartAmount(metrics.mrr, currencyCode, 12)}</span>
                                         <span className="summary-label">MRR</span>
                                     </div>
                                     <div className="summary-stat">
-                                        <span className="summary-value">{currencySymbol}{metrics.totalRevenue}</span>
+                                        <span className="summary-value">{formatSmartAmount(metrics.totalRevenue, currencyCode, 12)}</span>
                                         <span className="summary-label">Total Revenue</span>
                                     </div>
                                 </div>

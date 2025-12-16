@@ -11,7 +11,7 @@ import { useParams, useSearchParams, useNavigate, useLocation } from 'react-rout
 import { ArrowLeft, CheckCircle, XCircle, Loader2, DollarSign } from 'lucide-react'
 import { Pressable, useToast, Skeleton, AmbientBackground } from '../components'
 import { usePublicRequest, useAcceptRequest, useDeclineRequest } from '../api/hooks'
-import { getCurrencySymbol } from '../utils/currency'
+import { formatCurrencyFromCents } from '../utils/currency'
 import '../subscribe/template-one.css'
 
 export default function PublicRequestPage() {
@@ -204,12 +204,7 @@ export default function PublicRequestPage() {
   // No auto-fill needed anymore since we don't show the input for targeted requests
   // and we don't need the email in frontend state to submit
 
-
-  const currencySymbol = getCurrencySymbol(request.currency || 'USD')
-  // Backend now returns raw cents (amount) - convert using utility or simple math
-  // For display purposes, we assume standard 100-cent currencies for now unless currency utils handle it
-  // TODO: Use a proper currency formatter that handles zero-decimal currencies (JPY, etc)
-  const amountDollars = (request.amount || 0) / 100
+  const formattedAmount = formatCurrencyFromCents(request.amount || 0, request.currency || 'USD')
 
   return (
     <>
@@ -271,7 +266,7 @@ export default function PublicRequestPage() {
               </div>
               <div>
                 <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)' }}>
-                  {currencySymbol}{amountDollars.toLocaleString()}
+                  {formattedAmount}
                 </div>
                 <div style={{ fontSize: 14, color: 'var(--text-secondary)' }}>
                   {request.isRecurring ? 'Monthly' : 'One-time'}
@@ -341,7 +336,7 @@ export default function PublicRequestPage() {
                   <span>Processing...</span>
                 </>
               ) : (
-                <span>Pay {currencySymbol}{amountDollars.toLocaleString()}</span>
+                <span>Pay {formattedAmount}</span>
               )}
             </Pressable>
 

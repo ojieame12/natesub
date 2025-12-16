@@ -73,12 +73,19 @@
     display: flex;
     justify-content: space-between;
     margin-bottom: var(--space-lg);
+    gap: var(--space-lg);
 }
 
 .balance-item {
     display: flex;
     flex-direction: column;
     gap: 4px;
+    flex: 1;
+    min-width: 0;
+}
+
+.balance-item:last-child {
+    text-align: right;
 }
 
 .balance-label {
@@ -89,6 +96,9 @@
 .balance-value {
     font-size: 24px;
     font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .balance-value.pending {
@@ -279,12 +289,16 @@
     display: flex;
     flex-direction: column;
     gap: 2px;
+    min-width: 0;
 }
 
 .history-amount {
     font-size: 16px;
     font-weight: 600;
     color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .history-date {

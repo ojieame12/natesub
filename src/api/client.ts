@@ -956,6 +956,7 @@ export interface PayPeriod {
   id: string
   startDate: string
   endDate: string
+  currency: string
   grossAmount: number
   platformFee: number
   netAmount: number
@@ -977,6 +978,7 @@ interface BackendPayPeriod {
   id: string
   periodStart: string
   periodEnd: string
+  currency: string
   grossCents: number
   platformFeeCents?: number
   netCents: number
@@ -998,6 +1000,7 @@ const mapPayPeriod = (backend: BackendPayPeriod): PayPeriod => ({
   id: backend.id,
   startDate: backend.periodStart,
   endDate: backend.periodEnd,
+  currency: backend.currency || 'USD',
   grossAmount: backend.grossCents, // Keep in cents, frontend divides by 100
   platformFee: backend.platformFeeCents || Math.round(backend.grossCents * 0.08),
   netAmount: backend.netCents,
@@ -1023,7 +1026,7 @@ export const payroll = {
     }>('/payroll/periods')
     return {
       periods: response.periods.map(mapPayPeriod),
-      ytdTotal: response.ytdTotalCents / 100, // Convert to dollars for display
+      ytdTotalCents: response.ytdTotalCents,
     }
   },
 

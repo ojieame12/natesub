@@ -3,6 +3,7 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { db } from '../db/client.js'
 import { requireAuth } from '../middleware/auth.js'
+import { centsToDisplayAmount } from '../utils/currency.js'
 
 const activity = new Hono()
 
@@ -47,11 +48,18 @@ activity.get('/metrics', requireAuth, async (c) => {
 
   // Run all queries in parallel for efficiency
   const [
+    profile,
     subscriberCount,
     mrrResult,
     totalRevenue,
     tierBreakdown,
   ] = await Promise.all([
+    // Currency for display conversion (handles zero-decimal currencies correctly)
+    db.profile.findUnique({
+      where: { userId },
+      select: { currency: true },
+    }),
+
     // Count active subscribers
     db.subscription.count({
       where: {
@@ -98,14 +106,17 @@ activity.get('/metrics', requireAuth, async (c) => {
   }
 
   const mrrCents = mrrResult._sum.amount || 0
+  const currency = profile?.currency || 'USD'
+  const totalRevenueCents = totalRevenue._sum.netCents || 0
 
   return c.json({
     metrics: {
       subscriberCount,
       mrrCents,
-      mrr: mrrCents / 100,
-      totalRevenueCents: totalRevenue._sum.netCents || 0,
-      totalRevenue: (totalRevenue._sum.netCents || 0) / 100,
+      mrr: centsToDisplayAmount(mrrCents, currency),
+      totalRevenueCents,
+      totalRevenue: centsToDisplayAmount(totalRevenueCents, currency),
+      currency,
       tierBreakdown: tierBreakdownRecord,
     },
   })

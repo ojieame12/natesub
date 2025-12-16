@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Camera, Plus, GripVertical, Trash2, ExternalLink, Check, X, Loader2 } from 'lucide-react'
 import { Pressable, useToast, Skeleton, VoiceRecorder, LoadingButton } from './components'
 import { useProfile, useUpdateProfile, useUpdateSettings, uploadFile, uploadBlob } from './api/hooks'
-import { getCurrencySymbol, formatCompactNumber, centsToDisplayAmount } from './utils/currency'
+import { getCurrencySymbol, formatCompactNumber, centsToDisplayAmount, displayAmountToCents } from './utils/currency'
 import { calculateFeePreview, getPricing } from './utils/pricing'
 import type { Tier, Perk, ImpactItem } from './api/client'
 import './EditPage.css'
@@ -613,19 +613,22 @@ export default function EditPage() {
           </div>
 
           {(() => {
-            const baseAmount = pricingModel === 'single'
-              ? (singleAmount || 0) * 100  // Convert to cents
-              : (tiers[0]?.amount || 0) * 100
-            const preview = calculateFeePreview(baseAmount, profile.purpose, feeMode)
+            const currency = profile.currency || 'USD'
+            const baseAmountCents = pricingModel === 'single'
+              ? displayAmountToCents(singleAmount || 0, currency)
+              : displayAmountToCents(tiers[0]?.amount || 0, currency)
+            const preview = calculateFeePreview(baseAmountCents, profile.purpose, feeMode)
+            const subscriberPaysDisplay = centsToDisplayAmount(preview.subscriberPays, currency)
+            const creatorReceivesDisplay = centsToDisplayAmount(preview.creatorReceives, currency)
             return (
               <div className="fee-mode-preview">
                 <div className="fee-preview-row">
                   <span>Subscribers pay</span>
-                  <span className="fee-preview-amount">{currencySymbol}{formatCompactNumber(preview.subscriberPays / 100)}</span>
+                  <span className="fee-preview-amount">{currencySymbol}{formatCompactNumber(subscriberPaysDisplay)}</span>
                 </div>
                 <div className="fee-preview-row">
                   <span>You receive</span>
-                  <span className="fee-preview-amount">{currencySymbol}{formatCompactNumber(preview.creatorReceives / 100)}</span>
+                  <span className="fee-preview-amount">{currencySymbol}{formatCompactNumber(creatorReceivesDisplay)}</span>
                 </div>
               </div>
             )

@@ -5,6 +5,7 @@ import { SubscriptionStatus } from '@prisma/client'
 import { db } from '../db/client.js'
 import { requireAuth } from '../middleware/auth.js'
 import { cancelSubscription as cancelStripeSubscription, reactivateSubscription } from '../services/stripe.js'
+import { centsToDisplayAmount } from '../utils/currency.js'
 
 const subscriptions = new Hono()
 
@@ -72,7 +73,7 @@ subscriptions.get(
           avatarUrl: s.subscriber.profile?.avatarUrl,
         },
         tierName: s.tierName,
-        amount: s.amount / 100, // Convert from cents
+        amount: centsToDisplayAmount(s.amount, s.currency),
         currency: s.currency,
         interval: s.interval,
         status: s.status,
@@ -134,7 +135,7 @@ subscriptions.get(
           avatarUrl: subscription.subscriber.profile?.avatarUrl,
         },
         tierName: subscription.tierName,
-        amount: subscription.amount / 100,
+        amount: centsToDisplayAmount(subscription.amount, subscription.currency),
         currency: subscription.currency,
         interval: subscription.interval,
         status: subscription.status,
@@ -144,7 +145,7 @@ subscriptions.get(
         cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
         payments: subscription.payments.map(p => ({
           id: p.id,
-          amount: p.amountCents / 100,
+          amount: centsToDisplayAmount(p.amountCents, p.currency),
           currency: p.currency,
           status: p.status,
           occurredAt: p.occurredAt,

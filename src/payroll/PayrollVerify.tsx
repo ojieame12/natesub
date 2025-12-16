@@ -1,7 +1,7 @@
 import { useParams } from 'react-router-dom'
 import { CheckCircle, XCircle, Loader2, FileText } from 'lucide-react'
 import { usePayrollVerify } from '../api/hooks'
-import { getCurrencySymbol } from '../utils/currency'
+import { formatCurrencyFromCents } from '../utils/currency'
 import './payroll.css'
 
 // Format date for display
@@ -64,7 +64,6 @@ export default function PayrollVerify() {
     }
 
     const doc = data.document
-    const currencySymbol = getCurrencySymbol(doc.currency || 'USD')
 
     // Verified state
     return (
@@ -94,7 +93,7 @@ export default function PayrollVerify() {
                     <div className="payroll-verify-row">
                         <span className="payroll-verify-label">Net Pay</span>
                         <span className="payroll-verify-value highlight">
-                            {currencySymbol}{(doc.netCents / 100).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            {formatCurrencyFromCents(doc.netCents, doc.currency || 'USD')}
                         </span>
                     </div>
                     <div className="payroll-verify-row">

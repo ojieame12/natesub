@@ -4,6 +4,7 @@
 import type { RelationshipType } from '../request/store'
 import type { SubscriptionPurpose, PricingModel, SubscriptionTier, ImpactItem, PerkItem } from '../onboarding/store'
 import type { UpdateAudience } from '../updates/store'
+import { centsToDisplayAmount, displayAmountToCents } from '../utils/currency'
 
 // ============================================
 // AMOUNT CONVERSION HELPERS
@@ -12,22 +13,22 @@ import type { UpdateAudience } from '../updates/store'
 /**
  * Convert dollars to cents for API requests
  */
-export function dollarsToCents(dollars: number): number {
-  return Math.round(dollars * 100)
+export function dollarsToCents(dollars: number, currencyCode: string = 'USD'): number {
+  return displayAmountToCents(dollars, currencyCode)
 }
 
 /**
  * Convert cents to dollars for display
  */
-export function centsToDollars(cents: number): number {
-  return cents / 100
+export function centsToDollars(cents: number, currencyCode: string = 'USD'): number {
+  return centsToDisplayAmount(cents, currencyCode)
 }
 
 /**
  * Format amount for display (handles both cents and dollars)
  */
 export function formatAmount(amount: number, isCents = false, currency = 'USD'): string {
-  const dollars = isCents ? centsToDollars(amount) : amount
+  const dollars = isCents ? centsToDollars(amount, currency) : amount
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency,
@@ -125,11 +126,11 @@ export function mapOnboardingToApi(data: OnboardingStoreData): ProfileApiPayload
     currency: data.currency,
     purpose: data.purpose || 'other',
     pricingModel: data.pricingModel,
-    singleAmount: data.singleAmount ? dollarsToCents(data.singleAmount) : null,
+    singleAmount: data.singleAmount ? dollarsToCents(data.singleAmount, data.currency) : null,
     tiers: data.pricingModel === 'tiers' ? data.tiers.map(tier => ({
       id: tier.id,
       name: tier.name,
-      amount: dollarsToCents(tier.amount),
+      amount: dollarsToCents(tier.amount, data.currency),
       perks: tier.perks,
       isPopular: tier.isPopular,
     })) : null,
@@ -149,11 +150,11 @@ export function mapApiToOnboarding(profile: ProfileApiPayload): Partial<Onboardi
     currency: profile.currency,
     purpose: profile.purpose as SubscriptionPurpose,
     pricingModel: profile.pricingModel,
-    singleAmount: profile.singleAmount ? centsToDollars(profile.singleAmount) : null,
+    singleAmount: profile.singleAmount ? centsToDollars(profile.singleAmount, profile.currency) : null,
     tiers: profile.tiers?.map(tier => ({
       id: tier.id,
       name: tier.name,
-      amount: centsToDollars(tier.amount),
+      amount: centsToDollars(tier.amount, profile.currency),
       perks: tier.perks,
       isPopular: tier.isPopular,
     })) || [],
@@ -211,7 +212,7 @@ export function mapRequestToApi(data: RequestStoreData, currency = 'USD'): Reque
     recipientEmail: data.recipient.email,
     recipientPhone: data.recipient.phone,
     relationship: mapRelationshipToApi(data.relationship),
-    amountCents: dollarsToCents(data.amount),
+    amountCents: dollarsToCents(data.amount, currency),
     currency,
     isRecurring: data.isRecurring,
     message: data.message || undefined,
