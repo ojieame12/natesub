@@ -536,27 +536,27 @@ export default function Dashboard() {
         ) : (
           <>
             {/* Stats Card */}
-            <section className="stats-card">
-              <div className="stats-primary">
-                <span className="stats-label">Monthly Recurring Revenue</span>
-                <span className="stats-mrr">
-                  <AnimatedNumber value={metrics?.mrr ?? 0} duration={600} format={(n) => formatSmartAmount(n, currencyCode, 12)} />
-                </span>
-              </div>
-              <div className="stats-secondary-row">
-                <div className="stats-metric">
-                  <div className="stats-metric-value">
-                    <AnimatedNumber value={metrics?.subscriberCount ?? 0} duration={500} />
-                  </div>
-                  <span className="stats-label">{isService ? 'Clients' : 'Subscribers'}</span>
-                </div>
-                <div className="stats-metric">
-                  <div className="stats-metric-value">
-                    <AnimatedNumber value={metrics?.totalRevenue ?? 0} duration={600} format={(n) => formatSmartAmount(n, currencyCode, 12)} />
-                  </div>
-                  <span className="stats-label">Total Revenue</span>
-                </div>
-              </div>
+	            <section className="stats-card">
+	              <div className="stats-primary">
+	                <span className="stats-label">Monthly Recurring Revenue</span>
+	                <span className="stats-mrr">
+	                  <AnimatedNumber value={metrics?.mrr ?? 0} duration={600} format={(n) => formatSmartAmount(n, currencyCode, 10)} />
+	                </span>
+	              </div>
+	              <div className="stats-secondary-row">
+	                <div className="stats-metric">
+	                  <div className="stats-metric-value">
+	                    <AnimatedNumber value={metrics?.subscriberCount ?? 0} duration={500} format={(n) => formatCompactNumber(n)} />
+	                  </div>
+	                  <span className="stats-label">{isService ? 'Clients' : 'Subscribers'}</span>
+	                </div>
+	                <div className="stats-metric">
+	                  <div className="stats-metric-value">
+	                    <AnimatedNumber value={metrics?.totalRevenue ?? 0} duration={600} format={(n) => formatSmartAmount(n, currencyCode, 10)} />
+	                  </div>
+	                  <span className="stats-label">Total Revenue</span>
+	                </div>
+	              </div>
             </section>
 
             {/* Analytics Card */}
@@ -567,28 +567,28 @@ export default function Dashboard() {
                   <span className="analytics-period">Last 7 days</span>
                 </div>
                 <div className="analytics-metrics">
-                  <div className="analytics-metric">
-                    <div className="analytics-metric-icon">
-                      <Eye size={16} />
-                    </div>
-                    <div className="analytics-metric-content">
-                      <span className="analytics-metric-value">
-                        <AnimatedNumber value={analytics.views.week} duration={500} />
-                      </span>
-                      <span className="analytics-metric-label">Views</span>
-                    </div>
-                  </div>
-                  <div className="analytics-metric">
+	                  <div className="analytics-metric">
+	                    <div className="analytics-metric-icon">
+	                      <Eye size={16} />
+	                    </div>
+	                    <div className="analytics-metric-content">
+	                      <span className="analytics-metric-value">
+	                        <AnimatedNumber value={analytics.views.week} duration={500} format={(n) => formatCompactNumber(n)} />
+	                      </span>
+	                      <span className="analytics-metric-label">Views</span>
+	                    </div>
+	                  </div>
+	                  <div className="analytics-metric">
                     <div className="analytics-metric-icon">
                       <UserPlus size={16} />
                     </div>
-                    <div className="analytics-metric-content">
-                      <span className="analytics-metric-value">
-                        <AnimatedNumber value={analytics.uniqueVisitors.week} duration={500} />
-                      </span>
-                      <span className="analytics-metric-label">Visitors</span>
-                    </div>
-                  </div>
+	                    <div className="analytics-metric-content">
+	                      <span className="analytics-metric-value">
+	                        <AnimatedNumber value={analytics.uniqueVisitors.week} duration={500} format={(n) => formatCompactNumber(n)} />
+	                      </span>
+	                      <span className="analytics-metric-label">Visitors</span>
+	                    </div>
+	                  </div>
                   <div className="analytics-metric">
                     <div className="analytics-metric-icon">
                       <TrendingUp size={16} />

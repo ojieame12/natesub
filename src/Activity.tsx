@@ -240,25 +240,25 @@ export default function Activity() {
                         )}
 
                         {/* Monthly Summary */}
-                        {metrics && (
-                            <div className="summary-card">
-                                <span className="summary-title">Overview</span>
-                                <div className="summary-grid">
-                                    <div className="summary-stat">
-                                        <span className="summary-value">{metrics.subscriberCount}</span>
-                                        <span className="summary-label">{isService ? 'Clients' : 'Subscribers'}</span>
-                                    </div>
-                                    <div className="summary-stat">
-                                        <span className="summary-value positive">{formatSmartAmount(metrics.mrr, currencyCode, 12)}</span>
-                                        <span className="summary-label">MRR</span>
-                                    </div>
-                                    <div className="summary-stat">
-                                        <span className="summary-value">{formatSmartAmount(metrics.totalRevenue, currencyCode, 12)}</span>
-                                        <span className="summary-label">Total Revenue</span>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
+	                        {metrics && (
+	                            <div className="summary-card">
+	                                <span className="summary-title">Overview</span>
+	                                <div className="summary-grid">
+	                                    <div className="summary-stat">
+	                                        <span className="summary-value">{formatCompactNumber(metrics.subscriberCount)}</span>
+	                                        <span className="summary-label">{isService ? 'Clients' : 'Subscribers'}</span>
+	                                    </div>
+	                                    <div className="summary-stat">
+	                                        <span className="summary-value positive">{formatSmartAmount(metrics.mrr, currencyCode, 10)}</span>
+	                                        <span className="summary-label">MRR</span>
+	                                    </div>
+	                                    <div className="summary-stat">
+	                                        <span className="summary-value">{formatSmartAmount(metrics.totalRevenue, currencyCode, 10)}</span>
+	                                        <span className="summary-label">Total Revenue</span>
+	                                    </div>
+	                                </div>
+	                            </div>
+	                        )}
                     </>
                 )}
             </div>
