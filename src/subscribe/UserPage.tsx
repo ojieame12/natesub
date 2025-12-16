@@ -3,7 +3,7 @@ import { useParams, Navigate, useSearchParams } from 'react-router-dom'
 import { Lock, Clock, AlertCircle } from 'lucide-react'
 import { isReservedUsername } from '../utils/constants'
 import { usePublicProfile } from '../api/hooks'
-import { Skeleton, SkeletonAvatar, Pressable } from '../components'
+import { Pressable } from '../components'
 
 // This component handles vanity URLs like natepay.co/username
 // It checks if the username is valid and renders the subscribe page
@@ -13,35 +13,6 @@ import SubscribeMidnight from './SubscribeMidnight'
 import SubscriptionSuccess from './SubscriptionSuccess'
 import AlreadySubscribed from './AlreadySubscribed'
 
-/**
- * SubscriptionPageSkeleton - Matches exact layout of subscription card
- * Prevents layout shift (CLS) by reserving the correct space
- */
-function SubscriptionPageSkeleton() {
-  return (
-    <div className="sub-page template-boundary">
-      <div className="sub-skeleton">
-        {/* Avatar area */}
-        <div className="sub-skeleton-avatar">
-          <SkeletonAvatar size={80} />
-        </div>
-        {/* Name */}
-        <Skeleton width={160} height={24} style={{ marginTop: 16 }} />
-        {/* Username */}
-        <Skeleton width={100} height={14} style={{ marginTop: 8 }} />
-        {/* Bio area */}
-        <div className="sub-skeleton-bio">
-          <Skeleton width="90%" height={14} />
-          <Skeleton width="70%" height={14} style={{ marginTop: 8 }} />
-        </div>
-        {/* Card area placeholder */}
-        <div className="sub-skeleton-card">
-          <Skeleton width="100%" height={200} borderRadius="var(--radius-xl)" />
-        </div>
-      </div>
-    </div>
-  )
-}
 
 export default function UserPage() {
   const { username } = useParams<{ username: string }>()
@@ -60,9 +31,11 @@ export default function UserPage() {
   // Fetch real profile data from API (includes viewerSubscription if logged in)
   const { data, isLoading, error, refetch } = usePublicProfile(username)
 
-  // Loading state - use skeleton that matches final layout
+  // Loading state - minimal to avoid jarring skeleton flash
   if (isLoading) {
-    return <SubscriptionPageSkeleton />
+    return (
+      <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #fff8f0 0%, #fff 50%)' }} />
+    )
   }
 
   // Error handling - differentiate by status code
