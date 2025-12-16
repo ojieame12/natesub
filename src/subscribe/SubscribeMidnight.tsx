@@ -294,10 +294,11 @@ export default function SubscribeMidnight({ profile, isOwner }: SubscribeMidnigh
         borderRadius: 16,
         padding: '30px 24px 40px',
         boxShadow: `
-            0 0 0 1px rgba(255, 255, 255, 0.05),
-            inset 0 1px 0 rgba(255, 255, 255, 0.03),
-            0 20px 50px -10px rgba(0, 0, 0, 0.8),
-            0 0 60px -20px rgba(255, 210, 8, 0.3)
+            0 0 0 1px rgba(255, 255, 255, 0.08),
+            inset 0 1px 0 rgba(255, 255, 255, 0.05),
+            0 25px 60px -10px rgba(0, 0, 0, 0.9),
+            0 40px 100px -20px rgba(0, 0, 0, 0.7),
+            0 0 80px -10px rgba(255, 210, 8, 0.25)
         `,
         transform: mount ? 'translateY(0)' : 'translateY(50px)',
         opacity: mount ? 1 : 0,

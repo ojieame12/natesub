@@ -268,7 +268,7 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
         WebkitMaskImage: `radial-gradient(circle at 10px calc(100% + 5px), transparent 12px, black 13px)`,
         WebkitMaskSize: '20px 100%', WebkitMaskPosition: '-10px 0', WebkitMaskRepeat: 'repeat-x',
         padding: '30px 24px 50px',
-        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 50px 100px -20px rgba(0, 0, 0, 0.15)',
+        boxShadow: '0 8px 16px -4px rgba(0, 0, 0, 0.15), 0 35px 60px -15px rgba(0, 0, 0, 0.35), 0 60px 120px -25px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(0, 0, 0, 0.03)',
         transform: mount ? 'translateY(0)' : 'translateY(50px)',
         opacity: mount ? 1 : 0, transition: 'all 0.6s ease-out'
     }
