@@ -63,7 +63,10 @@ export default function Templates() {
   }, [profile?.template])
 
   const handleApply = async () => {
-    if (!profile) return
+    if (!profile) {
+      toast.error('Finish setting up your profile first')
+      return
+    }
 
     try {
       // Only send template field - minimal update to avoid validation issues
@@ -111,7 +114,8 @@ export default function Templates() {
     )
   }
 
-  const hasChanges = selectedTemplate !== savedTemplate
+  const hasProfile = !!profile
+  const hasChanges = hasProfile && selectedTemplate !== savedTemplate
 
   return (
     <div className="templates-page">
@@ -178,7 +182,7 @@ export default function Templates() {
         <Pressable
           className={`apply-btn ${!hasChanges ? 'disabled' : ''}`}
           onClick={handleApply}
-          disabled={!hasChanges || isSaving}
+          disabled={!hasProfile || !hasChanges || isSaving}
         >
           {isSaving ? (
             <>
