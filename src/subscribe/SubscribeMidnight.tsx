@@ -191,12 +191,11 @@ export default function SubscribeMidnight({ profile, isOwner }: SubscribeMidnigh
     useEffect(() => {
         // Small delay to ensure initial state is painted before animating
         const timer = setTimeout(() => setMount(true), 50)
-        return () => clearTimeout(timer)
 
         if (isSuccessReturn) {
             const sessionId = searchParams.get('session_id')
             if (sessionId) {
-                api.checkout.verifySession(sessionId)
+                api.checkout.verifySession(sessionId, profile.username)
                     .then(result => {
                         if (result.verified) {
                             setStatus('success')
@@ -213,12 +212,21 @@ export default function SubscribeMidnight({ profile, isOwner }: SubscribeMidnigh
                 setStatus('idle')
                 toast.error('Invalid payment session')
             }
-        } else if (profile.id) {
-            recordPageView({ profileId: profile.id, referrer: document.referrer || undefined })
-                .then(res => viewIdRef.current = res.viewId)
+        } else if (profile.id && !isOwner && !viewIdRef.current) {
+            // Public analytics: don't count owner preview as a "page view"
+            recordPageView({
+                profileId: profile.id,
+                referrer: document.referrer || undefined,
+                utmSource: searchParams.get('utm_source') || undefined,
+                utmMedium: searchParams.get('utm_medium') || undefined,
+                utmCampaign: searchParams.get('utm_campaign') || undefined,
+            })
+                .then(res => { viewIdRef.current = res.viewId })
                 .catch(console.error)
         }
-    }, [profile.id, recordPageView, isSuccessReturn, searchParams, toast])
+
+        return () => clearTimeout(timer)
+    }, [profile.id, profile.username, recordPageView, isSuccessReturn, searchParams, toast, isOwner])
 
     // Handlers
     const handleFeeToggle = async () => {
@@ -247,8 +255,27 @@ export default function SubscribeMidnight({ profile, isOwner }: SubscribeMidnigh
     const handleSubscribe = async () => {
         setStatus('processing')
         try {
-            if (viewIdRef.current) {
-                updatePageView({ viewId: viewIdRef.current, data: { reachedPayment: true, startedCheckout: true } }).catch(() => { })
+            // Best-effort: ensure we have a viewId for conversion attribution.
+            // The backend debounces duplicate views within 30 minutes.
+            let viewId = viewIdRef.current
+            if (!viewId && profile.id && !isOwner) {
+                try {
+                    const res = await recordPageView({
+                        profileId: profile.id,
+                        referrer: document.referrer || undefined,
+                        utmSource: searchParams.get('utm_source') || undefined,
+                        utmMedium: searchParams.get('utm_medium') || undefined,
+                        utmCampaign: searchParams.get('utm_campaign') || undefined,
+                    })
+                    viewId = res.viewId
+                    viewIdRef.current = res.viewId
+                } catch {
+                    // Ignore analytics failures - should never block checkout
+                }
+            }
+
+            if (viewId) {
+                updatePageView({ viewId, data: { reachedPayment: true, startedCheckout: true } }).catch(() => { })
             }
 
             const amountInCents = displayAmountToCents(currentAmount, currency)
@@ -257,7 +284,7 @@ export default function SubscribeMidnight({ profile, isOwner }: SubscribeMidnigh
                 amount: amountInCents,
                 interval: 'month',
                 subscriberEmail: subscriberEmail.trim(),
-                viewId: viewIdRef.current || undefined,
+                viewId: viewId || undefined,
             })
 
             if (result.url) {
