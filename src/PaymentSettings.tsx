@@ -405,89 +405,66 @@ export default function PaymentSettings() {
     return (
       <div className="payment-settings-page">
         <header className="payment-settings-header">
-          <Pressable className="back-btn" onClick={() => navigate(-1)}>
+          <Pressable className="back-btn" onClick={() => navigate('/dashboard')}>
             <ArrowLeft size={20} />
           </Pressable>
           <img src="/logo.svg" alt="NatePay" className="header-logo" />
           <div className="header-spacer" />
         </header>
 
-        <div className="payment-settings-content">
-          <section className="connect-card" style={{
-            textAlign: 'center',
-            padding: '32px 24px',
-            background: 'var(--surface)',
-            borderRadius: 16,
-            marginBottom: 16,
+        <div className="payment-settings-content" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', padding: '24px' }}>
+          <div style={{
+            width: 64,
+            height: 64,
+            borderRadius: '50%',
+            background: 'linear-gradient(135deg, #1a1a1a, #2d2d2d)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: 24,
           }}>
-            <div style={{
-              width: 64,
-              height: 64,
-              borderRadius: '50%',
-              background: 'linear-gradient(135deg, #1a1a1a, #2d2d2d)',
+            <CreditCard size={28} color="white" />
+          </div>
+
+          <h2 style={{ fontSize: 22, fontWeight: 600, marginBottom: 8, textAlign: 'center' }}>
+            Connect to start receiving payments
+          </h2>
+
+          <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 32, textAlign: 'center' }}>
+            Stripe is available in 40+ countries. We handle all payment processing and security.
+          </p>
+
+          <Pressable
+            className="connect-btn"
+            onClick={handleConnectStripe}
+            disabled={connecting}
+            style={{
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              margin: '0 auto 16px',
-            }}>
-              <CreditCard size={28} color="white" />
-            </div>
-            <h2 style={{ fontSize: 20, fontWeight: 600, marginBottom: 8 }}>Connect Payments</h2>
-            <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 24 }}>
-              Connect your Stripe account to start accepting payments and receiving payouts.
-            </p>
-
-            {error && (
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                padding: '12px 16px',
-                background: 'rgba(239, 68, 68, 0.1)',
-                borderRadius: 12,
-                marginBottom: 16,
-                textAlign: 'left',
-              }}>
-                <AlertCircle size={18} color="var(--error)" />
-                <span style={{ fontSize: 14, color: 'var(--error)' }}>{error}</span>
-              </div>
+              gap: 8,
+              width: '100%',
+              maxWidth: 320,
+              padding: '16px 24px',
+              background: 'linear-gradient(135deg, #1a1a1a, #2d2d2d)',
+              color: 'white',
+              borderRadius: 12,
+              fontWeight: 600,
+              fontSize: 16,
+            }}
+          >
+            {connecting ? (
+              <>
+                <Loader2 size={18} className="spin" />
+                Connecting...
+              </>
+            ) : (
+              <>
+                Connect with Stripe
+                <ExternalLink size={16} />
+              </>
             )}
-
-            <Pressable
-              className="connect-btn"
-              onClick={handleConnectStripe}
-              disabled={connecting}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 8,
-                width: '100%',
-                padding: '14px 24px',
-                background: 'linear-gradient(135deg, #1a1a1a, #2d2d2d)',
-                color: 'white',
-                borderRadius: 12,
-                fontWeight: 600,
-                fontSize: 16,
-              }}
-            >
-              {connecting ? (
-                <>
-                  <Loader2 size={18} className="spin" />
-                  Connecting...
-                </>
-              ) : (
-                <>
-                  Connect with Stripe
-                  <ExternalLink size={16} />
-                </>
-              )}
-            </Pressable>
-          </section>
-
-          <p style={{ fontSize: 13, color: 'var(--text-tertiary)', textAlign: 'center', padding: '0 16px' }}>
-            Stripe is available in 40+ countries. We handle all payment processing and security.
-          </p>
+          </Pressable>
         </div>
       </div>
     )
