@@ -180,6 +180,7 @@ export function useUpdateSettings() {
             ...oldData.profile,
             ...(variables?.isPublic !== undefined ? { isPublic: data.settings.isPublic } : null),
             ...(variables?.notificationPrefs !== undefined ? { notificationPrefs: data.settings.notificationPrefs } : null),
+            ...(variables?.feeMode !== undefined ? { feeMode: data.settings.feeMode } : null),
           },
         }
       })

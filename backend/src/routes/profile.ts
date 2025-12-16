@@ -302,6 +302,7 @@ const notificationPrefsSchema = z.object({
 const settingsSchema = z.object({
   notificationPrefs: notificationPrefsSchema.optional(),
   isPublic: z.boolean().optional(),
+  feeMode: z.enum(['absorb', 'pass_to_subscriber']).optional(),
 })
 
 // Update settings (notification prefs, visibility)
@@ -327,6 +328,9 @@ profile.patch(
     if (data.isPublic !== undefined) {
       updateData.isPublic = data.isPublic
     }
+    if (data.feeMode !== undefined) {
+      updateData.feeMode = data.feeMode
+    }
 
     const updatedProfile = await db.profile.update({
       where: { userId },
@@ -338,6 +342,7 @@ profile.patch(
       settings: {
         notificationPrefs: updatedProfile.notificationPrefs,
         isPublic: updatedProfile.isPublic,
+        feeMode: updatedProfile.feeMode,
       },
     })
   }
@@ -352,6 +357,7 @@ profile.get('/settings', requireAuth, async (c) => {
     select: {
       notificationPrefs: true,
       isPublic: true,
+      feeMode: true,
     },
   })
 
@@ -366,6 +372,7 @@ profile.get('/settings', requireAuth, async (c) => {
   return c.json({
     notificationPrefs: userProfile?.notificationPrefs || defaultPrefs,
     isPublic: userProfile?.isPublic ?? true,
+    feeMode: userProfile?.feeMode || 'pass_to_subscriber',
   })
 })
 

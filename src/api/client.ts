@@ -426,6 +426,7 @@ export interface NotificationPrefs {
 export interface Settings {
   notificationPrefs: NotificationPrefs
   isPublic: boolean
+  feeMode?: 'absorb' | 'pass_to_subscriber'
 }
 
 export const profile = {
@@ -448,7 +449,7 @@ export const profile = {
   // Settings
   getSettings: () => apiFetch<Settings>('/profile/settings'),
 
-  updateSettings: (data: { notificationPrefs?: NotificationPrefs; isPublic?: boolean }) =>
+  updateSettings: (data: { notificationPrefs?: NotificationPrefs; isPublic?: boolean; feeMode?: 'absorb' | 'pass_to_subscriber' }) =>
     apiFetch<{ success: boolean; settings: Settings }>('/profile/settings', {
       method: 'PATCH',
       body: JSON.stringify(data),
