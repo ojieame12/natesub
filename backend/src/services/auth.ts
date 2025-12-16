@@ -7,7 +7,7 @@ import { env } from '../config/env.js'
 import { sendOtpEmail } from './email.js'
 import type { OnboardingBranch } from '@prisma/client'
 
-const OTP_EXPIRES_MS = parseInt(env.MAGIC_LINK_EXPIRES_MINUTES) * 60 * 1000
+const OTP_EXPIRES_MS = (parseInt(env.MAGIC_LINK_EXPIRES_MINUTES, 10) || 30) * 60 * 1000
 const OTP_GRACE_PERIOD_MS = 30 * 1000 // 30 seconds grace period for clock skew
 const SESSION_EXPIRES_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
 const MAX_OTP_ATTEMPTS = 5
@@ -149,11 +149,11 @@ export async function verifyMagicLink(token: string, email?: string): Promise<{
   // This is critical: with 6-digit OTPs and many users, collisions become likely at scale
   const magicLinkToken = email
     ? await db.magicLinkToken.findFirst({
-        where: { tokenHash, email },
-      })
+      where: { tokenHash, email },
+    })
     : await db.magicLinkToken.findUnique({
-        where: { tokenHash },
-      })
+      where: { tokenHash },
+    })
 
   if (!magicLinkToken) {
     // Track failed attempt for global brute force protection

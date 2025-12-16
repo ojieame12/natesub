@@ -90,6 +90,7 @@ export function useCurrentUser() {
 export function useRequestMagicLink() {
   return useMutation({
     mutationFn: api.auth.requestMagicLink,
+    retry: false, // Don't retry auth - causes rate limit issues
   })
 }
 
@@ -98,6 +99,7 @@ export function useVerifyMagicLink() {
 
   return useMutation({
     mutationFn: ({ otp, email }: { otp: string; email: string }) => api.auth.verify(otp, email),
+    retry: false, // Don't retry auth - causes rate limit issues
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['currentUser'] })
     },

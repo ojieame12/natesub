@@ -268,14 +268,14 @@ function baseTemplate(options: BaseTemplateOptions): string {
 
 		          <!-- Logo Header -->
 		          <tr>
-		            <td align="center" bgcolor="#000000" style="padding: 24px; background-color: #000000;">
-		              <a href="${env.APP_URL}" style="text-decoration: none; display: inline-block; background-color: #ffffff; border-radius: 999px; padding: 10px 14px;">
+		            <td align="center" bgcolor="#000000" style="padding: 28px 24px; background-color: #000000;">
+		              <a href="${env.APP_URL}" style="text-decoration: none; display: inline-block;">
 		                <img
 		                  src="${escapeHtml(EMAIL_LOGO_URL)}"
 		                  alt="${BRAND_NAME}"
 		                  width="85"
 		                  height="29"
-		                  style="display: block; border: 0; width: 85px; height: 29px;"
+		                  style="display: block; border: 0; width: 85px; height: 29px; color: #ffffff; font-size: 20px; font-weight: 700;"
 		                >
 		              </a>
 	            </td>
