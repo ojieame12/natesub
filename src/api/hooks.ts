@@ -154,6 +154,10 @@ export function useUpdateProfile() {
     onSuccess: (data) => {
       queryClient.setQueryData(['profile'], data)
       queryClient.invalidateQueries({ queryKey: ['currentUser'] })
+      // Keep public profile view in sync (template, pricing, paymentsReady, etc.)
+      if (data?.profile?.username) {
+        queryClient.invalidateQueries({ queryKey: ['publicProfile', data.profile.username] })
+      }
     },
   })
 }
@@ -349,12 +353,24 @@ export function useCancelSubscription() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: api.subscriptions.cancel,
+    mutationFn: ({ id, immediate }: { id: string; immediate?: boolean }) =>
+      api.subscriptions.cancel(id, { immediate }),
     onSuccess: (data) => {
       // Invalidate specific subscription and list
       queryClient.invalidateQueries({ queryKey: ['subscription', data.subscription.id] })
       queryClient.invalidateQueries({ queryKey: ['subscriptions'] })
       queryClient.invalidateQueries({ queryKey: ['metrics'] })
+    },
+  })
+}
+
+export function useManageSubscription() {
+  return useMutation({
+    mutationFn: (id: string) => api.mySubscriptions.getPortalUrl(id),
+    onSuccess: (data) => {
+      if (data && data.url) {
+        window.location.href = data.url
+      }
     },
   })
 }

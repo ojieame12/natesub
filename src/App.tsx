@@ -85,6 +85,7 @@ function shouldBypassSplash(pathname: string): boolean {
   // an infinite load (e.g., after returning from Stripe which triggers a full reload).
   // We render the route skeleton quickly instead and let RequireAuth handle gating.
   return (
+    pathname === '/settings/payments' ||
     pathname === '/settings/payments/complete' ||
     pathname === '/settings/payments/refresh'
   )
@@ -304,8 +305,16 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
 
   // Authenticated but needs to complete profile - redirect to onboarding
   // (unless on settings or my-subscriptions - subscriber-only users can manage their subscriptions)
-  if (needsOnboarding && !location.pathname.startsWith('/onboarding')) {
-    return <Navigate to={onboarding?.redirectTo || '/onboarding'} replace />
+  if (needsOnboarding) {
+    const isSubscriberRoute =
+      location.pathname.startsWith('/onboarding') ||
+      location.pathname.startsWith('/my-subscriptions') ||
+      location.pathname.startsWith('/settings') ||
+      location.pathname.startsWith('/unsubscribe')
+
+    if (!isSubscriberRoute) {
+      return <Navigate to={onboarding?.redirectTo || '/onboarding'} replace />
+    }
   }
 
   return <>{children}</>

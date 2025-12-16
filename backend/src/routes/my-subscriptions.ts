@@ -198,7 +198,7 @@ mySubscriptions.post(
     try {
       const returnUrl = subscription.creator.profile?.username
         ? `${env.APP_URL}/${subscription.creator.profile.username}`
-        : `${env.APP_URL}/subscriptions`
+        : `${env.APP_URL}/my-subscriptions`
 
       const { url } = await createSubscriberPortalSession(
         subscription.stripeCustomerId,

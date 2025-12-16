@@ -318,18 +318,24 @@ function baseTemplate(options: BaseTemplateOptions): string {
 
 		          <!-- Logo Header -->
 		          <tr>
-		            <td align="center" bgcolor="#000000" style="padding: 28px 24px; background-color: #000000;">
-		              <a href="${env.APP_URL}" style="text-decoration: none; display: inline-block;">
-		                <img
-			                  src="${escapeHtml(getEmailLogoSrc())}"
-		                  alt="${BRAND_NAME}"
-		                  width="85"
-		                  height="29"
-		                  style="display: block; border: 0; width: 85px; height: 29px; color: #ffffff; font-size: 20px; font-weight: 700;"
-		                >
-		              </a>
-	            </td>
-	          </tr>
+		            <td bgcolor="#000000" style="padding: 0; background-color: #000000;">
+		              <table role="presentation" cellpadding="0" cellspacing="0" width="100%" bgcolor="#000000" style="background-color: #000000;">
+		                <tr>
+		                  <td align="center" bgcolor="#000000" style="padding: 28px 24px; background-color: #000000;">
+		                    <a href="${env.APP_URL}" style="text-decoration: none; display: inline-block;">
+		                      <img
+			                    src="${escapeHtml(getEmailLogoSrc())}"
+		                        alt="${BRAND_NAME}"
+		                        width="85"
+		                        height="29"
+		                        style="display: block; border: 0; width: 85px; height: 29px; color: #ffffff; font-size: 20px; font-weight: 700;"
+		                      >
+		                    </a>
+		                  </td>
+		                </tr>
+		              </table>
+		            </td>
+		          </tr>
 
           <!-- Main Content -->
           <tr>
@@ -490,23 +496,21 @@ export async function sendOtpEmail(to: string, otp: string): Promise<EmailResult
 
 export async function sendWelcomeEmail(to: string, displayName: string): Promise<EmailResult> {
   const safeName = escapeHtml(displayName)
-  return sendWithRetry(() =>
-    resend.emails.send({
-      from: env.EMAIL_FROM,
-      to,
-      subject: `Welcome to ${BRAND_NAME}!`,
-      html: baseTemplate({
-        preheader: `Welcome ${displayName}! Your page is live and ready to receive payments.`,
-        headline: `Welcome, ${safeName}!`,
-        body: `
+  return sendEmail({
+    from: env.EMAIL_FROM,
+    to,
+    subject: `Welcome to ${BRAND_NAME}!`,
+    html: baseTemplate({
+      preheader: `Welcome ${displayName}! Your page is live and ready to receive payments.`,
+      headline: `Welcome, ${safeName}!`,
+      body: `
           <p style="margin: 0 0 16px 0;">Your page is live. Share it with your clients and start receiving payments.</p>
           <p style="margin: 0; font-size: 14px; color: #888888;">Need help getting started? Check out our quick start guide.</p>
         `,
-        ctaText: 'Go to Dashboard',
-        ctaUrl: `${env.APP_URL}/dashboard`,
-      }),
-    })
-  )
+      ctaText: 'Go to Dashboard',
+      ctaUrl: `${env.APP_URL}/dashboard`,
+    }),
+  })
 }
 
 export async function sendOnboardingIncompleteEmail(
@@ -517,23 +521,21 @@ export async function sendOnboardingIncompleteEmail(
     ? "Don't forget to finish setting up your page"
     : `Finish setting up your ${BRAND_NAME} page`
 
-  return sendWithRetry(() =>
-    resend.emails.send({
-      from: env.EMAIL_FROM,
-      to,
-      subject: sanitizeEmailSubject(subject),
-      html: baseTemplate({
-        preheader: 'Complete your profile to start receiving payments.',
-        headline: isSecondReminder ? 'Your page is waiting' : 'Almost there!',
-        body: `
+  return sendEmail({
+    from: env.EMAIL_FROM,
+    to,
+    subject: sanitizeEmailSubject(subject),
+    html: baseTemplate({
+      preheader: 'Complete your profile to start receiving payments.',
+      headline: isSecondReminder ? 'Your page is waiting' : 'Almost there!',
+      body: `
           <p style="margin: 0 0 16px 0;">You started setting up your ${BRAND_NAME} page but didn't finish. Complete your profile to start receiving payments.</p>
           <p style="margin: 0; font-size: 14px; color: #888888;">It only takes a few minutes to complete.</p>
         `,
-        ctaText: 'Continue Setup',
-        ctaUrl: `${env.APP_URL}/onboarding`,
-      }),
-    })
-  )
+      ctaText: 'Continue Setup',
+      ctaUrl: `${env.APP_URL}/onboarding`,
+    }),
+  })
 }
 
 export async function sendNoSubscribersEmail(
@@ -544,15 +546,14 @@ export async function sendNoSubscribersEmail(
   const safeName = escapeHtml(displayName)
   const safeShareUrl = escapeHtml(shareUrl)
 
-  return sendWithRetry(() =>
-    resend.emails.send({
-      from: env.EMAIL_FROM,
-      to,
-      subject: sanitizeEmailSubject('Tips to get your first client'),
-      html: baseTemplate({
-        preheader: 'Your page is ready! Here are tips to get your first payment.',
-        headline: 'Ready to share your page?',
-        body: `
+  return sendEmail({
+    from: env.EMAIL_FROM,
+    to,
+    subject: sanitizeEmailSubject('Tips to get your first client'),
+    html: baseTemplate({
+      preheader: 'Your page is ready! Here are tips to get your first payment.',
+      headline: 'Ready to share your page?',
+      body: `
           <p style="margin: 0 0 16px 0;">Hey ${safeName}, your page is set up and ready to go! Here are some tips to get your first client:</p>
           <ul style="margin: 0 0 20px 0; padding-left: 20px; color: #4a4a4a;">
             <li style="margin-bottom: 8px;">Share your link on social media</li>
@@ -568,11 +569,10 @@ export async function sendNoSubscribersEmail(
             </tr>
           </table>
         `,
-        ctaText: 'Go to Dashboard',
-        ctaUrl: `${env.APP_URL}/dashboard`,
-      }),
-    })
-  )
+      ctaText: 'Go to Dashboard',
+      ctaUrl: `${env.APP_URL}/dashboard`,
+    }),
+  })
 }
 
 // ============================================
@@ -592,25 +592,23 @@ export async function sendNewSubscriberEmail(
 
   const tierText = safeTierName ? ` to ${safeTierName}` : ''
 
-  return sendWithRetry(() =>
-    resend.emails.send({
-      from: env.EMAIL_FROM,
-      to,
-      subject: sanitizeEmailSubject(`New subscriber: ${subscriberName}`),
-      html: baseTemplate({
-        preheader: `${subscriberName} just subscribed for ${formattedAmount}/month.`,
-        headline: 'You have a new subscriber!',
-        body: `
+  return sendEmail({
+    from: env.EMAIL_FROM,
+    to,
+    subject: sanitizeEmailSubject(`New subscriber: ${subscriberName}`),
+    html: baseTemplate({
+      preheader: `${subscriberName} just subscribed for ${formattedAmount}/month.`,
+      headline: 'You have a new subscriber!',
+      body: `
           <p style="margin: 0 0 16px 0;">
             <strong>${safeSubscriberName}</strong> just subscribed${tierText} for <strong>${escapeHtml(formattedAmount)}/month</strong>.
           </p>
         `,
-        ctaText: 'View Subscribers',
-        ctaUrl: `${env.APP_URL}/subscribers`,
-        ctaColor: '#16a34a',
-      }),
-    })
-  )
+      ctaText: 'View Subscribers',
+      ctaUrl: `${env.APP_URL}/subscribers`,
+      ctaColor: '#16a34a',
+    }),
+  })
 }
 
 /**
@@ -632,15 +630,14 @@ export async function sendSubscriptionConfirmationEmail(
   const safeTierName = tierName ? escapeHtml(tierName) : null
   const tierText = safeTierName ? ` (${safeTierName})` : ''
 
-  return sendWithRetry(() =>
-    resend.emails.send({
-      from: env.EMAIL_FROM,
-      to,
-      subject: sanitizeEmailSubject(`You're subscribed to ${providerName}`),
-      html: baseTemplate({
-        preheader: `Thanks for subscribing! You'll be charged ${formattedAmount}/month.`,
-        headline: `You're subscribed!`,
-        body: `
+  return sendEmail({
+    from: env.EMAIL_FROM,
+    to,
+    subject: sanitizeEmailSubject(`You're subscribed to ${providerName}`),
+    html: baseTemplate({
+      preheader: `Thanks for subscribing! You'll be charged ${formattedAmount}/month.`,
+      headline: `You're subscribed!`,
+      body: `
           <p style="margin: 0 0 16px 0;">
             Hey ${safeSubscriberName}, thanks for subscribing to <strong>${safeProviderName}</strong>${tierText}.
           </p>
@@ -667,13 +664,12 @@ export async function sendSubscriptionConfirmationEmail(
             </tr>
           </table>
         `,
-        ctaText: `View ${safeProviderName}'s Page`,
-        ctaUrl: `${env.APP_URL}/${escapeHtml(providerUsername)}`,
-        ctaColor: '#16a34a',
-        footerText: 'You can cancel your subscription anytime from your account settings.',
-      }),
-    })
-  )
+      ctaText: `View ${safeProviderName}'s Page`,
+      ctaUrl: `${env.APP_URL}/${escapeHtml(providerUsername)}`,
+      ctaColor: '#16a34a',
+      footerText: 'You can cancel your subscription anytime from your account settings.',
+    }),
+  })
 }
 
 export async function sendRenewalReminderEmail(
@@ -691,15 +687,14 @@ export async function sendRenewalReminderEmail(
     year: 'numeric',
   })
 
-  return sendWithRetry(() =>
-    resend.emails.send({
-      from: env.EMAIL_FROM,
-      to,
-      subject: sanitizeEmailSubject(`Subscription renewal reminder - ${providerName}`),
-      html: baseTemplate({
-        preheader: `Your subscription to ${providerName} renews on ${formattedDate}.`,
-        headline: 'Your subscription renews soon',
-        body: `
+  return sendEmail({
+    from: env.EMAIL_FROM,
+    to,
+    subject: sanitizeEmailSubject(`Subscription renewal reminder - ${providerName}`),
+    html: baseTemplate({
+      preheader: `Your subscription to ${providerName} renews on ${formattedDate}.`,
+      headline: 'Your subscription renews soon',
+      body: `
           <p style="margin: 0 0 16px 0;">
             Your subscription to <strong>${safeProviderName}</strong> will renew on <strong>${escapeHtml(formattedDate)}</strong> for <strong>${escapeHtml(formattedAmount)}</strong>.
           </p>
@@ -707,12 +702,11 @@ export async function sendRenewalReminderEmail(
             No action needed if you'd like to continue. To update your payment method or cancel, visit your account settings.
           </p>
         `,
-        ctaText: 'Manage Subscription',
-        ctaUrl: `${env.APP_URL}/settings`,
-        ctaColor: '#1a1a1a',
-      }),
-    })
-  )
+      ctaText: 'Manage Subscription',
+      ctaUrl: `${env.APP_URL}/my-subscriptions`,
+      ctaColor: '#1a1a1a',
+    }),
+  })
 }
 
 export async function sendPaymentFailedEmail(
@@ -729,26 +723,24 @@ export async function sendPaymentFailedEmail(
     ? `We'll automatically retry on ${retryDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}.`
     : 'Please update your payment method to continue your subscription.'
 
-  return sendWithRetry(() =>
-    resend.emails.send({
-      from: env.EMAIL_FROM,
-      to,
-      subject: sanitizeEmailSubject(`Action required: Payment failed for ${providerName}`),
-      html: baseTemplate({
-        preheader: `We couldn't process your ${formattedAmount} payment. Please update your payment method.`,
-        headline: 'Payment failed',
-        body: `
+  return sendEmail({
+    from: env.EMAIL_FROM,
+    to,
+    subject: sanitizeEmailSubject(`Action required: Payment failed for ${providerName}`),
+    html: baseTemplate({
+      preheader: `We couldn't process your ${formattedAmount} payment. Please update your payment method.`,
+      headline: 'Payment failed',
+      body: `
           <p style="margin: 0 0 16px 0;">
             We couldn't process your <strong>${escapeHtml(formattedAmount)}</strong> payment for your subscription to <strong>${safeProviderName}</strong>.
           </p>
           <p style="margin: 0; font-size: 14px; color: #888888;">${escapeHtml(retryMessage)}</p>
         `,
-        ctaText: 'Update Payment Method',
-        ctaUrl: `${env.APP_URL}/settings`,
-        ctaColor: '#dc2626',
-      }),
-    })
-  )
+      ctaText: 'Update Payment Method',
+      ctaUrl: `${env.APP_URL}/my-subscriptions`,
+      ctaColor: '#dc2626',
+    }),
+  })
 }
 
 export async function sendSubscriptionCanceledEmail(
@@ -773,15 +765,14 @@ export async function sendSubscriptionCanceledEmail(
       reasonMessage = 'has ended'
   }
 
-  return sendWithRetry(() =>
-    resend.emails.send({
-      from: env.EMAIL_FROM,
-      to,
-      subject: sanitizeEmailSubject(`Subscription to ${providerName} has ended`),
-      html: baseTemplate({
-        preheader: `Your subscription to ${providerName} ${reasonMessage}.`,
-        headline: 'Your subscription has ended',
-        body: `
+  return sendEmail({
+    from: env.EMAIL_FROM,
+    to,
+    subject: sanitizeEmailSubject(`Subscription to ${providerName} has ended`),
+    html: baseTemplate({
+      preheader: `Your subscription to ${providerName} ${reasonMessage}.`,
+      headline: 'Your subscription has ended',
+      body: `
           <p style="margin: 0 0 16px 0;">
             Your subscription to <strong>${safeProviderName}</strong> ${reasonMessage}.
           </p>
@@ -789,11 +780,10 @@ export async function sendSubscriptionCanceledEmail(
             You can resubscribe anytime if you'd like to continue.
           </p>
         `,
-        ctaText: 'Resubscribe',
-        ctaUrl: env.APP_URL,
-      }),
-    })
-  )
+      ctaText: 'Resubscribe',
+      ctaUrl: env.APP_URL,
+    }),
+  })
 }
 
 // ============================================
@@ -819,23 +809,21 @@ export async function sendRequestEmail(
       </table>`
     : ''
 
-  return sendWithRetry(() =>
-    resend.emails.send({
-      from: env.EMAIL_FROM,
-      to,
-      subject: sanitizeEmailSubject(`${senderName} sent you a request`),
-      html: baseTemplate({
-        preheader: `${senderName} sent you a payment request.`,
-        headline: `${safeSenderName} sent you a request`,
-        body: `
+  return sendEmail({
+    from: env.EMAIL_FROM,
+    to,
+    subject: sanitizeEmailSubject(`${senderName} sent you a request`),
+    html: baseTemplate({
+      preheader: `${senderName} sent you a payment request.`,
+      headline: `${safeSenderName} sent you a request`,
+      body: `
           ${messageHtml}
           <p style="margin: 0; font-size: 14px; color: #888888;">Click below to view the details and respond.</p>
         `,
-        ctaText: 'View Request',
-        ctaUrl: requestLink,
-      }),
-    })
-  )
+      ctaText: 'View Request',
+      ctaUrl: requestLink,
+    }),
+  })
 }
 
 export async function sendRequestUnopenedEmail(
@@ -849,25 +837,23 @@ export async function sendRequestUnopenedEmail(
     ? `Reminder: ${senderName} is waiting for your response`
     : `${senderName} sent you a request`
 
-  return sendWithRetry(() =>
-    resend.emails.send({
-      from: env.EMAIL_FROM,
-      to,
-      subject: sanitizeEmailSubject(subject),
-      html: baseTemplate({
-        preheader: `${senderName} sent you a request${isSecondReminder ? ' and is waiting for your response' : ''}.`,
-        headline: isSecondReminder ? 'Friendly reminder' : 'You have a request',
-        body: `
+  return sendEmail({
+    from: env.EMAIL_FROM,
+    to,
+    subject: sanitizeEmailSubject(subject),
+    html: baseTemplate({
+      preheader: `${senderName} sent you a request${isSecondReminder ? ' and is waiting for your response' : ''}.`,
+      headline: isSecondReminder ? 'Friendly reminder' : 'You have a request',
+      body: `
           <p style="margin: 0 0 16px 0;">
             <strong>${safeSenderName}</strong> sent you a request${isSecondReminder ? ' and is waiting for your response' : ''}.
           </p>
           <p style="margin: 0; font-size: 14px; color: #888888;">This request will expire if not responded to.</p>
         `,
-        ctaText: 'View Request',
-        ctaUrl: requestLink,
-      }),
-    })
-  )
+      ctaText: 'View Request',
+      ctaUrl: requestLink,
+    }),
+  })
 }
 
 export async function sendRequestUnpaidEmail(
@@ -880,24 +866,22 @@ export async function sendRequestUnpaidEmail(
   const formattedAmount = formatAmountForEmail(amount, currency)
   const safeSenderName = escapeHtml(senderName)
 
-  return sendWithRetry(() =>
-    resend.emails.send({
-      from: env.EMAIL_FROM,
-      to,
-      subject: sanitizeEmailSubject(`Complete your payment to ${senderName}`),
-      html: baseTemplate({
-        preheader: `You viewed a request for ${formattedAmount} but haven't completed payment.`,
-        headline: 'Complete your payment',
-        body: `
+  return sendEmail({
+    from: env.EMAIL_FROM,
+    to,
+    subject: sanitizeEmailSubject(`Complete your payment to ${senderName}`),
+    html: baseTemplate({
+      preheader: `You viewed a request for ${formattedAmount} but haven't completed payment.`,
+      headline: 'Complete your payment',
+      body: `
           <p style="margin: 0 0 16px 0;">
             You viewed a request from <strong>${safeSenderName}</strong> for <strong>${escapeHtml(formattedAmount)}</strong> but haven't completed the payment yet.
           </p>
         `,
-        ctaText: 'Complete Payment',
-        ctaUrl: requestLink,
-      }),
-    })
-  )
+      ctaText: 'Complete Payment',
+      ctaUrl: requestLink,
+    }),
+  })
 }
 
 export async function sendRequestExpiringEmail(
@@ -907,25 +891,23 @@ export async function sendRequestExpiringEmail(
 ): Promise<EmailResult> {
   const safeSenderName = escapeHtml(senderName)
 
-  return sendWithRetry(() =>
-    resend.emails.send({
-      from: env.EMAIL_FROM,
-      to,
-      subject: sanitizeEmailSubject(`Request from ${senderName} expires soon`),
-      html: baseTemplate({
-        preheader: `The request from ${senderName} will expire in 24 hours.`,
-        headline: 'Request expiring soon',
-        body: `
+  return sendEmail({
+    from: env.EMAIL_FROM,
+    to,
+    subject: sanitizeEmailSubject(`Request from ${senderName} expires soon`),
+    html: baseTemplate({
+      preheader: `The request from ${senderName} will expire in 24 hours.`,
+      headline: 'Request expiring soon',
+      body: `
           <p style="margin: 0 0 16px 0;">
             The request from <strong>${safeSenderName}</strong> will expire in <strong>24 hours</strong>. After that, you won't be able to respond.
           </p>
         `,
-        ctaText: 'Respond Now',
-        ctaUrl: requestLink,
-        ctaColor: '#dc2626',
-      }),
-    })
-  )
+      ctaText: 'Respond Now',
+      ctaUrl: requestLink,
+      ctaColor: '#dc2626',
+    }),
+  })
 }
 
 // ============================================
@@ -950,24 +932,22 @@ export async function sendInvoiceDueEmail(
   })
   const urgencyText = daysUntilDue === 1 ? 'tomorrow' : `in ${daysUntilDue} days`
 
-  return sendWithRetry(() =>
-    resend.emails.send({
-      from: env.EMAIL_FROM,
-      to,
-      subject: sanitizeEmailSubject(`Invoice from ${senderName} due ${urgencyText}`),
-      html: baseTemplate({
-        preheader: `Your invoice for ${formattedAmount} is due ${urgencyText}.`,
-        headline: `Invoice due ${urgencyText}`,
-        body: `
+  return sendEmail({
+    from: env.EMAIL_FROM,
+    to,
+    subject: sanitizeEmailSubject(`Invoice from ${senderName} due ${urgencyText}`),
+    html: baseTemplate({
+      preheader: `Your invoice for ${formattedAmount} is due ${urgencyText}.`,
+      headline: `Invoice due ${urgencyText}`,
+      body: `
           <p style="margin: 0 0 16px 0;">
             Your invoice from <strong>${safeSenderName}</strong> for <strong>${escapeHtml(formattedAmount)}</strong> is due on <strong>${escapeHtml(formattedDate)}</strong>.
           </p>
         `,
-        ctaText: 'Pay Now',
-        ctaUrl: requestLink,
-      }),
-    })
-  )
+      ctaText: 'Pay Now',
+      ctaUrl: requestLink,
+    }),
+  })
 }
 
 export async function sendInvoiceOverdueEmail(
@@ -986,25 +966,23 @@ export async function sendInvoiceOverdueEmail(
     day: 'numeric',
   })
 
-  return sendWithRetry(() =>
-    resend.emails.send({
-      from: env.EMAIL_FROM,
-      to,
-      subject: sanitizeEmailSubject(`Overdue: Invoice from ${senderName}`),
-      html: baseTemplate({
-        preheader: `Your invoice for ${formattedAmount} is ${daysOverdue} days overdue.`,
-        headline: 'Invoice overdue',
-        body: `
+  return sendEmail({
+    from: env.EMAIL_FROM,
+    to,
+    subject: sanitizeEmailSubject(`Overdue: Invoice from ${senderName}`),
+    html: baseTemplate({
+      preheader: `Your invoice for ${formattedAmount} is ${daysOverdue} days overdue.`,
+      headline: 'Invoice overdue',
+      body: `
           <p style="margin: 0 0 16px 0;">
             Your invoice from <strong>${safeSenderName}</strong> for <strong>${escapeHtml(formattedAmount)}</strong> was due on ${escapeHtml(formattedDate)} <strong>(${daysOverdue} day${daysOverdue > 1 ? 's' : ''} ago)</strong>.
           </p>
         `,
-        ctaText: 'Pay Now',
-        ctaUrl: requestLink,
-        ctaColor: '#dc2626',
-      }),
-    })
-  )
+      ctaText: 'Pay Now',
+      ctaUrl: requestLink,
+      ctaColor: '#dc2626',
+    }),
+  })
 }
 
 // ============================================
@@ -1047,25 +1025,23 @@ export async function sendUpdateEmail(
     <img src="${env.API_URL || env.APP_URL}/updates/track/${options.deliveryId}" alt="" width="1" height="1" style="display:block;width:1px;height:1px;border:0;" />
   ` : ''
 
-  return sendWithRetry(() =>
-    resend.emails.send({
-      from: env.EMAIL_FROM,
-      to,
-      subject: sanitizeEmailSubject(title || `New update from ${senderName}`),
-      html: baseTemplate({
-        preheader: body.substring(0, 100) + (body.length > 100 ? '...' : ''),
-        headline: headlineText,
-        body: `
+  return sendEmail({
+    from: env.EMAIL_FROM,
+    to,
+    subject: sanitizeEmailSubject(title || `New update from ${senderName}`),
+    html: baseTemplate({
+      preheader: body.substring(0, 100) + (body.length > 100 ? '...' : ''),
+      headline: headlineText,
+      body: `
           <p style="margin: 0 0 8px 0; font-size: 14px; color: #888888;">From ${safeSenderName}</p>
           ${photoHtml}
           <p style="margin: 0; white-space: pre-wrap; line-height: 1.6;">${safeBody}</p>
           ${viewOnlineHtml}
           ${trackingPixelHtml}
         `,
-        showUnsubscribe: true,  // Updates are marketing emails - must have unsubscribe
-      }),
-    })
-  )
+      showUnsubscribe: true,  // Updates are marketing emails - must have unsubscribe
+    }),
+  })
 }
 
 // ============================================
@@ -1083,27 +1059,25 @@ export async function sendPayoutCompletedEmail(
   const safeName = escapeHtml(displayName)
   const bankInfo = bankLast4 ? ` ending in ****${escapeHtml(bankLast4)}` : ''
 
-  return sendWithRetry(() =>
-    resend.emails.send({
-      from: env.EMAIL_FROM,
-      to,
-      subject: sanitizeEmailSubject(`${formattedAmount} deposited to your account`),
-      html: baseTemplate({
-        preheader: `${formattedAmount} has been deposited to your bank account.`,
-        headline: 'Money on the way!',
-        body: `
+  return sendEmail({
+    from: env.EMAIL_FROM,
+    to,
+    subject: sanitizeEmailSubject(`${formattedAmount} deposited to your account`),
+    html: baseTemplate({
+      preheader: `${formattedAmount} has been deposited to your bank account.`,
+      headline: 'Money on the way!',
+      body: `
           <p style="margin: 0 0 16px 0;">
             Hey ${safeName}, <strong>${escapeHtml(formattedAmount)}</strong> has been deposited to your bank account${bankInfo}.
           </p>
           ${amountCard('Amount deposited', formattedAmount, '#16a34a')}
           <p style="margin: 0; font-size: 14px; color: #888888;">Funds typically arrive within 1-2 business days.</p>
         `,
-        ctaText: 'View Dashboard',
-        ctaUrl: `${env.APP_URL}/dashboard`,
-        ctaColor: '#16a34a',
-      }),
-    })
-  )
+      ctaText: 'View Dashboard',
+      ctaUrl: `${env.APP_URL}/dashboard`,
+      ctaColor: '#16a34a',
+    }),
+  })
 }
 
 export async function sendPayoutFailedEmail(
@@ -1115,15 +1089,14 @@ export async function sendPayoutFailedEmail(
   const formattedAmount = formatAmountForEmail(amount, currency)
   const safeName = escapeHtml(displayName)
 
-  return sendWithRetry(() =>
-    resend.emails.send({
-      from: env.EMAIL_FROM,
-      to,
-      subject: sanitizeEmailSubject('Payout failed - action required'),
-      html: baseTemplate({
-        preheader: `We couldn't complete your payout of ${formattedAmount}.`,
-        headline: 'Payout failed',
-        body: `
+  return sendEmail({
+    from: env.EMAIL_FROM,
+    to,
+    subject: sanitizeEmailSubject('Payout failed - action required'),
+    html: baseTemplate({
+      preheader: `We couldn't complete your payout of ${formattedAmount}.`,
+      headline: 'Payout failed',
+      body: `
           <p style="margin: 0 0 16px 0;">
             Hey ${safeName}, we couldn't complete your payout of <strong>${escapeHtml(formattedAmount)}</strong>.
           </p>
@@ -1131,12 +1104,11 @@ export async function sendPayoutFailedEmail(
             Please check that your bank details are correct. We'll retry the transfer automatically.
           </p>
         `,
-        ctaText: 'Check Bank Details',
-        ctaUrl: `${env.APP_URL}/settings`,
-        ctaColor: '#dc2626',
-      }),
-    })
-  )
+      ctaText: 'Check Bank Details',
+      ctaUrl: `${env.APP_URL}/settings`,
+      ctaColor: '#dc2626',
+    }),
+  })
 }
 
 export async function sendBankSetupIncompleteEmail(
@@ -1148,26 +1120,24 @@ export async function sendBankSetupIncompleteEmail(
   const formattedAmount = formatAmountForEmail(pendingAmount, currency)
   const safeName = escapeHtml(displayName)
 
-  return sendWithRetry(() =>
-    resend.emails.send({
-      from: env.EMAIL_FROM,
-      to,
-      subject: sanitizeEmailSubject('Add bank details to receive your earnings'),
-      html: baseTemplate({
-        preheader: `You have ${formattedAmount} ready to be paid out.`,
-        headline: 'Your earnings are waiting',
-        body: `
+  return sendEmail({
+    from: env.EMAIL_FROM,
+    to,
+    subject: sanitizeEmailSubject('Add bank details to receive your earnings'),
+    html: baseTemplate({
+      preheader: `You have ${formattedAmount} ready to be paid out.`,
+      headline: 'Your earnings are waiting',
+      body: `
           <p style="margin: 0 0 16px 0;">
             Hey ${safeName}, you have <strong>${escapeHtml(formattedAmount)}</strong> ready to be paid out, but we need your bank details first.
           </p>
           ${amountCard('Pending payout', formattedAmount, BRAND_COLOR)}
         `,
-        ctaText: 'Add Bank Details',
-        ctaUrl: `${env.APP_URL}/settings`,
-        ctaColor: '#dc2626',
-      }),
-    })
-  )
+      ctaText: 'Add Bank Details',
+      ctaUrl: `${env.APP_URL}/settings`,
+      ctaColor: '#dc2626',
+    }),
+  })
 }
 
 // ============================================
@@ -1186,26 +1156,24 @@ export async function sendPayrollReadyEmail(
   const safeName = escapeHtml(displayName)
   const periodLabel = `${periodStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${periodEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
 
-  return sendWithRetry(() =>
-    resend.emails.send({
-      from: env.EMAIL_FROM,
-      to,
-      subject: sanitizeEmailSubject('Your pay statement is ready'),
-      html: baseTemplate({
-        preheader: `Your pay statement for ${periodLabel} is ready. Net earnings: ${formattedAmount}`,
-        headline: 'Pay statement ready',
-        body: `
+  return sendEmail({
+    from: env.EMAIL_FROM,
+    to,
+    subject: sanitizeEmailSubject('Your pay statement is ready'),
+    html: baseTemplate({
+      preheader: `Your pay statement for ${periodLabel} is ready. Net earnings: ${formattedAmount}`,
+      headline: 'Pay statement ready',
+      body: `
           <p style="margin: 0 0 16px 0;">
             Hey ${safeName}, your pay statement for <strong>${escapeHtml(periodLabel)}</strong> is now available.
           </p>
           ${amountCard('Net earnings', formattedAmount, '#16a34a')}
           <p style="margin: 0; font-size: 14px; color: #888888;">Use this statement for income verification, taxes, or your records.</p>
         `,
-        ctaText: 'View Statement',
-        ctaUrl: `${env.APP_URL}/payroll`,
-      }),
-    })
-  )
+      ctaText: 'View Statement',
+      ctaUrl: `${env.APP_URL}/payroll`,
+    }),
+  })
 }
 
 // ============================================
@@ -1250,15 +1218,14 @@ export async function sendPlatformDebitNotification(
     ? alertBox('⚠️ Your balance is approaching the $30 limit. After that, new payments will be paused until cleared.', 'warning')
     : ''
 
-  return sendWithRetry(() =>
-    resend.emails.send({
-      from: env.EMAIL_FROM,
-      to,
-      subject: sanitizeEmailSubject('Payment issue with your Nate plan'),
-      html: baseTemplate({
-        preheader: `Your $5 plan payment didn't go through. We'll recover it from your next client payment.`,
-        headline: 'Plan payment issue',
-        body: `
+  return sendEmail({
+    from: env.EMAIL_FROM,
+    to,
+    subject: sanitizeEmailSubject('Payment issue with your Nate plan'),
+    html: baseTemplate({
+      preheader: `Your $5 plan payment didn't go through. We'll recover it from your next client payment.`,
+      headline: 'Plan payment issue',
+      body: `
           <p style="margin: 0 0 16px 0;">
             Hey ${safeName}, we couldn't process your Nate plan payment of <strong>${formattedDebit}</strong>.
           </p>
@@ -1273,11 +1240,10 @@ export async function sendPlatformDebitNotification(
 
           ${closeToCapWarning}
         `,
-        ctaText: 'Update Payment Method',
-        ctaUrl: `${env.APP_URL}/settings/billing`,
-      }),
-    })
-  )
+      ctaText: 'Update Payment Method',
+      ctaUrl: `${env.APP_URL}/settings/billing`,
+    }),
+  })
 }
 
 /**
@@ -1319,23 +1285,21 @@ export async function sendPlatformDebitRecoveredNotification(
       </p>
     `
 
-  return sendWithRetry(() =>
-    resend.emails.send({
-      from: env.EMAIL_FROM,
-      to,
-      subject: sanitizeEmailSubject(remainingDebit > 0 ? 'Platform balance partially recovered' : 'Platform balance cleared ✓'),
-      html: baseTemplate({
-        preheader: remainingDebit > 0
-          ? `We recovered ${formattedRecovered} from your last payment. ${formattedRemaining} remaining.`
-          : `Your platform balance is now $0. All caught up!`,
-        headline: remainingDebit > 0 ? 'Balance partially recovered' : 'Balance cleared',
-        body: bodyContent,
-        ctaText: remainingDebit > 0 ? 'Update Payment Method' : 'View Billing',
-        ctaUrl: `${env.APP_URL}/settings/billing`,
-        ctaColor: remainingDebit > 0 ? undefined : '#10B981',
-      }),
-    })
-  )
+  return sendEmail({
+    from: env.EMAIL_FROM,
+    to,
+    subject: sanitizeEmailSubject(remainingDebit > 0 ? 'Platform balance partially recovered' : 'Platform balance cleared ✓'),
+    html: baseTemplate({
+      preheader: remainingDebit > 0
+        ? `We recovered ${formattedRecovered} from your last payment. ${formattedRemaining} remaining.`
+        : `Your platform balance is now $0. All caught up!`,
+      headline: remainingDebit > 0 ? 'Balance partially recovered' : 'Balance cleared',
+      body: bodyContent,
+      ctaText: remainingDebit > 0 ? 'Update Payment Method' : 'View Billing',
+      ctaUrl: `${env.APP_URL}/settings/billing`,
+      ctaColor: remainingDebit > 0 ? undefined : '#10B981',
+    }),
+  })
 }
 
 /**
@@ -1349,15 +1313,14 @@ export async function sendPaymentSetupCompleteEmail(
   const safeName = escapeHtml(displayName)
   const safeShareUrl = escapeHtml(shareUrl)
 
-  return sendWithRetry(() =>
-    resend.emails.send({
-      from: env.EMAIL_FROM,
-      to,
-      subject: sanitizeEmailSubject('Your payment account is now active!'),
-      html: baseTemplate({
-        preheader: `Great news! Your account is verified and you can now accept payments.`,
-        headline: `You're ready to get paid, ${safeName}!`,
-        body: `
+  return sendEmail({
+    from: env.EMAIL_FROM,
+    to,
+    subject: sanitizeEmailSubject('Your payment account is now active!'),
+    html: baseTemplate({
+      preheader: `Great news! Your account is verified and you can now accept payments.`,
+      headline: `You're ready to get paid, ${safeName}!`,
+      body: `
           <p style="margin: 0 0 16px 0;">
             Your payment account has been verified and is now <strong style="color: #16a34a;">active</strong>. You can start accepting payments from clients immediately.
           </p>
@@ -1377,12 +1340,11 @@ export async function sendPaymentSetupCompleteEmail(
             Share this link with your clients to start receiving payments. Funds are deposited to your bank account automatically.
           </p>
         `,
-        ctaText: 'Go to Dashboard',
-        ctaUrl: `${env.APP_URL}/dashboard`,
-        ctaColor: '#16a34a',
-      }),
-    })
-  )
+      ctaText: 'Go to Dashboard',
+      ctaUrl: `${env.APP_URL}/dashboard`,
+      ctaColor: '#16a34a',
+    }),
+  })
 }
 
 /**
@@ -1396,15 +1358,14 @@ export async function sendPlatformDebitCapReachedNotification(
   const safeName = escapeHtml(displayName)
   const formattedTotal = formatAmountForEmail(totalDebit, 'USD')
 
-  return sendWithRetry(() =>
-    resend.emails.send({
-      from: env.EMAIL_FROM,
-      to,
-      subject: sanitizeEmailSubject('Action required: Payment acceptance paused'),
-      html: baseTemplate({
-        preheader: `Your platform balance has reached $30. Update your payment method to continue accepting payments.`,
-        headline: 'Payment acceptance paused',
-        body: `
+  return sendEmail({
+    from: env.EMAIL_FROM,
+    to,
+    subject: sanitizeEmailSubject('Action required: Payment acceptance paused'),
+    html: baseTemplate({
+      preheader: `Your platform balance has reached $30. Update your payment method to continue accepting payments.`,
+      headline: 'Payment acceptance paused',
+      body: `
           <p style="margin: 0 0 16px 0;">
             Hey ${safeName}, your outstanding platform balance has reached the maximum limit.
           </p>
@@ -1426,10 +1387,9 @@ export async function sendPlatformDebitCapReachedNotification(
             Questions? Reply to this email and we'll help you get back on track.
           </p>
         `,
-        ctaText: 'Clear Balance Now',
-        ctaUrl: `${env.APP_URL}/settings/billing`,
-        ctaColor: '#DC2626',
-      }),
-    })
-  )
+      ctaText: 'Clear Balance Now',
+      ctaUrl: `${env.APP_URL}/settings/billing`,
+      ctaColor: '#DC2626',
+    }),
+  })
 }

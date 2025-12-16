@@ -49,7 +49,7 @@ export default function SubscriberDetail() {
 
     const handleCancel = async () => {
         try {
-            await cancelSubscription(id || '')
+            await cancelSubscription({ id: id || '', immediate: true })
             toast.success('Subscription cancelled')
             setShowCancelConfirm(false)
             setShowActions(false)

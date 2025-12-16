@@ -1,11 +1,11 @@
 import { useState, useMemo, useCallback, memo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Search, X } from 'lucide-react'
+import { ArrowLeft, Search, X, CreditCard } from 'lucide-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Virtuoso } from 'react-virtuoso'
 import { api } from './api/client'
 import type { MySubscription } from './api/client'
-import { useMySubscriptions } from './api/hooks'
+import { useMySubscriptions, useManageSubscription } from './api/hooks'
 import { Pressable, useToast, SkeletonList, ErrorState, LoadingButton } from './components'
 import { useViewTransition, useScrolled } from './hooks'
 import { getCurrencySymbol, formatCompactNumber } from './utils/currency'
@@ -19,17 +19,19 @@ interface SubscriptionRowProps {
   onViewPage: (username: string) => void
   onCancel: (id: string) => void
   onReactivate: (id: string) => void
+  onManageBilling: (id: string) => void
   cancellingId: string | null
   reactivatingId: string | null
+  managingId: string | null
 }
 
 const SubscriptionRow = memo(function SubscriptionRow({
   subscription,
   onViewPage,
-  onCancel,
   onReactivate,
-  cancellingId,
+  onManageBilling,
   reactivatingId,
+  managingId,
 }: SubscriptionRowProps) {
   const provider = subscription.provider
   const name = provider.displayName || provider.username || 'Unknown'
@@ -101,22 +103,22 @@ const SubscriptionRow = memo(function SubscriptionRow({
               Reactivate
             </LoadingButton>
           ) : (
-            <LoadingButton
+            <Pressable
               className="action-chip"
-              onClick={() => onCancel(subscription.id)}
-              loading={cancellingId === subscription.id}
+              onClick={() => onManageBilling(subscription.id)}
               style={{
                 padding: '6px 12px',
-                background: 'transparent',
-                color: 'var(--error)',
+                background: 'var(--neutral-100)',
                 borderRadius: 8,
                 fontSize: 12,
                 fontWeight: 500,
-                border: '1px solid var(--error)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
               }}
             >
-              Cancel
-            </LoadingButton>
+              {managingId === subscription.id ? 'Loading...' : <><CreditCard size={12} /> Billing</>}
+            </Pressable>
           )
         )}
       </div>
@@ -135,6 +137,7 @@ export default function MySubscriptions() {
   const [searchQuery, setSearchQuery] = useState('')
   const [cancellingId, setCancellingId] = useState<string | null>(null)
   const [reactivatingId, setReactivatingId] = useState<string | null>(null)
+  const [managingId, setManagingId] = useState<string | null>(null)
 
   const {
     data,
@@ -209,10 +212,19 @@ export default function MySubscriptions() {
     cancelMutation.mutate(id)
   }, [cancelMutation])
 
+  const manageMutation = useManageSubscription()
+
   const handleReactivate = useCallback((id: string) => {
     setReactivatingId(id)
     reactivateMutation.mutate(id)
   }, [reactivateMutation])
+
+  const handleManageBilling = useCallback((id: string) => {
+    setManagingId(id)
+    manageMutation.mutate(id, {
+      onSettled: () => setManagingId(null)
+    })
+  }, [manageMutation])
 
   return (
     <div className="subscribers-page" ref={scrollRef}>
@@ -319,8 +331,10 @@ export default function MySubscriptions() {
                 onViewPage={handleViewPage}
                 onCancel={handleCancel}
                 onReactivate={handleReactivate}
+                onManageBilling={handleManageBilling}
                 cancellingId={cancellingId}
                 reactivatingId={reactivatingId}
+                managingId={managingId}
               />
             )}
             components={{

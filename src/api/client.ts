@@ -713,9 +713,10 @@ export const subscriptions = {
       `/subscriptions/${id}`
     ),
 
-  cancel: (id: string) =>
+  cancel: (id: string, options?: { immediate?: boolean }) =>
     apiFetch<{ success: boolean; subscription: Subscription }>(`/subscriptions/${id}/cancel`, {
       method: 'POST',
+      body: JSON.stringify(options),
     }),
 }
 
@@ -1093,9 +1094,10 @@ export const mySubscriptions = {
       `/my-subscriptions/${id}`
     ),
 
-  cancel: (id: string) =>
+  cancel: (id: string, options?: { immediate?: boolean }) =>
     apiFetch<{ success: boolean; subscription: MySubscription }>(`/my-subscriptions/${id}/cancel`, {
       method: 'POST',
+      body: JSON.stringify(options),
     }),
 
   reactivate: (id: string) =>

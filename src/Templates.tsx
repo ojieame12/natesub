@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Check, Eye, Sparkles, Loader2 } from 'lucide-react'
+import { ArrowLeft, Check, Eye, Loader2 } from 'lucide-react'
 import { Pressable, useToast, Skeleton } from './components'
 import { useProfile, useUpdateProfile } from './api/hooks'
 import './Templates.css'
@@ -143,9 +143,11 @@ export default function Templates() {
               disabled={!template.available}
             >
               {/* Preview Image Placeholder */}
-              <div className="template-preview">
-                <div className="template-preview-placeholder">
-                  <Sparkles size={24} />
+              <div className={`template-preview template-preview-${template.id}`}>
+                <div className="template-mini-frame" aria-hidden="true">
+                  <div className="template-mini-top" />
+                  <div className="template-mini-body" />
+                  <div className="template-mini-cta" />
                 </div>
                 {selectedTemplate === template.id && template.available && (
                   <div className="template-selected-badge">

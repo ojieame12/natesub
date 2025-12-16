@@ -85,6 +85,27 @@ export default function PaymentSettings() {
     let isCancelled = false
 
     async function loadPaymentData() {
+      // If Stripe returns to the wrong URL (env misconfigured), we can land on /settings/payments.
+      // Redirect immediately to the "complete" handler to avoid a slow first API call / cold start
+      // feeling like an infinite load.
+      const onboardingSource = sessionStorage.getItem('stripe_onboarding_source')
+      const startedAtMs = Number.parseInt(sessionStorage.getItem('stripe_onboarding_started_at') || '', 10)
+      const isRecentOnboardingReturn =
+        Boolean(onboardingSource) &&
+        Number.isFinite(startedAtMs) &&
+        (Date.now() - startedAtMs) < 30 * 60 * 1000
+
+      if (isRecentOnboardingReturn) {
+        navigate('/settings/payments/complete', { replace: true })
+        return
+      }
+
+      // Clear stale onboarding flags (>30m old) to avoid surprising redirects
+      if (onboardingSource && (!Number.isFinite(startedAtMs) || (Date.now() - startedAtMs) >= 30 * 60 * 1000)) {
+        sessionStorage.removeItem('stripe_onboarding_source')
+        sessionStorage.removeItem('stripe_onboarding_started_at')
+      }
+
       setLoading(true)
       setError(null)
 
@@ -101,24 +122,6 @@ export default function PaymentSettings() {
           // Check if request was cancelled before updating state
           if (isCancelled) return
           setStripeStatus(status)
-
-          // If Stripe returned us here (misconfigured return_url), redirect to the intended destination.
-          const onboardingSource = sessionStorage.getItem('stripe_onboarding_source')
-          const startedAtMs = Number.parseInt(sessionStorage.getItem('stripe_onboarding_started_at') || '', 10)
-          const isRecentOnboardingReturn = Boolean(onboardingSource) && Number.isFinite(startedAtMs) && (Date.now() - startedAtMs) < 30 * 60 * 1000
-
-          if (isRecentOnboardingReturn) {
-            // If we land here, it means the Env var is misconfigured (pointing to Settings instead of Complete).
-            // Forward immediately to StripeComplete to handle verification, polling, and final direction.
-            navigate('/settings/payments/complete', { replace: true })
-            return
-          }
-
-          // Clear stale onboarding flags (>30m old) to avoid surprising redirects
-          if (onboardingSource && (!Number.isFinite(startedAtMs) || (Date.now() - startedAtMs) >= 30 * 60 * 1000)) {
-            sessionStorage.removeItem('stripe_onboarding_source')
-            sessionStorage.removeItem('stripe_onboarding_started_at')
-          }
 
           if (status.connected && status.status === 'active') {
             // Fetch balance and payouts
