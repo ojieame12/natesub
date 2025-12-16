@@ -1,4 +1,6 @@
-import { Resend } from 'resend'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { Resend, type Attachment, type CreateEmailOptions } from 'resend'
 import { env } from '../config/env.js'
 import { centsToDisplayAmount, isZeroDecimalCurrency } from '../utils/currency.js'
 
@@ -16,11 +18,12 @@ const BRAND_NAME = 'Nate'
 const BRAND_COLOR = '#FF941A'
 const BRAND_COLOR_DARK = '#E8850F'
 
+const EMAIL_LOGO_FALLBACK_URL = new URL('/logo-email.png', env.PUBLIC_PAGE_URL).toString()
+
 function resolveEmailLogoUrl(): string {
   // Prefer a publicly reachable origin. Public pages are typically unauthenticated and safe for image hosting.
-  const fallback = new URL('/logo-email.png', env.PUBLIC_PAGE_URL).toString()
   const configured = env.EMAIL_LOGO_URL?.trim()
-  if (!configured) return fallback
+  if (!configured) return EMAIL_LOGO_FALLBACK_URL
 
   const lower = configured.toLowerCase()
 
@@ -35,20 +38,58 @@ function resolveEmailLogoUrl(): string {
   // Gmail blocks/strips `data:` image URIs, so base64 logos won't render.
   if (lower.startsWith('data:')) {
     console.warn('[email] EMAIL_LOGO_URL uses a data: URI; Gmail blocks this. Falling back to hosted logo-email.png.')
-    return fallback
+    return EMAIL_LOGO_FALLBACK_URL
   }
 
   // Gmail frequently blocks SVG images in <img>. Prefer PNG.
   const pathname = getPathname(configured) || lower
   if (pathname.endsWith('.svg')) {
     console.warn('[email] EMAIL_LOGO_URL points to an SVG; Gmail may block this. Falling back to hosted logo-email.png.')
-    return fallback
+    return EMAIL_LOGO_FALLBACK_URL
   }
 
   return configured
 }
 
 const EMAIL_LOGO_URL = resolveEmailLogoUrl()
+const USE_INLINE_EMAIL_LOGO = EMAIL_LOGO_URL === EMAIL_LOGO_FALLBACK_URL
+const INLINE_EMAIL_LOGO_CID = 'nate-logo'
+
+function loadInlineEmailLogoAttachment(): Attachment | null {
+  try {
+    const filePath = join(process.cwd(), 'assets', 'logo-email.png')
+    const content = readFileSync(filePath)
+    return {
+      filename: 'logo-email.png',
+      content,
+      contentType: 'image/png',
+      inlineContentId: INLINE_EMAIL_LOGO_CID,
+    }
+  } catch (err: any) {
+    console.warn('[email] Inline logo asset unavailable; falling back to remote logo URL.', err?.message || err)
+    return null
+  }
+}
+
+const INLINE_EMAIL_LOGO_ATTACHMENT: Attachment | null = USE_INLINE_EMAIL_LOGO ? loadInlineEmailLogoAttachment() : null
+
+function getEmailLogoSrc(): string {
+  return INLINE_EMAIL_LOGO_ATTACHMENT ? `cid:${INLINE_EMAIL_LOGO_CID}` : EMAIL_LOGO_URL
+}
+
+function withDefaultEmailAttachments(options: CreateEmailOptions): CreateEmailOptions {
+  if (!INLINE_EMAIL_LOGO_ATTACHMENT) return options
+
+  const existing = options.attachments || []
+  const hasInlineLogo = existing.some(att => att.inlineContentId === INLINE_EMAIL_LOGO_CID)
+  if (hasInlineLogo) return options
+
+  return { ...options, attachments: [INLINE_EMAIL_LOGO_ATTACHMENT, ...existing] }
+}
+
+function sendEmail(options: CreateEmailOptions): Promise<EmailResult> {
+  return sendWithRetry(() => resend.emails.send(withDefaultEmailAttachments(options)))
+}
 
 // Track email send attempts for monitoring
 interface EmailResult {
@@ -280,7 +321,7 @@ function baseTemplate(options: BaseTemplateOptions): string {
 		            <td align="center" bgcolor="#000000" style="padding: 28px 24px; background-color: #000000;">
 		              <a href="${env.APP_URL}" style="text-decoration: none; display: inline-block;">
 		                <img
-		                  src="${escapeHtml(EMAIL_LOGO_URL)}"
+			                  src="${escapeHtml(getEmailLogoSrc())}"
 		                  alt="${BRAND_NAME}"
 		                  width="85"
 		                  height="29"
@@ -379,24 +420,22 @@ function infoRow(label: string, value: string): string {
  * Test email delivery - sends a test email to verify Resend is working
  */
 export async function sendTestEmail(to: string): Promise<EmailResult> {
-  return sendWithRetry(() =>
-    resend.emails.send({
-      from: env.EMAIL_FROM,
-      to,
-      subject: `${BRAND_NAME} Email Test`,
-      html: baseTemplate({
-        preheader: 'This is a test email to verify delivery is working.',
-        headline: 'Email Working!',
-        body: `
-          <p style="margin: 0 0 16px 0;">This is a test email from ${BRAND_NAME} to verify email delivery is working correctly.</p>
-          <p style="margin: 0; font-size: 14px; color: #888888;">Sent at: ${new Date().toISOString()}</p>
-        `,
-        ctaText: 'Go to Dashboard',
-        ctaUrl: `${env.APP_URL}/dashboard`,
-        ctaColor: '#16a34a',
-      }),
-    })
-  )
+  return sendEmail({
+    from: env.EMAIL_FROM,
+    to,
+    subject: `${BRAND_NAME} Email Test`,
+    html: baseTemplate({
+      preheader: 'This is a test email to verify delivery is working.',
+      headline: 'Email Working!',
+      body: `
+        <p style="margin: 0 0 16px 0;">This is a test email from ${BRAND_NAME} to verify email delivery is working correctly.</p>
+        <p style="margin: 0; font-size: 14px; color: #888888;">Sent at: ${new Date().toISOString()}</p>
+      `,
+      ctaText: 'Go to Dashboard',
+      ctaUrl: `${env.APP_URL}/dashboard`,
+      ctaColor: '#16a34a',
+    }),
+  })
 }
 
 /**
@@ -421,30 +460,28 @@ export async function checkEmailHealth(): Promise<{ healthy: boolean; error?: st
 // ============================================
 
 export async function sendOtpEmail(to: string, otp: string): Promise<EmailResult> {
-  return sendWithRetry(() =>
-    resend.emails.send({
-      from: env.EMAIL_FROM,
-      to,
-      subject: sanitizeEmailSubject(`${otp} is your ${BRAND_NAME} verification code`),
-      html: baseTemplate({
-        preheader: `Your verification code is ${otp}. It expires in ${env.MAGIC_LINK_EXPIRES_MINUTES} minutes.`,
-        headline: 'Your verification code',
-        body: `
-          <p style="margin: 0 0 20px 0;">Enter this code in the app to sign in:</p>
-          <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin: 0 0 20px 0;">
-            <tr>
-              <td style="background-color: #f5f5f5; border-radius: 12px; padding: 24px; text-align: center;">
-                <span style="font-size: 36px; font-weight: 700; letter-spacing: 8px; color: #1a1a1a; font-family: 'SF Mono', Monaco, 'Courier New', monospace;">
-                  ${escapeHtml(otp)}
-                </span>
-              </td>
-            </tr>
-          </table>
-          <p style="margin: 0; font-size: 14px; color: #888888;">This code expires in ${env.MAGIC_LINK_EXPIRES_MINUTES} minutes. If you didn't request this, you can safely ignore it.</p>
-        `,
-      }),
-    })
-  )
+  return sendEmail({
+    from: env.EMAIL_FROM,
+    to,
+    subject: sanitizeEmailSubject(`${otp} is your ${BRAND_NAME} verification code`),
+    html: baseTemplate({
+      preheader: `Your verification code is ${otp}. It expires in ${env.MAGIC_LINK_EXPIRES_MINUTES} minutes.`,
+      headline: 'Your verification code',
+      body: `
+        <p style="margin: 0 0 20px 0;">Enter this code in the app to sign in:</p>
+        <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin: 0 0 20px 0;">
+          <tr>
+            <td style="background-color: #f5f5f5; border-radius: 12px; padding: 24px; text-align: center;">
+              <span style="font-size: 36px; font-weight: 700; letter-spacing: 8px; color: #1a1a1a; font-family: 'SF Mono', Monaco, 'Courier New', monospace;">
+                ${escapeHtml(otp)}
+              </span>
+            </td>
+          </tr>
+        </table>
+        <p style="margin: 0; font-size: 14px; color: #888888;">This code expires in ${env.MAGIC_LINK_EXPIRES_MINUTES} minutes. If you didn't request this, you can safely ignore it.</p>
+      `,
+    }),
+  })
 }
 
 // ============================================
