@@ -1,4 +1,4 @@
-import { lazy, Suspense, type ReactNode } from 'react'
+import { type ReactNode } from 'react'
 import { useParams, Navigate, useSearchParams } from 'react-router-dom'
 import { Lock, Clock, AlertCircle } from 'lucide-react'
 import { isReservedUsername } from '../utils/constants'
@@ -8,10 +8,10 @@ import { Skeleton, SkeletonAvatar, Pressable } from '../components'
 // This component handles vanity URLs like natepay.co/username
 // It checks if the username is valid and renders the subscribe page
 
-const SubscribeBoundary = lazy(() => import('./SubscribeBoundary'))
-const SubscribeMidnight = lazy(() => import('./SubscribeMidnight'))
-const SubscriptionSuccess = lazy(() => import('./SubscriptionSuccess'))
-const AlreadySubscribed = lazy(() => import('./AlreadySubscribed'))
+import SubscribeBoundary from './SubscribeBoundary'
+import SubscribeMidnight from './SubscribeMidnight'
+import SubscriptionSuccess from './SubscriptionSuccess'
+import AlreadySubscribed from './AlreadySubscribed'
 
 /**
  * SubscriptionPageSkeleton - Matches exact layout of subscription card
@@ -164,9 +164,5 @@ export default function UserPage() {
       : <SubscribeBoundary profile={data.profile} canceled={isCanceled} />
   }
 
-  return (
-    <Suspense fallback={<SubscriptionPageSkeleton />}>
-      {content}
-    </Suspense>
-  )
+  return <>{content}</>
 }
