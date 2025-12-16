@@ -12,6 +12,7 @@ const OTP_GRACE_PERIOD_MS = 30 * 1000 // 30 seconds grace period for clock skew
 const SESSION_EXPIRES_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
 const MAX_OTP_ATTEMPTS = 5
 const OTP_LOCKOUT_MS = 15 * 60 * 1000 // 15 minutes
+const MAX_OTP_GENERATION_ATTEMPTS = 5
 
 // Onboarding state returned to frontend
 export interface OnboardingState {
@@ -68,19 +69,39 @@ export async function requestMagicLink(email: string): Promise<{ success: boolea
     },
   })
 
-  // Generate 6-digit OTP
-  const otp = generateOtp()
-  const otpHash = hashToken(otp)
-  const expiresAt = new Date(Date.now() + OTP_EXPIRES_MS)
+  // Generate and store a 6-digit OTP.
+  // The DB enforces a unique index on tokenHash, so we retry on rare collisions.
+  let otp: string | null = null
+  for (let attempt = 0; attempt < MAX_OTP_GENERATION_ATTEMPTS; attempt++) {
+    otp = generateOtp()
+    const otpHash = hashToken(otp)
+    const expiresAt = new Date(Date.now() + OTP_EXPIRES_MS)
 
-  // Store in database (reusing magicLinkToken table)
-  await db.magicLinkToken.create({
-    data: {
-      email: normalizedEmail,
-      tokenHash: otpHash,
-      expiresAt,
-    },
-  })
+    try {
+      await db.magicLinkToken.create({
+        data: {
+          email: normalizedEmail,
+          tokenHash: otpHash,
+          expiresAt,
+        },
+      })
+      break
+    } catch (err: any) {
+      const isUniqueCollision =
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === 'P2002'
+
+      if (!isUniqueCollision || attempt === MAX_OTP_GENERATION_ATTEMPTS - 1) {
+        throw err
+      }
+
+      otp = null
+    }
+  }
+
+  if (!otp) {
+    throw new Error('Failed to generate a verification code. Please try again.')
+  }
 
   // Send OTP email
   await sendOtpEmail(normalizedEmail, otp)
@@ -144,12 +165,13 @@ export async function verifyMagicLink(token: string, email?: string): Promise<{
   onboarding: OnboardingState
 }> {
   const tokenHash = hashToken(token)
+  const normalizedEmail = email ? email.toLowerCase().trim() : undefined
 
   // Find token - if email provided, scope lookup to that email (prevents OTP collision attacks)
   // This is critical: with 6-digit OTPs and many users, collisions become likely at scale
-  const magicLinkToken = email
+  const magicLinkToken = normalizedEmail
     ? await db.magicLinkToken.findFirst({
-      where: { tokenHash, email },
+      where: { tokenHash, email: normalizedEmail },
     })
     : await db.magicLinkToken.findUnique({
       where: { tokenHash },
@@ -193,7 +215,7 @@ export async function verifyMagicLink(token: string, email?: string): Promise<{
       await redis.set(lockoutKey, '1', 'PX', OTP_LOCKOUT_MS)
       await redis.del(attemptKey)
     }
-    throw new Error('This code has already been used')
+    throw new Error('This code is no longer valid. Please request a new code.')
   }
 
   // Add grace period to handle minor clock skew between servers
@@ -205,45 +227,52 @@ export async function verifyMagicLink(token: string, email?: string): Promise<{
   // Success - clear any failed attempts
   await redis.del(attemptKey)
 
-  // Mark token as used
-  await db.magicLinkToken.update({
-    where: { id: magicLinkToken.id },
-    data: { usedAt: new Date() },
-  })
+  // Mark token as used and create a session atomically.
+  // This prevents consuming the OTP if DB writes fail mid-flight.
+  const now = new Date()
+  const { user, sessionToken } = await db.$transaction(async (tx) => {
+    const updateResult = await tx.magicLinkToken.updateMany({
+      where: { id: magicLinkToken.id, usedAt: null },
+      data: { usedAt: now },
+    })
 
-  // Find or create user
-  let user = await db.user.findUnique({
-    where: { email: magicLinkToken.email },
-    include: { profile: true },
-  })
+    if (updateResult.count !== 1) {
+      throw new Error('This code is no longer valid. Please request a new code.')
+    }
 
-  if (!user) {
-    user = await db.user.create({
-      data: {
-        email: magicLinkToken.email,
-        onboardingStep: 3, // Post-OTP step (identity)
-      },
+    let user = await tx.user.findUnique({
+      where: { email: magicLinkToken.email },
       include: { profile: true },
     })
-  }
 
-  // Update last login
-  await db.user.update({
-    where: { id: user.id },
-    data: { lastLoginAt: new Date() },
-  })
+    if (!user) {
+      user = await tx.user.create({
+        data: {
+          email: magicLinkToken.email,
+          onboardingStep: 3, // Post-OTP step (identity)
+        },
+        include: { profile: true },
+      })
+    }
 
-  // Create session
-  const sessionToken = generateToken()
-  const sessionTokenHash = hashToken(sessionToken)
-  const sessionExpiresAt = new Date(Date.now() + SESSION_EXPIRES_MS)
+    await tx.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: now },
+    })
 
-  await db.session.create({
-    data: {
-      userId: user.id,
-      token: sessionTokenHash,
-      expiresAt: sessionExpiresAt,
-    },
+    const sessionToken = generateToken()
+    const sessionTokenHash = hashToken(sessionToken)
+    const sessionExpiresAt = new Date(Date.now() + SESSION_EXPIRES_MS)
+
+    await tx.session.create({
+      data: {
+        userId: user.id,
+        token: sessionTokenHash,
+        expiresAt: sessionExpiresAt,
+      },
+    })
+
+    return { user, sessionToken }
   })
 
   // Compute onboarding state

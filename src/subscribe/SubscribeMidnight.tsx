@@ -402,25 +402,27 @@ export default function SubscribeMidnight({ profile, isOwner }: SubscribeMidnigh
                 <div style={{ fontSize: 13, marginBottom: 25, position: 'relative', zIndex: 1 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, alignItems: 'center' }}>
                         <span style={{ color: '#aaa' }}>Subscription</span>
-                        {hasTiers && profile.tiers ? (
-                            <select
-                                value={selectedTierId}
-                                onChange={e => setSelectedTierId(e.target.value)}
-                                disabled={status === 'processing' || !isReadyToPay}
-                                style={{
-                                    appearance: 'none', background: '#2a2a30', border: '1px solid #3a3a40', color: '#f0f0f0',
-                                    borderRadius: 4, padding: '2px 20px 2px 8px', fontSize: 13, fontWeight: 'bold',
-                                    cursor: 'pointer', fontFamily: 'inherit'
-                                }}
-                            >
-                                {profile.tiers.map(t => (
-                                    <option key={t.id} value={t.id}>{t.name}</option>
-                                ))}
-                            </select>
+                        {hasTiers && profile.tiers && profile.tiers.length > 1 ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <select
+                                    value={selectedTierId}
+                                    onChange={e => setSelectedTierId(e.target.value)}
+                                    disabled={status === 'processing' || !isReadyToPay}
+                                    style={{
+                                        appearance: 'none', background: '#2a2a30', border: '1px solid #3a3a40', color: '#f0f0f0',
+                                        borderRadius: 4, padding: '4px 8px', fontSize: 13, fontWeight: 'bold',
+                                        cursor: 'pointer', fontFamily: 'inherit'
+                                    }}
+                                >
+                                    {profile.tiers.map(t => (
+                                        <option key={t.id} value={t.id}>{t.name}</option>
+                                    ))}
+                                </select>
+                                <span style={{ color: '#f0f0f0' }}>{formatCurrency(currentAmount, currency)}/mo</span>
+                            </div>
                         ) : (
                             <span style={{ color: '#f0f0f0' }}>{formatCurrency(currentAmount, currency)}/mo</span>
                         )}
-                        {hasTiers && <span style={{ color: '#f0f0f0' }}>{formatCurrency(currentAmount, currency)}/mo</span>}
                     </div>
 
                     {(subscriberPaysFee || isOwner) && (

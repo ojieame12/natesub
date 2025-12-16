@@ -277,7 +277,7 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
         WebkitMaskImage: `radial-gradient(circle at 10px calc(100% + 5px), transparent 12px, black 13px)`,
         WebkitMaskSize: '20px 100%', WebkitMaskPosition: '-10px 0', WebkitMaskRepeat: 'repeat-x',
         padding: '30px 24px 50px',
-        boxShadow: '0 30px 60px -15px rgba(0, 0, 0, 0.3)',
+        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 50px 100px -20px rgba(0, 0, 0, 0.15)',
         transform: mount ? 'translateY(0)' : 'translateY(50px)',
         opacity: mount ? 1 : 0, transition: 'all 0.6s ease-out'
     }
@@ -358,15 +358,15 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                 <div style={{ fontSize: 13, marginBottom: 25 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, alignItems: 'center' }}>
                         <span>Subscription</span>
-                        {hasTiers && profile.tiers ? (
-                            <div style={{ position: 'relative' }}>
+                        {hasTiers && profile.tiers && profile.tiers.length > 1 ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                                 <select
                                     value={selectedTierId}
                                     onChange={e => setSelectedTierId(e.target.value)}
                                     disabled={status === 'processing' || !isReadyToPay}
                                     style={{
                                         appearance: 'none', background: '#f5f5f5', border: 'none',
-                                        borderRadius: 4, padding: '2px 20px 2px 8px', fontSize: 13, fontWeight: 'bold',
+                                        borderRadius: 4, padding: '4px 8px', fontSize: 13, fontWeight: 'bold',
                                         cursor: 'pointer', fontFamily: 'inherit'
                                     }}
                                 >
@@ -374,14 +374,11 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                                         <option key={t.id} value={t.id}>{t.name}</option>
                                     ))}
                                 </select>
-                                <div style={{ position: 'absolute', right: 4, top: 4, pointerEvents: 'none', opacity: 0.5 }}>
-                                    <Briefcase size={10} />
-                                </div>
+                                <span>{formatCurrency(currentAmount, currency)}/mo</span>
                             </div>
                         ) : (
                             <span>{formatCurrency(currentAmount, currency)}/mo</span>
                         )}
-                        {hasTiers && <span>{formatCurrency(currentAmount, currency)}/mo</span>}
                     </div>
 
                     {/* Fee Row: Hidden if Owner absorbs, OR visible if Owner is viewing to show context */}
