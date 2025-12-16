@@ -300,9 +300,10 @@ export default function SubscribeMidnight({ profile, isOwner }: SubscribeMidnigh
             0 40px 100px -20px rgba(0, 0, 0, 0.7),
             0 0 80px -10px rgba(255, 210, 8, 0.25)
         `,
-        transform: mount ? 'translateY(0)' : 'translateY(50px)',
+        transform: mount ? 'translateY(0) scale(1)' : 'translateY(-20px) scale(0.98)',
+        clipPath: mount ? 'inset(-100px -100px -200px -100px)' : 'inset(0 0 100% 0)',
         opacity: mount ? 1 : 0,
-        transition: 'all 0.6s ease-out',
+        transition: 'clip-path 0.8s cubic-bezier(0.16, 1, 0.3, 1), transform 0.8s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.6s ease-out',
         position: 'relative',
         overflow: 'hidden',
     }

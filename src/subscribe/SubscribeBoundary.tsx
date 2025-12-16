@@ -269,8 +269,10 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
         WebkitMaskSize: '20px 100%', WebkitMaskPosition: '-10px 0', WebkitMaskRepeat: 'repeat-x',
         padding: '30px 24px 50px',
         boxShadow: '0 8px 16px -4px rgba(0, 0, 0, 0.15), 0 35px 60px -15px rgba(0, 0, 0, 0.35), 0 60px 120px -25px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(0, 0, 0, 0.03)',
-        transform: mount ? 'translateY(0)' : 'translateY(50px)',
-        opacity: mount ? 1 : 0, transition: 'all 0.6s ease-out'
+        transform: mount ? 'translateY(0) scale(1)' : 'translateY(-20px) scale(0.98)',
+        clipPath: mount ? 'inset(-100px -100px -200px -100px)' : 'inset(0 0 100% 0)',
+        opacity: mount ? 1 : 0,
+        transition: 'clip-path 0.8s cubic-bezier(0.16, 1, 0.3, 1), transform 0.8s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.6s ease-out'
     }
 
     // Success Animation Override
