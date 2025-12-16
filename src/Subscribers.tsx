@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, memo } from 'react'
 import { ArrowLeft, Search, X } from 'lucide-react'
 import { Virtuoso } from 'react-virtuoso'
 import { Pressable, SkeletonList, ErrorState } from './components'
-import { useViewTransition, useScrolled } from './hooks'
+import { useAuthState, useViewTransition, useScrolled } from './hooks'
 import { useSubscriptions } from './api/hooks'
 import { getCurrencySymbol, formatCompactNumber } from './utils/currency'
 import './Subscribers.css'
@@ -12,15 +12,16 @@ type FilterType = 'all' | 'active' | 'canceled'
 // Memoized subscriber row for virtualization performance
 interface SubscriberRowProps {
   subscription: any
+  defaultTier: string
   onNavigate: (id: string) => void
 }
 
-const SubscriberRow = memo(function SubscriberRow({ subscription, onNavigate }: SubscriberRowProps) {
+const SubscriberRow = memo(function SubscriberRow({ subscription, defaultTier, onNavigate }: SubscriberRowProps) {
   const subscriber = subscription.subscriber || {}
   const name = subscriber.displayName || subscriber.email || 'Unknown'
   const email = subscriber.email || ''
   const amount = subscription.amount || 0
-  const tier = subscription.tierName || 'Supporter'
+  const tier = subscription.tierName || defaultTier
   const status = subscription.status
   const currencySymbol = getCurrencySymbol(subscription.currency || 'USD')
 
@@ -49,6 +50,10 @@ const SubscriberRow = memo(function SubscriberRow({ subscription, onNavigate }: 
 export default function Subscribers() {
   const { goBack, navigateWithSharedElements } = useViewTransition()
   const [scrollRef, isScrolled] = useScrolled()
+  const { user } = useAuthState()
+  const isService = user?.profile?.purpose === 'service'
+  const peopleLabel = isService ? 'clients' : 'subscribers'
+  const defaultTier = isService ? 'Client' : 'Supporter'
   const [filter, setFilter] = useState<FilterType>('all')
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -109,7 +114,7 @@ export default function Subscribers() {
             <Search size={18} className="search-icon" />
             <input
               type="text"
-              placeholder="Search subscribers..."
+              placeholder={`Search ${peopleLabel}...`}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               autoFocus
@@ -176,8 +181,8 @@ export default function Subscribers() {
       <div className="subscribers-content">
         {isError ? (
           <ErrorState
-            title="Couldn't load subscribers"
-            message="We had trouble loading your subscribers. Please try again."
+            title={`Couldn't load ${peopleLabel}`}
+            message={`We had trouble loading your ${peopleLabel}. Please try again.`}
             onRetry={loadData}
           />
         ) : isLoading ? (
@@ -187,7 +192,7 @@ export default function Subscribers() {
             <div className="empty-icon">
               <Search size={32} />
             </div>
-            <p className="empty-title">No subscribers found</p>
+            <p className="empty-title">No {peopleLabel} found</p>
             <p className="empty-desc">
               {searchQuery ? 'Try a different search term' : 'Share your page to get started'}
             </p>
@@ -202,6 +207,7 @@ export default function Subscribers() {
               <SubscriberRow
                 key={subscription.id}
                 subscription={subscription}
+                defaultTier={defaultTier}
                 onNavigate={handleNavigate}
               />
             )}

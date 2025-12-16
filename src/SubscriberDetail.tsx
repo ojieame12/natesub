@@ -15,7 +15,7 @@ import {
     ChevronRight,
 } from 'lucide-react'
 import { Pressable, Skeleton, ErrorState, useToast } from './components'
-import { useViewTransition } from './hooks'
+import { useAuthState, useViewTransition } from './hooks'
 import { useSubscription, useCancelSubscription } from './api/hooks'
 import { getCurrencySymbol, formatCompactNumber } from './utils/currency'
 import './SubscriberDetail.css'
@@ -36,6 +36,9 @@ export default function SubscriberDetail() {
     const toast = useToast()
     const [showActions, setShowActions] = useState(false)
     const [showCancelConfirm, setShowCancelConfirm] = useState(false)
+    const { user } = useAuthState()
+    const isService = user?.profile?.purpose === 'service'
+    const personLabel = isService ? 'client' : 'subscriber'
 
     // Fetch subscription from API
     const { data, isLoading, isError, refetch } = useSubscription(id || '')
@@ -107,8 +110,8 @@ export default function SubscriberDetail() {
                     <div className="header-spacer" />
                 </header>
                 <ErrorState
-                    title="Couldn't load subscriber"
-                    message="We had trouble loading this subscriber's details."
+                    title={`Couldn't load ${personLabel}`}
+                    message={`We had trouble loading this ${personLabel}'s details.`}
                     onRetry={() => refetch()}
                 />
             </div>
@@ -127,7 +130,7 @@ export default function SubscriberDetail() {
                     <div className="header-spacer" />
                 </header>
                 <div className="subscriber-empty">
-                    <p>Subscriber not found</p>
+                    <p>{isService ? 'Client' : 'Subscriber'} not found</p>
                 </div>
             </div>
         )

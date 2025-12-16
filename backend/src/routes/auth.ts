@@ -18,6 +18,17 @@ import { stripe } from '../services/stripe.js'
 
 const auth = new Hono()
 
+function isUserAuthError(message: string): boolean {
+  const m = message.toLowerCase()
+  return (
+    m.includes('invalid code') ||
+    m.includes('expired') ||
+    m.includes('no longer valid') ||
+    m.includes('too many failed attempts') ||
+    m.includes('verification codes must be submitted in-app')
+  )
+}
+
 // Auth endpoints should never be cached (they set cookies and return sensitive user/session data).
 auth.use('*', async (c, next) => {
   c.header('Cache-Control', 'no-store')
@@ -75,6 +86,13 @@ async function handleVerify(c: any, token: string, email?: string) {
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Verification failed'
+
+    // Never leak internal DB/stack errors to clients.
+    if (!isUserAuthError(message)) {
+      console.error('[auth/verify] Internal error:', error)
+      return c.json({ error: 'Service temporarily unavailable. Please try again in a moment.' }, 503)
+    }
+
     return c.json({ error: message }, 400)
   }
 }

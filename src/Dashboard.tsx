@@ -30,7 +30,7 @@ import {
 } from 'lucide-react'
 import { Pressable, useToast, Skeleton, SkeletonList, ErrorState, AnimatedCurrency, AnimatedNumber } from './components'
 import { useViewTransition } from './hooks'
-import { useMetrics, useActivity, useProfile, useAnalyticsStats } from './api/hooks'
+import { useCurrentUser, useMetrics, useActivity, useProfile, useAnalyticsStats } from './api/hooks'
 import { getCurrencySymbol, formatCompactNumber } from './utils/currency'
 import './Dashboard.css'
 
@@ -121,6 +121,7 @@ export default function Dashboard() {
   const [copied, setCopied] = useState(false)
 
   // Real API hooks
+  const { data: currentUser } = useCurrentUser()
   const { data: profileData, isLoading: profileLoading, refetch: refetchProfile } = useProfile()
   const { data: metricsData, isLoading: metricsLoading, isError: metricsError, refetch: refetchMetrics } = useMetrics()
   const { data: activityData, isLoading: activityLoading, isError: activityError, refetch: refetchActivity } = useActivity(5)
@@ -131,7 +132,8 @@ export default function Dashboard() {
   const activities = activityData?.pages?.[0]?.activities || []
   const analytics = analyticsData
   const currencySymbol = getCurrencySymbol(profile?.currency || 'USD')
-  const isService = profile?.purpose === 'service'
+  // Avoid "Clients ↔ Subscribers" flicker while /profile loads by using the already-loaded /auth/me profile.
+  const isService = (profile?.purpose || currentUser?.profile?.purpose) === 'service'
 
   // Build menu items based on service vs personal
   const menuItems = useMemo(() => getMenuItems(isService), [isService])

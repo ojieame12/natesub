@@ -1,14 +1,9 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate, useLocation, Outlet } from 'react-router-dom'
 import { Home, Users, Plus, Activity, User } from 'lucide-react'
 import { prefetchRoute } from './utils/prefetch'
-import { useHaptics } from './hooks'
+import { useAuthState, useHaptics } from './hooks'
 import './AppLayout.css'
-
-const NAV_ITEMS_LEFT = [
-    { icon: Home, path: '/dashboard', label: 'Home' },
-    { icon: Users, path: '/subscribers', label: 'Subscribers' },
-]
 
 const NAV_ITEMS_RIGHT = [
     { icon: Activity, path: '/activity', label: 'Activity' },
@@ -20,6 +15,13 @@ function BottomNav() {
     const location = useLocation()
     const [pressedTab, setPressedTab] = useState<string | null>(null)
     const [centerPressed, setCenterPressed] = useState(false)
+
+    const { user } = useAuthState()
+    const isService = user?.profile?.purpose === 'service'
+    const navItemsLeft = useMemo(() => [
+        { icon: Home, path: '/dashboard', label: 'Home' },
+        { icon: Users, path: '/subscribers', label: isService ? 'Clients' : 'Subscribers' },
+    ], [isService])
 
     const { selection, impact } = useHaptics()
 
@@ -37,6 +39,8 @@ function BottomNav() {
             <button
                 key={item.path}
                 className={`tab-item ${isActive ? 'active' : ''} ${pressedTab === item.path ? 'pressed' : ''}`}
+                aria-label={item.label}
+                title={item.label}
                 onClick={() => {
                     navigate(item.path)
                     setPressedTab(null)
@@ -59,9 +63,11 @@ function BottomNav() {
     return (
         <nav className="tab-bar">
             <div className="tab-bar-inner">
-                {NAV_ITEMS_LEFT.map(renderTabItem)}
+                {navItemsLeft.map(renderTabItem)}
                 <button
                     className={`tab-center-btn ${centerPressed ? 'pressed' : ''}`}
+                    aria-label="New request"
+                    title="New request"
                     onClick={() => {
                         navigate('/new-request')
                         setCenterPressed(false)
