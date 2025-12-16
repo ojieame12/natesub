@@ -351,9 +351,9 @@ function AppShell() {
     }
   }, [navigate])
 
-  // Minimum splash display time to prevent flash
+  // Minimum splash display time to prevent flash (reduced from 600ms)
   useEffect(() => {
-    const timer = setTimeout(() => setMinTimeElapsed(true), 600)
+    const timer = setTimeout(() => setMinTimeElapsed(true), 200)
     return () => clearTimeout(timer)
   }, [])
 

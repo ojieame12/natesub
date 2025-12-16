@@ -196,8 +196,8 @@ function normalizeEmail(email: string): string {
   return email.trim().toLowerCase()
 }
 
-// Default timeout for API requests (15 seconds)
-const API_TIMEOUT_MS = 15000
+// Default timeout for API requests (8 seconds - reduced from 15s)
+const API_TIMEOUT_MS = 8000
 
 // Base fetch wrapper
 async function apiFetch<T>(

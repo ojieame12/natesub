@@ -84,7 +84,7 @@ export function useAuthState(): AuthState {
       const result = await api.auth.me()
       return result
     },
-    // Retry transient errors (500, network) up to 2 times, but not 401s
+    // Retry transient errors (500, network) once only, but not 401s
     retry: (failureCount, err) => {
       const status = (err as any)?.status
       // Don't retry 401s - they're definitive
@@ -94,10 +94,10 @@ export function useAuthState(): AuthState {
         queryClient.removeQueries({ queryKey: ['currentUser'] })
         return false
       }
-      // Retry other errors up to 2 times
-      return failureCount < 2
+      // Retry other errors once only (reduced from 2)
+      return failureCount < 1
     },
-    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 5000),
+    retryDelay: () => 1000, // Fixed 1s delay for quick retry
     // Cache for 5 minutes - token is cleared on cold start anyway
     staleTime: 5 * 60 * 1000,
     // Fetch if we have a token OR a session flag (cookie-based auth)
@@ -125,9 +125,9 @@ export function useAuthState(): AuthState {
       if (errStatus === 401) {
         return 'unauthenticated'
       }
-      // Other errors (500, network) after retries exhausted = show error state
+      // Other errors (500, network) after retry exhausted = show error state
       // This prevents redirecting users during outages. User can retry.
-      if (failureCount >= 2) {
+      if (failureCount >= 1) {
         return 'error'
       }
       // Still retrying
