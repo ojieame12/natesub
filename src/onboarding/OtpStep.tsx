@@ -16,6 +16,7 @@ export default function OtpStep() {
     const [isVerifying, setIsVerifying] = useState(false)
     const [isResending, setIsResending] = useState(false)
     const [resendCooldown, setResendCooldown] = useState(0)
+    const verifyInFlightRef = useRef(false)
 
     const { mutateAsync: verifyCode } = useVerifyMagicLink()
     const { mutateAsync: resendCode } = useRequestMagicLink()
@@ -27,8 +28,7 @@ export default function OtpStep() {
 
     // Auto-verify when all digits entered
     useEffect(() => {
-        if (otp.length === OTP_LENGTH && !isVerifying && !hasAttemptedRef.current) {
-            hasAttemptedRef.current = true
+        if (otp.length === OTP_LENGTH && !hasAttemptedRef.current) {
             verifyOtp()
         }
     }, [otp])
@@ -49,13 +49,21 @@ export default function OtpStep() {
     }, [resendCooldown])
 
     const verifyOtp = async () => {
-        if (isVerifying) return
+        const normalizedEmail = email.trim().toLowerCase()
+        if (!normalizedEmail) {
+            setError('Missing email. Please go back and try again.')
+            return
+        }
+        if (otp.length !== OTP_LENGTH) return
+        if (verifyInFlightRef.current) return
+        verifyInFlightRef.current = true
+        hasAttemptedRef.current = true
         setIsVerifying(true)
         setError(null)
         setSuccess(null)
         try {
             // Pass both OTP and email for security - prevents OTP collision attacks
-            const result = await verifyCode({ otp, email })
+            const result = await verifyCode({ otp, email: normalizedEmail })
 
             // Smart routing based on user state
             if (result.hasProfile && result.hasActivePayment) {
@@ -78,11 +86,20 @@ export default function OtpStep() {
             }
         } catch (err: any) {
             const errorMsg = err?.error || 'Invalid code. Please try again.'
+            const status = err?.status
+            const normalizedError = errorMsg.toLowerCase()
+
+            // Rate limit: keep the code so the user can retry once the limit resets.
+            if (status === 429 || normalizedError.includes('too many') || normalizedError.includes('rate')) {
+                setError('Too many attempts. Please wait a few minutes and try again.')
+                return
+            }
+
             // Improve error messages
-            if (errorMsg.toLowerCase().includes('already') || errorMsg.toLowerCase().includes('used')) {
+            if (normalizedError.includes('expired')) {
                 setError('This code has expired. Please click Resend to get a new code.')
-            } else if (errorMsg.toLowerCase().includes('too many') || errorMsg.toLowerCase().includes('rate')) {
-                setError('Too many attempts. Please wait a minute and try again.')
+            } else if (normalizedError.includes('no longer valid') || normalizedError.includes('already') || normalizedError.includes('used')) {
+                setError('This code is no longer valid. Please click Resend to get a new code.')
             } else {
                 setError(errorMsg)
             }
@@ -91,6 +108,7 @@ export default function OtpStep() {
             inputRefs.current[0]?.focus()
         } finally {
             setIsVerifying(false)
+            verifyInFlightRef.current = false
         }
     }
 
@@ -101,7 +119,12 @@ export default function OtpStep() {
         setSuccess(null)
         setOtp('') // Clear any old code
         try {
-            await resendCode(email)
+            const normalizedEmail = email.trim().toLowerCase()
+            if (!normalizedEmail) {
+                setError('Missing email. Please go back and try again.')
+                return
+            }
+            await resendCode(normalizedEmail)
             setResendCooldown(60) // 60 second cooldown
             setSuccess('New code sent! Check your email.')
         } catch (err: any) {
@@ -216,7 +239,7 @@ export default function OtpStep() {
                     )}
 
                     <div style={{ textAlign: 'center', marginTop: 24 }}>
-                        <Pressable onClick={handleResend} disabled={resendCooldown > 0 || isResending}>
+                        <Pressable onClick={handleResend} disabled={resendCooldown > 0 || isResending || isVerifying}>
                             <span style={{ color: 'var(--text-secondary)', fontSize: 15 }}>
                                 Didn't get a code?{' '}
                                 <span style={{ color: (resendCooldown > 0 || isResending) ? 'var(--text-tertiary)' : 'var(--text-primary)', fontWeight: 600 }}>

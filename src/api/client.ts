@@ -192,6 +192,10 @@ function dispatchAuthError() {
   window.dispatchEvent(new CustomEvent(AUTH_ERROR_EVENT))
 }
 
+function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase()
+}
+
 // Default timeout for API requests (15 seconds)
 const API_TIMEOUT_MS = 15000
 
@@ -318,20 +322,22 @@ export interface VerifyResponse {
 
 export const auth = {
   requestMagicLink: (email: string) => {
+    const normalizedEmail = normalizeEmail(email)
     return apiFetch<{ success: boolean; message: string }>('/auth/magic-link', {
       method: 'POST',
-      body: JSON.stringify({ email }),
+      body: JSON.stringify({ email: normalizedEmail }),
     })
   },
 
   verify: async (otp: string, email: string): Promise<VerifyResponse> => {
     // Ensure stale tokens don't interfere with verification flows.
     clearAuthToken()
+    const normalizedEmail = normalizeEmail(email)
 
     // Send both OTP and email - prevents account takeover via OTP collision
     const result = await apiFetch<VerifyResponse>('/auth/verify', {
       method: 'POST',
-      body: JSON.stringify({ token: otp, email }),
+      body: JSON.stringify({ token: otp, email: normalizedEmail }),
     })
 
     // Prefer HttpOnly cookie sessions on web when possible.

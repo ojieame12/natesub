@@ -139,17 +139,9 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
 
     // Data
     const isService = profile.purpose === 'service'
-    const hasTiers = isService && profile.pricingModel === 'tiers' && !!profile.tiers && profile.tiers.length > 0
 
-    // Tier Selection State
-    const [selectedTierId, setSelectedTierId] = useState<string | undefined>(hasTiers && profile.tiers ? profile.tiers[0].id : undefined)
-
-    // Calculate Amount
-    let currentAmount = (profile.singleAmount || 0)
-    if (hasTiers && profile.tiers && selectedTierId) {
-        const tier = profile.tiers.find(t => t.id === selectedTierId)
-        if (tier) currentAmount = tier.amount
-    }
+    // Use single amount only (tiers removed from the flow)
+    const currentAmount = profile.singleAmount || 0
 
     const currency = profile.currency || 'USD'
 
@@ -237,7 +229,6 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                 creatorUsername: profile.username,
                 amount: amountInCents,
                 interval: 'month',
-                tierId: hasTiers && profile.tiers ? profile.tiers[0].id : undefined,
                 subscriberEmail: subscriberEmail.trim(),
                 viewId: viewIdRef.current || undefined,
             })
@@ -358,27 +349,7 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                 <div style={{ fontSize: 13, marginBottom: 25 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, alignItems: 'center' }}>
                         <span>Subscription</span>
-                        {hasTiers && profile.tiers && profile.tiers.length > 1 ? (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                <select
-                                    value={selectedTierId}
-                                    onChange={e => setSelectedTierId(e.target.value)}
-                                    disabled={status === 'processing' || !isReadyToPay}
-                                    style={{
-                                        appearance: 'none', background: '#f5f5f5', border: 'none',
-                                        borderRadius: 4, padding: '4px 8px', fontSize: 13, fontWeight: 'bold',
-                                        cursor: 'pointer', fontFamily: 'inherit'
-                                    }}
-                                >
-                                    {profile.tiers.map(t => (
-                                        <option key={t.id} value={t.id}>{t.name}</option>
-                                    ))}
-                                </select>
-                                <span>{formatCurrency(currentAmount, currency)}/mo</span>
-                            </div>
-                        ) : (
-                            <span>{formatCurrency(currentAmount, currency)}/mo</span>
-                        )}
+                        <span>{formatCurrency(currentAmount, currency)}/mo</span>
                     </div>
 
                     {/* Fee Row: Hidden if Owner absorbs, OR visible if Owner is viewing to show context */}

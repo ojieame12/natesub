@@ -105,6 +105,10 @@ auth.get(
   })),
   async (c) => {
     const { token } = c.req.valid('query')
+    // Hardening: OTP flows must be verified with POST + email to prevent OTP collision/takeover attacks.
+    if (/^\d{6}$/.test(token)) {
+      return c.json({ error: 'Verification codes must be submitted in-app. Please enter the code and try again.' }, 400)
+    }
     return handleVerify(c, token)
   }
 )

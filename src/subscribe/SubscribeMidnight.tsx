@@ -173,15 +173,9 @@ export default function SubscribeMidnight({ profile, isOwner }: SubscribeMidnigh
 
     // Data
     const isService = profile.purpose === 'service'
-    const hasTiers = isService && profile.pricingModel === 'tiers' && !!profile.tiers && profile.tiers.length > 0
-    const [selectedTierId, setSelectedTierId] = useState<string | undefined>(hasTiers && profile.tiers ? profile.tiers[0].id : undefined)
 
-    // Calculate Amount
-    let currentAmount = (profile.singleAmount || 0)
-    if (hasTiers && profile.tiers && selectedTierId) {
-        const tier = profile.tiers.find(t => t.id === selectedTierId)
-        if (tier) currentAmount = tier.amount
-    }
+    // Use single amount only (tiers removed from the flow)
+    const currentAmount = profile.singleAmount || 0
 
     const currency = profile.currency || 'USD'
     const paymentsReady = profile.payoutStatus === 'active' || profile.paymentsReady
@@ -260,7 +254,6 @@ export default function SubscribeMidnight({ profile, isOwner }: SubscribeMidnigh
                 creatorUsername: profile.username,
                 amount: amountInCents,
                 interval: 'month',
-                tierId: hasTiers && profile.tiers ? profile.tiers[0].id : undefined,
                 subscriberEmail: subscriberEmail.trim(),
                 viewId: viewIdRef.current || undefined,
             })
@@ -402,27 +395,7 @@ export default function SubscribeMidnight({ profile, isOwner }: SubscribeMidnigh
                 <div style={{ fontSize: 13, marginBottom: 25, position: 'relative', zIndex: 1 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, alignItems: 'center' }}>
                         <span style={{ color: '#aaa' }}>Subscription</span>
-                        {hasTiers && profile.tiers && profile.tiers.length > 1 ? (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                <select
-                                    value={selectedTierId}
-                                    onChange={e => setSelectedTierId(e.target.value)}
-                                    disabled={status === 'processing' || !isReadyToPay}
-                                    style={{
-                                        appearance: 'none', background: '#2a2a30', border: '1px solid #3a3a40', color: '#f0f0f0',
-                                        borderRadius: 4, padding: '4px 8px', fontSize: 13, fontWeight: 'bold',
-                                        cursor: 'pointer', fontFamily: 'inherit'
-                                    }}
-                                >
-                                    {profile.tiers.map(t => (
-                                        <option key={t.id} value={t.id}>{t.name}</option>
-                                    ))}
-                                </select>
-                                <span style={{ color: '#f0f0f0' }}>{formatCurrency(currentAmount, currency)}/mo</span>
-                            </div>
-                        ) : (
-                            <span style={{ color: '#f0f0f0' }}>{formatCurrency(currentAmount, currency)}/mo</span>
-                        )}
+                        <span style={{ color: '#f0f0f0' }}>{formatCurrency(currentAmount, currency)}/mo</span>
                     </div>
 
                     {(subscriberPaysFee || isOwner) && (

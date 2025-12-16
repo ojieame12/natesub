@@ -106,7 +106,7 @@ describe('onboarding/OtpStep', () => {
     }
 
     expect(
-      await screen.findByText('This code has expired. Please click Resend to get a new code.')
+      await screen.findByText('This code is no longer valid. Please click Resend to get a new code.')
     ).toBeInTheDocument()
 
     // Cleared for retry

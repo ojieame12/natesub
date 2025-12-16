@@ -34,7 +34,9 @@ export default function EmailStep() {
         setError(null)
 
         try {
-            await sendMagicLink(email)
+            const normalizedEmail = email.trim().toLowerCase()
+            await sendMagicLink(normalizedEmail)
+            setEmail(normalizedEmail)
             nextStep()
         } catch (err: any) {
             setError(err?.error || 'Failed to send code. Please try again.')
@@ -42,7 +44,7 @@ export default function EmailStep() {
             setIsSending(false)
             isSubmitting.current = false
         }
-    }, [isValidEmail, isSending, email, sendMagicLink, nextStep])
+    }, [isValidEmail, isSending, email, sendMagicLink, setEmail, nextStep])
 
     return (
         <div className="onboarding">

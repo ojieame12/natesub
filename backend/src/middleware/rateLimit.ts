@@ -6,6 +6,7 @@
  */
 
 import type { Context, Next } from 'hono'
+import { createHash } from 'crypto'
 import { redis } from '../db/redis.js'
 
 interface RateLimitOptions {
@@ -23,6 +24,60 @@ const defaultOptions: RateLimitOptions = {
   message: 'Too many requests, please try again later',
 }
 
+function getClientIp(c: Context): string | null {
+  const candidates = [
+    c.req.header('cf-connecting-ip'),
+    c.req.header('true-client-ip'),
+    c.req.header('fly-client-ip'),
+    c.req.header('x-real-ip'),
+    c.req.header('x-forwarded-for'),
+  ].filter(Boolean) as string[]
+
+  for (const candidate of candidates) {
+    const raw = candidate.trim()
+    if (!raw) continue
+
+    // x-forwarded-for may contain multiple IPs.
+    const first = raw.split(',')[0]?.trim()
+    if (!first) continue
+
+    // Strip :port for IPv4 (keep IPv6 which uses colons).
+    if (/^\d{1,3}(?:\.\d{1,3}){3}:\d+$/.test(first)) {
+      return first.replace(/:\d+$/, '')
+    }
+
+    return first
+  }
+
+  const forwarded = c.req.header('forwarded')
+  if (forwarded) {
+    // RFC 7239: Forwarded: for=192.0.2.60;proto=http;by=203.0.113.43
+    const match = forwarded.match(/for=(?:"?)([^;,\"]+)/i)
+    if (match?.[1]) {
+      let value = match[1].trim()
+      value = value.replace(/^"|"$/g, '')
+      value = value.replace(/^\[|\]$/g, '')
+      if (/^\d{1,3}(?:\.\d{1,3}){3}:\d+$/.test(value)) {
+        value = value.replace(/:\d+$/, '')
+      }
+      if (value) return value
+    }
+  }
+
+  return null
+}
+
+function getClientIdentifier(c: Context): string {
+  const ip = getClientIp(c)
+  if (ip) return ip
+
+  // Last-resort fallback to avoid global collisions when proxies omit IP headers.
+  const ua = c.req.header('user-agent') || ''
+  const lang = c.req.header('accept-language') || ''
+  const fingerprint = createHash('sha256').update(`${ua}|${lang}`).digest('hex').slice(0, 16)
+  return `unknown:${fingerprint}`
+}
+
 /**
  * Create a rate limiting middleware
  */
@@ -36,7 +91,7 @@ export function rateLimit(options: Partial<RateLimitOptions> = {}) {
     // Generate rate limit key
     const key = config.keyGenerator
       ? config.keyGenerator(c)
-      : `${config.keyPrefix}:${userId || c.req.header('x-forwarded-for') || 'anonymous'}`
+      : `${config.keyPrefix}:${userId || getClientIdentifier(c)}`
 
     try {
       // Increment counter
@@ -116,10 +171,7 @@ export const webhookRateLimit = rateLimit({
   keyPrefix: 'webhook_ratelimit',
   keyGenerator: (c) => {
     // Use IP address for webhook rate limiting (not user ID)
-    const ip = c.req.header('x-forwarded-for')?.split(',')[0]?.trim()
-      || c.req.header('x-real-ip')
-      || 'unknown'
-    return `webhook_ratelimit:${ip}`
+    return `webhook_ratelimit:${getClientIdentifier(c)}`
   },
   message: 'Too many webhook requests. Please contact support if this persists.',
 })
@@ -134,10 +186,7 @@ export const authMagicLinkRateLimit = rateLimit({
   maxRequests: 5,
   keyPrefix: 'auth_magic_ratelimit',
   keyGenerator: (c) => {
-    const ip = c.req.header('x-forwarded-for')?.split(',')[0]?.trim()
-      || c.req.header('x-real-ip')
-      || 'unknown'
-    return `auth_magic_ratelimit:${ip}`
+    return `auth_magic_ratelimit:${getClientIdentifier(c)}`
   },
   message: 'Too many login attempts. Please wait 10 minutes before trying again.',
 })
@@ -152,10 +201,7 @@ export const authVerifyRateLimit = rateLimit({
   maxRequests: 15,
   keyPrefix: 'auth_verify_ratelimit',
   keyGenerator: (c) => {
-    const ip = c.req.header('x-forwarded-for')?.split(',')[0]?.trim()
-      || c.req.header('x-real-ip')
-      || 'unknown'
-    return `auth_verify_ratelimit:${ip}`
+    return `auth_verify_ratelimit:${getClientIdentifier(c)}`
   },
   message: 'Too many verification attempts. Please wait a few minutes before trying again.',
 })
@@ -182,10 +228,7 @@ export const checkoutRateLimit = rateLimit({
   maxRequests: 20,
   keyPrefix: 'checkout_ratelimit',
   keyGenerator: (c) => {
-    const ip = c.req.header('x-forwarded-for')?.split(',')[0]?.trim()
-      || c.req.header('x-real-ip')
-      || 'unknown'
-    return `checkout_ratelimit:${ip}`
+    return `checkout_ratelimit:${getClientIdentifier(c)}`
   },
   message: 'Too many checkout requests. Please try again later.',
 })
@@ -200,10 +243,7 @@ export const publicRateLimit = rateLimit({
   maxRequests: 100,
   keyPrefix: 'public_ratelimit',
   keyGenerator: (c) => {
-    const ip = c.req.header('x-forwarded-for')?.split(',')[0]?.trim()
-      || c.req.header('x-real-ip')
-      || 'unknown'
-    return `public_ratelimit:${ip}`
+    return `public_ratelimit:${getClientIdentifier(c)}`
   },
   message: 'Too many requests. Please try again later.',
 })
@@ -218,10 +258,7 @@ export const publicStrictRateLimit = rateLimit({
   maxRequests: 30,
   keyPrefix: 'public_strict_ratelimit',
   keyGenerator: (c) => {
-    const ip = c.req.header('x-forwarded-for')?.split(',')[0]?.trim()
-      || c.req.header('x-real-ip')
-      || 'unknown'
-    return `public_strict_ratelimit:${ip}`
+    return `public_strict_ratelimit:${getClientIdentifier(c)}`
   },
   message: 'Too many requests. Please try again later.',
 })
