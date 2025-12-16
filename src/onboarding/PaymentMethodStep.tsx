@@ -68,7 +68,7 @@ const PAYSTACK_CURRENCIES: Record<string, string> = {
 export default function PaymentMethodStep() {
     const navigate = useNavigate()
     const store = useOnboardingStore()
-    const { countryCode, country, currency, branch, paymentProvider, setPaymentProvider, prevStep, reset } = store
+    const { countryCode, country, currency, branch, paymentProvider, setPaymentProvider, prevStep, reset, nextStep, currentStep } = store
     const [selectedMethod, setSelectedMethod] = useState<string | null>(paymentProvider)
 
     // Get pricing based on branch (service vs personal)
@@ -160,8 +160,8 @@ export default function PaymentMethodStep() {
                 currency: store.currency,
                 purpose: store.branch === 'service' ? 'service' : (store.purpose || 'support'),
                 pricingModel: store.pricingModel,
-                singleAmount: store.singleAmount,
-                tiers: store.tiers,
+                singleAmount: store.pricingModel === 'single' ? store.singleAmount : null,
+                tiers: store.pricingModel === 'tiers' ? store.tiers : null,
                 perks: store.perks.map(p => ({
                     id: p.id,
                     title: p.title,
@@ -177,6 +177,15 @@ export default function PaymentMethodStep() {
 
             // Save profile to backend
             await api.profile.update(profileData)
+            // Ensure profile stays private/draft until the final "Launch" step
+            await api.profile.updateSettings({ isPublic: false })
+
+            // Persist onboarding progress so the flow can resume after redirects
+            await api.auth.saveOnboardingProgress({
+                step: currentStep + 1, // next step is Launch Review
+                branch: branch === 'service' ? 'service' : 'personal',
+                data: { paymentProvider: selectedMethod },
+            }).catch(() => { })
 
             // Handle Stripe connect flow
             if (selectedMethod === 'stripe') {
@@ -187,6 +196,8 @@ export default function PaymentMethodStep() {
                         // Store source for redirect handling when user returns from Stripe
                         sessionStorage.setItem('stripe_onboarding_source', 'onboarding')
                         sessionStorage.setItem('stripe_onboarding_started_at', Date.now().toString())
+                        // Fallback: if StripeComplete can't determine source, it can still navigate back here.
+                        sessionStorage.setItem('stripe_return_to', '/onboarding?step=6')
                         // Profile is saved - redirect to Stripe onboarding
                         // Don't reset() here - AuthRedirect will route properly when user returns
                         window.location.href = result.onboardingUrl
@@ -194,9 +205,8 @@ export default function PaymentMethodStep() {
                     }
 
                     if (result.alreadyOnboarded) {
-                        // Already connected - profile is saved, go to dashboard
-                        reset() // Clear local store since we're done
-                        navigate('/dashboard')
+                        // Already connected - proceed to final review/launch
+                        nextStep()
                         return
                     }
 
@@ -223,8 +233,8 @@ export default function PaymentMethodStep() {
             }
 
             // For flutterwave (when available), go to dashboard
-            reset() // Clear local store since we're done
-            navigate('/dashboard')
+            reset()
+            navigate('/dashboard', { replace: true })
 
         } catch (err: any) {
             console.error('Failed to complete onboarding:', err)

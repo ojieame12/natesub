@@ -5,7 +5,8 @@ import { useOnboardingStore } from './store'
 import { Button, Pressable } from './components'
 import { getShareableLink } from '../utils/constants'
 import { getCurrencySymbol, formatCompactNumber } from '../utils/currency'
-import { calculateFeePreview, getPricing } from '../utils/pricing'
+import { calculateFeePreview } from '../utils/currency'
+import { getPricing } from '../utils/pricing'
 import { api } from '../api'
 import './onboarding.css'
 
@@ -141,76 +142,63 @@ export default function PersonalReviewStep() {
         setBio,
         setUsername,
         setFeeMode,
-        goToStep,
         prevStep,
         reset
     } = useOnboardingStore()
 
+    const resolvedPurpose = branch === 'service' ? 'service' : (purpose || 'support')
+
     const handleLaunch = async () => {
+        if (!name || !username) {
+            setError('Please fill in all fields.')
+            return
+        }
+
         setLaunching(true)
         setError(null)
 
         try {
-            // 1. Save profile to backend
-            const profileData = {
+            // 1. Final Profile Update (persist edits from this step)
+            await api.profile.update({
                 username,
                 displayName: name,
-                bio: bio || undefined,
-                avatarUrl: avatarUrl || undefined,
-                voiceIntroUrl: voiceIntroUrl || undefined,
+                bio: bio || null,
+                avatarUrl,
+                voiceIntroUrl,
+                purpose: resolvedPurpose,
+                feeMode,
+                currency,
                 country,
                 countryCode,
-                currency,
-                purpose: purpose || 'tips',
                 pricingModel,
-                singleAmount: pricingModel === 'single' ? singleAmount : undefined,
-                tiers: pricingModel === 'tiers' ? tiers : undefined,
-                perks: perks.filter(p => p.enabled),
-                impactItems,
-                feeMode,
-            }
+                singleAmount: pricingModel === 'single' ? singleAmount : null,
+                tiers: pricingModel === 'tiers' ? tiers : null,
+                perks: perks.map(p => ({
+                    id: p.id,
+                    title: p.title,
+                    enabled: p.enabled,
+                })),
+                impactItems: impactItems.map(i => ({
+                    id: i.id,
+                    title: i.title,
+                    subtitle: i.subtitle,
+                })),
+                paymentProvider,
+            })
 
-            await api.profile.update(profileData)
-            console.log('Profile saved successfully')
+            // 2. Publish Page
+            await api.profile.updateSettings({ isPublic: true })
 
-            // 2. Initiate Stripe connect if selected
-            if (paymentProvider === 'stripe') {
-                try {
-                    const stripeResult = await api.stripe.connect()
+            // 3. Complete Onboarding
+            await api.auth.saveOnboardingProgress({ step: 7, data: {} })
 
-                    if (stripeResult.error) {
-                        // Show error but don't block - user can set up payments later
-                        console.warn('Stripe connect warning:', stripeResult.error)
-                        setError(stripeResult.suggestion || stripeResult.error)
-                        // Wait a bit then continue anyway
-                        await new Promise(resolve => setTimeout(resolve, 2000))
-                    } else if (stripeResult.onboardingUrl) {
-                        // Mark source for when we return from Stripe
-                        sessionStorage.setItem('stripe_onboarding_source', 'onboarding')
-                        sessionStorage.setItem('stripe_onboarding_started_at', Date.now().toString())
-                        // Redirect to Stripe for onboarding
-                        window.location.href = stripeResult.onboardingUrl
-                        return // Don't navigate to dashboard yet - return early!
-                    } else if (stripeResult.alreadyOnboarded) {
-                        console.log('Stripe already connected')
-                    }
-                } catch (stripeErr: any) {
-                    console.warn('Stripe setup deferred:', stripeErr)
-                    // Don't block launch if Stripe fails - they can set up later
-                    if (stripeErr?.error?.includes('not available')) {
-                        setError('Stripe is not available in your country. You can set up payments later in Settings.')
-                        await new Promise(resolve => setTimeout(resolve, 2000))
-                    }
-                }
-            }
-
-            // 3. Clear onboarding store and navigate to dashboard
+            // 4. Go to Dashboard
             reset()
-            navigate('/dashboard')
+            navigate('/dashboard', { replace: true })
 
         } catch (err: any) {
             console.error('Launch error:', err)
-            setError(err?.error || 'Failed to save profile. Please try again.')
+            setError(err?.error || 'Failed to launch page.')
             setLaunching(false)
         }
     }
@@ -277,13 +265,13 @@ export default function PersonalReviewStep() {
                         />
                         <ReviewRow
                             label="Purpose"
-                            value={purpose ? PURPOSE_LABELS[purpose] : ''}
-                            onNavigate={() => goToStep(3)} // Navigate to purpose step
+                            value={PURPOSE_LABELS[resolvedPurpose] || ''}
+                            readonly
                         />
                         <ReviewRow
                             label="Pricing"
                             value={getPricingDisplay()}
-                            onNavigate={() => goToStep(4)} // Navigate to pricing step
+                            readonly
                         />
                     </div>
 
@@ -310,18 +298,18 @@ export default function PersonalReviewStep() {
 
                         {(() => {
                             const baseAmount = pricingModel === 'single'
-                                ? (singleAmount || 0) * 100  // Convert to cents
-                                : (tiers[0]?.amount || 0) * 100
-                            const preview = calculateFeePreview(baseAmount, branch === 'service' ? 'service' : 'personal', feeMode)
+                                ? (singleAmount || 0)
+                                : (tiers[0]?.amount || 0)
+                            const preview = calculateFeePreview(baseAmount, currency, resolvedPurpose, feeMode)
                             return (
                                 <div className="fee-mode-preview">
                                     <div className="fee-preview-row">
                                         <span>Subscribers pay</span>
-                                        <span className="fee-preview-amount">{currencySymbol}{formatCompactNumber(preview.subscriberPays / 100)}</span>
+                                        <span className="fee-preview-amount">{currencySymbol}{formatCompactNumber(preview.subscriberPays)}</span>
                                     </div>
                                     <div className="fee-preview-row">
                                         <span>You receive</span>
-                                        <span className="fee-preview-amount">{currencySymbol}{formatCompactNumber(preview.creatorReceives / 100)}</span>
+                                        <span className="fee-preview-amount">{currencySymbol}{formatCompactNumber(preview.creatorReceives)}</span>
                                     </div>
                                 </div>
                             )

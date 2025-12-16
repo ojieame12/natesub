@@ -8,7 +8,6 @@ import { requireAuth } from '../middleware/auth.js'
 import { publicStrictRateLimit, publicRateLimit } from '../middleware/rateLimit.js'
 import { sendWelcomeEmail } from '../services/email.js'
 import { cancelOnboardingReminders } from '../jobs/reminders.js'
-import { clearOnboardingState } from '../services/auth.js'
 import { RESERVED_USERNAMES } from '../utils/constants.js'
 import { displayAmountToCents } from '../utils/currency.js'
 import {
@@ -169,10 +168,8 @@ profile.put(
     // Send welcome email for new profiles and clean up onboarding state
     if (isNewProfile && user) {
       await sendWelcomeEmail(user.email, data.displayName)
-      // Cancel any pending onboarding reminders since profile is now complete
+      // Cancel any pending onboarding reminders (legacy: only scheduled for users without profiles)
       await cancelOnboardingReminders(userId)
-      // Clear onboarding state from user record (step, branch, data)
-      await clearOnboardingState(userId)
     }
 
     // Auto-start platform trial for service users

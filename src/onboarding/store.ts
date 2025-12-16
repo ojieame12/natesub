@@ -221,8 +221,8 @@ const initialState = {
     country: '',
     countryCode: '',
     currency: 'USD',
-    purpose: null as SubscriptionPurpose | null,
-    pricingModel: 'tiers' as PricingModel,
+    purpose: 'support' as SubscriptionPurpose,
+    pricingModel: 'single' as PricingModel,
     singleAmount: 10,
     tiers: defaultTiers,
     impactItems: defaultImpactItems,
@@ -233,7 +233,7 @@ const initialState = {
     username: '',
     avatarUrl: null as string | null,
     paymentProvider: null as PaymentProvider,
-    feeMode: 'absorb' as FeeMode, // Default: creator absorbs the fee
+    feeMode: 'pass_to_subscriber' as FeeMode, // Default: subscriber pays the fee
 }
 
 // === Store ===

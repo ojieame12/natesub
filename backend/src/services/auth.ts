@@ -99,21 +99,28 @@ export function computeOnboardingState(user: {
     paymentProvider: string | null
   } | null
 }): OnboardingState {
+  // Update this if onboarding adds/removes steps.
+  // We clear onboarding state when the user reaches (or surpasses) this step.
+  const ONBOARDING_COMPLETE_STEP = 7
+
   const hasProfile = !!user.profile
   // Payment is only "active" when Stripe/Paystack is fully connected
   const hasActivePayment = user.profile?.payoutStatus === 'active'
 
   let redirectTo: string
 
-  if (hasProfile && hasActivePayment) {
-    // Fully complete - go to dashboard
-    redirectTo = '/dashboard'
-  } else if (hasProfile && !hasActivePayment) {
-    // Profile exists but payment not set up - allow dashboard access (Zero State will handle setup)
-    redirectTo = '/dashboard'
-  } else if (user.onboardingStep !== null && user.onboardingStep >= 3) {
-    // Has progress - resume from saved step
+  const hasInProgressOnboarding =
+    user.onboardingStep !== null &&
+    user.onboardingStep >= 0 &&
+    user.onboardingStep < ONBOARDING_COMPLETE_STEP
+
+  if (hasInProgressOnboarding) {
+    // Resume from saved step (even if profile exists) to support multi-stage onboarding.
     redirectTo = `/onboarding?step=${user.onboardingStep}`
+  } else if (hasProfile) {
+    // Profile exists - allow dashboard access regardless of payment status
+    // (the app can guide them to finish setup).
+    redirectTo = '/dashboard'
   } else {
     // Fresh start - go to onboarding (will start at identity step after OTP)
     redirectTo = '/onboarding'
@@ -317,6 +324,13 @@ export async function saveOnboardingProgress(
     data?: Record<string, any>
   }
 ) {
+  // Keep in sync with computeOnboardingState(). When onboarding is complete, clear the state.
+  const ONBOARDING_COMPLETE_STEP = 7
+  if (data.step >= ONBOARDING_COMPLETE_STEP) {
+    await clearOnboardingState(userId)
+    return { success: true }
+  }
+
   // Merge with existing onboarding data if present
   const user = await db.user.findUnique({
     where: { id: userId },

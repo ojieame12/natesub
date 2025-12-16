@@ -7,7 +7,8 @@ import EmailStep from './EmailStep'
 import OtpStep from './OtpStep'
 import IdentityStep from './IdentityStep'
 import PersonalUsernameStep from './PersonalUsernameStep'
-import CreateProfileStep from './components/CreateProfileStep'
+import PaymentMethodStep from './PaymentMethodStep'
+import PersonalReviewStep from './PersonalReviewStep'
 import './onboarding.css'
 
 export default function OnboardingFlow() {
@@ -17,7 +18,8 @@ export default function OnboardingFlow() {
     const [direction, setDirection] = useState<'forward' | 'back'>('forward')
     const [isAnimating, setIsAnimating] = useState(false)
     const prevStepRef = useRef(currentStep)
-    const hasHydrated = useRef(false)
+    const hasHydratedFromServer = useRef(false)
+    const lastAppliedUrlStep = useRef<number | null>(null)
     const shouldSkipNextAnimation = useRef(false)
 
     // "Naked Onboarding" Steps
@@ -27,37 +29,43 @@ export default function OnboardingFlow() {
         <OtpStep key="otp" />,
         <IdentityStep key="identity" />,
         <PersonalUsernameStep key="username" />,
-        <CreateProfileStep key="create" />,
+        <PaymentMethodStep key="payments" />,
+        <PersonalReviewStep key="review" />,
     ]
 
     // Hydrate onboarding state from URL ?step= param or server state
     useEffect(() => {
-        if (hasHydrated.current) return
         if (status !== 'authenticated') return
 
         const params = new URLSearchParams(location.search)
         const urlStep = params.get('step')
 
-        if (urlStep && currentStep === 0) {
-            hasHydrated.current = true
-            shouldSkipNextAnimation.current = true
-            hydrateFromServer({
-                step: parseInt(urlStep, 10),
-                branch: null,
-                data: onboarding?.data,
-            })
+        if (urlStep) {
+            const parsed = parseInt(urlStep, 10)
+            if (!Number.isNaN(parsed) && lastAppliedUrlStep.current !== parsed) {
+                lastAppliedUrlStep.current = parsed
+                shouldSkipNextAnimation.current = true
+                const clampedStep = Math.min(Math.max(parsed, 0), steps.length - 1)
+                hydrateFromServer({
+                    step: clampedStep,
+                    branch: onboarding?.branch || null,
+                    data: onboarding?.data,
+                })
+            }
             return
         }
 
+        if (hasHydratedFromServer.current) return
+
         if (onboarding?.step && onboarding.step > 0 && currentStep === 0) {
-            hasHydrated.current = true
+            hasHydratedFromServer.current = true
             shouldSkipNextAnimation.current = true
             // Map old/out-of-bounds steps to the Username step (index 4) so they can review before creating
             const safeStep = onboarding.step >= steps.length ? 4 : onboarding.step
 
             hydrateFromServer({
                 step: safeStep,
-                branch: null,
+                branch: onboarding.branch || null,
                 data: onboarding.data,
             })
         }

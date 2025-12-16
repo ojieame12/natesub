@@ -117,24 +117,24 @@ export default function StripeComplete() {
     let cancelled = false
     setRetryError(null)
 
-    ;(async () => {
-      try {
-        const quickResult = await checkStatus({ quick: true, refresh: false })
-        if (cancelled) return
-        if (quickResult.status !== 'active') {
-          try {
-            await checkStatus({ quick: true, refresh: true })
-          } catch (err: any) {
-            // Don't downgrade a valid quick status just because the refresh call failed.
-            setRetryError(err?.error || 'Unable to verify Stripe status right now. Please try again.')
+      ; (async () => {
+        try {
+          const quickResult = await checkStatus({ quick: true, refresh: false })
+          if (cancelled) return
+          if (quickResult.status !== 'active') {
+            try {
+              await checkStatus({ quick: true, refresh: true })
+            } catch (err: any) {
+              // Don't downgrade a valid quick status just because the refresh call failed.
+              setRetryError(err?.error || 'Unable to verify Stripe status right now. Please try again.')
+            }
           }
+        } catch (err: any) {
+          if (cancelled) return
+          setStatus('network_error')
+          setRetryError(err?.error || 'Unable to verify Stripe status right now. Please try again.')
         }
-      } catch (err: any) {
-        if (cancelled) return
-        setStatus('network_error')
-        setRetryError(err?.error || 'Unable to verify Stripe status right now. Please try again.')
-      }
-    })()
+      })()
 
     return () => {
       cancelled = true
@@ -146,10 +146,12 @@ export default function StripeComplete() {
     if (status === 'success' && !hasProcessedSuccess.current) {
       hasProcessedSuccess.current = true
 
-      // Only reset onboarding store if user came from onboarding flow
-      if (source === 'onboarding') {
-        resetOnboarding()
-      }
+      // NOTE: If source === 'onboarding', we do NOT resetOnboarding() here anymore.
+      // We want to preserve the state so they can review it in the final 'Launch' step.
+      // The reset will happen in PersonalReviewStep after they click "Launch My Page".
+      // if (source === 'onboarding') {
+      //   resetOnboarding()
+      // }
 
       // Set flag so AuthRedirect knows payment is active (even if webhook hasn't arrived)
       // This survives page refreshes and prevents yo-yo redirects
@@ -249,14 +251,18 @@ export default function StripeComplete() {
   const handleContinue = useCallback(() => {
     setIsNavigating(true)
     const returnTo = sessionStorage.getItem('stripe_return_to')
-    
+
     if (returnTo) {
       sessionStorage.removeItem('stripe_return_to')
       navigate(returnTo, { replace: true })
+    } else if (source === 'onboarding') {
+      // Return to Onboarding Step 6 (Launch Review)
+      // Step indices are 0-based, so 6 is the 7th step (Launch Review)
+      navigate('/onboarding?step=6', { replace: true })
     } else {
       navigate('/dashboard', { replace: true })
     }
-  }, [navigate])
+  }, [navigate, source])
 
   // Auto-continue after success for a smoother flow (especially on mobile).
   // Only do this when user came from a known flow, so manual visits don't instantly redirect away.
@@ -286,11 +292,13 @@ export default function StripeComplete() {
         },
       }
     })
-    
+
     const returnTo = sessionStorage.getItem('stripe_return_to')
     if (returnTo) {
       sessionStorage.removeItem('stripe_return_to')
       navigate(returnTo, { replace: true })
+    } else if (source === 'onboarding') {
+      navigate('/onboarding?step=6', { replace: true })
     } else {
       navigate('/dashboard', { replace: true })
     }
@@ -440,7 +448,7 @@ export default function StripeComplete() {
                   try {
                     const result = await api.stripe.getDashboardLink()
                     if (result.url) window.open(result.url, '_blank', 'noopener,noreferrer')
-                  } catch {}
+                  } catch { }
                 }}
               >
                 <span>Stripe Dashboard</span>

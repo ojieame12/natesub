@@ -56,6 +56,7 @@ const Privacy = lazy(() => import('./legal/Privacy'))
 const Unsubscribe = lazy(() => import('./Unsubscribe'))
 const MySubscriptions = lazy(() => import('./MySubscriptions'))
 const NotFound = lazy(() => import('./NotFound'))
+const ReceiptDesign = lazy(() => import('./experiments/ReceiptDesign'))
 
 function isPublicCreatorPage(pathname: string): boolean {
   // Creator pages are single-segment vanity URLs like "/username"
@@ -199,6 +200,10 @@ function InitialRouteRedirect() {
   useEffect(() => {
     // Only run on /onboarding path
     if (!isOnboardingPath) return
+    // If an explicit ?step= is provided, do not auto-redirect away from onboarding.
+    // This is critical for returning from payment onboarding flows (e.g., StripeComplete → /onboarding?step=6).
+    const params = new URLSearchParams(location.search)
+    if (params.has('step')) return
 
     // Only navigate once per mount
     if (hasNavigated.current) return
@@ -245,7 +250,7 @@ function InitialRouteRedirect() {
       navigate('/dashboard', { replace: true })
     }
     // needsOnboarding: Stay on /onboarding - the flow handles this
-  }, [isOnboardingPath, status, isFullySetUp, needsPaymentSetup, currentStep, onboarding, navigate, resetOnboarding, hydrateFromServer])
+  }, [isOnboardingPath, location.search, status, isFullySetUp, needsPaymentSetup, currentStep, onboarding, navigate, resetOnboarding, hydrateFromServer])
 
   // Reset flags when leaving /onboarding
   useEffect(() => {
@@ -464,6 +469,9 @@ function AppShell() {
           {/* Public Request Pages - for payment/subscription requests */}
           <Route path="/r/:token" element={<PublicRequestPage />} />
           <Route path="/r/:token/success" element={<PublicRequestPage />} />
+
+          {/* Design Experiments */}
+          <Route path="/experiment/receipt" element={<ReceiptDesign />} />
 
           {/* Vanity URLs - natepay.co/username */}
           {/* This must be LAST before the catch-all */}
