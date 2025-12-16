@@ -24,6 +24,14 @@ function resolveEmailLogoUrl(): string {
 
   const lower = configured.toLowerCase()
 
+  const getPathname = (value: string): string | null => {
+    try {
+      return new URL(value).pathname.toLowerCase()
+    } catch {
+      return null
+    }
+  }
+
   // Gmail blocks/strips `data:` image URIs, so base64 logos won't render.
   if (lower.startsWith('data:')) {
     console.warn('[email] EMAIL_LOGO_URL uses a data: URI; Gmail blocks this. Falling back to hosted logo-email.png.')
@@ -31,7 +39,8 @@ function resolveEmailLogoUrl(): string {
   }
 
   // Gmail frequently blocks SVG images in <img>. Prefer PNG.
-  if (lower.endsWith('.svg')) {
+  const pathname = getPathname(configured) || lower
+  if (pathname.endsWith('.svg')) {
     console.warn('[email] EMAIL_LOGO_URL points to an SVG; Gmail may block this. Falling back to hosted logo-email.png.')
     return fallback
   }
