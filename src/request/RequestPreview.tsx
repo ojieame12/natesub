@@ -60,6 +60,9 @@ export default function RequestPreview() {
     const [editingPhone, setEditingPhone] = useState(false)
     const [editingEmail, setEditingEmail] = useState(false)
 
+    // Payout Interceptor State
+    const [showPayoutWall, setShowPayoutWall] = useState(false)
+
     // Redirect if no recipient (useEffect to avoid render-time side effects)
     useEffect(() => {
         if (!recipient) {
@@ -83,9 +86,6 @@ export default function RequestPreview() {
 
     const canSendSMS = phoneNumber.length >= 10
     const canSendEmail = emailAddress.includes('@')
-
-    // Payout Interceptor State
-    const [showPayoutWall, setShowPayoutWall] = useState(false)
 
     const handleSelectMethod = (method: SendMethod) => {
         setSendMethod(method)

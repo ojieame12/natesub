@@ -50,7 +50,7 @@ export default function Billing() {
     const hasSubscription = subscription?.subscriptionId != null
 
     const daysRemaining = getDaysRemaining(subscription?.trialEndsAt || null)
-    const trialProgress = isTrialing ? Math.max(0, Math.min(100, ((30 - daysRemaining) / 30) * 100)) : 0
+    const trialProgress = isTrialing ? Math.max(0, Math.min(100, ((60 - daysRemaining) / 60) * 100)) : 0
 
     const handleStartTrial = () => {
         createCheckout()
@@ -177,7 +177,7 @@ export default function Billing() {
                                     </div>
                                     <div className="billing-status-info">
                                         <span className="billing-status-label">Start Your Free Trial</span>
-                                        <span className="billing-status-detail">First month free, then $5/month</span>
+                                        <span className="billing-status-detail">First 2 months free, then $5/month</span>
                                     </div>
                                 </>
                             ) : (
@@ -221,7 +221,7 @@ export default function Billing() {
                                     <span>Service Plan</span>
                                 </div>
                                 {!hasSubscription && (
-                                    <span className="billing-trial-badge">First month free</span>
+                                    <span className="billing-trial-badge">First 2 months free</span>
                                 )}
                             </div>
                             <div className="billing-plan-price">

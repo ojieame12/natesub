@@ -422,10 +422,18 @@ export function calculateFeePreview(
     amountDollars: number,
     _currency: string,
     purpose?: string | null,
-    feeMode?: 'absorb' | 'pass_to_subscriber' | null
+    feeMode?: 'absorb' | 'pass_to_subscriber' | null,
+    isCrossBorder: boolean = false
 ): FeePreview {
     const isService = purpose === 'service'
-    const rate = isService ? FEE_RATES.service : FEE_RATES.personal
+    let rate = isService ? FEE_RATES.service : FEE_RATES.personal
+
+    // Smart Buffer: Add 1.5% for cross-border transactions (matches backend)
+    // This ensures creators see accurate "net" amounts
+    if (isCrossBorder) {
+        rate += 0.015
+    }
+
     const creatorAbsorbsFee = feeMode === 'absorb'
 
     if (amountDollars === 0) {

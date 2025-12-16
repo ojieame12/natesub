@@ -23,13 +23,14 @@ export default function UserPage() {
   const isCanceled = searchParams.get('canceled') === 'true'
   const provider = searchParams.get('provider')
 
+  // Fetch real profile data from API (includes viewerSubscription if logged in)
+  // Hook must be called before any early returns (Rules of Hooks)
+  const { data, isLoading, error, refetch } = usePublicProfile(username || '')
+
   // If no username or it's a reserved route, redirect to onboarding
   if (!username || isReservedUsername(username)) {
     return <Navigate to="/onboarding" replace />
   }
-
-  // Fetch real profile data from API (includes viewerSubscription if logged in)
-  const { data, isLoading, error, refetch } = usePublicProfile(username)
 
   // Loading state - minimal to avoid jarring skeleton flash
   if (isLoading) {

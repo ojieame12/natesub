@@ -146,11 +146,11 @@ export async function startPlatformTrial(
     const { priceId } = await ensurePlatformProduct()
     const customerId = await getOrCreateCustomer(userId, email)
 
-    // Create subscription directly with 14-day trial (no payment required)
+    // Create subscription directly with 60-day trial (no payment required)
     const subscription = await stripe.subscriptions.create({
       customer: customerId,
       items: [{ price: priceId }],
-      trial_period_days: 14,
+      trial_period_days: 60,
       trial_settings: {
         end_behavior: {
           missing_payment_method: 'cancel', // Cancel if no payment method after trial
@@ -166,7 +166,7 @@ export async function startPlatformTrial(
     const sub = subscription as any
     const trialEndsAt = sub.trial_end
       ? new Date(sub.trial_end * 1000)
-      : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
+      : new Date(Date.now() + 60 * 24 * 60 * 60 * 1000)
 
     // Save to profile
     await db.profile.update({
@@ -230,7 +230,7 @@ export async function createPlatformCheckout(
         },
       ],
       subscription_data: {
-        trial_period_days: 30, // First month free
+        trial_period_days: 60, // First 2 months free
         metadata: {
           userId,
           type: 'platform_subscription',

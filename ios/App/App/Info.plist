@@ -45,6 +45,19 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>NatePay uses your microphone to record voice introductions for your profile</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>NatePay needs access to your photos to set your profile picture</string>
+	<key>NSCameraUsageDescription</key>
+	<string>NatePay needs camera access to take profile photos</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:natepay.co</string>
+		<string>webcredentials:natepay.co</string>
+	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
 </dict>

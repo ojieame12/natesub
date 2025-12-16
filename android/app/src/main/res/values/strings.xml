@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">NatePay</string>
+    <string name="title_activity_main">NatePay</string>
+    <string name="package_name">co.natepay.app</string>
+    <string name="custom_url_scheme">co.natepay.app</string>
+</resources>

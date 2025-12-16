@@ -227,7 +227,7 @@ export async function getAccountStatus(stripeAccountId: string, options: { skipB
   }
 
   // Cache the result (non-blocking)
-  redis.setex(cacheKey, STRIPE_STATUS_CACHE_TTL, JSON.stringify(result)).catch(() => {})
+  redis.setex(cacheKey, STRIPE_STATUS_CACHE_TTL, JSON.stringify(result)).catch(() => { })
 
   return result
 }
@@ -272,9 +272,13 @@ export async function createCheckoutSession(params: {
   const stripeAccountId = creatorProfile.stripeAccountId
 
   // Check for platform debit to recover (only for one-time payments)
-  // For subscriptions, debit recovery happens via separate charge in webhook
+  // SAFETY: Cap recovery at 50% of the Net Amount to ensure creator always gets paid something.
+  // SAFETY: Absolute max cap (3000 = $30) to prevent draining huge amounts at once.
+  // CURRENCY NOTE: Assuming platformDebitCents is roughly 1:1 with transaction currency for now.
+  // In future: Convert USD debt to target currency using FX rates.
+  const maxRecoverable = Math.max(0, Math.floor(params.netAmount * 0.50))
   const platformDebitToRecover = params.interval === 'one_time'
-    ? Math.min(creatorProfile.platformDebitCents || 0, 3000) // Max $30 recovery per payment
+    ? Math.min(creatorProfile.platformDebitCents || 0, 3000, maxRecoverable)
     : 0
 
   // Use pre-calculated amounts from fee engine

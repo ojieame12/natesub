@@ -96,11 +96,10 @@ export default function UpdatePreview() {
     if (stored) {
       const data = JSON.parse(stored) as PendingUpdate
       setPendingUpdate(data)
-      setEnhanced(enhanceCaption(data.caption, tone))
     } else {
       navigate('/updates/new')
     }
-  }, [navigate, tone])
+  }, [navigate])
 
   useEffect(() => {
     if (pendingUpdate) {
