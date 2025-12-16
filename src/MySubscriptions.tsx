@@ -1,10 +1,11 @@
 import { useState, useMemo, useCallback, memo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Search, X } from 'lucide-react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Virtuoso } from 'react-virtuoso'
 import { api } from './api/client'
 import type { MySubscription } from './api/client'
+import { useMySubscriptions } from './api/hooks'
 import { Pressable, useToast, SkeletonList, ErrorState, LoadingButton } from './components'
 import { useViewTransition, useScrolled } from './hooks'
 import { getCurrencySymbol, formatCompactNumber } from './utils/currency'
@@ -135,10 +136,15 @@ export default function MySubscriptions() {
   const [cancellingId, setCancellingId] = useState<string | null>(null)
   const [reactivatingId, setReactivatingId] = useState<string | null>(null)
 
-  const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['mySubscriptions', filter],
-    queryFn: () => api.mySubscriptions.list({ status: filter }),
-  })
+  const {
+    data,
+    isLoading,
+    isError,
+    refetch,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useMySubscriptions(filter)
 
   const cancelMutation = useMutation({
     mutationFn: (id: string) => api.mySubscriptions.cancel(id),
@@ -166,23 +172,33 @@ export default function MySubscriptions() {
     },
   })
 
-  const subscriptions = data?.subscriptions || []
+  // Flatten paginated data
+  const allSubscriptions = useMemo(() => {
+    return data?.pages.flatMap(page => page.subscriptions) || []
+  }, [data])
 
   // Filter by search query
   const filteredSubscriptions = useMemo(() => {
-    if (!searchQuery) return subscriptions
+    if (!searchQuery) return allSubscriptions
     const query = searchQuery.toLowerCase()
-    return subscriptions.filter((sub) => {
+    return allSubscriptions.filter((sub) => {
       const name = sub.provider.displayName || sub.provider.username || ''
       const username = sub.provider.username || ''
       return name.toLowerCase().includes(query) || username.toLowerCase().includes(query)
     })
-  }, [subscriptions, searchQuery])
+  }, [allSubscriptions, searchQuery])
 
-  // Stats
-  const totalActive = subscriptions.filter((s) => s.status === 'active' && !s.cancelAtPeriodEnd).length
-  const totalCancelling = subscriptions.filter((s) => s.cancelAtPeriodEnd).length
-  const totalCancelled = subscriptions.filter((s) => s.status === 'canceled').length
+  // Stats (from loaded data)
+  const totalActive = allSubscriptions.filter((s) => s.status === 'active' && !s.cancelAtPeriodEnd).length
+  const totalCancelling = allSubscriptions.filter((s) => s.cancelAtPeriodEnd).length
+  const totalCancelled = allSubscriptions.filter((s) => s.status === 'canceled').length
+
+  // Load more when reaching end of list
+  const handleEndReached = useCallback(() => {
+    if (hasNextPage && !isFetchingNextPage) {
+      fetchNextPage()
+    }
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage])
 
   const handleViewPage = useCallback((username: string) => {
     navigate(`/${username}`)
@@ -294,6 +310,7 @@ export default function MySubscriptions() {
           <Virtuoso
             className="subscribers-list virtuoso-list"
             data={filteredSubscriptions}
+            endReached={handleEndReached}
             overscan={200}
             itemContent={(_, subscription) => (
               <SubscriptionRow
@@ -306,6 +323,11 @@ export default function MySubscriptions() {
                 reactivatingId={reactivatingId}
               />
             )}
+            components={{
+              Footer: () => isFetchingNextPage ? (
+                <div className="load-more-loading">Loading more...</div>
+              ) : null
+            }}
           />
         )}
       </div>

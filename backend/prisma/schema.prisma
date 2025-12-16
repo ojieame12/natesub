@@ -310,6 +310,8 @@ model Subscription {
   @@index([creatorId, status])                    // Dashboard: count active subs per creator
   @@index([status, interval, currentPeriodEnd])   // Billing job: find due renewals
   @@index([creatorId, status, interval])          // Metrics: MRR calculation
+  @@index([creatorId, createdAt(sort: Desc)])     // Pagination: order by createdAt for cursor pagination
+  @@index([subscriberId, createdAt(sort: Desc)]) // mySubscriptions: order by createdAt
   @@map("subscriptions")
 }
 

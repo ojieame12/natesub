@@ -150,7 +150,7 @@ export function useUpdateProfile() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: api.profile.update,
+    mutationFn: api.profile.patch,
     onSuccess: (data) => {
       queryClient.setQueryData(['profile'], data)
       queryClient.invalidateQueries({ queryKey: ['currentUser'] })
@@ -356,6 +356,20 @@ export function useCancelSubscription() {
       queryClient.invalidateQueries({ queryKey: ['subscriptions'] })
       queryClient.invalidateQueries({ queryKey: ['metrics'] })
     },
+  })
+}
+
+// ============================================
+// MY SUBSCRIPTIONS HOOKS (Client viewing their subscriptions)
+// ============================================
+
+export function useMySubscriptions(status: 'all' | 'active' | 'canceled' = 'active') {
+  return useInfiniteQuery({
+    queryKey: ['mySubscriptions', status],
+    queryFn: ({ pageParam }) => api.mySubscriptions.list({ cursor: pageParam, status }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor || undefined,
+    staleTime: 2 * 60 * 1000, // 2 minutes
   })
 }
 

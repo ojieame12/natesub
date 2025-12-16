@@ -161,7 +161,8 @@ users.get(
       currency: displayCurrency, // Use checkout currency (USD for cross-border)
       shareUrl: profile.shareUrl,
       paymentProvider: inferredPaymentProvider,
-      template: profile.template || 'boundary', // Default to boundary
+      // Normalize legacy 'liquid' template to 'midnight' for frontend consistency
+      template: (profile.template === 'liquid' ? 'midnight' : profile.template) || 'boundary',
       feeMode: profile.feeMode || 'pass_to_subscriber', // Default behavior
       paymentsReady,
       crossBorder: isCrossBorder, // Flag for frontend to show cross-border info

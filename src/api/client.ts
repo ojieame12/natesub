@@ -444,6 +444,12 @@ export interface Settings {
 export const profile = {
   get: () => apiFetch<{ profile: Profile | null }>('/profile'),
 
+  patch: (data: Partial<Profile>) =>
+    apiFetch<{ profile: Profile }>('/profile', {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
   update: (data: Partial<Profile>) =>
     apiFetch<{ profile: Profile }>('/profile', {
       method: 'PUT',

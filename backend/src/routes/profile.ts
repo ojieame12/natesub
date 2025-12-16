@@ -60,6 +60,8 @@ const httpsUrl = z.string().refine(
 )
 
 // Profile create/update schema
+const templateSchema = z.enum(['boundary', 'midnight', 'liquid', 'minimal', 'editorial'])
+
 const profileSchema = z.object({
   username: z.string().min(3).max(20).regex(/^[a-z0-9_]+$/),
   displayName: z.string().min(2).max(50),
@@ -76,7 +78,7 @@ const profileSchema = z.object({
   perks: z.array(perkSchema).optional().nullable(),
   impactItems: z.array(impactItemSchema).optional().nullable(),
   paymentProvider: z.enum(['stripe', 'paystack', 'flutterwave']).optional().nullable(),
-  template: z.enum(['boundary', 'liquid', 'minimal', 'editorial']).optional(),
+  template: templateSchema.optional(),
   feeMode: z.enum(['absorb', 'pass_to_subscriber']).optional(),
   // Address fields
   address: z.string().optional().nullable(),
@@ -84,6 +86,24 @@ const profileSchema = z.object({
   state: z.string().optional().nullable(),
   zip: z.string().optional().nullable(),
 })
+
+const profilePatchSchema = profileSchema
+  .partial()
+  .extend({
+    // Allow explicitly clearing JSON fields with null
+    tiers: z.array(tierSchema).optional().nullable(),
+    perks: z.array(perkSchema).optional().nullable(),
+    impactItems: z.array(impactItemSchema).optional().nullable(),
+    template: templateSchema.optional(),
+  })
+
+type TemplateId = z.infer<typeof templateSchema>
+
+function normalizeTemplate(template: TemplateId | null | undefined): Exclude<TemplateId, 'liquid'> | null {
+  if (!template) return null
+  if (template === 'liquid') return 'midnight'
+  return template
+}
 
 // Get own profile
 profile.get('/', requireAuth, async (c) => {
@@ -97,7 +117,12 @@ profile.get('/', requireAuth, async (c) => {
     return c.json({ profile: null })
   }
 
-  return c.json({ profile: userProfile })
+  return c.json({
+    profile: {
+      ...userProfile,
+      template: normalizeTemplate(userProfile.template as any) || 'boundary',
+    },
+  })
 })
 
 // Create or update profile
@@ -158,7 +183,7 @@ profile.put(
       perks: perksData,
       impactItems: impactItemsData,
       paymentProvider: data.paymentProvider || null,
-      template: data.template || 'boundary',
+      template: normalizeTemplate(data.template) || 'boundary',
       feeMode: data.feeMode || 'pass_to_subscriber', // Default: subscriber pays fee
       shareUrl: `${env.PUBLIC_PAGE_URL || 'https://natepay.co'}/${data.username.toLowerCase()}`,
       address: data.address || null,
@@ -197,6 +222,108 @@ profile.put(
     }
 
     return c.json({ profile: updatedProfile })
+  }
+)
+
+// Partially update profile (used for Templates/Edit Page/Address updates)
+profile.patch(
+  '/',
+  requireAuth,
+  zValidator('json', profilePatchSchema),
+  async (c) => {
+    const userId = c.get('userId')
+    const data = c.req.valid('json')
+
+    // Ensure profile exists (profile creation must go through PUT /profile)
+    const existingProfile = await db.profile.findUnique({ where: { userId } })
+    if (!existingProfile) {
+      return c.json({ error: 'Profile not found. Complete onboarding first.' }, 404)
+    }
+
+    if (Object.keys(data).length === 0) {
+      return c.json({ error: 'No updates provided' }, 400)
+    }
+
+    const updateData: Prisma.ProfileUpdateInput = {}
+
+    // Username changes require reserved + uniqueness checks
+    if (data.username !== undefined) {
+      const normalizedUsername = data.username.toLowerCase()
+
+      if (RESERVED_USERNAMES.includes(normalizedUsername)) {
+        return c.json({ error: 'This username is not available' }, 400)
+      }
+
+      const usernameOwner = await db.profile.findUnique({
+        where: { username: normalizedUsername },
+        select: { userId: true },
+      })
+
+      if (usernameOwner && usernameOwner.userId !== userId) {
+        return c.json({ error: 'This username is already taken' }, 400)
+      }
+
+      updateData.username = normalizedUsername
+      updateData.shareUrl = `${env.PUBLIC_PAGE_URL || 'https://natepay.co'}/${normalizedUsername}`
+    }
+
+    if (data.displayName !== undefined) updateData.displayName = data.displayName
+    if (data.bio !== undefined) updateData.bio = data.bio || null
+    if (data.avatarUrl !== undefined) updateData.avatarUrl = data.avatarUrl || null
+    if (data.voiceIntroUrl !== undefined) updateData.voiceIntroUrl = data.voiceIntroUrl || null
+    if (data.country !== undefined) updateData.country = data.country
+    if (data.countryCode !== undefined) updateData.countryCode = data.countryCode.toUpperCase()
+    if (data.currency !== undefined) updateData.currency = data.currency.toUpperCase()
+    if (data.purpose !== undefined) updateData.purpose = data.purpose
+    if (data.pricingModel !== undefined) updateData.pricingModel = data.pricingModel
+    if (data.paymentProvider !== undefined) updateData.paymentProvider = data.paymentProvider || null
+    if (data.feeMode !== undefined) updateData.feeMode = data.feeMode
+
+    // Address fields
+    if (data.address !== undefined) updateData.address = data.address || null
+    if (data.city !== undefined) updateData.city = data.city || null
+    if (data.state !== undefined) updateData.state = data.state || null
+    if (data.zip !== undefined) updateData.zip = data.zip || null
+
+    // Template (normalize legacy 'liquid' -> 'midnight')
+    if (data.template !== undefined) {
+      updateData.template = normalizeTemplate(data.template) || 'boundary'
+    }
+
+    // Amount conversion depends on currency (use updated currency if provided)
+    const currency = (data.currency || existingProfile.currency || 'USD').toUpperCase()
+
+    if (data.singleAmount !== undefined) {
+      updateData.singleAmount = data.singleAmount === null
+        ? null
+        : displayAmountToCents(data.singleAmount, currency)
+    }
+
+    if (data.tiers !== undefined) {
+      updateData.tiers = data.tiers === null
+        ? Prisma.JsonNull
+        : data.tiers.map(t => ({ ...t, amount: displayAmountToCents(t.amount, currency) }))
+    }
+
+    if (data.perks !== undefined) {
+      updateData.perks = data.perks === null ? Prisma.JsonNull : data.perks
+    }
+
+    if (data.impactItems !== undefined) {
+      updateData.impactItems = data.impactItems === null ? Prisma.JsonNull : data.impactItems
+    }
+
+    const updatedProfile = await db.profile.update({
+      where: { userId },
+      data: updateData,
+    })
+
+    return c.json({
+      profile: {
+        ...updatedProfile,
+        template: normalizeTemplate(updatedProfile.template as any) || 'boundary',
+      },
+    })
   }
 )
 
