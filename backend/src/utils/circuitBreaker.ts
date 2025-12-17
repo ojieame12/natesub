@@ -134,7 +134,7 @@ export const stripeCircuitBreaker = <T>(fn: () => Promise<T>) =>
   withCircuitBreaker({ name: 'stripe', failureThreshold: 5, resetTimeout: 60000 }, fn)
 
 export const paystackCircuitBreaker = <T>(fn: () => Promise<T>) =>
-  withCircuitBreaker({ name: 'paystack', failureThreshold: 5, resetTimeout: 60000 }, fn)
+  withCircuitBreaker({ name: 'paystack', failureThreshold: 5, resetTimeout: 60000, timeout: 30000 }, fn)
 
 export const emailCircuitBreaker = <T>(fn: () => Promise<T>) =>
   withCircuitBreaker({ name: 'email', failureThreshold: 3, resetTimeout: 120000 }, fn)

@@ -16,9 +16,14 @@ This document reviews the end‑to‑end “dual payments” implementation (Str
   - Uses Paystack **Transfers** to pay creators (platform collects gross, then transfers net).
 
 ### “Dual” Behavior (Important Reality Check)
-At the moment, **checkout chooses exactly one provider per creator** based on `profile.paymentProvider` (with some inference if null).
+Checkout now supports **per-checkout provider routing** when a creator has both providers connected:
+- If creator has **both** Stripe + Paystack:
+  - Payers in `NG/KE/ZA/GH` → **Paystack**
+  - All other countries → **Stripe**
+  - If payer geo is missing/invalid → fallback to creator default (`profile.paymentProvider`, else Stripe).
+- If creator has **only one** provider connected → always use that provider.
 
-So the system is “dual-capable” at the platform level, but **not dual-per-creator per-checkout** (payer cannot choose Stripe vs Paystack at payment time).
+This enables a single creator to receive funds via both “global” (Stripe) and “local” (Paystack) without changing checkout UI.
 
 ## 2) End‑to‑End Flow
 
@@ -46,7 +51,7 @@ So the system is “dual-capable” at the platform level, but **not dual-per-cr
 
 **Backend**
 - Provider selection + fee calc + dedupe: `backend/src/routes/checkout.ts`.
-  - Determines provider from `profile.paymentProvider` (or inferred from stored provider IDs).
+  - Determines provider from stored provider IDs + optional `payerCountry` (geo routing when both are connected).
   - Validates `amount` matches profile pricing.
   - Applies platform constraints for service providers (subscription required, debit cap).
 
@@ -140,12 +145,19 @@ Pick one:
 
 This requires a product decision before coding a “correct” solution.
 
-### P0 — “Dual payments” is not yet dual at checkout time
-Right now, provider is effectively a single default per creator. If you want “receive money from both US and locally”, you likely need:
-- A per-checkout provider selection (payer chooses “Pay with card (USD)” vs “Pay locally”).
-- Or auto-selection based on payer geo/currency (with a visible override).
+### P0 — Smart provider detection has trust + availability weaknesses
+Current implementation relies on a client-provided `payerCountry` (frontend uses `ipapi.co` and sends it to `POST /checkout/session`).
 
-This also implies multi‑currency pricing (two price tracks) or an FX conversion strategy.
+Risks:
+- **Spoofable input**: clients can send any `payerCountry`; it’s not a security issue, but it can route users into the “wrong” checkout and increase failures.
+- **Third‑party dependency**: `ipapi.co` introduces rate limits, latency, and an external outage surface area at the top of the funnel.
+- **First‑click race**: if the geo lookup hasn’t completed when the user starts checkout, `payerCountry` is missing and routing falls back to creator default.
+- **UI mismatch risk**: public profile returns a single `paymentProvider`, but backend may route to the other provider for some payers, so any “processed by Stripe/Paystack” copy can become inaccurate.
+
+Recommended hardening:
+- Prefer server-side geo headers when available (`cf-ipcountry`, `x-vercel-ip-country`) and treat client `payerCountry` as best-effort.
+- Add a Paystack→Stripe fallback (only when Stripe is connected) if Paystack init fails with a provider/config/currency error.
+- Unify the “Paystack-eligible countries” list across backend + frontend and align it with actual Paystack support.
 
 ### P1 — Paystack payout efficiency (recipient caching)
 Each payout creates a fresh transfer recipient:
@@ -200,4 +212,3 @@ What to add next for scale:
    - A creator can accept both providers concurrently, or
    - The platform supports both, but each creator chooses one?
 3) For dual acceptance: should payer pick provider explicitly, or should the system auto-select (geo/currency)?
-
