@@ -33,7 +33,6 @@ export default function SubscribePage() {
     const displayName = name || urlUsername || 'Someone'
     const selectedTier = tiers.find(t => t.id === selectedTierId)
     const currentAmount = pricingModel === 'single' ? singleAmount : selectedTier?.amount
-    const currentAmount = pricingModel === 'single' ? singleAmount : selectedTier?.amount
 
     // Fallback images from Unsplash
     const fallbackCover = 'https://images.unsplash.com/photo-1534088568595-a066f410bcda?w=800&q=80'

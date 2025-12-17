@@ -10,13 +10,9 @@ import './onboarding.css'
 export default function PersonalPricingStep() {
     const {
         pricingModel,
-        setPricingModel,
         singleAmount,
-        setSingleAmount,
         tiers,
-        updateTier,
-        addTier,
-        removeTier,
+        setPricing,
         currency,
         branch,
         currentStep,
@@ -24,27 +20,34 @@ export default function PersonalPricingStep() {
         prevStep
     } = useOnboardingStore()
     const { mutateAsync: saveProgress } = useSaveOnboardingProgress()
+    const [inputValue, setInputValue] = useState(singleAmount?.toString() || '')
 
     const currencySymbol = getCurrencySymbol(currency)
     // Get currency-aware suggested amounts (e.g., NGN shows ₦5000, not ₦5)
     const suggestedAmounts = getSuggestedAmounts(currency, branch === 'service' ? 'service' : 'personal')
 
-    const [inputValue, setInputValue] = useState(singleAmount?.toString() || '')
+    // Helper to update state via setPricing
+    const updateState = (updates: { model?: 'single' | 'tiers', newAmount?: number | null, newTiers?: SubscriptionTier[] }) => {
+        setPricing(
+            updates.model || pricingModel,
+            updates.newTiers || tiers,
+            updates.newAmount !== undefined ? updates.newAmount : singleAmount
+        )
+    }
 
     const handleSingleAmountChange = (value: string) => {
         setInputValue(value)
         const num = parseInt(value)
         if (!isNaN(num) && num > 0) {
-            setSingleAmount(num)
+            updateState({ newAmount: num })
         } else if (value === '') {
-            // Clear store when input emptied - prevents stale value submission
-            setSingleAmount(null)
+            updateState({ newAmount: null })
         }
     }
 
     const handleQuickAmount = (amount: number) => {
         setInputValue(amount.toString())
-        setSingleAmount(amount)
+        updateState({ newAmount: amount })
     }
 
     const handleAddTier = () => {
@@ -54,18 +57,25 @@ export default function PersonalPricingStep() {
             amount: 15,
             perks: ['Add a perk'],
         }
-        addTier(newTier)
+        updateState({ newTiers: [...tiers, newTier] })
     }
 
     const handleTierAmountChange = (id: string, value: string) => {
         const num = parseInt(value)
         if (!isNaN(num) && num > 0) {
-            updateTier(id, { amount: num })
+            const newTiers = tiers.map(t => t.id === id ? { ...t, amount: num } : t)
+            updateState({ newTiers })
         }
     }
 
     const handleTierNameChange = (id: string, name: string) => {
-        updateTier(id, { name })
+        const newTiers = tiers.map(t => t.id === id ? { ...t, name } : t)
+        updateState({ newTiers })
+    }
+
+    const removeTier = (id: string) => {
+        const newTiers = tiers.filter(t => t.id !== id)
+        updateState({ newTiers })
     }
 
     // Validation - minimum $1 for subscriptions (Stripe requires $0.50 minimum)
@@ -118,13 +128,13 @@ export default function PersonalPricingStep() {
                         <div className="pricing-model-toggle">
                             <Pressable
                                 className={`pricing-model-btn ${pricingModel === 'single' ? 'active' : ''}`}
-                                onClick={() => setPricingModel('single')}
+                                onClick={() => updateState({ model: 'single' })}
                             >
                                 Simple
                             </Pressable>
                             <Pressable
                                 className={`pricing-model-btn ${pricingModel === 'tiers' ? 'active' : ''}`}
-                                onClick={() => setPricingModel('tiers')}
+                                onClick={() => updateState({ model: 'tiers' })}
                             >
                                 Packages
                             </Pressable>

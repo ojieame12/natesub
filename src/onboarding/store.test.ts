@@ -22,8 +22,6 @@ describe('onboarding/store', () => {
         currency: 'USD',
         username: 'server_user',
         bio: 'Server bio',
-        hasVoiceIntro: true,
-        voiceIntroUrl: 'https://example.com/voice.mp3',
         serviceDescription: 'I do consulting',
         serviceCredential: '10 years',
         feeMode: 'pass_to_subscriber',
@@ -39,8 +37,7 @@ describe('onboarding/store', () => {
     expect(hydrated.countryCode).toBe('SC')
     expect(hydrated.username).toBe('server_user')
     expect(hydrated.bio).toBe('Server bio')
-    expect(hydrated.hasVoiceIntro).toBe(true)
-    expect(hydrated.voiceIntroUrl).toBe('https://example.com/voice.mp3')
+    expect(hydrated.bio).toBe('Server bio')
     expect(hydrated.serviceDescription).toBe('I do consulting')
     expect(hydrated.serviceCredential).toBe('10 years')
     expect(hydrated.feeMode).toBe('pass_to_subscriber')

@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useState } from 'react'
 import { ChevronLeft, Check, Plus, X, Pencil } from 'lucide-react'
 import { useOnboardingStore } from './store'

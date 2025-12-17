@@ -153,7 +153,6 @@ export default function PaymentMethodStep() {
                 displayName: store.name,
                 bio: store.bio || store.generatedBio || null,
                 avatarUrl: store.avatarUrl,
-                voiceIntroUrl: store.voiceIntroUrl,
                 country: store.country,
                 countryCode: store.countryCode,
                 currency: store.currency,
@@ -161,16 +160,6 @@ export default function PaymentMethodStep() {
                 pricingModel: store.pricingModel,
                 singleAmount: store.pricingModel === 'single' ? store.singleAmount : null,
                 tiers: store.pricingModel === 'tiers' ? store.tiers : null,
-                perks: store.perks.map(p => ({
-                    id: p.id,
-                    title: p.title,
-                    enabled: p.enabled,
-                })),
-                impactItems: store.impactItems.map(i => ({
-                    id: i.id,
-                    title: i.title,
-                    subtitle: i.subtitle,
-                })),
                 paymentProvider: selectedMethod,
             }
 
