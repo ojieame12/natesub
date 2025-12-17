@@ -77,17 +77,23 @@ export async function createExpressAccount(
   // Use idempotency key to prevent duplicate accounts on retry/double-click
   const idempotencyKey = generateIdempotencyKey('acct_create', userId, email)
 
+  // Use Standard accounts for cross-border (NG, GH, KE, ZA) to ensure support
+  // Express accounts have stricter regional availability
+  const accountType = isCrossBorder ? 'standard' : 'express'
+
+  // Capabilities are managed by Stripe for Standard accounts
+  const capabilities = accountType === 'express' ? {
+    transfers: { requested: true },
+    card_payments: { requested: true },
+  } : undefined
+
   // For cross-border payouts, use recipient service agreement
   // This enables the platform to send payouts to these accounts
   const accountParams: Stripe.AccountCreateParams = {
-    type: 'express',
+    type: accountType,
     email,
     country,
-    capabilities: {
-      transfers: { requested: true },
-      // Cross-border accounts don't need card_payments capability
-      ...(isCrossBorder ? {} : { card_payments: { requested: true } }),
-    },
+    capabilities,
     business_type: 'individual',
     // Prefill KYC data to speed up onboarding
     individual: {
@@ -102,10 +108,6 @@ export async function createExpressAccount(
         },
       },
     },
-    // NOTE: We previously used tos_acceptance.service_agreement: 'recipient' for cross-border,
-    // but this is ONLY supported for US-based platforms. Since we're GB-based, we use the
-    // default 'full' agreement which works for all platforms. Users complete standard Stripe
-    // Express onboarding with full KYC verification.
   }
 
   const account = await stripe.accounts.create(accountParams, { idempotencyKey })
@@ -208,6 +210,7 @@ export async function getAccountStatus(stripeAccountId: string, options: { skipB
   }
 
   const result = {
+    type: account.type, // 'standard', 'express', etc.
     detailsSubmitted: account.details_submitted,
     chargesEnabled: account.charges_enabled,
     payoutsEnabled: account.payouts_enabled,

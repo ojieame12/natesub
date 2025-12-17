@@ -241,6 +241,11 @@ stripeRoutes.get('/dashboard-link', requireAuth, async (c) => {
       return c.json({ error: 'Complete onboarding first' }, 400)
     }
 
+    // Standard accounts (e.g., cross-border) use the main Stripe Dashboard
+    if (status.type === 'standard') {
+      return c.json({ url: 'https://dashboard.stripe.com' })
+    }
+
     const dashboardUrl = await createExpressDashboardLink(profile.stripeAccountId)
     return c.json({ url: dashboardUrl })
   } catch (error) {
