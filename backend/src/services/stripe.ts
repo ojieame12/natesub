@@ -69,19 +69,26 @@ export async function createExpressAccount(
   const firstName = nameParts[0] || undefined
   const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : undefined
 
-  // Create new Express account with prefilled KYC data
+  // Create new account with prefilled KYC data
   // Use idempotency key to prevent duplicate accounts on retry/double-click
   const idempotencyKey = generateIdempotencyKey('acct_create', userId, email)
 
-  // All countries use Express accounts
+  // Nigeria, Ghana, Kenya, South Africa need Standard accounts (Express not fully supported)
+  const STANDARD_ACCOUNT_COUNTRIES = ['NG', 'GH', 'KE', 'ZA']
+  const needsStandardAccount = STANDARD_ACCOUNT_COUNTRIES.includes(country.toUpperCase())
+  const accountType = needsStandardAccount ? 'standard' : 'express'
+
+  // Capabilities are only for Express accounts
+  const capabilities = accountType === 'express' ? {
+    transfers: { requested: true },
+    card_payments: { requested: true },
+  } : undefined
+
   const accountParams: Stripe.AccountCreateParams = {
-    type: 'express',
+    type: accountType,
     email,
     country,
-    capabilities: {
-      transfers: { requested: true },
-      card_payments: { requested: true },
-    },
+    capabilities,
     business_type: 'individual',
     // Prefill KYC data to speed up onboarding
     individual: {
