@@ -225,7 +225,7 @@ export default function PersonalReviewStep() {
                         <ReviewRow
                             label="Username"
                             value={username}
-                            onEdit={setUsername}
+                            onEdit={(val) => setUsername(val.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20))}
                             editing={editingField === 'username'}
                             onStartEdit={() => setEditingField('username')}
                             onEndEdit={() => setEditingField(null)}
