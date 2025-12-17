@@ -24,9 +24,6 @@ import {
   Activity,
   FileText,
   Heart,
-  Home,
-  ArrowDownLeft,
-  ScanLine,
 } from 'lucide-react'
 import { Pressable, useToast, Skeleton, SkeletonList, ErrorState, AnimatedNumber } from './components'
 import { useViewTransition } from './hooks'
@@ -689,58 +686,6 @@ export default function Dashboard() {
           </>
         )}
       </main>
-
-      {/* Footer Navigation */}
-      <div className="dashboard-footer">
-        <Pressable
-          className="footer-tab active"
-          onClick={() => navigate('/dashboard')}
-        >
-          <div className="tab-icon">
-            <Home size={24} strokeWidth={2.5} />
-          </div>
-        </Pressable>
-
-        <Pressable
-          className="footer-tab"
-          onClick={() => navigate('/requests')}
-        >
-          <div className="tab-icon">
-            <ArrowDownLeft size={24} strokeWidth={2.5} />
-          </div>
-        </Pressable>
-
-        <Pressable
-          className="footer-tab scan-tab"
-          onClick={() => navigate('/scan')}
-        >
-          <div className="scan-button">
-            <ScanLine size={24} strokeWidth={2.5} />
-          </div>
-        </Pressable>
-
-        <Pressable
-          className="footer-tab"
-          onClick={() => navigate('/activity')}
-        >
-          <div className="tab-icon">
-            <Clock size={24} strokeWidth={2.5} />
-          </div>
-        </Pressable>
-
-        <Pressable
-          className="footer-tab"
-          onClick={() => navigate('/profile')}
-        >
-          <div className="tab-icon">
-            <img
-              src={currentUser?.profile?.avatarUrl || `https://ui-avatars.com/api/?name=${currentUser?.email}&background=random`}
-              alt="Profile"
-              className="tab-avatar"
-            />
-          </div>
-        </Pressable>
-      </div>
     </div>
   )
 }

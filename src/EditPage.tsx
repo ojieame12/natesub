@@ -120,7 +120,7 @@ export default function EditPage() {
 
   const handlePreview = () => {
     if (profile?.username) {
-      window.open(`/ ${profile.username} `, '_blank')
+      window.open(`/${profile.username}`, '_blank')
     }
   }
 
