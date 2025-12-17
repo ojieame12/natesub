@@ -7,7 +7,7 @@ export type UserPurpose = 'personal' | 'service'
 // Platform fee percentages by purpose (all-inclusive, no separate processing fee)
 // These match the actual fees charged in fees.ts
 const PLATFORM_FEES: Record<UserPurpose, number> = {
-  personal: 10, // 10% for free personal users
+  personal: 8, // 8% for free personal users
   service: 8,   // 8% for paid service providers
 }
 

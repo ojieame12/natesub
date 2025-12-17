@@ -4,8 +4,8 @@ export const PRICING = {
   personal: {
     subscription: 0, // Free
     subscriptionLabel: 'Free',
-    transactionFee: 0.10, // 10%
-    transactionFeeLabel: '10%',
+    transactionFee: 0.08, // 8%
+    transactionFeeLabel: '8%',
     planName: 'Free Plan',
     planDescription: 'No monthly fee, pay only when you earn',
   },
