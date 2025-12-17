@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Camera, Plus, GripVertical, Trash2, ExternalLink, Check, X, Loader2 } from 'lucide-react'
-import { Pressable, useToast, Skeleton, VoiceRecorder, LoadingButton } from './components'
-import { useProfile, useUpdateProfile, useUpdateSettings, uploadFile, uploadBlob } from './api/hooks'
+import { Pressable, useToast, Skeleton, LoadingButton } from './components'
+import { useProfile, useUpdateProfile, useUpdateSettings, uploadFile } from './api/hooks'
 import { getCurrencySymbol, formatCompactNumber, centsToDisplayAmount, displayAmountToCents } from './utils/currency'
 import { calculateFeePreview, getPricing } from './utils/pricing'
-import type { Tier, Perk, ImpactItem } from './api/client'
+import type { Tier } from './api/client'
 import './EditPage.css'
 
 export default function EditPage() {
@@ -19,26 +19,18 @@ export default function EditPage() {
 
   const profile = profileData?.profile
 
-  // Local state for editing
+  // Local state for editing - simplified to only essential fields
   const [displayName, setDisplayName] = useState('')
-  const [bio, setBio] = useState('')
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
-  const [voiceIntroUrl, setVoiceIntroUrl] = useState<string | null>(null)
   const [pricingModel, setPricingModel] = useState<'single' | 'tiers'>('single')
   const [singleAmount, setSingleAmount] = useState<number>(10)
   const [tiers, setTiers] = useState<Tier[]>([])
-  const [perks, setPerks] = useState<Perk[]>([])
-  const [impactItems, setImpactItems] = useState<ImpactItem[]>([])
   const [feeMode, setFeeMode] = useState<'absorb' | 'pass_to_subscriber'>('pass_to_subscriber')
-  const [isPublic, setIsPublic] = useState(false)
   const [hasChanges, setHasChanges] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
-  const [isVoiceUploading, setIsVoiceUploading] = useState(false)
-  const [voiceBlob, setVoiceBlob] = useState<Blob | null>(null)
   const [isContinuing, setIsContinuing] = useState(false)
 
-  // When navigating from the dashboard "Launch My Page" card, we enter a guided flow:
-  // save/publish → connect payments (if needed) → return to dashboard.
+  // When navigating from the dashboard "Launch My Page" card, we enter a guided flow
   const isLaunchFlow = new URLSearchParams(location.search).get('launch') === '1'
 
   // Hydrate local state from profile
@@ -46,19 +38,14 @@ export default function EditPage() {
     if (profile) {
       const currency = profile.currency || 'USD'
       setDisplayName(profile.displayName || '')
-      setBio(profile.bio || '')
       setAvatarUrl(profile.avatarUrl)
-      setVoiceIntroUrl(profile.voiceIntroUrl || null)
       setPricingModel(profile.pricingModel || 'single')
       setSingleAmount(profile.singleAmount ? centsToDisplayAmount(profile.singleAmount, currency) : 10)
       setTiers((profile.tiers || []).map(t => ({
         ...t,
         amount: centsToDisplayAmount(t.amount, currency)
       })))
-      setPerks(profile.perks || [])
-      setImpactItems(profile.impactItems || [])
       setFeeMode(profile.feeMode || 'pass_to_subscriber')
-      setIsPublic(profile.isPublic || false)
     }
   }, [profile])
 
@@ -75,18 +62,13 @@ export default function EditPage() {
     }))
     const changed =
       displayName !== (profile.displayName || '') ||
-      bio !== (profile.bio || '') ||
       avatarUrl !== (profile.avatarUrl || null) ||
-      voiceIntroUrl !== (profile.voiceIntroUrl || null) ||
       pricingModel !== profile.pricingModel ||
       singleAmount !== profileAmountDisplay ||
       JSON.stringify(tiers) !== JSON.stringify(profileTiersDisplay) ||
-      JSON.stringify(perks) !== JSON.stringify(profile.perks || []) ||
-      JSON.stringify(impactItems) !== JSON.stringify(profile.impactItems || []) ||
-      feeMode !== (profile.feeMode || 'pass_to_subscriber') ||
-      isPublic !== (profile.isPublic || false)
+      feeMode !== (profile.feeMode || 'pass_to_subscriber')
     setHasChanges(changed)
-  }, [displayName, bio, avatarUrl, voiceIntroUrl, pricingModel, singleAmount, tiers, perks, impactItems, feeMode, isPublic, profile])
+  }, [displayName, avatarUrl, pricingModel, singleAmount, tiers, feeMode, profile])
 
   // Avatar upload handler
   const handleAvatarClick = () => {
@@ -98,10 +80,10 @@ export default function EditPage() {
     if (!file) return
 
     const isImage = file.type.startsWith('image/') ||
-                   file.type === 'image/heic' ||
-                   file.type === 'image/heif' ||
-                   file.name.toLowerCase().endsWith('.heic') ||
-                   file.name.toLowerCase().endsWith('.heif')
+      file.type === 'image/heic' ||
+      file.type === 'image/heif' ||
+      file.name.toLowerCase().endsWith('.heic') ||
+      file.name.toLowerCase().endsWith('.heif')
 
     if (!isImage) {
       toast.error('Please upload an image file')
@@ -126,28 +108,6 @@ export default function EditPage() {
         fileInputRef.current.value = ''
       }
     }
-  }
-
-  // Voice intro handlers
-  const handleVoiceRecorded = async (blob: Blob, _duration: number) => {
-    setVoiceBlob(blob)
-    setIsVoiceUploading(true)
-    try {
-      const url = await uploadBlob(blob, 'voice')
-      setVoiceIntroUrl(url)
-      setVoiceBlob(null)
-      toast.success('Voice intro saved')
-    } catch (err: any) {
-      toast.error(err?.error || 'Failed to upload voice intro')
-      setVoiceBlob(null)
-    } finally {
-      setIsVoiceUploading(false)
-    }
-  }
-
-  const handleVoiceRemove = () => {
-    setVoiceBlob(null)
-    setVoiceIntroUrl(null)
   }
 
   // Tier handlers
@@ -205,46 +165,6 @@ export default function EditPage() {
     }))
   }
 
-  // Perk handlers
-  const handleAddPerk = () => {
-    const newPerk: Perk = {
-      id: Date.now().toString(),
-      title: 'New perk',
-      enabled: true,
-    }
-    setPerks([...perks, newPerk])
-  }
-
-  const handleUpdatePerk = (id: string, field: keyof Perk, value: string | boolean) => {
-    setPerks(perks.map(perk =>
-      perk.id === id ? { ...perk, [field]: value } : perk
-    ))
-  }
-
-  const handleDeletePerk = (id: string) => {
-    setPerks(perks.filter(perk => perk.id !== id))
-  }
-
-  // Impact item handlers
-  const handleAddImpact = () => {
-    const newItem: ImpactItem = {
-      id: Date.now().toString(),
-      title: '',
-      subtitle: '',
-    }
-    setImpactItems([...impactItems, newItem])
-  }
-
-  const handleUpdateImpact = (id: string, field: keyof ImpactItem, value: string) => {
-    setImpactItems(impactItems.map(item =>
-      item.id === id ? { ...item, [field]: value } : item
-    ))
-  }
-
-  const handleDeleteImpact = (id: string) => {
-    setImpactItems(impactItems.filter(item => item.id !== id))
-  }
-
   const handlePreview = () => {
     if (profile?.username) {
       window.open(`/${profile.username}`, '_blank')
@@ -256,24 +176,20 @@ export default function EditPage() {
     const { showSuccessToast = true } = options
 
     try {
-      // 1. Update Profile Data
+      // Update Profile Data
       await updateProfile({
         ...profile,
         displayName,
-        bio,
         avatarUrl,
-        voiceIntroUrl,
         pricingModel,
         singleAmount: pricingModel === 'single' ? singleAmount : null,
         tiers: pricingModel === 'tiers' ? tiers : null,
-        perks,
-        impactItems,
         feeMode,
       })
 
-      // 2. Update Settings (Visibility) if changed
-      if (isPublic !== profile.isPublic) {
-        await updateSettings({ isPublic })
+      // Always ensure page is public
+      if (!profile.isPublic) {
+        await updateSettings({ isPublic: true })
       }
 
       setHasChanges(false)
@@ -292,20 +208,14 @@ export default function EditPage() {
   const handleContinue = async () => {
     if (!profile) return
 
-    // Prevent accidental "launch" without publishing.
-    if (!isPublic) {
-      toast.error('Turn on Page Visibility to launch your page.')
-      return
-    }
-
     setIsContinuing(true)
     let didNavigate = false
     try {
-      // Save any pending edits first (including publishing via settings).
+      // Save any pending edits first
       const ok = hasChanges ? await saveProfileAndSettings({ showSuccessToast: false }) : true
       if (!ok) return
 
-      // If payments are not active yet, guide user to connect/finish payments next.
+      // If payments are not active yet, guide user to connect/finish payments next
       if (profile.payoutStatus !== 'active') {
         toast.info('Next: connect payments to start earning.')
         didNavigate = true
@@ -338,7 +248,6 @@ export default function EditPage() {
               <Skeleton width={80} height={80} borderRadius="50%" />
               <div className="profile-fields" style={{ flex: 1 }}>
                 <Skeleton width="100%" height={40} style={{ marginBottom: 12 }} />
-                <Skeleton width="100%" height={80} />
               </div>
             </div>
           </section>
@@ -369,8 +278,6 @@ export default function EditPage() {
     )
   }
 
-  const isService = profile.purpose === 'service'
-
   return (
     <div className="edit-page">
       {/* Header */}
@@ -385,40 +292,7 @@ export default function EditPage() {
       </header>
 
       <div className="edit-page-content">
-        {/* Visibility Section */}
-        <section className="edit-section">
-          <div className="section-header">
-            <h3 className="section-title">Page Visibility</h3>
-            <Pressable
-              onClick={() => setIsPublic(!isPublic)}
-              style={{
-                width: 44,
-                height: 24,
-                borderRadius: 12,
-                background: isPublic ? 'var(--success)' : 'var(--neutral-200)',
-                position: 'relative',
-                transition: 'background 0.2s'
-              }}
-            >
-              <div style={{
-                width: 20,
-                height: 20,
-                borderRadius: '50%',
-                background: 'white',
-                position: 'absolute',
-                top: 2,
-                left: isPublic ? 22 : 2,
-                transition: 'left 0.2s',
-                boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-              }} />
-            </Pressable>
-          </div>
-          <p className="section-hint">
-            {isPublic ? 'Your page is live.' : 'Your page is private (Draft mode).'}
-          </p>
-        </section>
-
-        {/* Profile Section */}
+        {/* Profile Section - Avatar + Display Name only */}
         <section className="edit-section">
           <h3 className="section-title">Profile</h3>
           <div className="profile-card">
@@ -452,34 +326,8 @@ export default function EditPage() {
                   placeholder="Your name or brand"
                 />
               </div>
-              <div className="field">
-                <label className="field-label">Bio</label>
-                <textarea
-                  className="field-textarea"
-                  value={bio}
-                  onChange={(e) => setBio(e.target.value)}
-                  placeholder="Tell people what you do..."
-                  rows={3}
-                />
-              </div>
             </div>
           </div>
-        </section>
-
-        {/* Voice Intro Section */}
-        <section className="edit-section">
-          <h3 className="section-title">Voice Intro</h3>
-          <p className="section-hint">Let subscribers hear from you directly</p>
-          <VoiceRecorder
-            onRecorded={handleVoiceRecorded}
-            onRemove={handleVoiceRemove}
-            audioBlob={voiceBlob}
-            existingAudioUrl={voiceIntroUrl}
-            maxDuration={60}
-            label=""
-            hint="Up to 60 seconds"
-            isUploading={isVoiceUploading}
-          />
         </section>
 
         {/* Pricing Section */}
@@ -634,84 +482,6 @@ export default function EditPage() {
             )
           })()}
         </section>
-
-        {/* Perks Section - Hidden when service account has multiple tiers (perks are per-tier) */}
-        {!(isService && pricingModel === 'tiers') && (
-          <section className="edit-section">
-            <div className="section-header">
-              <h3 className="section-title">{isService ? "What's Included" : 'Subscriber Perks'}</h3>
-              <span className="item-count">{perks.filter(p => p.enabled).length} active</span>
-            </div>
-
-            <div className="perks-list">
-              {perks.map((perk) => (
-                <div key={perk.id} className="perk-card">
-                  <Pressable
-                    className={`perk-toggle ${perk.enabled ? 'enabled' : ''}`}
-                    onClick={() => handleUpdatePerk(perk.id, 'enabled', !perk.enabled)}
-                  >
-                    {perk.enabled && <Check size={12} />}
-                  </Pressable>
-                  <input
-                    type="text"
-                    className="perk-input"
-                    value={perk.title}
-                    onChange={(e) => handleUpdatePerk(perk.id, 'title', e.target.value)}
-                    placeholder="Perk title"
-                  />
-                  <Pressable className="perk-delete" onClick={() => handleDeletePerk(perk.id)}>
-                    <X size={16} />
-                  </Pressable>
-                </div>
-              ))}
-            </div>
-
-            <Pressable className="add-tier-btn" onClick={handleAddPerk}>
-              <Plus size={18} />
-              <span>Add Perk</span>
-            </Pressable>
-          </section>
-        )}
-
-        {/* Impact Section */}
-        <section className="edit-section">
-          <div className="section-header">
-            <h3 className="section-title">{isService ? 'Why Work With Me' : 'How It Helps'}</h3>
-            <span className="item-count">{impactItems.length} items</span>
-          </div>
-
-          <div className="impact-list">
-            {impactItems.map((item, index) => (
-              <div key={item.id} className="impact-card">
-                <div className="impact-number">{index + 1}</div>
-                <div className="impact-fields">
-                  <input
-                    type="text"
-                    className="impact-title-input"
-                    value={item.title}
-                    onChange={(e) => handleUpdateImpact(item.id, 'title', e.target.value)}
-                    placeholder="Main point"
-                  />
-                  <input
-                    type="text"
-                    className="impact-subtitle-input"
-                    value={item.subtitle}
-                    onChange={(e) => handleUpdateImpact(item.id, 'subtitle', e.target.value)}
-                    placeholder="Optional details"
-                  />
-                </div>
-                <Pressable className="impact-delete" onClick={() => handleDeleteImpact(item.id)}>
-                  <Trash2 size={16} />
-                </Pressable>
-              </div>
-            ))}
-          </div>
-
-          <Pressable className="add-tier-btn" onClick={handleAddImpact}>
-            <Plus size={18} />
-            <span>Add Item</span>
-          </Pressable>
-        </section>
       </div>
 
       {/* Save Button */}
@@ -720,13 +490,11 @@ export default function EditPage() {
           className="save-btn"
           onClick={isLaunchFlow ? handleContinue : handleSave}
           disabled={isLaunchFlow ? false : !hasChanges}
-          loading={isSaving || isUploading || isVoiceUploading || isContinuing}
+          loading={isSaving || isUploading || isContinuing}
           fullWidth
         >
           {isLaunchFlow
-            ? (!isPublic
-              ? 'Launch Page'
-              : (profile.payoutStatus === 'active' ? 'Continue to Dashboard' : 'Continue to Payments'))
+            ? (profile.payoutStatus === 'active' ? 'Continue to Dashboard' : 'Continue to Payments')
             : 'Save Changes'}
         </LoadingButton>
       </div>
