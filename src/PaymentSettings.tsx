@@ -187,9 +187,6 @@ export default function PaymentSettings() {
   }, [navigate, returnTo])
 
   const handleConnectStripe = useCallback(async () => {
-    if (returnTo) sessionStorage.setItem('stripe_return_to', returnTo)
-    sessionStorage.setItem('stripe_onboarding_started_at', Date.now().toString())
-
     setStripeConnecting(true)
     setStripeError(null)
 
@@ -202,7 +199,10 @@ export default function PaymentSettings() {
       }
 
       if (result.onboardingUrl) {
+        // Set sessionStorage only after successful API call, before redirect
+        if (returnTo) sessionStorage.setItem('stripe_return_to', returnTo)
         sessionStorage.setItem('stripe_onboarding_source', 'settings')
+        sessionStorage.setItem('stripe_onboarding_started_at', Date.now().toString())
         window.location.href = result.onboardingUrl
         return
       }
@@ -221,16 +221,16 @@ export default function PaymentSettings() {
   }, [loadPaymentData, returnTo])
 
   const handleFixStripe = useCallback(async () => {
-    if (returnTo) sessionStorage.setItem('stripe_return_to', returnTo)
-    sessionStorage.setItem('stripe_onboarding_started_at', Date.now().toString())
-
     setStripeFixing(true)
     setStripeError(null)
 
     try {
       const result = await api.stripe.refreshOnboarding()
       if (result.onboardingUrl) {
+        // Set sessionStorage only after successful API call, before redirect
+        if (returnTo) sessionStorage.setItem('stripe_return_to', returnTo)
         sessionStorage.setItem('stripe_onboarding_source', 'settings')
+        sessionStorage.setItem('stripe_onboarding_started_at', Date.now().toString())
         window.location.href = result.onboardingUrl
       } else {
         setStripeError('Unable to get onboarding link. Please try again.')
