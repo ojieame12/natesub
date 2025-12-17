@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronLeft, CreditCard, Check, Loader2, AlertCircle } from 'lucide-react'
 import { useOnboardingStore, type PaymentProvider } from './store'
@@ -77,7 +77,6 @@ export default function PaymentMethodStep() {
     const pricing = getPricing(branch === 'service' ? 'service' : undefined)
     const feeLabel = pricing.transactionFeeLabel
     // const [stripeCountryCodes, setStripeCountryCodes] = useState<string[]>([]) // Removed: Stripe enabled globally
-    const [loading, setLoading] = useState(false) // No longer fetching countries
     const [saving, setSaving] = useState(false)
     const [error, setError] = useState<string | null>(null)
 
@@ -215,16 +214,6 @@ export default function PaymentMethodStep() {
             setError(err?.error || 'Failed to save profile. Please try again.')
             setSaving(false)
         }
-    }
-
-    if (loading) {
-        return (
-            <div className="onboarding">
-                <div className="onboarding-content" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
-                    <Loader2 size={32} className="spin" />
-                </div>
-            </div>
-        )
     }
 
     return (
