@@ -1387,7 +1387,7 @@ export async function sendPaymentSetupCompleteEmail(
             <tr>
               <td style="background-color: #f5f5f5; border-radius: 8px; padding: 16px;">
                 <p style="margin: 0 0 8px 0; font-size: 14px; color: #888888;">Your page link:</p>
-                <a href="https://${safeShareUrl}" style="font-size: 16px; color: ${BRAND_COLOR}; word-break: break-all; text-decoration: none;">${safeShareUrl}</a>
+                <a href="${safeShareUrl}" style="font-size: 16px; color: ${BRAND_COLOR}; word-break: break-all; text-decoration: none;">${safeShareUrl}</a>
               </td>
             </tr>
           </table>
