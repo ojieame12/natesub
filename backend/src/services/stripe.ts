@@ -47,22 +47,31 @@ export async function createExpressAccount(
 
     const account = await stripe.accounts.retrieve(profile.stripeAccountId)
 
-    const needsOnboarding = !account.details_submitted
-    const currentlyDue = account.requirements?.currently_due || []
-    const disabledReason = account.requirements?.disabled_reason || null
-    const needsUpdate = currentlyDue.length > 0 || Boolean(disabledReason)
+    // FIX: If this is a cross-border country (NG/KE/ZA) but the account is 'express',
+    // it means it was created before we switched to 'standard'. We must abandon this
+    // account and create a new Standard one, as Express is not fully supported for these regions.
+    const userCountry = profile.countryCode || country
+    const isCrossBorderTarget = isStripeCrossBorderSupported(userCountry)
+    const isWrongType = isCrossBorderTarget && account.type === 'express'
 
-    if (needsOnboarding) {
-      const accountLink = await createAccountLink(profile.stripeAccountId, { type: 'account_onboarding' })
-      return { accountId: profile.stripeAccountId, accountLink }
+    if (!isWrongType) {
+      const needsOnboarding = !account.details_submitted
+      const currentlyDue = account.requirements?.currently_due || []
+      const disabledReason = account.requirements?.disabled_reason || null
+      const needsUpdate = currentlyDue.length > 0 || Boolean(disabledReason)
+
+      if (needsOnboarding) {
+        const accountLink = await createAccountLink(profile.stripeAccountId, { type: 'account_onboarding' })
+        return { accountId: profile.stripeAccountId, accountLink }
+      }
+
+      if (needsUpdate) {
+        const accountLink = await createAccountLink(profile.stripeAccountId, { type: 'account_update' })
+        return { accountId: profile.stripeAccountId, accountLink }
+      }
+
+      return { accountId: profile.stripeAccountId, accountLink: null, alreadyOnboarded: true }
     }
-
-    if (needsUpdate) {
-      const accountLink = await createAccountLink(profile.stripeAccountId, { type: 'account_update' })
-      return { accountId: profile.stripeAccountId, accountLink }
-    }
-
-    return { accountId: profile.stripeAccountId, accountLink: null, alreadyOnboarded: true }
   }
 
   // Check if this is a cross-border payout country (e.g., Nigeria, Ghana, Kenya)
