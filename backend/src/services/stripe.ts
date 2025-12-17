@@ -102,12 +102,10 @@ export async function createExpressAccount(
         },
       },
     },
-    // Cross-border accounts use recipient TOS
-    ...(isCrossBorder ? {
-      tos_acceptance: {
-        service_agreement: 'recipient',
-      },
-    } : {}),
+    // NOTE: We previously used tos_acceptance.service_agreement: 'recipient' for cross-border,
+    // but this is ONLY supported for US-based platforms. Since we're GB-based, we use the
+    // default 'full' agreement which works for all platforms. Users complete standard Stripe
+    // Express onboarding with full KYC verification.
   }
 
   const account = await stripe.accounts.create(accountParams, { idempotencyKey })

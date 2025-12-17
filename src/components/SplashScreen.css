@@ -3,7 +3,7 @@
 .splash-screen {
   position: fixed;
   inset: 0;
-  background: #000 url("/Splash%20Screen.png") center/cover no-repeat;
+  background: #000 url("/splash-screen.png") center/cover no-repeat;
   z-index: 9999;
 }
 
