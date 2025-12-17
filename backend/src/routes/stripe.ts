@@ -12,7 +12,7 @@ import {
   getPayoutHistory,
   createExpressDashboardLink,
 } from '../services/stripe.js'
-import { isStripeSupported, getStripeSupportedCountries } from '../utils/constants.js'
+import { isStripeSupported, isStripeCrossBorderSupported, getStripeSupportedCountries } from '../utils/constants.js'
 
 const stripeRoutes = new Hono()
 
@@ -135,13 +135,26 @@ stripeRoutes.get('/connect/status', requireAuth, async (c) => {
       forceRefresh: refresh,
     })
 
+    // Check if this is a cross-border account (e.g., Nigeria, Ghana, Kenya)
+    // Cross-border accounts don't have charges_enabled - only payouts_enabled matters
+    const isCrossBorder = isStripeCrossBorderSupported(profile.countryCode)
+
     // Update payout status in our database
-    // All accounts: need both chargesEnabled and payoutsEnabled
     let payoutStatus: 'pending' | 'active' | 'restricted' = 'pending'
-    if (status.chargesEnabled && status.payoutsEnabled) {
-      payoutStatus = 'active'
-    } else if (status.requirements?.disabledReason) {
-      payoutStatus = 'restricted'
+    if (isCrossBorder) {
+      // Cross-border accounts: only need payouts_enabled (transfers capability)
+      if (status.payoutsEnabled) {
+        payoutStatus = 'active'
+      } else if (status.requirements?.disabledReason) {
+        payoutStatus = 'restricted'
+      }
+    } else {
+      // Native accounts: need both charges_enabled and payouts_enabled
+      if (status.chargesEnabled && status.payoutsEnabled) {
+        payoutStatus = 'active'
+      } else if (status.requirements?.disabledReason) {
+        payoutStatus = 'restricted'
+      }
     }
 
     if (profile.payoutStatus !== payoutStatus) {
