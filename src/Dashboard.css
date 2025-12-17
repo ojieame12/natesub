@@ -186,6 +186,7 @@
 .main {
     padding: var(--space-xl);
     padding-top: calc(env(safe-area-inset-top, 12px) + 60px + var(--space-xl));
+    padding-bottom: calc(56px + env(safe-area-inset-bottom, 0) + var(--space-xl));
     display: flex;
     flex-direction: column;
     gap: var(--space-xl);
@@ -1135,4 +1136,89 @@
     align-items: center;
     justify-content: center;
     color: var(--text-primary);
+}
+
+/* ===========================================
+   DASHBOARD FOOTER NAVIGATION
+   =========================================== */
+
+.dashboard-footer {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    height: 56px;
+    background: var(--bg-elevated);
+    border-top: 1px solid var(--border-default);
+    padding-bottom: env(safe-area-inset-bottom, 0);
+    max-width: 430px;
+    margin: 0 auto;
+    z-index: 100;
+}
+
+.footer-tab {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    height: 100%;
+    background: transparent;
+    border: none;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    transition: color 0.15s ease, transform 0.1s ease;
+}
+
+.footer-tab:active,
+.footer-tab.pressed {
+    transform: scale(0.92);
+}
+
+.footer-tab.active {
+    color: var(--text-primary);
+}
+
+.footer-tab .tab-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Scan/Center Button */
+.scan-tab {
+    flex: none;
+    width: 64px;
+}
+
+.scan-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    background: var(--neutral-900);
+    border-radius: var(--radius-full);
+    color: white;
+    transition: transform 0.1s ease;
+}
+
+.scan-tab:active .scan-button,
+.scan-tab.pressed .scan-button {
+    transform: scale(0.92);
+}
+
+/* Profile Avatar in Footer */
+.tab-avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: var(--radius-full);
+    object-fit: cover;
+    border: 2px solid transparent;
+}
+
+.footer-tab.active .tab-avatar {
+    border-color: var(--text-primary);
 }
