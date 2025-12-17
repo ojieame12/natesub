@@ -65,21 +65,47 @@ checkout.post(
 
     // Paystack-supported countries (local payments)
     const PAYSTACK_COUNTRIES = ['NG', 'KE', 'ZA', 'GH']
-    const payerIsPaystackEligible = payerCountry && PAYSTACK_COUNTRIES.includes(payerCountry.toUpperCase())
 
-    // Smart provider selection based on payer location
-    // If creator has BOTH providers, route based on payer geo
-    // Otherwise, use whichever provider they have
+    // Validate payerCountry - must be exactly 2 uppercase letters
+    const validPayerCountry = payerCountry && /^[A-Z]{2}$/.test(payerCountry.toUpperCase())
+      ? payerCountry.toUpperCase()
+      : null
+    const payerIsPaystackEligible = validPayerCountry && PAYSTACK_COUNTRIES.includes(validPayerCountry)
+
+    // Currency safety: only route to Stripe if creator can accept USD
+    const creatorCurrencyIsUSD = profile.currency === 'USD'
+    const creatorIsCrossBorder = isStripeCrossBorderSupported(profile.countryCode)
+    const canAcceptStripe = creatorCurrencyIsUSD || creatorIsCrossBorder
+
+    // Smart provider selection based on payer location + currency safety
+    // If creator has BOTH providers, route based on payer geo (if valid) OR creator preference
     let inferredProvider: 'stripe' | 'paystack' | null = null
 
     if (hasBothProviders) {
-      // Smart selection: local payers → Paystack, global payers → Stripe
-      inferredProvider = payerIsPaystackEligible ? 'paystack' : 'stripe'
+      if (validPayerCountry) {
+        // Valid geo available - use smart routing with currency guard
+        if (payerIsPaystackEligible) {
+          inferredProvider = 'paystack'
+        } else if (canAcceptStripe) {
+          // Global payer + creator can accept USD → Stripe
+          inferredProvider = 'stripe'
+        } else {
+          // Global payer but creator is local-currency → Paystack (safe fallback)
+          inferredProvider = 'paystack'
+        }
+      } else {
+        // No valid geo - use creator's default preference
+        const creatorDefault = profile.paymentProvider as 'stripe' | 'paystack' | null
+        inferredProvider = creatorDefault || (canAcceptStripe ? 'stripe' : 'paystack')
+      }
     } else if (hasStripeAccount) {
       inferredProvider = 'stripe'
     } else if (hasPaystackAccount) {
       inferredProvider = 'paystack'
     }
+
+    // Log provider selection for debugging
+    console.log(`[checkout] Provider selection: ${inferredProvider} (payer: ${validPayerCountry || 'unknown'}, creator: ${profile.username}, currency: ${profile.currency}, crossBorder: ${creatorIsCrossBorder})`)
 
     const hasStripe = inferredProvider === 'stripe' && hasStripeAccount
     const hasPaystack = inferredProvider === 'paystack' && hasPaystackAccount

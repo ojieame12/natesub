@@ -149,11 +149,28 @@ export default function SubscriptionLiquid({ profile, canceled, isOwner }: Subsc
     }, [profileId, recordPageView, searchParams])
 
     // Detect payer country via IP for geo-based provider selection
+    // Uses sessionStorage cache to reduce API calls (ipapi.co has rate limits)
     useEffect(() => {
+        const CACHE_KEY = 'natepay_payer_country'
+        const cached = sessionStorage.getItem(CACHE_KEY)
+
+        if (cached && /^[A-Z]{2}$/.test(cached)) {
+            setPayerCountry(cached)
+            return
+        }
+
         fetch('https://ipapi.co/country/')
             .then(r => r.text())
-            .then(code => setPayerCountry(code.trim().toUpperCase()))
-            .catch(() => setPayerCountry(null)) // Fallback: backend uses creator default
+            .then(code => {
+                const cleaned = code.trim().toUpperCase()
+                // Only accept valid 2-letter ISO country codes
+                if (/^[A-Z]{2}$/.test(cleaned)) {
+                    sessionStorage.setItem(CACHE_KEY, cleaned)
+                    setPayerCountry(cleaned)
+                }
+                // Invalid response → payerCountry stays null → backend uses creator default
+            })
+            .catch(() => { }) // Silent fail - backend uses creator default
     }, [])
 
     // Track when user reaches payment screen
