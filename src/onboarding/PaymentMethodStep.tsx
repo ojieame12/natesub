@@ -76,27 +76,12 @@ export default function PaymentMethodStep() {
     // Get pricing based on branch (service vs personal)
     const pricing = getPricing(branch === 'service' ? 'service' : undefined)
     const feeLabel = pricing.transactionFeeLabel
-    const [stripeCountryCodes, setStripeCountryCodes] = useState<string[]>([])
-    const [loading, setLoading] = useState(true)
+    // const [stripeCountryCodes, setStripeCountryCodes] = useState<string[]>([]) // Removed: Stripe enabled globally
+    const [loading, setLoading] = useState(false) // No longer fetching countries
     const [saving, setSaving] = useState(false)
     const [error, setError] = useState<string | null>(null)
 
-    // Fetch Stripe supported countries on mount
-    useEffect(() => {
-        async function fetchSupportedCountries() {
-            try {
-                const result = await api.stripe.getSupportedCountries()
-                setStripeCountryCodes(result.countries.map(c => c.code))
-            } catch (err) {
-                console.error('Failed to fetch supported countries:', err)
-                // Fallback to common countries if API fails (includes cross-border countries like NG)
-                setStripeCountryCodes(['US', 'CA', 'GB', 'AU', 'DE', 'FR', 'JP', 'SG', 'NG', 'GH', 'KE', 'ZA'])
-            } finally {
-                setLoading(false)
-            }
-        }
-        fetchSupportedCountries()
-    }, [])
+    // Removed country check effect since we allow all countries now
 
     // Determine which payment methods to show based on country code
     const countryUpper = countryCode?.toUpperCase() || ''
