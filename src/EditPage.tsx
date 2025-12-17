@@ -136,8 +136,8 @@ export default function EditPage() {
         avatarUrl,
         pricingModel: 'single',
         singleAmount,
-        tiers: null,
         feeMode,
+        isPublic: true, // Force public on specific save
       })
 
       setHasChanges(false)

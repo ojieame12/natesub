@@ -155,7 +155,7 @@ export default function SubscribeMidnight({ profile, isOwner }: SubscribeMidnigh
     const [searchParams] = useSearchParams()
 
     const isSuccessReturn = searchParams.get('success') === 'true'
-    const stripeSessionId = searchParams.get('session_id')
+    // const stripeSessionId = searchParams.get('session_id') // Removed unused
     const [resetKey, setResetKey] = useState(0)
 
     // Hooks
@@ -170,8 +170,9 @@ export default function SubscribeMidnight({ profile, isOwner }: SubscribeMidnigh
     const [subscriberEmail, setSubscriberEmail] = useState('')
     const [emailFocused, setEmailFocused] = useState(false)
     const [status, setStatus] = useState<'idle' | 'processing' | 'verifying' | 'success'>(
-        isSuccessReturn && stripeSessionId ? 'verifying' : 'idle'
+        isSuccessReturn ? 'verifying' : 'idle'
     )
+    const [payerCountry, setPayerCountry] = useState<string | null>(null)
     const viewIdRef = useRef<string | null>(null)
 
     // Data
@@ -195,10 +196,45 @@ export default function SubscribeMidnight({ profile, isOwner }: SubscribeMidnigh
         // Small delay to ensure initial state is painted before animating
         const timer = setTimeout(() => setMount(true), 50)
 
+        // IP Detection for Smart Provider Routing
+        const CACHE_KEY = 'natepay_payer_country'
+        const cached = sessionStorage.getItem(CACHE_KEY)
+        if (cached && /^[A-Z]{2}$/.test(cached)) {
+            setPayerCountry(cached)
+        } else {
+            fetch('https://ipapi.co/country/')
+                .then(r => r.text())
+                .then(code => {
+                    const cleaned = code.trim().toUpperCase()
+                    if (/^[A-Z]{2}$/.test(cleaned)) {
+                        sessionStorage.setItem(CACHE_KEY, cleaned)
+                        setPayerCountry(cleaned)
+                    }
+                }).catch(() => { })
+        }
+
+        const stripeSessionId = searchParams.get('session_id')
+        const paystackRef = searchParams.get('reference') || searchParams.get('trxref')
+
         if (isSuccessReturn) {
-            const sessionId = searchParams.get('session_id')
-            if (sessionId) {
-                api.checkout.verifySession(sessionId, profile.username)
+            if (stripeSessionId) {
+                // STRIPE VERIFICATION
+                api.checkout.verifySession(stripeSessionId, profile.username)
+                    .then(result => {
+                        if (result.verified) {
+                            setStatus('success')
+                        } else {
+                            setStatus('idle')
+                            toast.error('Payment verification failed')
+                        }
+                    })
+                    .catch(() => {
+                        setStatus('idle')
+                        toast.error('Could not verify payment')
+                    })
+            } else if (paystackRef) {
+                // PAYSTACK VERIFICATION
+                api.checkout.verifyPaystack(paystackRef)
                     .then(result => {
                         if (result.verified) {
                             setStatus('success')
@@ -212,10 +248,11 @@ export default function SubscribeMidnight({ profile, isOwner }: SubscribeMidnigh
                         toast.error('Could not verify payment')
                     })
             } else {
+                setStatus('idle')
                 toast.error('Invalid payment session')
             }
         } else if (profile.id && !isOwner && !viewIdRef.current) {
-            // Public analytics: don't count owner preview as a "page view"
+            // Public analytics
             recordPageView({
                 profileId: profile.id,
                 referrer: document.referrer || undefined,
@@ -286,6 +323,7 @@ export default function SubscribeMidnight({ profile, isOwner }: SubscribeMidnigh
                 amount: amountInCents,
                 interval: 'month',
                 subscriberEmail: subscriberEmail.trim(),
+                payerCountry: payerCountry || undefined, // PASS GEO for Smart Routing
                 viewId: viewId || undefined,
             })
 

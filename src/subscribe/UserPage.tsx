@@ -109,21 +109,29 @@ export default function UserPage() {
 
   let content: ReactNode
   const isOwner = Boolean(data.isOwner)
+  const templateToUse = data.profile.template || 'boundary' // Restored
 
-  const templateToUse = data.profile.template || 'boundary'
+  // Determine template component
+  // 'minimal' and 'editorial' are not yet implemented, so we fall back to 'boundary'
+  const renderTemplate = (tpl: string | null, isOwnerMode: boolean = false) => {
+    // Normalize logic
+    const t = tpl || 'boundary'
 
-  // Show success page after payment (Legacy support for other templates)
-  // 'boundary' template handles its own success state with the new Receipt verification flow
+    if (t === 'midnight') {
+      return <SubscribeMidnight profile={data.profile} canceled={isCanceled} isOwner={isOwnerMode} />
+    }
+
+    // Fallback for 'boundary', 'minimal', 'editorial' (until implemented)
+    return <SubscribeBoundary profile={data.profile} canceled={isCanceled} isOwner={isOwnerMode} />
+  }
+
   if (isSuccess && templateToUse !== 'boundary') {
+    // Legacy success page for non-boundary templates (if any)
+    // Since boundary handles its own success, we might eventually remove SubscriptionSuccess entirely
     content = <SubscriptionSuccess profile={data.profile} provider={provider} />
   } else if (isOwner) {
-    // Owner preview mode - show the public page but disable checkout actions
-    const templateToUse = data.profile.template || 'boundary'
-    content = templateToUse === 'midnight'
-      ? <SubscribeMidnight profile={data.profile} canceled={isCanceled} isOwner />
-      : <SubscribeBoundary profile={data.profile} canceled={isCanceled} isOwner />
+    content = renderTemplate(templateToUse, true)
   } else if (data.viewerSubscription?.isActive) {
-    // Show "Already Subscribed" if viewer has active subscription
     content = (
       <AlreadySubscribed
         profile={data.profile}
@@ -131,11 +139,7 @@ export default function UserPage() {
       />
     )
   } else {
-    // Use the profile's saved template preference (default to 'boundary')
-    const templateToUse = data.profile.template || 'boundary'
-    content = templateToUse === 'midnight'
-      ? <SubscribeMidnight profile={data.profile} canceled={isCanceled} />
-      : <SubscribeBoundary profile={data.profile} canceled={isCanceled} />
+    content = renderTemplate(templateToUse, false)
   }
 
   return <>{content}</>

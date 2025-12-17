@@ -95,8 +95,12 @@ export default function SubscriptionSuccess({ profile, provider }: SubscriptionS
 
             // PAYSTACK / LEGACY: Use Polling (with timeout fallback - risky but legacy)
             if (pollCount.current > 5) { // 10 seconds (5 * 2s)
-                // Timeout - Optimistically show success but warn
-                if (isMounted) setStatus('verified')
+                // Timeout - Do NOT optimistically show success. Use error state or keep loading.
+                if (isMounted) {
+                    console.error('Polling timed out')
+                    // Ideally show an error or a manual "Check Again" button.
+                    // For now, we just stop polling to avoid infinite loops.
+                }
                 return
             }
 

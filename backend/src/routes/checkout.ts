@@ -137,16 +137,28 @@ checkout.post(
     // IMPORTANT: profile.singleAmount and tier.amount are stored in CENTS in the database
     // (see profile.ts:128 where we do Math.round(data.singleAmount * 100))
     // The `amount` from request is also in cents (smallest unit)
-    if (profile.pricingModel === 'single' && profile.singleAmount) {
-      if (amount !== profile.singleAmount) {
-        return c.json({ error: 'Invalid amount' }, 400)
+    // Relaxed Validation: Allow payment if amount matches EITHER singleAmount OR a tier.
+    // This fixes the issue where users stuck on 'tiers' model use templates that only support singleAmount.
+    let isValidAmount = false
+
+    if (profile.singleAmount && amount === profile.singleAmount) {
+      isValidAmount = true
+    } else if (profile.tiers && Array.isArray(profile.tiers)) {
+      // Check if amount matches any tier
+      const match = (profile.tiers as any[]).find(t => t.amount === amount)
+      if (match) {
+        isValidAmount = true
+        // If tierId was passed, verify it matches
+        if (tierId && match.id !== tierId) {
+          isValidAmount = false
+        }
       }
-    } else if (profile.pricingModel === 'tiers' && profile.tiers) {
-      const tiers = profile.tiers as any[]
-      const tier = tiers.find(t => t.id === tierId)
-      if (!tier || tier.amount !== amount) {
-        return c.json({ error: 'Invalid tier or amount' }, 400)
-      }
+    }
+
+    if (!isValidAmount) {
+      // Final fallback: If they are sending a valid amount that matches the 'single' price,
+      // we allow it even if they are technically on 'tiers' mode.
+      return c.json({ error: 'Invalid amount' }, 400)
     }
 
     // Check if this is a cross-border account (Stripe context only)

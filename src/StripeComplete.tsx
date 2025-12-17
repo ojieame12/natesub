@@ -141,6 +141,21 @@ export default function StripeComplete() {
     }
   }, [checkStatus])
 
+  // Safety Timeout: If loading takes too long (e.g. API hang), force 'pending' state
+  // This triggers the polling loop which is more robust and gives feedback
+  useEffect(() => {
+    if (status !== 'loading') return
+
+    const timer = setTimeout(() => {
+      if (status === 'loading') {
+        console.warn('[StripeComplete] Safety timeout triggered - forcing pending state')
+        setStatus('pending')
+      }
+    }, 6000) // 6 seconds
+
+    return () => clearTimeout(timer)
+  }, [status])
+
   // Handle success state - optimistic cache update to prevent webhook race condition
   useEffect(() => {
     if (status === 'success' && !hasProcessedSuccess.current) {

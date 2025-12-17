@@ -135,6 +135,7 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
     const [subscriberEmail, setSubscriberEmail] = useState('')
     const [emailFocused, setEmailFocused] = useState(false)
     const [status, setStatus] = useState<'idle' | 'processing' | 'verifying' | 'success'>(isSuccessReturn ? 'verifying' : 'idle')
+    const [payerCountry, setPayerCountry] = useState<string | null>(null)
     const viewIdRef = useRef<string | null>(null)
 
     // Data
@@ -162,16 +163,50 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
         // Small delay to ensure initial state is painted before animating
         const timer = setTimeout(() => setMount(true), 50)
 
+        // IP Detection for Smart Provider Routing
+        const CACHE_KEY = 'natepay_payer_country'
+        const cached = sessionStorage.getItem(CACHE_KEY)
+        if (cached && /^[A-Z]{2}$/.test(cached)) {
+            setPayerCountry(cached)
+        } else {
+            fetch('https://ipapi.co/country/')
+                .then(r => r.text())
+                .then(code => {
+                    const cleaned = code.trim().toUpperCase()
+                    if (/^[A-Z]{2}$/.test(cleaned)) {
+                        sessionStorage.setItem(CACHE_KEY, cleaned)
+                        setPayerCountry(cleaned)
+                    }
+                }).catch(() => { })
+        }
+
         // Handle Session Verification
+        // Check for both Stripe (session_id) and Paystack (reference/trxref)
+        const stripeSessionId = searchParams.get('session_id')
+        const paystackRef = searchParams.get('reference') || searchParams.get('trxref')
+
         if (isSuccessReturn) {
-            const sessionId = searchParams.get('session_id')
-            if (sessionId) {
-                api.checkout.verifySession(sessionId, profile.username)
+            if (stripeSessionId) {
+                // STRIPE VERIFICATION
+                api.checkout.verifySession(stripeSessionId, profile.username)
                     .then(result => {
                         if (result.verified) {
                             setStatus('success')
-                            // Clear query params to prevent re-verification on refresh
-                            // navigate(location.pathname, { replace: true })
+                        } else {
+                            setStatus('idle')
+                            toast.error('Payment verification failed')
+                        }
+                    })
+                    .catch(() => {
+                        setStatus('idle')
+                        toast.error('Could not verify payment')
+                    })
+            } else if (paystackRef) {
+                // PAYSTACK VERIFICATION
+                api.checkout.verifyPaystack(paystackRef)
+                    .then(result => {
+                        if (result.verified) {
+                            setStatus('success')
                         } else {
                             setStatus('idle')
                             toast.error('Payment verification failed')
@@ -182,7 +217,7 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                         toast.error('Could not verify payment')
                     })
             } else {
-                // Fallback for legacy/spoofed URLs without session_id
+                // Fallback for legacy/spoofed URLs without IDs
                 setStatus('idle')
                 toast.error('Invalid payment session')
             }
@@ -258,6 +293,7 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                 amount: amountInCents,
                 interval: 'month',
                 subscriberEmail: subscriberEmail.trim(),
+                payerCountry: payerCountry || undefined, // PASS GEO for Smart Routing
                 viewId: viewId || undefined,
             })
 

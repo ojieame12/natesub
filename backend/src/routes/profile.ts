@@ -185,6 +185,7 @@ profile.put(
       paymentProvider: data.paymentProvider || null,
       template: normalizeTemplate(data.template) || 'boundary',
       feeMode: data.feeMode || 'pass_to_subscriber', // Default: subscriber pays fee
+      isPublic: true, // FORCE PUBLIC: All profiles are public by default
       shareUrl: `${env.PUBLIC_PAGE_URL || 'https://natepay.co'}/${data.username.toLowerCase()}`,
       address: data.address || null,
       city: data.city || null,
@@ -458,8 +459,9 @@ profile.patch(
     if (data.notificationPrefs !== undefined) {
       updateData.notificationPrefs = data.notificationPrefs
     }
+    // FORCE PUBLIC: Settings cannot disable public visibility anymore
     if (data.isPublic !== undefined) {
-      updateData.isPublic = data.isPublic
+      updateData.isPublic = true
     }
     if (data.feeMode !== undefined) {
       updateData.feeMode = data.feeMode
