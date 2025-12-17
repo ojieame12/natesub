@@ -12,17 +12,16 @@ import {
   getPayoutHistory,
   createExpressDashboardLink,
 } from '../services/stripe.js'
-import { isStripeSupported, isStripeCrossBorderSupported, getStripeSupportedCountries, STRIPE_SUPPORTED_COUNTRIES, STRIPE_CROSS_BORDER_COUNTRIES } from '../utils/constants.js'
+import { isStripeSupported, getStripeSupportedCountries } from '../utils/constants.js'
 
 const stripeRoutes = new Hono()
 
 // Get supported countries for Stripe Connect
 stripeRoutes.get('/supported-countries', async (c) => {
+  const countries = getStripeSupportedCountries()
   return c.json({
-    countries: getStripeSupportedCountries(),
-    nativeCount: Object.keys(STRIPE_SUPPORTED_COUNTRIES).length,
-    crossBorderCount: Object.keys(STRIPE_CROSS_BORDER_COUNTRIES).length,
-    total: Object.keys(STRIPE_SUPPORTED_COUNTRIES).length + Object.keys(STRIPE_CROSS_BORDER_COUNTRIES).length,
+    countries,
+    total: countries.length,
   })
 })
 
@@ -51,7 +50,6 @@ stripeRoutes.post('/connect', requireAuth, paymentRateLimit, async (c) => {
   }
 
   try {
-    const isCrossBorder = isStripeCrossBorderSupported(user.profile.countryCode)
     const result = await createExpressAccount(
       userId,
       user.email,
@@ -64,7 +62,6 @@ stripeRoutes.post('/connect', requireAuth, paymentRateLimit, async (c) => {
         success: true,
         alreadyOnboarded: true,
         message: 'Payments already connected',
-        crossBorder: isCrossBorder,
       })
     }
 
@@ -72,11 +69,6 @@ stripeRoutes.post('/connect', requireAuth, paymentRateLimit, async (c) => {
       success: true,
       accountId: result.accountId,
       onboardingUrl: result.accountLink,
-      crossBorder: isCrossBorder,
-      // Cross-border accounts receive payouts in local currency (e.g., NGN for Nigeria)
-      ...(isCrossBorder && {
-        note: 'Your account will receive payouts in your local currency. Payments are collected in USD and converted automatically.',
-      }),
     })
   } catch (error: any) {
     console.error('Stripe Connect error:', error)
@@ -130,12 +122,10 @@ stripeRoutes.get('/connect/status', requireAuth, async (c) => {
 
   // Fast path: when quick is requested and refresh is false, return the last known DB status
   // without calling Stripe (avoids slow Stripe API on cold starts / return redirects).
-  const isCrossBorder = isStripeCrossBorderSupported(profile.countryCode)
   if (quick && !refresh) {
     return c.json({
       connected: true,
       status: profile.payoutStatus || 'pending',
-      crossBorder: isCrossBorder,
     })
   }
 
@@ -145,26 +135,13 @@ stripeRoutes.get('/connect/status', requireAuth, async (c) => {
       forceRefresh: refresh,
     })
 
-    // Check if this is a cross-border account (e.g., Nigeria)
-    // Cross-border accounts don't have chargesEnabled - only payoutsEnabled matters
     // Update payout status in our database
-    // Cross-border: only payoutsEnabled required
-    // Native: both chargesEnabled and payoutsEnabled required
+    // All accounts: need both chargesEnabled and payoutsEnabled
     let payoutStatus: 'pending' | 'active' | 'restricted' = 'pending'
-    if (isCrossBorder) {
-      // Cross-border accounts: only need payoutsEnabled (transfers capability)
-      if (status.payoutsEnabled) {
-        payoutStatus = 'active'
-      } else if (status.requirements?.disabledReason) {
-        payoutStatus = 'restricted'
-      }
-    } else {
-      // Native accounts: need both chargesEnabled and payoutsEnabled
-      if (status.chargesEnabled && status.payoutsEnabled) {
-        payoutStatus = 'active'
-      } else if (status.requirements?.disabledReason) {
-        payoutStatus = 'restricted'
-      }
+    if (status.chargesEnabled && status.payoutsEnabled) {
+      payoutStatus = 'active'
+    } else if (status.requirements?.disabledReason) {
+      payoutStatus = 'restricted'
     }
 
     if (profile.payoutStatus !== payoutStatus) {
@@ -178,7 +155,6 @@ stripeRoutes.get('/connect/status', requireAuth, async (c) => {
       connected: true,
       status: payoutStatus,
       details: status,
-      crossBorder: isCrossBorder,
     })
   } catch (error) {
     console.error('Status check error:', error)
