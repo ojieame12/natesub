@@ -70,33 +70,26 @@ checkout.post(
     const validPayerCountry = payerCountry && /^[A-Z]{2}$/.test(payerCountry.toUpperCase())
       ? payerCountry.toUpperCase()
       : null
-    const payerIsPaystackEligible = validPayerCountry && PAYSTACK_COUNTRIES.includes(validPayerCountry)
+    const payerIsLocal = validPayerCountry && PAYSTACK_COUNTRIES.includes(validPayerCountry)
+    const payerIsGlobal = validPayerCountry && !payerIsLocal
 
-    // Currency safety: only route to Stripe if creator can accept USD
-    const creatorCurrencyIsUSD = profile.currency === 'USD'
-    const creatorIsCrossBorder = isStripeCrossBorderSupported(profile.countryCode)
-    const canAcceptStripe = creatorCurrencyIsUSD || creatorIsCrossBorder
-
-    // Smart provider selection based on payer location + currency safety
-    // If creator has BOTH providers, route based on payer geo (if valid) OR creator preference
+    // INTELLIGENT ROUTING v2:
+    // - Local payers (NG/KE/ZA/GH) → Paystack (best local UX)
+    // - Global payers → Stripe (best global coverage, handles FX)
+    // - If creator only has one provider → use that (regardless of payer geo)
     let inferredProvider: 'stripe' | 'paystack' | null = null
 
     if (hasBothProviders) {
-      if (validPayerCountry) {
-        // Valid geo available - use smart routing with currency guard
-        if (payerIsPaystackEligible) {
-          inferredProvider = 'paystack'
-        } else if (canAcceptStripe) {
-          // Global payer + creator can accept USD → Stripe
-          inferredProvider = 'stripe'
-        } else {
-          // Global payer but creator is local-currency → Paystack (safe fallback)
-          inferredProvider = 'paystack'
-        }
+      if (payerIsLocal) {
+        // Local payer → Paystack for best local experience
+        inferredProvider = 'paystack'
+      } else if (payerIsGlobal) {
+        // Global payer → Stripe (handles cross-border FX automatically)
+        inferredProvider = 'stripe'
       } else {
         // No valid geo - use creator's default preference
         const creatorDefault = profile.paymentProvider as 'stripe' | 'paystack' | null
-        inferredProvider = creatorDefault || (canAcceptStripe ? 'stripe' : 'paystack')
+        inferredProvider = creatorDefault || 'stripe' // Stripe as final fallback for global reach
       }
     } else if (hasStripeAccount) {
       inferredProvider = 'stripe'
@@ -105,7 +98,7 @@ checkout.post(
     }
 
     // Log provider selection for debugging
-    console.log(`[checkout] Provider selection: ${inferredProvider} (payer: ${validPayerCountry || 'unknown'}, creator: ${profile.username}, currency: ${profile.currency}, crossBorder: ${creatorIsCrossBorder})`)
+    console.log(`[checkout] Provider selection: ${inferredProvider} (payer: ${validPayerCountry || 'unknown'}, payerIsLocal: ${payerIsLocal}, creator: ${profile.username}, hasStripe: ${hasStripeAccount}, hasPaystack: ${hasPaystackAccount})`)
 
     const hasStripe = inferredProvider === 'stripe' && hasStripeAccount
     const hasPaystack = inferredProvider === 'paystack' && hasPaystackAccount
@@ -451,4 +444,78 @@ function buildBreakdown(feeCalc: FeeCalculation, currency: string) {
   }
 }
 
+// DEBUG: Test routing endpoint - simulates provider selection without creating a checkout
+// Usage: POST /checkout/test-routing with { creatorUsername, payerCountry }
+checkout.post(
+  '/test-routing',
+  publicRateLimit,
+  zValidator('json', z.object({
+    creatorUsername: z.string(),
+    payerCountry: z.string().length(2).optional(),
+  })),
+  async (c) => {
+    const { creatorUsername, payerCountry } = c.req.valid('json')
+
+    const profile = await db.profile.findUnique({
+      where: { username: creatorUsername.toLowerCase() },
+    })
+
+    if (!profile) {
+      return c.json({ error: 'User not found' }, 404)
+    }
+
+    const hasStripeAccount = Boolean(profile.stripeAccountId)
+    const hasPaystackAccount = Boolean(profile.paystackSubaccountCode)
+    const hasBothProviders = hasStripeAccount && hasPaystackAccount
+
+    const PAYSTACK_COUNTRIES = ['NG', 'KE', 'ZA', 'GH']
+    const validPayerCountry = payerCountry && /^[A-Z]{2}$/.test(payerCountry.toUpperCase())
+      ? payerCountry.toUpperCase()
+      : null
+    const payerIsLocal = validPayerCountry && PAYSTACK_COUNTRIES.includes(validPayerCountry)
+    const payerIsGlobal = validPayerCountry && !payerIsLocal
+
+    let selectedProvider: 'stripe' | 'paystack' | null = null
+    let reason = ''
+
+    if (hasBothProviders) {
+      if (payerIsLocal) {
+        selectedProvider = 'paystack'
+        reason = 'Both providers available, payer is local (NG/KE/ZA/GH) → Paystack'
+      } else if (payerIsGlobal) {
+        selectedProvider = 'stripe'
+        reason = 'Both providers available, payer is global → Stripe'
+      } else {
+        const creatorDefault = profile.paymentProvider as 'stripe' | 'paystack' | null
+        selectedProvider = creatorDefault || 'stripe'
+        reason = `Both providers available, no valid geo → using creator default (${creatorDefault || 'stripe'})`
+      }
+    } else if (hasStripeAccount) {
+      selectedProvider = 'stripe'
+      reason = 'Only Stripe available'
+    } else if (hasPaystackAccount) {
+      selectedProvider = 'paystack'
+      reason = 'Only Paystack available'
+    } else {
+      reason = 'No payment provider connected'
+    }
+
+    return c.json({
+      test: true,
+      creatorUsername: profile.username,
+      creatorCountry: profile.countryCode,
+      creatorCurrency: profile.currency,
+      payerCountry: validPayerCountry,
+      payerIsLocal,
+      payerIsGlobal,
+      hasStripe: hasStripeAccount,
+      hasPaystack: hasPaystackAccount,
+      hasBoth: hasBothProviders,
+      selectedProvider,
+      reason,
+    })
+  }
+)
+
 export default checkout
+
