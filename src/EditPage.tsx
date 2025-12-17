@@ -21,6 +21,8 @@ export default function EditPage() {
   const [displayName, setDisplayName] = useState('')
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [singleAmount, setSingleAmount] = useState<number>(10)
+  // Use string state for the input to allow free editing (decimals, empty string)
+  const [priceInput, setPriceInput] = useState<string>('10')
   const [feeMode, setFeeMode] = useState<'absorb' | 'pass_to_subscriber'>('pass_to_subscriber')
   const [hasChanges, setHasChanges] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
@@ -35,7 +37,11 @@ export default function EditPage() {
       const currency = profile.currency || 'USD'
       setDisplayName(profile.displayName || '')
       setAvatarUrl(profile.avatarUrl)
-      setSingleAmount(profile.singleAmount ? centsToDisplayAmount(profile.singleAmount, currency) : 10)
+
+      const amt = profile.singleAmount ? centsToDisplayAmount(profile.singleAmount, currency) : 10
+      setSingleAmount(amt)
+      setPriceInput(amt.toString())
+
       setFeeMode(profile.feeMode || 'pass_to_subscriber')
     }
   }, [profile])
@@ -48,13 +54,29 @@ export default function EditPage() {
     const currency = profile.currency || 'USD'
     const profileAmountDisplay = profile.singleAmount ? centsToDisplayAmount(profile.singleAmount, currency) : 10
 
+    // Parse current input for comparison
+    const currentVal = parseFloat(priceInput) || 0
+
     const changed =
       displayName !== (profile.displayName || '') ||
       avatarUrl !== (profile.avatarUrl || null) ||
-      singleAmount !== profileAmountDisplay ||
+      currentVal !== profileAmountDisplay ||
       feeMode !== (profile.feeMode || 'pass_to_subscriber')
     setHasChanges(changed)
-  }, [displayName, avatarUrl, singleAmount, feeMode, profile])
+
+    // Sync numeric state for validation usage elsewhere
+    setSingleAmount(currentVal)
+  }, [displayName, avatarUrl, priceInput, feeMode, profile])
+
+  // ... (avatar handlers unchanged) ...
+
+  const handlePriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value
+    // Allow empty string, digits, one decimal point
+    if (val === '' || /^\d*\.?\d*$/.test(val)) {
+      setPriceInput(val)
+    }
+  }
 
   // Avatar upload handler
   const handleAvatarClick = () => {
@@ -275,11 +297,12 @@ export default function EditPage() {
           <div className="single-price-card">
             <span className="price-currency">{currencySymbol}</span>
             <input
-              type="number"
+              type="text"
+              inputMode="decimal"
               className="price-input"
-              value={singleAmount}
-              onChange={(e) => setSingleAmount(parseFloat(e.target.value) || 0)}
-              min={1}
+              value={priceInput}
+              onChange={handlePriceChange}
+              placeholder="0.00"
             />
             <span className="price-period">/month</span>
           </div>
