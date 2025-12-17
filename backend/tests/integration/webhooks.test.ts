@@ -89,11 +89,12 @@ describe('stripe webhooks', () => {
         data: {
           object: {
             id: 'cs_test_123',
-            mode: 'subscription',
+            mode: 'payment', // Changed from subscription to trigger immediate payment creation
+            payment_status: 'paid',
             amount_total: 1000,
             currency: 'usd',
             customer: 'cus_test_subscriber',
-            subscription: 'sub_test_123',
+            subscription: null, // No subscription ID for one-time payment
             customer_details: {
               email: 'subscriber@test.com',
               name: 'Test Subscriber',
@@ -113,7 +114,7 @@ describe('stripe webhooks', () => {
       const subscriptions = await db.subscription.findMany({})
       expect(subscriptions.length).toBe(1)
       expect(subscriptions[0].creatorId).toBe(creator.id)
-      expect(subscriptions[0].stripeSubscriptionId).toBe('sub_test_123')
+      expect(subscriptions[0].stripeSubscriptionId).toBeNull()
 
       // Verify payment was created
       const payments = await db.payment.findMany({})
@@ -162,6 +163,7 @@ describe('stripe webhooks', () => {
           object: {
             id: 'cs_request_123',
             mode: 'payment',
+            payment_status: 'paid',
             amount_total: 2000,
             currency: 'usd',
             customer: 'cus_payer',

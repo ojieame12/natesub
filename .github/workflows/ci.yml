@@ -10,6 +10,44 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  lint:
+    name: Lint & Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
+      - run: npm run lint
+
+  build:
+    name: Build Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install Frontend Deps
+        run: npm ci
+      - name: Build Frontend
+        run: npm run build
+      
+      - name: Install Backend Deps
+        run: npm ci
+        working-directory: backend
+      - name: Generate Prisma Client
+        run: npm run db:generate
+        working-directory: backend
+      - name: Build Backend
+        run: npm run build
+        working-directory: backend
+
   frontend-tests:
     name: Frontend Tests
     runs-on: ubuntu-latest
@@ -54,3 +92,55 @@ jobs:
         run: npm test -- tests/unit
         working-directory: backend
 
+  backend-integration-tests:
+    name: Backend Integration Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: nate_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      
+      - name: Install deps
+        run: npm ci
+        working-directory: backend
+      
+      - name: Setup Test DB
+        run: npm run db:push
+        working-directory: backend
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/nate_test
+      
+      - name: Run Integration Tests
+        run: npm test -- tests/integration
+        working-directory: backend
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/nate_test
+          REDIS_URL: redis://localhost:6379
+          NODE_ENV: test

@@ -83,6 +83,7 @@ export async function requestMagicLink(email: string): Promise<{ success: boolea
           email: normalizedEmail,
           tokenHash: otpHash,
           expiresAt,
+          usedAt: null,
         },
       })
       break

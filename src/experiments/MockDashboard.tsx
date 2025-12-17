@@ -24,11 +24,9 @@ const getActivityTitle = (type: ActivityType) => {
   }
 }
 
-const noop = () => {}
+const noop = () => { }
 
 export default function MockDashboard() {
-  const username = 'nate'
-  const displayName = 'Nate Creator'
   const currencyCode = 'NGN'
   const currencySymbol = getCurrencySymbol(currencyCode)
 
@@ -82,32 +80,52 @@ export default function MockDashboard() {
       </header>
 
       <main className="main">
-        <section className="stats-card">
+        <section className="stats-card" style={{ height: '220px', padding: '24px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
           <div className="stats-primary">
-            <span className="stats-label">Monthly Recurring Revenue</span>
-            <span className="stats-mrr">
-              {formatSmartAmount(metrics.mrr, currencyCode, 12)}
+            <span className="stats-label" style={{ marginBottom: '0', opacity: 0.8, lineHeight: '1.2' }}>Monthly Recurring Revenue</span>
+            <span className="stats-mrr" style={{ lineHeight: '1', marginTop: '2px' }}>
+              {formatSmartAmount(metrics.mrr, currencyCode, 10)}
             </span>
           </div>
           <div className="stats-secondary-row">
             <div className="stats-metric">
-              <div className="stats-metric-value">{metrics.subscriberCount}</div>
-              <span className="stats-label">Subscribers</span>
+              <div className="stats-metric-value" style={{ lineHeight: '1' }}>{metrics.subscriberCount}</div>
+              <span className="stats-label" style={{ marginTop: '2px', opacity: 0.8, lineHeight: '1.2' }}>Subscribers</span>
             </div>
             <div className="stats-metric">
-              <div className="stats-metric-value">
-                {formatSmartAmount(metrics.totalRevenue, currencyCode, 12)}
+              <div className="stats-metric-value" style={{ lineHeight: '1' }}>
+                {formatSmartAmount(metrics.totalRevenue, currencyCode, 10)}
               </div>
-              <span className="stats-label">Total Revenue</span>
+              <span className="stats-label" style={{ marginTop: '2px', opacity: 0.8, lineHeight: '1.2' }}>Total Revenue</span>
             </div>
           </div>
+          <img
+            src="/wink.png"
+            alt="Sticker"
+            style={{
+              position: 'absolute',
+              top: '16px',
+              right: '16px',
+              width: '60px',
+              height: '60px',
+              transform: 'rotate(5deg)',
+              pointerEvents: 'none',
+              opacity: 0.9
+            }}
+          />
         </section>
 
         <Pressable className="link-card" onClick={noop}>
-          <div className="link-avatar">{displayName.charAt(0).toUpperCase()}</div>
+          <div className="link-avatar">
+            <img
+              src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=200&fit=crop&crop=face"
+              alt="Profile"
+              className="link-avatar-img"
+            />
+          </div>
           <div className="link-info">
             <span className="link-label">Your subscription page</span>
-            <span className="link-url">{getShareableLink(username)}</span>
+            <span className="link-url">{getShareableLink('nate')}</span>
           </div>
           <Pressable className="link-btn link-btn-copy" onClick={noop}>
             <ChevronRight size={20} />

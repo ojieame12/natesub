@@ -10,8 +10,13 @@ try {
   validateEncryptionConfig()
 } catch (err) {
   console.error(err instanceof Error ? err.message : err)
-  console.warn('⚠️ Server starting despite configuration errors (Healthcheck Priority)')
-  // process.exit(1) // Don't crash on startup
+  
+  if (env.NODE_ENV === 'production') {
+    console.error('❌ FATAL: Encryption configuration failed in production. Exiting.')
+    process.exit(1)
+  }
+  
+  console.warn('⚠️ Server starting despite configuration errors (Dev/Test Mode)')
 }
 
 const port = Number.parseInt(env.PORT, 10)

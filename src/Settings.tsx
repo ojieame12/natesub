@@ -30,10 +30,13 @@ function BillingAddressSection({ user }: { user: any }) {
   // Sync with user prop changes
   useEffect(() => {
     if (!isEditing && user?.profile) {
-      setAddress(user.profile.address || '')
-      setCity(user.profile.city || '')
-      setState(user.profile.state || '')
-      setZip(user.profile.zip || '')
+      const timer = window.setTimeout(() => {
+        setAddress(user.profile.address || '')
+        setCity(user.profile.city || '')
+        setState(user.profile.state || '')
+        setZip(user.profile.zip || '')
+      }, 0)
+      return () => window.clearTimeout(timer)
     }
   }, [user, isEditing])
 
@@ -150,11 +153,14 @@ export default function Settings() {
   useEffect(() => {
     if (settings) {
       const prefs = settings.notificationPrefs
-      setPushNotifications(prefs?.push ?? true)
-      setEmailNotifications(prefs?.email ?? true)
-      setNewSubscriberAlerts(prefs?.subscriberAlerts ?? true)
-      setPaymentAlerts(prefs?.paymentAlerts ?? true)
-      setIsPublic(settings.isPublic ?? true)
+      const timer = window.setTimeout(() => {
+        setPushNotifications(prefs?.push ?? true)
+        setEmailNotifications(prefs?.email ?? true)
+        setNewSubscriberAlerts(prefs?.subscriberAlerts ?? true)
+        setPaymentAlerts(prefs?.paymentAlerts ?? true)
+        setIsPublic(settings.isPublic ?? true)
+      }, 0)
+      return () => window.clearTimeout(timer)
     }
   }, [settings])
 

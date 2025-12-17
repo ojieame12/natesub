@@ -309,3 +309,171 @@
 .history-chevron {
     color: var(--text-tertiary);
 }
+
+/* ===========================================
+   PROVIDER STATUS (Stripe / Paystack)
+   =========================================== */
+
+.method-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: var(--radius-full);
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.method-status.success {
+    background: var(--status-success-soft);
+    color: var(--status-success);
+}
+
+.method-status.warning {
+    background: var(--status-warning-soft);
+    color: var(--status-warning);
+}
+
+.method-status.error {
+    background: var(--status-error-soft);
+    color: var(--status-error);
+}
+
+.provider-actions {
+    display: flex;
+    gap: var(--space-sm);
+    padding: 0 var(--space-lg) var(--space-lg);
+}
+
+.provider-connect-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border-radius: var(--radius-lg);
+    font-size: 13px;
+    font-weight: 600;
+    border: 1px solid transparent;
+    user-select: none;
+}
+
+.provider-connect-btn.primary {
+    background: var(--neutral-900);
+    color: white;
+}
+
+.provider-connect-btn.primary.pressed {
+    background: var(--neutral-800);
+}
+
+.provider-connect-btn.secondary {
+    background: white;
+    color: var(--text-primary);
+    border-color: var(--border-default);
+}
+
+.provider-connect-btn.secondary.pressed {
+    background: var(--neutral-50);
+}
+
+.provider-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 14px;
+    border-radius: var(--radius-lg);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    border: 1px solid var(--border-default);
+    background: white;
+    user-select: none;
+}
+
+.provider-link.pressed {
+    background: var(--neutral-50);
+}
+
+.provider-inline-error {
+    margin: 0 var(--space-lg) var(--space-lg);
+}
+
+.provider-details {
+    padding: 0 var(--space-lg) var(--space-lg);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.provider-details-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-md);
+}
+
+.provider-details-label {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.provider-details-value {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 65%;
+    text-align: right;
+}
+
+.provider-requirements {
+    margin: 0 var(--space-lg) var(--space-lg);
+    padding: var(--space-md);
+    background: var(--neutral-50);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-lg);
+}
+
+.provider-requirements-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+}
+
+.provider-requirements-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 0;
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+.provider-requirements-list li::before {
+    content: '•';
+    margin-right: 8px;
+    color: var(--text-tertiary);
+}
+
+.provider-requirements-more {
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--text-tertiary);
+}
+
+/* Local spinner utility (avoid relying on other route CSS) */
+.spin {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}

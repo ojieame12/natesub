@@ -68,6 +68,7 @@ const defaults: Record<string, string> = {
   PAYSTACK_SECRET_KEY: 'sk_test_dummy_paystack_key',
   PAYSTACK_WEBHOOK_SECRET: 'test_paystack_webhook_secret',
   JOBS_API_KEY: 'test_jobs_api_key_12345678',
+  ENCRYPTION_KEY: 'test_encryption_key_at_least_32_chars_long',
 }
 
 for (const [key, value] of Object.entries(defaults)) {
@@ -92,7 +93,11 @@ vi.mock('../src/db/redis.js', () => {
         return current + 1
       }),
       expire: vi.fn(async () => 1),
+      pexpire: vi.fn(async () => 1),
       ttl: vi.fn(async () => -1),
+      ping: vi.fn(async () => 'PONG'),
+      eval: vi.fn(async () => null),
+      exists: vi.fn(async (key: string) => (store.has(key) ? 1 : 0)),
       on: vi.fn(),
       quit: vi.fn(),
     },
@@ -110,9 +115,12 @@ const dbStorage = {
   payments: new Map<string, any>(),
   requests: new Map<string, any>(),
   updates: new Map<string, any>(),
+  updateDeliveries: new Map<string, any>(),
   activities: new Map<string, any>(),
   payrollPeriods: new Map<string, any>(),
   pageViews: new Map<string, any>(),
+  webhookEvents: new Map<string, any>(),
+  reminders: new Map<string, any>(),
 }
 
 const generateId = () => randomUUID()
@@ -223,11 +231,15 @@ function createMockModel(store: Map<string, any>) {
       let count = 0
       for (const [id, item] of store.entries()) {
         const match = !where || Object.entries(where).every(([k, v]) => {
-          if (v && typeof v === 'object' && v.gte !== undefined) {
-            return item[k] >= v.gte
-          }
-          if (v && typeof v === 'object' && v.lte !== undefined) {
-            return item[k] <= v.lte
+          // Handle simple date operators
+          if (v && typeof v === 'object') {
+            if (v.gte !== undefined && new Date(item[k]) < new Date(v.gte)) return false
+            if (v.gt !== undefined && new Date(item[k]) <= new Date(v.gt)) return false
+            if (v.lte !== undefined && new Date(item[k]) > new Date(v.lte)) return false
+            if (v.lt !== undefined && new Date(item[k]) >= new Date(v.lt)) return false
+            // Handle 'in' operator
+            if (v.in !== undefined && Array.isArray(v.in) && !v.in.includes(item[k])) return false
+            return true
           }
           return item[k] === v
         })
@@ -240,13 +252,14 @@ function createMockModel(store: Map<string, any>) {
       return { count }
     }),
     findFirst: vi.fn(async ({ where, include, orderBy }: any = {}) => {
-      if (!where) {
-        const first = store.values().next().value
-        return first ? resolveIncludes(first, include) : null
-      }
+      // Basic implementation - just finds the first match
       for (const item of store.values()) {
-        const match = Object.entries(where).every(([k, v]) => {
-          if (typeof v === 'object' && v !== null) return true
+        const match = !where || Object.entries(where).every(([k, v]) => {
+          if (v && typeof v === 'object') {
+             if (v.gte !== undefined && new Date(item[k]) < new Date(v.gte)) return false
+             if (v.lte !== undefined && new Date(item[k]) > new Date(v.lte)) return false
+             return true
+          }
           return item[k] === v
         })
         if (match) return resolveIncludes(item, include)
@@ -258,7 +271,26 @@ function createMockModel(store: Map<string, any>) {
       if (where) {
         items = items.filter(item =>
           Object.entries(where).every(([k, v]) => {
-            if (typeof v === 'object' && v !== null) return true
+            // Handle simple date operators and 'in'
+            if (v && typeof v === 'object') {
+              if (v.gte !== undefined && new Date(item[k]) < new Date(v.gte)) return false
+              if (v.gt !== undefined && new Date(item[k]) <= new Date(v.gt)) return false
+              if (v.lte !== undefined) {
+                 const itemDate = new Date(item[k])
+                 const filterDate = new Date(v.lte)
+                 if (itemDate > filterDate) return false
+              }
+              if (v.lt !== undefined && new Date(item[k]) >= new Date(v.lt)) return false
+              if (v.in !== undefined && Array.isArray(v.in) && !v.in.includes(item[k])) return false
+              if (v.not !== undefined) {
+                if (v.not === null) {
+                  if (item[k] === null || item[k] === undefined) return false
+                } else if (item[k] === v.not) {
+                  return false
+                }
+              }
+              return true
+            }
             return item[k] === v
           })
         )
@@ -276,6 +308,7 @@ function createMockModel(store: Map<string, any>) {
     update: vi.fn(async ({ where, data, include }: any) => {
       let item = store.get(where.id)
       if (!item) {
+        // Fallback find
         for (const [key, val] of store.entries()) {
           const match = Object.entries(where).every(([k, v]) => val[k] === v)
           if (match) { item = val; break }
@@ -288,10 +321,14 @@ function createMockModel(store: Map<string, any>) {
     }),
     upsert: vi.fn(async ({ where, create, update, include }: any) => {
       let existing = null
-      for (const item of store.values()) {
-        const match = Object.entries(where).every(([k, v]) => item[k] === v)
-        if (match) { existing = item; break }
+      if (where.id) existing = store.get(where.id)
+      if (!existing) {
+        for (const item of store.values()) {
+          const match = Object.entries(where).every(([k, v]) => item[k] === v)
+          if (match) { existing = item; break }
+        }
       }
+      
       if (existing) {
         const updated = { ...existing, ...update, updatedAt: new Date() }
         store.set(existing.id, updated)
@@ -307,14 +344,62 @@ function createMockModel(store: Map<string, any>) {
       if (item) store.delete(where.id)
       return item
     }),
-    count: vi.fn(async () => store.size),
+    count: vi.fn(async ({ where }: any) => {
+        if (!where) return store.size
+        return Array.from(store.values()).filter(item =>
+          Object.entries(where).every(([k, v]) => {
+            // Handle simple date operators, 'in', and 'not'
+            if (v && typeof v === 'object') {
+              if (v.gte !== undefined && new Date(item[k]) < new Date(v.gte)) return false
+              if (v.gt !== undefined && new Date(item[k]) <= new Date(v.gt)) return false
+              if (v.lte !== undefined && new Date(item[k]) > new Date(v.lte)) return false
+              if (v.lt !== undefined && new Date(item[k]) >= new Date(v.lt)) return false
+              if (v.in !== undefined && Array.isArray(v.in) && !v.in.includes(item[k])) return false
+              if (v.not !== undefined) {
+                if (v.not === null) {
+                  if (item[k] === null || item[k] === undefined) return false
+                } else if (item[k] === v.not) {
+                  return false
+                }
+              }
+              return true
+            }
+            return item[k] === v
+          })
+        ).length
+    }),
+    // ... aggregate, createMany, groupBy ...
     aggregate: vi.fn(async ({ where, _sum }: any = {}) => {
       let items = Array.from(store.values())
+      // console.log(`[aggregate] Start with ${items.length} items. Filter:`, where)
       if (where) {
         items = items.filter(item =>
-          Object.entries(where).every(([k, v]) => item[k] === v)
+          Object.entries(where).every(([k, v]) => {
+            // Handle simple date operators, 'in', and 'not'
+            if (v && typeof v === 'object') {
+              if (v.gte !== undefined && new Date(item[k]) < new Date(v.gte)) return false
+              if (v.gt !== undefined && new Date(item[k]) <= new Date(v.gt)) return false
+              if (v.lte !== undefined && new Date(item[k]) > new Date(v.lte)) return false
+              if (v.lt !== undefined && new Date(item[k]) >= new Date(v.lt)) return false
+              if (v.in !== undefined && Array.isArray(v.in) && !v.in.includes(item[k])) return false
+              if (v.not !== undefined) {
+                if (v.not === null) {
+                  if (item[k] === null || item[k] === undefined) return false
+                } else if (item[k] === v.not) {
+                  return false
+                }
+              }
+              return true
+            }
+            if (item[k] !== v) {
+               // console.log(`[aggregate] Filter mismatch for ${k}: ${item[k]} !== ${v}`)
+               return false
+            }
+            return true
+          })
         )
       }
+      // console.log(`[aggregate] Filtered to ${items.length} items. Summing:`, _sum)
 
       // Build aggregate result
       const result: any = {}
@@ -326,12 +411,77 @@ function createMockModel(store: Map<string, any>) {
       }
       return result
     }),
+    createMany: vi.fn(async ({ data }: any) => {
+      const items = Array.isArray(data) ? data : [data]
+      let count = 0
+      for (const item of items) {
+        const id = item.id || generateId()
+        const newItem = { id, ...item, createdAt: new Date(), updatedAt: new Date() }
+        store.set(id, newItem)
+        count++
+      }
+      return { count }
+    }),
+    groupBy: vi.fn(async ({ by, where, _count, _sum }: any) => {
+      const items = Array.from(store.values()).filter(item => {
+        if (!where) return true
+        return Object.entries(where).every(([k, v]) => {
+          if (v && typeof v === 'object') {
+            if (v.gte !== undefined && new Date(item[k]) < new Date(v.gte)) return false
+            if (v.gt !== undefined && new Date(item[k]) <= new Date(v.gt)) return false
+            if (v.lte !== undefined && new Date(item[k]) > new Date(v.lte)) return false
+            if (v.lt !== undefined && new Date(item[k]) >= new Date(v.lt)) return false
+            if (v.in !== undefined && Array.isArray(v.in) && !v.in.includes(item[k])) return false
+            if (v.not !== undefined) {
+              if (v.not === null) {
+                if (item[k] === null || item[k] === undefined) return false
+              } else if (item[k] === v.not) {
+                return false
+              }
+            }
+            return true
+          }
+          return item[k] === v
+        })
+      })
+
+      // Group items
+      const groups = new Map<string, any[]>()
+      for (const item of items) {
+        const key = by.map((field: string) => item[field]).join(':::')
+        if (!groups.has(key)) {
+          groups.set(key, [])
+        }
+        groups.get(key)!.push(item)
+      }
+
+      // Calculate aggregates for each group
+      return Array.from(groups.entries()).map(([key, groupItems]) => {
+        const result: any = {
+          _count: _count ? groupItems.length : undefined,
+        }
+
+        if (_sum) {
+          result._sum = {}
+          for (const field of Object.keys(_sum)) {
+            result._sum[field] = groupItems.reduce((sum, item) => sum + (item[field] || 0), 0)
+          }
+        }
+
+        // Add grouping fields
+        by.forEach((field: string) => {
+          result[field] = groupItems[0][field]
+        })
+
+        return result
+      })
+    }),
   }
 }
 
 // Global mock for Prisma client
-vi.mock('../src/db/client.js', () => ({
-  db: {
+vi.mock('../src/db/client.js', () => {
+  const models = {
     user: createMockModel(dbStorage.users),
     profile: createMockModel(dbStorage.profiles),
     session: createMockModel(dbStorage.sessions),
@@ -340,17 +490,32 @@ vi.mock('../src/db/client.js', () => ({
     payment: createMockModel(dbStorage.payments),
     request: createMockModel(dbStorage.requests),
     update: createMockModel(dbStorage.updates),
+    updateDelivery: createMockModel(dbStorage.updateDeliveries),
     activity: createMockModel(dbStorage.activities),
     payrollPeriod: createMockModel(dbStorage.payrollPeriods),
     pageView: createMockModel(dbStorage.pageViews),
+    webhookEvent: createMockModel(dbStorage.webhookEvents),
+    reminder: createMockModel(dbStorage.reminders),
+  }
+
+  const client = {
+    ...models,
     $connect: vi.fn(),
     $disconnect: vi.fn(),
+    $queryRaw: vi.fn(async () => []),
     $executeRawUnsafe: vi.fn(async () => {
       Object.values(dbStorage).forEach(store => store.clear())
       return 0
     }),
-  },
-}))
+    $transaction: vi.fn(async (arg) => {
+      if (Array.isArray(arg)) return Promise.all(arg)
+      if (typeof arg === 'function') return arg(client)
+      return arg
+    }),
+  }
+
+  return { db: client }
+})
 
 // Export for tests to access storage directly
 // Export for tests to access storage directly

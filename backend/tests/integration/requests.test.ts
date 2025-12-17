@@ -1,36 +1,39 @@
 import { beforeEach, describe, expect, it, vi, afterAll } from 'vitest'
-import { createHash } from 'crypto'
+import { createHash, createHmac } from 'crypto'
 import app from '../../src/app.js'
 import { db } from '../../src/db/client.js'
 import { dbStorage } from '../setup.js'
+import { env } from '../../src/config/env.js'
 
 // Mock email service
 vi.mock('../../src/services/email.js', () => ({
-  sendMagicLinkEmail: vi.fn(),
-  sendWelcomeEmail: vi.fn(),
-  sendNewSubscriberEmail: vi.fn(),
   sendRequestEmail: vi.fn(),
-  sendUpdateEmail: vi.fn(),
+  sendNewSubscriberEmail: vi.fn(),
 }))
 
-// Mock Stripe service
 const mockCheckoutSession = {
   id: 'cs_test_123',
-  url: 'https://checkout.stripe.com/test',
+  url: 'https://checkout.stripe.com/test'
 }
 
+// Mock Stripe service
 vi.mock('../../src/services/stripe.js', () => ({
   stripe: {
     webhooks: {
       constructEvent: vi.fn((body, sig, secret) => JSON.parse(body)),
     },
+    checkout: {
+      sessions: {
+        retrieve: vi.fn(async () => ({ payment_status: 'paid' })),
+      }
+    }
   },
   createCheckoutSession: vi.fn(async () => mockCheckoutSession),
 }))
 
 // Hash function matching auth service
 function hashToken(token: string): string {
-  return createHash('sha256').update(token).digest('hex')
+  return createHmac('sha256', env.SESSION_SECRET).update(token).digest('hex')
 }
 
 // Helper to create a test user with session
@@ -163,8 +166,7 @@ describe('request lifecycle', () => {
 
       // Create a sent request with token
       const publicToken = 'test-public-token-123'
-      const tokenHash = require('crypto')
-        .createHash('sha256')
+      const tokenHash = createHash('sha256')
         .update(publicToken)
         .digest('hex')
 
@@ -207,8 +209,7 @@ describe('request lifecycle', () => {
       const { user } = await createTestUserWithSession()
 
       const publicToken = 'retry-token-456'
-      const tokenHash = require('crypto')
-        .createHash('sha256')
+      const tokenHash = createHash('sha256')
         .update(publicToken)
         .digest('hex')
 
@@ -247,8 +248,7 @@ describe('request lifecycle', () => {
       const { user } = await createTestUserWithSession()
 
       const publicToken = 'accepted-token-789'
-      const tokenHash = require('crypto')
-        .createHash('sha256')
+      const tokenHash = createHash('sha256')
         .update(publicToken)
         .digest('hex')
 
@@ -286,8 +286,7 @@ describe('request lifecycle', () => {
       const { user } = await createTestUserWithSession()
 
       const publicToken = 'decline-token'
-      const tokenHash = require('crypto')
-        .createHash('sha256')
+      const tokenHash = createHash('sha256')
         .update(publicToken)
         .digest('hex')
 

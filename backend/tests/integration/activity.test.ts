@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi, afterAll } from 'vitest'
-import { createHash } from 'crypto'
+import { createHmac } from 'crypto'
 import app from '../../src/app.js'
 import { db } from '../../src/db/client.js'
 import { dbStorage } from '../setup.js'
+import { env } from '../../src/config/env.js'
 
 // Mock email service
 vi.mock('../../src/services/email.js', () => ({
@@ -25,7 +26,7 @@ vi.mock('../../src/services/stripe.js', () => ({
 
 // Hash function matching auth service
 function hashToken(token: string): string {
-  return createHash('sha256').update(token).digest('hex')
+  return createHmac('sha256', env.SESSION_SECRET).update(token).digest('hex')
 }
 
 // Helper to create a test user with session

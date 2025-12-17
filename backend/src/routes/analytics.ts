@@ -175,19 +175,19 @@ analytics.get('/stats', requireAuth, async (c) => {
     // Get unique visitors (by visitorHash) - use raw SQL for efficient COUNT(DISTINCT)
     const [uniqueToday, uniqueWeek, uniqueMonth] = await Promise.all([
       db.$queryRaw<[{ count: number }]>`
-        SELECT COUNT(DISTINCT visitor_hash)::int as count
+        SELECT COUNT(DISTINCT "visitorHash")::int as count
         FROM page_views
-        WHERE profile_id = ${profile.id} AND created_at >= ${today}
+        WHERE "profileId" = ${profile.id} AND "createdAt" >= ${today}
       `.then(r => r[0]?.count ?? 0),
       db.$queryRaw<[{ count: number }]>`
-        SELECT COUNT(DISTINCT visitor_hash)::int as count
+        SELECT COUNT(DISTINCT "visitorHash")::int as count
         FROM page_views
-        WHERE profile_id = ${profile.id} AND created_at >= ${thisWeek}
+        WHERE "profileId" = ${profile.id} AND "createdAt" >= ${thisWeek}
       `.then(r => r[0]?.count ?? 0),
       db.$queryRaw<[{ count: number }]>`
-        SELECT COUNT(DISTINCT visitor_hash)::int as count
+        SELECT COUNT(DISTINCT "visitorHash")::int as count
         FROM page_views
-        WHERE profile_id = ${profile.id} AND created_at >= ${thisMonth}
+        WHERE "profileId" = ${profile.id} AND "createdAt" >= ${thisMonth}
       `.then(r => r[0]?.count ?? 0),
     ])
 
@@ -238,11 +238,11 @@ analytics.get('/stats', requireAuth, async (c) => {
     // Daily views for chart (last 14 days)
     const fourteenDaysAgo = new Date(today.getTime() - 14 * 24 * 60 * 60 * 1000)
     const dailyViews = await db.$queryRaw<{ date: string; count: number }[]>`
-      SELECT DATE(created_at) as date, COUNT(*)::int as count
+      SELECT DATE("createdAt") as date, COUNT(*)::int as count
       FROM page_views
-      WHERE profile_id = ${profile.id}
-        AND created_at >= ${fourteenDaysAgo}
-      GROUP BY DATE(created_at)
+      WHERE "profileId" = ${profile.id}
+        AND "createdAt" >= ${fourteenDaysAgo}
+      GROUP BY DATE("createdAt")
       ORDER BY date ASC
     `
 

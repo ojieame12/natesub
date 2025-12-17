@@ -115,7 +115,10 @@ async function generateQRCodeDataUrl(url: string): Promise<string> {
 // ============================================
 
 export async function generatePayStatement(data: PayStatementData): Promise<Buffer> {
-  return new Promise(async (resolve, reject) => {
+  const qrDataUrl = await generateQRCodeDataUrl(data.verificationUrl)
+  const qrBuffer = Buffer.from(qrDataUrl.split(',')[1], 'base64')
+
+  return new Promise((resolve, reject) => {
     try {
       const doc = new PDFDocument({
         size: 'LETTER',
@@ -131,10 +134,6 @@ export async function generatePayStatement(data: PayStatementData): Promise<Buff
       doc.on('data', (chunk) => chunks.push(chunk))
       doc.on('end', () => resolve(Buffer.concat(chunks)))
       doc.on('error', reject)
-
-      // Generate QR code
-      const qrDataUrl = await generateQRCodeDataUrl(data.verificationUrl)
-      const qrBuffer = Buffer.from(qrDataUrl.split(',')[1], 'base64')
 
       // ==========================================
       // HEADER

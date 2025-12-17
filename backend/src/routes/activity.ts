@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { db } from '../db/client.js'
 import { requireAuth } from '../middleware/auth.js'
 import { centsToDisplayAmount } from '../utils/currency.js'
+import { getUSDRate, convertLocalCentsToUSD, convertUSDCentsToLocal } from '../services/fx.js'
 
 const activity = new Hono()
 
@@ -51,7 +52,7 @@ activity.get('/metrics', requireAuth, async (c) => {
     profile,
     subscriberCount,
     mrrResult,
-    totalRevenue,
+    totalRevenueResult,
     tierBreakdown,
   ] = await Promise.all([
     // Currency for display conversion (handles zero-decimal currencies correctly)
@@ -68,8 +69,9 @@ activity.get('/metrics', requireAuth, async (c) => {
       },
     }),
 
-    // Calculate MRR using DB aggregate (only recurring subscriptions)
-    db.subscription.aggregate({
+    // Calculate MRR using DB aggregate, grouped by currency
+    db.subscription.groupBy({
+      by: ['currency'],
       where: {
         creatorId: userId,
         status: 'active',
@@ -78,8 +80,9 @@ activity.get('/metrics', requireAuth, async (c) => {
       _sum: { amount: true },
     }),
 
-    // Get total revenue
-    db.payment.aggregate({
+    // Get total revenue, grouped by currency
+    db.payment.groupBy({
+      by: ['currency'],
       where: {
         creatorId: userId,
         status: 'succeeded',
@@ -105,18 +108,53 @@ activity.get('/metrics', requireAuth, async (c) => {
     tierBreakdownRecord[tierName] = tier._count
   }
 
-  const mrrCents = mrrResult._sum.amount || 0
-  const currency = profile?.currency || 'USD'
-  const totalRevenueCents = totalRevenue._sum.netCents || 0
+  const profileCurrency = profile?.currency || 'USD'
+
+  // Helper to normalize cents from any currency to Profile Currency
+  // 1. Convert Local -> USD
+  // 2. Convert USD -> Profile Currency
+  // Note: FX rates for NGN/KES/etc are "USD to Local".
+  const normalizeToProfile = async (groups: { currency: string, _sum: any }[], field: string) => {
+    let totalUsdCents = 0
+
+    // First pass: Convert everything to USD common base
+    for (const group of groups) {
+      const currency = group.currency
+      const amount = group._sum[field] || 0
+
+      if (amount === 0) continue
+
+      if (currency === 'USD') {
+        totalUsdCents += amount
+      } else {
+        // Fetch rate (e.g., 1 USD = 1600 NGN)
+        const rate = await getUSDRate(currency)
+        // Convert NGN cents -> USD cents
+        totalUsdCents += convertLocalCentsToUSD(amount, rate)
+      }
+    }
+
+    // Second pass: Convert Total USD -> Profile Currency
+    if (profileCurrency === 'USD') {
+      return totalUsdCents
+    } else {
+      const rate = await getUSDRate(profileCurrency)
+      return convertUSDCentsToLocal(totalUsdCents, rate)
+    }
+  }
+
+  // Calculate normalized totals
+  const mrrCents = await normalizeToProfile(mrrResult, 'amount')
+  const totalRevenueCents = await normalizeToProfile(totalRevenueResult, 'netCents')
 
   return c.json({
     metrics: {
       subscriberCount,
       mrrCents,
-      mrr: centsToDisplayAmount(mrrCents, currency),
+      mrr: centsToDisplayAmount(mrrCents, profileCurrency),
       totalRevenueCents,
-      totalRevenue: centsToDisplayAmount(totalRevenueCents, currency),
-      currency,
+      totalRevenue: centsToDisplayAmount(totalRevenueCents, profileCurrency),
+      currency: profileCurrency,
       tierBreakdown: tierBreakdownRecord,
     },
   })

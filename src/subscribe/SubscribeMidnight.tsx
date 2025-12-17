@@ -155,6 +155,7 @@ export default function SubscribeMidnight({ profile, isOwner }: SubscribeMidnigh
     const [searchParams] = useSearchParams()
 
     const isSuccessReturn = searchParams.get('success') === 'true'
+    const stripeSessionId = searchParams.get('session_id')
     const [resetKey, setResetKey] = useState(0)
 
     // Hooks
@@ -168,7 +169,9 @@ export default function SubscribeMidnight({ profile, isOwner }: SubscribeMidnigh
     const [feeMode, setFeeMode] = useState<'absorb' | 'pass_to_subscriber'>(profile.feeMode || 'pass_to_subscriber')
     const [subscriberEmail, setSubscriberEmail] = useState('')
     const [emailFocused, setEmailFocused] = useState(false)
-    const [status, setStatus] = useState<'idle' | 'processing' | 'verifying' | 'success'>(isSuccessReturn ? 'verifying' : 'idle')
+    const [status, setStatus] = useState<'idle' | 'processing' | 'verifying' | 'success'>(
+        isSuccessReturn && stripeSessionId ? 'verifying' : 'idle'
+    )
     const viewIdRef = useRef<string | null>(null)
 
     // Data
@@ -209,7 +212,6 @@ export default function SubscribeMidnight({ profile, isOwner }: SubscribeMidnigh
                         toast.error('Could not verify payment')
                     })
             } else {
-                setStatus('idle')
                 toast.error('Invalid payment session')
             }
         } else if (profile.id && !isOwner && !viewIdRef.current) {

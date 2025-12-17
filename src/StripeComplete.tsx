@@ -442,18 +442,20 @@ export default function StripeComplete() {
               >
                 Continue to {destinationText}
               </LoadingButton>
-              <Pressable
-                className="btn-secondary"
-                onClick={async () => {
-                  try {
-                    const result = await api.stripe.getDashboardLink()
-                    if (result.url) window.open(result.url, '_blank', 'noopener,noreferrer')
-                  } catch { }
-                }}
-              >
-                <span>Stripe Dashboard</span>
-                <ExternalLink size={16} />
-              </Pressable>
+	              <Pressable
+	                className="btn-secondary"
+	                onClick={async () => {
+	                  try {
+	                    const result = await api.stripe.getDashboardLink()
+	                    if (result.url) window.open(result.url, '_blank', 'noopener,noreferrer')
+	                  } catch (err) {
+	                    if (import.meta.env.DEV) console.debug('[stripe] open dashboard failed', err)
+	                  }
+	                }}
+	              >
+	                <span>Stripe Dashboard</span>
+	                <ExternalLink size={16} />
+	              </Pressable>
             </div>
           </>
         )}

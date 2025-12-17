@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { RefreshCw, AlertCircle, ArrowLeft } from 'lucide-react'
 import { api } from './api'
@@ -9,22 +9,22 @@ export default function StripeRefresh() {
   const navigate = useNavigate()
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    refreshOnboarding()
-  }, [])
-
-  async function refreshOnboarding() {
+  const refreshOnboarding = useCallback(async () => {
     try {
       const result = await api.stripe.refreshOnboarding()
       if (result.onboardingUrl) {
         // Preserve the source for when user returns from Stripe
         // Source is already in sessionStorage from original redirect
-        window.location.href = result.onboardingUrl
+        window.location.assign(result.onboardingUrl)
       }
     } catch (err: any) {
       setError(err?.error || 'Failed to refresh onboarding link')
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    void refreshOnboarding()
+  }, [refreshOnboarding])
 
   const destinationText = 'Dashboard'
   const backDestination = '/dashboard'

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronLeft, Check, Send, Clock, Mail } from 'lucide-react'
 import { Pressable, useToast } from '../components'
@@ -81,9 +81,16 @@ export default function UpdatePreview() {
   const username = profileData?.profile?.username || 'you'
   const subscriberCount = metricsData?.metrics?.subscriberCount ?? 0
 
-  const [pendingUpdate, setPendingUpdate] = useState<PendingUpdate | null>(null)
+  const [pendingUpdate] = useState<PendingUpdate | null>(() => {
+    const stored = sessionStorage.getItem('pending-update')
+    if (!stored) return null
+    try {
+      return JSON.parse(stored) as PendingUpdate
+    } catch {
+      return null
+    }
+  })
   const [tone, setTone] = useState<Tone>('polished')
-  const [enhanced, setEnhanced] = useState<{ title: string; body: string }>({ title: '', body: '' })
   const [isSent, setIsSent] = useState(false)
   const [sentCount, setSentCount] = useState(0)
   const [showEmailPreview, setShowEmailPreview] = useState(false)
@@ -92,20 +99,15 @@ export default function UpdatePreview() {
   const isSending = createUpdate.isPending || sendUpdate.isPending
 
   useEffect(() => {
-    const stored = sessionStorage.getItem('pending-update')
-    if (stored) {
-      const data = JSON.parse(stored) as PendingUpdate
-      setPendingUpdate(data)
-    } else {
+    if (!pendingUpdate) {
       navigate('/updates/new')
     }
-  }, [navigate])
+  }, [navigate, pendingUpdate])
 
-  useEffect(() => {
-    if (pendingUpdate) {
-      setEnhanced(enhanceCaption(pendingUpdate.caption, tone))
-    }
-  }, [tone, pendingUpdate])
+  const enhanced = useMemo(() => {
+    if (!pendingUpdate) return { title: '', body: '' }
+    return enhanceCaption(pendingUpdate.caption, tone)
+  }, [pendingUpdate, tone])
 
   const handleSend = async () => {
     if (!pendingUpdate) return

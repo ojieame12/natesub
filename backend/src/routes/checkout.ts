@@ -117,9 +117,10 @@ checkout.post(
       }
     }
 
-    // Check if this is a cross-border account (e.g., Nigeria)
-    // Cross-border accounts don't have chargesEnabled since they only receive payouts
-    const isCrossBorder = isStripeCrossBorderSupported(profile.countryCode)
+    // Check if this is a cross-border account (Stripe context only)
+    // For Paystack, if the country is supported (NG/KE/ZA), it's considered local/native
+    const isStripeCrossBorder = hasStripe && isStripeCrossBorderSupported(profile.countryCode)
+    const isCrossBorder = !hasPaystack && isStripeCrossBorder
 
     // Calculate service fee based on creator's fee mode setting
     // feeMode: 'absorb' = creator absorbs, 'pass_to_subscriber' = subscriber pays
@@ -154,7 +155,8 @@ checkout.post(
         }
 
         // Deduplication: Check for existing pending checkout
-        const dedupeKey = `checkout:paystack:${subscriberEmail}:${profile.userId}:${tierId || amount}`
+        // FIXED: Include interval in dedupe key to distinguish between one-time and recurring
+        const dedupeKey = `checkout:paystack:${subscriberEmail}:${profile.userId}:${tierId || amount}:${interval}`
         const existingCheckout = await redis.get(dedupeKey)
 
         if (existingCheckout) {

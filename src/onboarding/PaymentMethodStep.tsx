@@ -25,15 +25,17 @@ interface PaymentMethodCardProps {
     description: string
     logo?: string
     recommended?: boolean
+    disabled?: boolean
     selected: boolean
     onSelect: () => void
 }
 
-function PaymentMethodCard({ name, description, logo, recommended, selected, onSelect }: PaymentMethodCardProps) {
+function PaymentMethodCard({ name, description, logo, recommended, disabled, selected, onSelect }: PaymentMethodCardProps) {
     return (
         <Pressable
-            className={`payment-method-card ${selected ? 'selected' : ''}`}
+            className={`payment-method-card ${selected ? 'selected' : ''} ${disabled ? 'disabled' : ''}`}
             onClick={onSelect}
+            disabled={disabled}
         >
             <div className="payment-method-icon">
                 {logo ? (
@@ -97,7 +99,6 @@ export default function PaymentMethodStep() {
     }, [])
 
     // Determine which payment methods to show based on country code
-    const isStripeCountry = stripeCountryCodes.includes(countryCode?.toUpperCase() || '')
     const countryUpper = countryCode?.toUpperCase() || ''
     const isPaystackCountry = PAYSTACK_COUNTRY_CODES.includes(countryUpper)
     const isFlutterwaveCountry = FLUTTERWAVE_COUNTRY_CODES.includes(countryUpper)
@@ -106,9 +107,7 @@ export default function PaymentMethodStep() {
     const expectedPaystackCurrency = PAYSTACK_CURRENCIES[countryUpper]
     const isCurrencyAligned = !expectedPaystackCurrency || currency?.toUpperCase() === expectedPaystackCurrency
     const canUsePaystack = PAYSTACK_ENABLED && isPaystackCountry && isCurrencyAligned
-
-    // Default recommendation - Paystack for NG/KE/ZA with aligned currency, otherwise Stripe
-    const recommendedMethod = canUsePaystack ? 'paystack' : 'stripe'
+    const canUseStripe = stripeCountryCodes.includes(countryUpper)
 
     const handleContinue = async () => {
         if (!selectedMethod) return
@@ -311,9 +310,10 @@ export default function PaymentMethodStep() {
                         {/* 1. Stripe (Foreign Currencies) */}
                         <PaymentMethodCard
                             name="Stripe"
-                            description="Accept USD, GBP, EUR (Global Audience)"
+                            description={canUseStripe ? "Accept USD, GBP, EUR (Global Audience)" : "Not available in your country"}
                             logo="/stripe-logo.svg"
-                            recommended={!isPaystackCountry} // Recommend Stripe if outside Africa
+                            recommended={!isPaystackCountry && canUseStripe} // Recommend Stripe if outside Africa
+                            disabled={!canUseStripe}
                             selected={selectedMethod === 'stripe'}
                             onSelect={() => setSelectedMethod('stripe')}
                         />

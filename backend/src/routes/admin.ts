@@ -13,7 +13,7 @@ import { getStuckTransfers, getTransferStats } from '../jobs/transfers.js'
 import { getMissingTransactions, reconcilePaystackTransactions } from '../jobs/reconciliation.js'
 import { checkEmailHealth, sendTestEmail } from '../services/email.js'
 import { stripe } from '../services/stripe.js'
-import { handleInvoicePaid } from './webhooks.js'
+import { handleInvoicePaid } from './webhooks/stripe/invoice.js'
 
 const admin = new Hono()
 

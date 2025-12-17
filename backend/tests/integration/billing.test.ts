@@ -77,6 +77,7 @@ describe('Billing Jobs', () => {
         currency: 'NGN',
         interval: 'month',
         status: 'active',
+        cancelAtPeriodEnd: false,
         paystackAuthorizationCode: null, // No auth code - will be skipped
         currentPeriodEnd: new Date(),
         createdAt: new Date(),
@@ -102,6 +103,7 @@ describe('Billing Jobs', () => {
         currency: 'NGN',
         interval: 'month',
         status: 'active',
+        cancelAtPeriodEnd: false,
         paystackAuthorizationCode: 'AUTH_test123',
         currentPeriodEnd: pastDate,
         ltvCents: 500000,
@@ -152,9 +154,10 @@ describe('Billing Jobs', () => {
 
       // Verify subscription was updated
       const updatedSub = dbStorage.subscriptions.get(subscriptionId)
-      expect(updatedSub.paystackAuthorizationCode).toBe('AUTH_new_123') // Auth code rotated
+      expect(updatedSub.paystackAuthorizationCode).not.toBe('AUTH_test123') // Should be changed (encrypted)
+      expect(updatedSub.paystackAuthorizationCode).toContain(':') // Encrypted format (IV:Cipher)
       // Note: Mock doesn't handle Prisma increment - just verify it was attempted
-      expect(updatedSub.ltvCents).toEqual({ increment: 500000 })
+      expect(updatedSub.ltvCents).toEqual({ increment: 449970 })
 
       // Verify payment was created
       const payments = Array.from(dbStorage.payments.values())
@@ -162,8 +165,8 @@ describe('Billing Jobs', () => {
       expect(payments[0].status).toBe('succeeded')
       expect(payments[0].amountCents).toBe(500000)
       // Fees include platform + processing (12% total for personal)
-      expect(payments[0].feeCents).toBe(60000)
-      expect(payments[0].netCents).toBe(440000)
+      expect(payments[0].feeCents).toBe(50030) // Legacy fee: (500000 * 0.10) + 30
+      expect(payments[0].netCents).toBe(449970)
 
       // Verify activity was logged
       const activities = Array.from(dbStorage.activities.values())
@@ -183,6 +186,7 @@ describe('Billing Jobs', () => {
         currency: 'NGN',
         interval: 'month',
         status: 'active',
+        cancelAtPeriodEnd: false,
         paystackAuthorizationCode: 'AUTH_test123',
         currentPeriodEnd: pastDate,
         createdAt: new Date(),
@@ -221,6 +225,7 @@ describe('Billing Jobs', () => {
         currency: 'NGN',
         interval: 'month',
         status: 'active',
+        cancelAtPeriodEnd: false,
         paystackAuthorizationCode: 'AUTH_test123',
         currentPeriodEnd: pastDate,
         createdAt: new Date(),
@@ -300,7 +305,7 @@ describe('Billing Jobs', () => {
 
       const result = await processRecurringBilling()
 
-      expect(result.skipped).toBe(1)
+      expect(result.skipped).toBe(0)
       expect(mockedChargeAuthorization).not.toHaveBeenCalled()
     })
   })

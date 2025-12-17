@@ -194,10 +194,11 @@ export default function Dashboard() {
       console.error('[dashboard] refresh failed:', err)
       toast.error('Failed to refresh')
     } finally {
-      if (!isMountedRef.current) return
-      setIsRefreshing(false)
-      if (source === 'pull') {
-        setPullOffsetPx(0)
+      if (isMountedRef.current) {
+        setIsRefreshing(false)
+        if (source === 'pull') {
+          setPullOffsetPx(0)
+        }
       }
     }
   }, [refetchActivity, refetchAnalytics, refetchMetrics, refetchProfile, setIsRefreshing, setPullOffsetPx, toast])
@@ -536,27 +537,41 @@ export default function Dashboard() {
         ) : (
           <>
             {/* Stats Card */}
-	            <section className="stats-card">
-	              <div className="stats-primary">
-	                <span className="stats-label">Monthly Recurring Revenue</span>
-	                <span className="stats-mrr">
-	                  <AnimatedNumber value={metrics?.mrr ?? 0} duration={600} format={(n) => formatSmartAmount(n, currencyCode, 10)} />
-	                </span>
-	              </div>
-	              <div className="stats-secondary-row">
-	                <div className="stats-metric">
-	                  <div className="stats-metric-value">
-	                    <AnimatedNumber value={metrics?.subscriberCount ?? 0} duration={500} format={(n) => formatCompactNumber(n)} />
-	                  </div>
-	                  <span className="stats-label">{isService ? 'Clients' : 'Subscribers'}</span>
-	                </div>
-	                <div className="stats-metric">
-	                  <div className="stats-metric-value">
-	                    <AnimatedNumber value={metrics?.totalRevenue ?? 0} duration={600} format={(n) => formatSmartAmount(n, currencyCode, 10)} />
-	                  </div>
-	                  <span className="stats-label">Total Revenue</span>
-	                </div>
-	              </div>
+            <section className="stats-card" style={{ height: '220px', padding: '24px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+              <div className="stats-primary">
+                <span className="stats-label" style={{ marginBottom: '0', opacity: 0.8, lineHeight: '1.2' }}>Monthly Recurring Revenue</span>
+                <span className="stats-mrr" style={{ lineHeight: '1', marginTop: '2px' }}>
+                  <AnimatedNumber value={metrics?.mrr ?? 0} duration={600} format={(n) => formatSmartAmount(n, currencyCode, 10)} />
+                </span>
+              </div>
+              <div className="stats-secondary-row">
+                <div className="stats-metric">
+                  <div className="stats-metric-value" style={{ lineHeight: '1' }}>
+                    <AnimatedNumber value={metrics?.subscriberCount ?? 0} duration={500} format={(n) => formatCompactNumber(n)} />
+                  </div>
+                  <span className="stats-label" style={{ marginTop: '2px', opacity: 0.8, lineHeight: '1.2' }}>{isService ? 'Clients' : 'Subscribers'}</span>
+                </div>
+                <div className="stats-metric">
+                  <div className="stats-metric-value" style={{ lineHeight: '1' }}>
+                    <AnimatedNumber value={metrics?.totalRevenue ?? 0} duration={600} format={(n) => formatSmartAmount(n, currencyCode, 10)} />
+                  </div>
+                  <span className="stats-label" style={{ marginTop: '2px', opacity: 0.8, lineHeight: '1.2' }}>Total Revenue</span>
+                </div>
+              </div>
+              <img
+                src="/wink.png"
+                alt=""
+                style={{
+                  position: 'absolute',
+                  top: '16px',
+                  right: '16px',
+                  width: '60px',
+                  height: '60px',
+                  transform: 'rotate(5deg)',
+                  pointerEvents: 'none',
+                  opacity: 0.9
+                }}
+              />
             </section>
 
             {/* Analytics Card */}
@@ -567,28 +582,28 @@ export default function Dashboard() {
                   <span className="analytics-period">Last 7 days</span>
                 </div>
                 <div className="analytics-metrics">
-	                  <div className="analytics-metric">
-	                    <div className="analytics-metric-icon">
-	                      <Eye size={16} />
-	                    </div>
-	                    <div className="analytics-metric-content">
-	                      <span className="analytics-metric-value">
-	                        <AnimatedNumber value={analytics.views.week} duration={500} format={(n) => formatCompactNumber(n)} />
-	                      </span>
-	                      <span className="analytics-metric-label">Views</span>
-	                    </div>
-	                  </div>
-	                  <div className="analytics-metric">
+                  <div className="analytics-metric">
+                    <div className="analytics-metric-icon">
+                      <Eye size={16} />
+                    </div>
+                    <div className="analytics-metric-content">
+                      <span className="analytics-metric-value">
+                        <AnimatedNumber value={analytics.views.week} duration={500} format={(n) => formatCompactNumber(n)} />
+                      </span>
+                      <span className="analytics-metric-label">Views</span>
+                    </div>
+                  </div>
+                  <div className="analytics-metric">
                     <div className="analytics-metric-icon">
                       <UserPlus size={16} />
                     </div>
-	                    <div className="analytics-metric-content">
-	                      <span className="analytics-metric-value">
-	                        <AnimatedNumber value={analytics.uniqueVisitors.week} duration={500} format={(n) => formatCompactNumber(n)} />
-	                      </span>
-	                      <span className="analytics-metric-label">Visitors</span>
-	                    </div>
-	                  </div>
+                    <div className="analytics-metric-content">
+                      <span className="analytics-metric-value">
+                        <AnimatedNumber value={analytics.uniqueVisitors.week} duration={500} format={(n) => formatCompactNumber(n)} />
+                      </span>
+                      <span className="analytics-metric-label">Visitors</span>
+                    </div>
+                  </div>
                   <div className="analytics-metric">
                     <div className="analytics-metric-icon">
                       <TrendingUp size={16} />

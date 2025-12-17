@@ -37,6 +37,24 @@ export interface FeeCalculation {
   purposeType: 'service' | 'personal'
 }
 
+// Minimum fee floor by currency (in smallest unit)
+// Ensures we cover fixed processing fees + transfer costs
+// Approximates ~$0.30 - $0.50 USD
+const MIN_FEE_BY_CURRENCY: Record<string, number> = {
+  USD: 50,    // $0.50
+  EUR: 50,    // €0.50
+  GBP: 40,    // £0.40
+  CAD: 70,    // $0.70
+  AUD: 70,    // $0.70
+  ZAR: 1000,  // R10.00
+  KES: 5000,  // KSh 50.00
+  NGN: 50000, // ₦500.00 (50,000 kobo)
+  GHS: 500,   // ₵5.00
+}
+
+// Fallback for unknown currencies (assumes strong currency like USD)
+const DEFAULT_MIN_FEE = 50
+
 /**
  * Calculate service fee based on creator's fee mode
  *
@@ -96,12 +114,14 @@ export function calculateServiceFee(
   // Calculate fee based on mode (flat percentage)
   let feeCents = Math.round(amountCents * rate)
 
-  // Safety Floor: Ensure we collect at least 50 cents (or equivalent) to cover fixed costs
-  // Only apply floor if the transaction amount is reasonably high (> $1) to avoid killing micro-transactions
-  // For micro-transactions (< $1), we accept the loss or take what we can
-  const MIN_FEE_CENTS = 50
-  if (amountCents > 100 && feeCents < MIN_FEE_CENTS) {
-    feeCents = MIN_FEE_CENTS
+  // Safety Floor: Ensure we collect minimum fee to cover fixed costs
+  // Currency-aware to handle weak currencies (e.g. NGN, KES) correctly
+  const minFee = MIN_FEE_BY_CURRENCY[normalizedCurrency] || DEFAULT_MIN_FEE
+  
+  // Only apply floor if the transaction amount is reasonably high (> 2x min fee)
+  // This avoids taking >50% of very small micro-transactions
+  if (amountCents > (minFee * 2) && feeCents < minFee) {
+    feeCents = minFee
     // Recalculate effective rate for metadata
     rate = feeCents / amountCents
   }

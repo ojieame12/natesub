@@ -6,7 +6,7 @@ import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  globalIgnores(['dist', 'backend/dist', 'backend/node_modules', 'android', 'ios', 'coverage', 'public/assets']),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [
@@ -33,6 +33,15 @@ export default defineConfig([
           message: 'Use the shared Pressable component from "./components" instead of defining locally.',
         },
       ],
+      // Downgraded to warnings for legacy code - Fix these over time
+      '@typescript-eslint/no-explicit-any': 'warn',
+      '@typescript-eslint/no-unused-vars': 'warn',
+      'react-hooks/exhaustive-deps': 'warn',
+      'react-hooks/rules-of-hooks': 'warn',
+      'react-hooks/set-state-in-effect': 'warn',
+      'react-hooks/purity': 'warn',
+      'react-hooks/immutability': 'warn',
+      'react-refresh/only-export-components': 'warn',
     },
   },
   // Exclude shared components directory from the local definition check

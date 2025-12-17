@@ -10,43 +10,18 @@ import './SplashScreen.css'
  * - Prevents flickering between states
  */
 export function SplashScreen() {
-  const [showLogo, setShowLogo] = useState(false)
+  const [showLoader, setShowLoader] = useState(false)
 
   useEffect(() => {
-    // Fade in the logo after a tiny delay for smooth entrance
-    const timer = setTimeout(() => setShowLogo(true), 50)
+    // Fade in the loader after a tiny delay for smooth entrance
+    const timer = setTimeout(() => setShowLoader(true), 150)
     return () => clearTimeout(timer)
   }, [])
 
   return (
     <div className="splash-screen">
-      <div className="splash-content">
-        {/* Logo/Brand Mark */}
-        <div className={`splash-logo ${showLogo ? 'visible' : ''}`}>
-          <div className="splash-logo-mark">
-            <svg
-              viewBox="0 0 40 40"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-              className="splash-logo-svg"
-            >
-              {/* N letter mark */}
-              <path
-                d="M10 30V10L20 25L30 10V30"
-                stroke="currentColor"
-                strokeWidth="3"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                fill="none"
-              />
-            </svg>
-          </div>
-        </div>
-
-        {/* Loading indicator */}
-        <div className={`splash-loader ${showLogo ? 'visible' : ''}`}>
-          <div className="splash-loader-bar" />
-        </div>
+      <div className={`splash-loader ${showLoader ? 'visible' : ''}`}>
+        <div className="splash-loader-bar" />
       </div>
     </div>
   )

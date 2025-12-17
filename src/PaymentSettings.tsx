@@ -1,24 +1,23 @@
-import { useState, useEffect } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
-import { useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Building2, Check, Loader2, AlertCircle, CreditCard, ExternalLink } from 'lucide-react'
-import { Pressable } from './components'
-import { Skeleton } from './components/Skeleton'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { ArrowLeft, Building2, Check, CreditCard, ExternalLink, Loader2, RefreshCw, TriangleAlert } from 'lucide-react'
+import { InlineError, Pressable, Skeleton } from './components'
 import { api } from './api'
 import type { PaystackConnectionStatus } from './api/client'
 import { useProfile } from './api/hooks'
 import { formatCurrencyFromCents } from './utils/currency'
-import { setPaymentConfirmed } from './utils/paymentConfirmed'
 import './PaymentSettings.css'
 
-const payoutSchedules = [
-  { id: 'instant', label: 'Instant', desc: 'Get paid immediately (1.5% fee)' },
-  { id: 'daily', label: 'Daily', desc: 'Next business day' },
-  { id: 'weekly', label: 'Weekly', desc: 'Every Monday' },
-  { id: 'monthly', label: 'Monthly', desc: 'First of the month' },
-]
+type StripeStatus = Awaited<ReturnType<typeof api.stripe.getStatus>>
 
-// Format Stripe requirement keys into readable text
+const STRIPE_ONBOARDING_RETURN_MAX_AGE_MS = 30 * 60 * 1000
+
+function getErrorMessage(err: unknown): string {
+  const anyErr = err as any
+  return anyErr?.error || anyErr?.message || 'Something went wrong. Please try again.'
+}
+
+// Format Stripe requirement keys into readable text (matches StripeComplete)
 function formatRequirement(key: string): string {
   const map: Record<string, string> = {
     'individual.address.city': 'City',
@@ -45,794 +44,495 @@ function formatRequirement(key: string): string {
   return map[key] || key.replace(/[._]/g, ' ').replace(/individual /i, '')
 }
 
-interface Payout {
-  id: string
-  amount: number
-  currency: string
-  status: string
-  arrivalDate: string
-  createdAt: string
+function getLocationReturnTo(state: unknown): string | null {
+  if (!state || typeof state !== 'object') return null
+  const maybeReturnTo = (state as any).returnTo
+  if (typeof maybeReturnTo !== 'string') return null
+  // Only allow internal paths
+  if (!maybeReturnTo.startsWith('/')) return null
+  return maybeReturnTo
 }
 
 export default function PaymentSettings() {
   const navigate = useNavigate()
   const location = useLocation()
-  const queryClient = useQueryClient()
-  const [loading, setLoading] = useState(true)
-  const [connecting, setConnecting] = useState(false)
-  const [completingSetup, setCompletingSetup] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  // Get profile to know which provider they use
   const { data: profileData } = useProfile()
-  const paymentProvider = profileData?.profile?.paymentProvider
-  const profileCurrency = profileData?.profile?.currency || 'USD'
+  const isMountedRef = useRef(true)
 
-  // Real data from API
-  const [stripeStatus, setStripeStatus] = useState<{
-    connected: boolean
-    status: string
-    details?: any
-  } | null>(null)
+  const profileCurrency = profileData?.profile?.currency || 'USD'
+  const defaultProvider = profileData?.profile?.paymentProvider || null
+
+  const returnTo = useMemo(() => getLocationReturnTo(location.state), [location.state])
+
+  const [loading, setLoading] = useState(true)
+  const [stripeStatus, setStripeStatus] = useState<StripeStatus | null>(null)
   const [paystackStatus, setPaystackStatus] = useState<PaystackConnectionStatus | null>(null)
-  const [balance, setBalance] = useState({ available: 0, pending: 0 })
-  const [payoutHistory, setPayoutHistory] = useState<Payout[]>([])
+
+  const [stripeBalance, setStripeBalance] = useState<{ available: number; pending: number } | null>(null)
+  const [stripeBalanceLoading, setStripeBalanceLoading] = useState(false)
+
+  const [stripeError, setStripeError] = useState<string | null>(null)
+  const [paystackError, setPaystackError] = useState<string | null>(null)
+
+  const [stripeConnecting, setStripeConnecting] = useState(false)
+  const [stripeFixing, setStripeFixing] = useState(false)
+  const [stripeRefreshing, setStripeRefreshing] = useState(false)
+  const [stripeOpeningDashboard, setStripeOpeningDashboard] = useState(false)
 
   useEffect(() => {
-    // AbortController to prevent race conditions when paymentProvider changes
-    // or component unmounts while API calls are in flight
-    const abortController = new AbortController()
-    let isCancelled = false
+    isMountedRef.current = true
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [])
 
-    async function loadPaymentData() {
-      // If Stripe returns to the wrong URL (env misconfigured), we can land on /settings/payments.
-      // Redirect immediately to the "complete" handler to avoid a slow first API call / cold start
-      // feeling like an infinite load.
-      const onboardingSource = sessionStorage.getItem('stripe_onboarding_source')
-      const startedAtMs = Number.parseInt(sessionStorage.getItem('stripe_onboarding_started_at') || '', 10)
-      const isRecentOnboardingReturn =
-        Boolean(onboardingSource) &&
-        Number.isFinite(startedAtMs) &&
-        (Date.now() - startedAtMs) < 30 * 60 * 1000
+  const redirectIfStripeReturnedHere = useCallback((): boolean => {
+    // Stripe return is a full page reload; if RETURN_URL is misconfigured to /settings/payments,
+    // redirect immediately to the dedicated completion handler for a reliable post-onboarding boot.
+    const onboardingSource = sessionStorage.getItem('stripe_onboarding_source')
+    const startedAtMs = Number.parseInt(sessionStorage.getItem('stripe_onboarding_started_at') || '', 10)
+    const isRecent =
+      Boolean(onboardingSource) &&
+      Number.isFinite(startedAtMs) &&
+      (Date.now() - startedAtMs) < STRIPE_ONBOARDING_RETURN_MAX_AGE_MS
 
-      if (isRecentOnboardingReturn) {
-        navigate('/settings/payments/complete', { replace: true })
-        return
-      }
+    if (isRecent) {
+      navigate('/settings/payments/complete', { replace: true })
+      return true
+    }
 
-      // Clear stale onboarding flags (>30m old) to avoid surprising redirects
-      if (onboardingSource && (!Number.isFinite(startedAtMs) || (Date.now() - startedAtMs) >= 30 * 60 * 1000)) {
+    // Clear stale flags so manual visits don’t cause surprising redirects.
+    if (onboardingSource) {
+      const isStale = !Number.isFinite(startedAtMs) || (Date.now() - startedAtMs) >= STRIPE_ONBOARDING_RETURN_MAX_AGE_MS
+      if (isStale) {
         sessionStorage.removeItem('stripe_onboarding_source')
         sessionStorage.removeItem('stripe_onboarding_started_at')
       }
+    }
 
-      setLoading(true)
-      setError(null)
+    return false
+  }, [navigate])
 
-      try {
-        // Check status based on payment provider
-        if (paymentProvider === 'paystack') {
-          const status = await api.paystack.getStatus()
-          // Check if request was cancelled before updating state
-          if (isCancelled) return
-          setPaystackStatus(status)
-        } else {
-          // Default to Stripe
-          const status = await api.stripe.getStatus()
-          // Check if request was cancelled before updating state
-          if (isCancelled) return
-          setStripeStatus(status)
+  const fetchStripeBalance = useCallback(async () => {
+    setStripeBalanceLoading(true)
+    try {
+      const result = await api.stripe.getBalance()
+      if (!isMountedRef.current) return
+      setStripeBalance(result.balance)
+    } catch (err) {
+      if (!isMountedRef.current) return
+      setStripeError((prev) => prev || getErrorMessage(err))
+    } finally {
+      if (isMountedRef.current) setStripeBalanceLoading(false)
+    }
+  }, [])
 
-          if (status.connected && status.status === 'active') {
-            // Fetch balance and payouts
-            const [balanceResult, payoutsResult] = await Promise.all([
-              api.stripe.getBalance().catch(() => ({ balance: { available: 0, pending: 0 } })),
-              api.stripe.getPayouts().catch(() => ({ payouts: [] })),
-            ])
-            // Check again before updating state
-            if (isCancelled) return
-            setBalance(balanceResult.balance)
-            setPayoutHistory(payoutsResult.payouts)
-          }
-        }
-      } catch (err: any) {
-        // Don't update state if cancelled
-        if (isCancelled) return
-        console.error('Failed to load payment data:', err)
-        // Don't show error for unconnected accounts
-        if (err?.status !== 404) {
-          setError(err?.error || 'Failed to load payment data')
-        }
-      } finally {
-        // Don't update state if cancelled
-        if (!isCancelled) {
-          setLoading(false)
-        }
+  const loadPaymentData = useCallback(async () => {
+    if (redirectIfStripeReturnedHere()) return
+
+    setLoading(true)
+    setStripeError(null)
+    setPaystackError(null)
+    setStripeBalance(null)
+
+    const [stripeResult, paystackResult] = await Promise.allSettled([
+      api.stripe.getStatus({ quick: true, refresh: false }),
+      api.paystack.getStatus(),
+    ])
+
+    if (!isMountedRef.current) return
+
+    if (stripeResult.status === 'fulfilled') {
+      setStripeStatus(stripeResult.value)
+      if (stripeResult.value.connected && stripeResult.value.status === 'active') {
+        // Balance is helpful, but keep the page responsive by fetching it separately.
+        void fetchStripeBalance()
       }
+    } else {
+      setStripeStatus({ connected: false, status: 'not_started' } as StripeStatus)
+      setStripeError(getErrorMessage(stripeResult.reason))
     }
 
-    loadPaymentData()
-
-    // Cleanup: cancel pending operations when effect re-runs or component unmounts
-    return () => {
-      isCancelled = true
-      abortController.abort()
+    if (paystackResult.status === 'fulfilled') {
+      setPaystackStatus(paystackResult.value)
+    } else {
+      setPaystackStatus({ connected: false, status: 'not_started' })
+      setPaystackError(getErrorMessage(paystackResult.reason))
     }
-  }, [paymentProvider])
 
-  async function handleConnectStripe() {
-    // Persist return URL for post-Stripe redirection
-    const returnTo = (location.state as any)?.returnTo
+    setLoading(false)
+  }, [fetchStripeBalance, redirectIfStripeReturnedHere])
+
+  useEffect(() => {
+    void loadPaymentData()
+  }, [loadPaymentData])
+
+  const handleBack = useCallback(() => {
     if (returnTo) {
-      sessionStorage.setItem('stripe_return_to', returnTo)
+      navigate(returnTo)
+      return
     }
+
+    if (window.history.length > 1) {
+      navigate(-1)
+      return
+    }
+
+    navigate('/dashboard')
+  }, [navigate, returnTo])
+
+  const handleConnectStripe = useCallback(async () => {
+    if (returnTo) sessionStorage.setItem('stripe_return_to', returnTo)
     sessionStorage.setItem('stripe_onboarding_started_at', Date.now().toString())
 
-    setConnecting(true)
-    setError(null)
+    setStripeConnecting(true)
+    setStripeError(null)
 
     try {
       const result = await api.stripe.connect()
 
       if (result.error) {
-        setError(result.error)
-        if (result.suggestion) {
-          setError(`${result.error}. ${result.suggestion}`)
-        }
-      } else if (result.onboardingUrl) {
-        // Store source for redirect handling when user returns from Stripe
+        setStripeError(result.suggestion ? `${result.error}. ${result.suggestion}` : result.error)
+        return
+      }
+
+      if (result.onboardingUrl) {
         sessionStorage.setItem('stripe_onboarding_source', 'settings')
         window.location.href = result.onboardingUrl
-      } else if (result.alreadyOnboarded) {
-        // Refresh status by reloading
-        window.location.reload()
+        return
       }
-    } catch (err: any) {
-      setError(err?.error || 'Failed to connect Stripe')
+
+      if (result.alreadyOnboarded) {
+        void loadPaymentData()
+      }
+    } catch (err) {
+      setStripeError(getErrorMessage(err))
     } finally {
-      setConnecting(false)
+      if (isMountedRef.current) setStripeConnecting(false)
     }
-  }
+  }, [loadPaymentData, returnTo])
+
+  const handleFixStripe = useCallback(async () => {
+    if (returnTo) sessionStorage.setItem('stripe_return_to', returnTo)
+    sessionStorage.setItem('stripe_onboarding_started_at', Date.now().toString())
+
+    setStripeFixing(true)
+    setStripeError(null)
+
+    try {
+      const result = await api.stripe.refreshOnboarding()
+      if (result.onboardingUrl) {
+        sessionStorage.setItem('stripe_onboarding_source', 'settings')
+        window.location.href = result.onboardingUrl
+      } else {
+        setStripeError('Unable to get onboarding link. Please try again.')
+      }
+    } catch (err) {
+      setStripeError(getErrorMessage(err))
+    } finally {
+      if (isMountedRef.current) setStripeFixing(false)
+    }
+  }, [returnTo])
+
+  const handleRefreshStripeStatus = useCallback(async () => {
+    setStripeRefreshing(true)
+    setStripeError(null)
+
+    try {
+      const result = await api.stripe.getStatus({ quick: true, refresh: true })
+      if (!isMountedRef.current) return
+      setStripeStatus(result)
+      if (result.connected && result.status === 'active') {
+        void fetchStripeBalance()
+      }
+    } catch (err) {
+      if (!isMountedRef.current) return
+      setStripeError(getErrorMessage(err))
+    } finally {
+      if (isMountedRef.current) setStripeRefreshing(false)
+    }
+  }, [fetchStripeBalance])
+
+  const handleOpenStripeDashboard = useCallback(async () => {
+    setStripeOpeningDashboard(true)
+    setStripeError(null)
+
+    // Avoid popup blockers: open synchronously, then set URL after fetch.
+    const popup = window.open('', '_blank', 'noopener,noreferrer')
+    try {
+      const result = await api.stripe.getDashboardLink()
+      if (popup) {
+        popup.location.href = result.url
+      } else {
+        window.location.href = result.url
+      }
+    } catch (err) {
+      if (popup) popup.close()
+      setStripeError(getErrorMessage(err))
+    } finally {
+      if (isMountedRef.current) setStripeOpeningDashboard(false)
+    }
+  }, [])
+
+  const stripeIsConnected = stripeStatus?.connected === true
+  const stripeIsActive = stripeIsConnected && stripeStatus?.status === 'active'
+  const stripeIsRestricted = stripeIsConnected && stripeStatus?.status === 'restricted'
+  const stripeIsPending = stripeIsConnected && stripeStatus?.status === 'pending'
+
+  const paystackIsConnected = paystackStatus?.connected === true
+  const paystackIsActive = paystackIsConnected && paystackStatus?.status === 'active'
+  const paystackIsInactive = paystackIsConnected && paystackStatus?.status === 'inactive'
+
+  const stripeRequirements = stripeStatus?.details?.requirements?.currentlyDue || []
 
   if (loading) {
     return (
       <div className="payment-settings-page">
         <header className="payment-settings-header">
-          <Pressable className="back-btn" onClick={() => navigate(-1)}>
+          <Pressable className="back-btn" onClick={handleBack}>
             <ArrowLeft size={20} />
           </Pressable>
-          <img src="/logo.svg" alt="NatePay" className="header-logo" />
-          <div className="header-spacer" />
-        </header>
-        <div className="payment-settings-content">
-          {/* Balance Card Skeleton */}
-          <section className="balance-card" style={{ opacity: 0.6 }}>
-            <div className="balance-row">
-              <div className="balance-item">
-                <Skeleton width={60} height={14} borderRadius="var(--radius-sm)" />
-                <Skeleton width={100} height={28} borderRadius="var(--radius-sm)" style={{ marginTop: 4 }} />
-              </div>
-              <div className="balance-item">
-                <Skeleton width={60} height={14} borderRadius="var(--radius-sm)" />
-                <Skeleton width={80} height={28} borderRadius="var(--radius-sm)" style={{ marginTop: 4 }} />
-              </div>
-            </div>
-            <Skeleton height={44} borderRadius="var(--radius-md)" style={{ marginTop: 16 }} />
-          </section>
-
-          {/* Status Skeleton */}
-          <section className="settings-section">
-            <Skeleton height={48} borderRadius="var(--radius-md)" />
-          </section>
-
-          {/* Payout Method Skeleton */}
-          <section className="settings-section">
-            <Skeleton width={120} height={16} borderRadius="var(--radius-sm)" style={{ marginBottom: 12 }} />
-            <Skeleton height={72} borderRadius="var(--radius-lg)" />
-          </section>
-
-          {/* Payout Schedule Skeleton */}
-          <section className="settings-section">
-            <Skeleton width={140} height={16} borderRadius="var(--radius-sm)" style={{ marginBottom: 12 }} />
-            <Skeleton height={200} borderRadius="var(--radius-lg)" />
-          </section>
-        </div>
-      </div>
-    )
-  }
-
-  // Show Paystack not connected or inactive
-  if (paymentProvider === 'paystack' && (!paystackStatus?.connected || paystackStatus.status === 'not_started' || paystackStatus.status === 'inactive')) {
-    const isInactive = paystackStatus?.status === 'inactive'
-    return (
-      <div className="payment-settings-page">
-        <header className="payment-settings-header">
-          <Pressable className="back-btn" onClick={() => navigate(-1)}>
-            <ArrowLeft size={20} />
-          </Pressable>
-          <img src="/logo.svg" alt="NatePay" className="header-logo" />
+          <div className="payment-settings-title">Payments</div>
           <div className="header-spacer" />
         </header>
 
         <div className="payment-settings-content">
-          <section className="connect-card" style={{
-            textAlign: 'center',
-            padding: '32px 24px',
-            background: 'var(--surface)',
-            borderRadius: 16,
-            marginBottom: 16,
-          }}>
-            <div style={{
-              width: 64,
-              height: 64,
-              borderRadius: '50%',
-              background: isInactive ? 'linear-gradient(135deg, #f59e0b, #d97706)' : 'linear-gradient(135deg, #00C3F7, #0AA5C2)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              margin: '0 auto 16px',
-            }}>
-              {isInactive ? <AlertCircle size={28} color="white" /> : <Building2 size={28} color="white" />}
-            </div>
-            <h2 style={{ fontSize: 20, fontWeight: 600, marginBottom: 8 }}>
-              {isInactive ? 'Account Inactive' : 'Connect Payment Method'}
-            </h2>
-            <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 24 }}>
-              {isInactive
-                ? 'Your payment account has been deactivated. Please reconnect to receive payments.'
-                : 'Connect your bank or mobile money via Paystack to receive payments.'}
-            </p>
-
-            {error && (
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                padding: '12px 16px',
-                background: 'rgba(239, 68, 68, 0.1)',
-                borderRadius: 12,
-                marginBottom: 16,
-                textAlign: 'left',
-              }}>
-                <AlertCircle size={18} color="var(--error)" />
-                <span style={{ fontSize: 14, color: 'var(--error)' }}>{error}</span>
-              </div>
-            )}
-
-            <Pressable
-              onClick={() => navigate('/onboarding/paystack')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 8,
-                width: '100%',
-                padding: '14px 24px',
-                background: 'linear-gradient(135deg, #00C3F7, #0AA5C2)',
-                color: 'white',
-                borderRadius: 12,
-                fontWeight: 600,
-                fontSize: 16,
-              }}
-            >
-              {isInactive ? 'Reconnect Payment Method' : 'Connect Payment Method'}
-            </Pressable>
-          </section>
-
-          <p style={{ fontSize: 13, color: 'var(--text-tertiary)', textAlign: 'center', padding: '0 16px' }}>
-            Paystack supports banks and mobile money in Nigeria, Kenya, and South Africa.
-          </p>
-        </div>
-      </div>
-    )
-  }
-
-  // Show Paystack connected account
-  if (paymentProvider === 'paystack' && paystackStatus?.connected) {
-    const details = paystackStatus.details
-    return (
-      <div className="payment-settings-page">
-        <header className="payment-settings-header">
-          <Pressable className="back-btn" onClick={() => navigate(-1)}>
-            <ArrowLeft size={20} />
-          </Pressable>
-          <img src="/logo.svg" alt="NatePay" className="header-logo" />
-          <div className="header-spacer" />
-        </header>
-
-        <div className="payment-settings-content">
-          {/* Connected Status */}
           <section className="settings-section">
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              padding: '12px 16px',
-              background: 'rgba(34, 197, 94, 0.1)',
-              borderRadius: 12,
-              marginBottom: 16,
-            }}>
-              <Check size={18} color="var(--success)" />
-              <span style={{ fontSize: 14, color: 'var(--success)' }}>
-                Paystack connected and active
-              </span>
-            </div>
+            <Skeleton height={110} borderRadius="var(--radius-xl)" />
           </section>
-
-          {/* Bank Account Info */}
           <section className="settings-section">
-            <h3 className="section-title">Connected Bank Account</h3>
-            <div className="method-card">
-              <div className="method-row" style={{ cursor: 'default' }}>
-                <div className="method-icon">
-                  <Building2 size={20} />
-                </div>
-                <div className="method-info">
-                  <span className="method-name">{details?.bank || 'Bank Account'}</span>
-                  <span className="method-detail">
-                    {details?.accountNumber ? `****${details.accountNumber.slice(-4)}` : '****'}
-                    {details?.accountName && ` - ${details.accountName}`}
-                  </span>
-                </div>
-                <div className="method-default">
-                  <Check size={16} />
-                </div>
-              </div>
-            </div>
-          </section>
-
-          {/* Info about Paystack payouts */}
-          <section className="settings-section">
-            <div style={{
-              padding: '16px',
-              background: 'var(--surface)',
-              borderRadius: 12,
-            }}>
-              <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 8 }}>
-                When you receive a payment, we'll transfer your earnings to your bank account. Transfer times vary by country:
-              </p>
-              <ul style={{ fontSize: 13, color: 'var(--text-tertiary)', paddingLeft: 20, margin: 0 }}>
-                <li>Nigeria: Same day or next business day</li>
-                <li>Kenya: T+1 to T+2 business days</li>
-                <li>South Africa: T+2 business days</li>
-              </ul>
-            </div>
+            <Skeleton height={92} borderRadius="var(--radius-xl)" />
+            <Skeleton height={92} borderRadius="var(--radius-xl)" />
           </section>
         </div>
       </div>
     )
   }
 
-  // Show connect screen if not connected
-  if (!stripeStatus?.connected || stripeStatus.status === 'not_connected') {
-    return (
-      <div className="payment-settings-page">
-        <header className="payment-settings-header">
-          <Pressable className="back-btn" onClick={() => navigate('/dashboard')}>
-            <ArrowLeft size={20} />
-          </Pressable>
-          <img src="/logo.svg" alt="NatePay" className="header-logo" />
-          <div className="header-spacer" />
-        </header>
-
-        <div className="payment-settings-content" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', padding: '24px' }}>
-          <div style={{
-            width: 64,
-            height: 64,
-            borderRadius: '50%',
-            background: 'linear-gradient(135deg, #1a1a1a, #2d2d2d)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            marginBottom: 24,
-          }}>
-            <CreditCard size={28} color="white" />
-          </div>
-
-          <h2 style={{ fontSize: 22, fontWeight: 600, marginBottom: 8, textAlign: 'center' }}>
-            Connect to start receiving payments
-          </h2>
-
-          <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 32, textAlign: 'center' }}>
-            Stripe is available in 40+ countries. We handle all payment processing and security.
-          </p>
-
-          <Pressable
-            className="connect-btn"
-            onClick={handleConnectStripe}
-            disabled={connecting}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 8,
-              width: '100%',
-              maxWidth: 320,
-              padding: '16px 24px',
-              background: 'linear-gradient(135deg, #1a1a1a, #2d2d2d)',
-              color: 'white',
-              borderRadius: 12,
-              fontWeight: 600,
-              fontSize: 16,
-            }}
-          >
-            {connecting ? (
-              <>
-                <Loader2 size={18} className="spin" />
-                Connecting...
-              </>
-            ) : (
-              <>
-                Connect with Stripe
-                <ExternalLink size={16} />
-              </>
-            )}
-          </Pressable>
-        </div>
-      </div>
-    )
-  }
-
-  // Show pending status
-  if (stripeStatus.status === 'pending' || stripeStatus.status === 'restricted') {
-    const requirements = stripeStatus.details?.requirements
-    const hasMissingInfo = requirements?.currentlyDue?.length > 0
-
-    return (
-      <div className="payment-settings-page">
-        <header className="payment-settings-header">
-          <Pressable className="back-btn" onClick={() => navigate(-1)}>
-            <ArrowLeft size={20} />
-          </Pressable>
-          <img src="/logo.svg" alt="NatePay" className="header-logo" />
-          <div className="header-spacer" />
-        </header>
-
-        <div className="payment-settings-content">
-          <section className="status-card" style={{
-            textAlign: 'center',
-            padding: '32px 24px',
-            background: 'var(--surface)',
-            borderRadius: 16,
-          }}>
-            <AlertCircle size={48} color="var(--warning)" style={{ marginBottom: 16 }} />
-            <h2 style={{ fontSize: 20, fontWeight: 600, marginBottom: 8 }}>
-              {stripeStatus.status === 'pending' ? 'Verification Pending' : 'Action Required'}
-            </h2>
-            <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 16 }}>
-              {stripeStatus.status === 'pending'
-                ? 'Your account is being verified. This usually takes a few minutes.'
-                : 'Additional information is required to complete your account setup.'}
-            </p>
-
-            {/* Show missing requirements */}
-            {hasMissingInfo && (
-              <div style={{
-                textAlign: 'left',
-                padding: '12px 16px',
-                background: 'var(--surface-secondary)',
-                borderRadius: 12,
-                marginBottom: 16,
-              }}>
-                <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Missing Information:</p>
-                <ul style={{ fontSize: 13, color: 'var(--text-secondary)', paddingLeft: 16, margin: 0 }}>
-                  {requirements.currentlyDue.slice(0, 5).map((item: string) => (
-                    <li key={item} style={{ marginBottom: 4 }}>
-                      {formatRequirement(item)}
-                    </li>
-                  ))}
-                  {requirements.currentlyDue.length > 5 && (
-                    <li>And {requirements.currentlyDue.length - 5} more...</li>
-                  )}
-                </ul>
-              </div>
-            )}
-
-            {/* Deadline warning */}
-            {requirements?.currentDeadline && (
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                padding: '8px 12px',
-                background: 'rgba(239, 68, 68, 0.1)',
-                borderRadius: 8,
-                marginBottom: 16,
-              }}>
-                <AlertCircle size={16} color="var(--error)" />
-                <span style={{ fontSize: 13, color: 'var(--error)' }}>
-                  Complete by {new Date(requirements.currentDeadline).toLocaleDateString()}
-                </span>
-              </div>
-            )}
-
-            {/* Error message */}
-            {error && (
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                padding: '12px 16px',
-                background: 'rgba(239, 68, 68, 0.1)',
-                borderRadius: 12,
-                marginBottom: 16,
-              }}>
-                <AlertCircle size={18} color="var(--error)" />
-                <span style={{ fontSize: 14, color: 'var(--error)' }}>{error}</span>
-              </div>
-            )}
-
-            <Pressable
-              className="action-btn"
-              onClick={async () => {
-                setCompletingSetup(true)
-                setError(null)
-                try {
-                  // Pending usually means Stripe is verifying identity; don't bounce them back to Stripe.
-                  // Instead, force-refresh status from Stripe.
-                  if (stripeStatus.status === 'pending') {
-                    const refreshed = await api.stripe.getStatus({ refresh: true })
-                    setStripeStatus(refreshed)
-
-                    if (refreshed.connected && refreshed.status === 'active') {
-                      // Prevent AuthRedirect bounce while webhooks catch up
-                      setPaymentConfirmed()
-
-                      // Optimistically update caches (same approach as StripeComplete)
-                      queryClient.setQueryData(['currentUser'], (oldData: any) => {
-                        if (!oldData) return oldData
-                        return {
-                          ...oldData,
-                          onboarding: {
-                            ...oldData.onboarding,
-                            hasActivePayment: true,
-                          },
-                        }
-                      })
-                      queryClient.setQueryData(['profile'], (oldData: any) => {
-                        if (!oldData?.profile) return oldData
-                        return {
-                          ...oldData,
-                          profile: {
-                            ...oldData.profile,
-                            payoutStatus: 'active',
-                          },
-                        }
-                      })
-
-                      const [balanceResult, payoutsResult] = await Promise.all([
-                        api.stripe.getBalance().catch(() => ({ balance: { available: 0, pending: 0 } })),
-                        api.stripe.getPayouts().catch(() => ({ payouts: [] })),
-                      ])
-                      setBalance(balanceResult.balance)
-                      setPayoutHistory(payoutsResult.payouts)
-                    }
-
-                    return
-                  }
-
-                  const result = await api.stripe.refreshOnboarding()
-                  if (result.onboardingUrl) {
-                    // Store source for redirect handling when user returns from Stripe
-                    sessionStorage.setItem('stripe_onboarding_source', 'settings')
-                    sessionStorage.setItem('stripe_onboarding_started_at', Date.now().toString())
-                    window.location.href = result.onboardingUrl
-                    return
-                  }
-
-                  setError('Unable to get onboarding link. Please try again.')
-                } catch (err: any) {
-                  setError(
-                    err?.error || (stripeStatus.status === 'pending'
-                      ? 'Failed to refresh Stripe status'
-                      : 'Failed to get onboarding link')
-                  )
-                } finally {
-                  setCompletingSetup(false)
-                }
-              }}
-              disabled={completingSetup}
-              style={{
-                padding: '12px 24px',
-                background: 'var(--primary)',
-                color: 'white',
-                borderRadius: 12,
-                fontWeight: 600,
-                opacity: completingSetup ? 0.7 : 1,
-              }}
-            >
-              {completingSetup ? (
-                <>
-                  <Loader2 size={18} className="spin" style={{ marginRight: 8, display: 'inline' }} />
-                  {stripeStatus.status === 'pending' ? 'Checking...' : 'Connecting...'}
-                </>
-              ) : (
-                stripeStatus.status === 'pending' ? 'Check Status' : 'Complete Setup'
-              )}
-            </Pressable>
-          </section>
-        </div>
-      </div>
-    )
-  }
-
-  // Full dashboard for connected accounts
   return (
     <div className="payment-settings-page">
-      {/* Header */}
       <header className="payment-settings-header">
-        <Pressable className="back-btn" onClick={() => navigate(-1)}>
+        <Pressable className="back-btn" onClick={handleBack}>
           <ArrowLeft size={20} />
         </Pressable>
-        <img src="/logo.svg" alt="NatePay" className="header-logo" />
-        <div className="header-spacer" />
+        <div className="payment-settings-title">Payments</div>
+        <Pressable className="back-btn" onClick={loadPaymentData} disabled={loading}>
+          <RefreshCw size={20} />
+        </Pressable>
       </header>
 
       <div className="payment-settings-content">
-        {/* Balance Card */}
-        <section className="balance-card">
-          <div className="balance-row">
-            <div className="balance-item">
-              <span className="balance-label">Available</span>
-              <span className="balance-value">{formatCurrencyFromCents(balance.available, profileCurrency)}</span>
+        {/* Stripe Balance */}
+        {stripeIsActive && (
+          <section className="balance-card">
+            <div className="balance-row">
+              <div className="balance-item">
+                <div className="balance-label">Available</div>
+                <div className="balance-value">
+                  {stripeBalanceLoading ? '…' : formatCurrencyFromCents(stripeBalance?.available || 0, profileCurrency)}
+                </div>
+              </div>
+              <div className="balance-item">
+                <div className="balance-label">Pending</div>
+                <div className="balance-value pending">
+                  {stripeBalanceLoading ? '…' : formatCurrencyFromCents(stripeBalance?.pending || 0, profileCurrency)}
+                </div>
+              </div>
             </div>
-            <div className="balance-item">
-              <span className="balance-label">Pending</span>
-              <span className="balance-value pending">{formatCurrencyFromCents(balance.pending, profileCurrency)}</span>
-            </div>
-          </div>
-          <Pressable
-            className="cashout-btn"
-            onClick={async () => {
-              try {
-                const result = await api.stripe.getDashboardLink()
-                if (result.url) window.open(result.url, '_blank', 'noopener,noreferrer')
-              } catch { }
-            }}
-          >
-            View in Stripe
-          </Pressable>
-        </section>
 
-        {/* Connected Status */}
-        <section className="settings-section">
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 8,
-            padding: '12px 16px',
-            background: 'rgba(34, 197, 94, 0.1)',
-            borderRadius: 12,
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Check size={18} color="var(--success)" />
-              <span style={{ fontSize: 14, color: 'var(--success)' }}>
-                Stripe connected and active
-              </span>
-            </div>
             <Pressable
-              onClick={async () => {
-                try {
-                  const result = await api.stripe.getDashboardLink()
-                  if (result.url) {
-                    window.open(result.url, '_blank', 'noopener,noreferrer')
-                  }
-                } catch (err) {
-                  setError('Failed to open dashboard')
-                }
-              }}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 4,
-                fontSize: 13,
-                color: 'var(--primary)',
-                fontWeight: 500,
-              }}
+              className="cashout-btn"
+              onClick={handleOpenStripeDashboard}
+              disabled={stripeOpeningDashboard}
             >
-              Stripe Dashboard
-              <ExternalLink size={14} />
+              {stripeOpeningDashboard ? 'Opening Stripe…' : 'View Stripe Dashboard'}
             </Pressable>
-          </div>
-        </section>
+          </section>
+        )}
 
-        {/* Payout Method */}
+        {/* Global (Stripe) */}
         <section className="settings-section">
-          <h3 className="section-title">Payout Method</h3>
+          <h3 className="section-title">Global (Stripe)</h3>
           <div className="method-card">
-            <div className="method-row" style={{ cursor: 'default' }}>
+            <div className="method-row">
               <div className="method-icon">
-                <Building2 size={20} />
+                <CreditCard size={20} color={stripeIsConnected ? '#635bff' : undefined} />
               </div>
               <div className="method-info">
-                <span className="method-name">
-                  {stripeStatus?.details?.bankAccount?.bankName || 'Bank Account'}
-                </span>
+                <span className="method-name">Stripe</span>
                 <span className="method-detail">
-                  {stripeStatus?.details?.bankAccount?.last4
-                    ? `••••${stripeStatus.details.bankAccount.last4}`
-                    : 'Connected via Stripe'}
+                  {stripeIsActive
+                    ? `Connected${defaultProvider === 'stripe' ? ' · Default' : ''}`
+                    : stripeIsRestricted
+                      ? 'Action required to receive payouts'
+                      : stripeIsPending
+                        ? 'Setup in progress'
+                        : 'Accept global cards (USD, EUR, GBP)'}
                 </span>
               </div>
-              <div className="method-default">
-                <Check size={16} />
-              </div>
-            </div>
-          </div>
-          <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 8 }}>
-            Manage bank accounts in your{' '}
-            <Pressable
-              onClick={async () => {
-                try {
-                  const result = await api.stripe.getDashboardLink()
-                  if (result.url) window.open(result.url, '_blank', 'noopener,noreferrer')
-                } catch { }
-              }}
-              style={{ color: 'var(--primary)', fontWeight: 500, display: 'inline' }}
-            >
-              Stripe Dashboard
-            </Pressable>
-          </p>
-        </section>
 
-        {/* Payout Schedule */}
-        <section className="settings-section">
-          <h3 className="section-title">Payout Schedule</h3>
-          <div className="schedule-card">
-            {payoutSchedules.map((schedule) => {
-              const isSelected = stripeStatus?.details?.payoutSchedule === schedule.id
-              return (
-                <div
-                  key={schedule.id}
-                  className={`schedule-row ${isSelected ? 'selected' : ''}`}
-                  style={{ cursor: 'default', opacity: isSelected ? 1 : 0.5 }}
+              {!stripeIsConnected ? (
+                <Pressable
+                  className="provider-connect-btn primary"
+                  onClick={handleConnectStripe}
+                  disabled={stripeConnecting}
                 >
-                  <div className="schedule-info">
-                    <span className="schedule-label">{schedule.label}</span>
-                    <span className="schedule-desc">{schedule.desc}</span>
-                  </div>
-                  {isSelected && (
-                    <div className="schedule-check">
-                      <Check size={16} />
-                    </div>
+                  {stripeConnecting ? (
+                    <>
+                      <Loader2 size={16} className="spin" />
+                      <span>Connecting</span>
+                    </>
+                  ) : (
+                    'Connect'
                   )}
+                </Pressable>
+              ) : (
+                <div
+                  className={[
+                    'method-status',
+                    stripeIsActive ? 'success' : stripeIsRestricted ? 'error' : 'warning',
+                  ].join(' ')}
+                >
+                  {stripeIsActive ? <Check size={14} /> : <TriangleAlert size={14} />}
+                  <span>{stripeIsActive ? 'Connected' : stripeIsRestricted ? 'Restricted' : 'Pending'}</span>
                 </div>
-              )
-            })}
+              )}
+            </div>
+
+            {stripeIsConnected && !stripeIsActive && (
+              <div className="provider-actions">
+                <Pressable
+                  className="provider-connect-btn primary"
+                  onClick={handleFixStripe}
+                  disabled={stripeFixing}
+                >
+                  {stripeFixing ? (
+                    <>
+                      <Loader2 size={16} className="spin" />
+                      <span>Opening</span>
+                    </>
+                  ) : (
+                    'Continue setup'
+                  )}
+                </Pressable>
+                <Pressable
+                  className="provider-connect-btn secondary"
+                  onClick={handleRefreshStripeStatus}
+                  disabled={stripeRefreshing}
+                >
+                  {stripeRefreshing ? (
+                    <>
+                      <Loader2 size={16} className="spin" />
+                      <span>Checking</span>
+                    </>
+                  ) : (
+                    'Refresh status'
+                  )}
+                </Pressable>
+              </div>
+            )}
+
+            {stripeIsActive && (
+              <div className="provider-actions">
+                <Pressable
+                  className="provider-connect-btn secondary"
+                  onClick={handleRefreshStripeStatus}
+                  disabled={stripeRefreshing}
+                >
+                  {stripeRefreshing ? (
+                    <>
+                      <Loader2 size={16} className="spin" />
+                      <span>Checking</span>
+                    </>
+                  ) : (
+                    'Refresh status'
+                  )}
+                </Pressable>
+                <Pressable className="provider-link" onClick={handleOpenStripeDashboard} disabled={stripeOpeningDashboard}>
+                  <span>Stripe Dashboard</span>
+                  <ExternalLink size={14} />
+                </Pressable>
+              </div>
+            )}
+
+            {stripeIsRestricted && stripeRequirements.length > 0 && (
+              <div className="provider-requirements">
+                <div className="provider-requirements-title">Needed to finish setup</div>
+                <ul className="provider-requirements-list">
+                  {stripeRequirements.slice(0, 6).map((req) => (
+                    <li key={req}>{formatRequirement(req)}</li>
+                  ))}
+                </ul>
+                {stripeRequirements.length > 6 && (
+                  <div className="provider-requirements-more">+{stripeRequirements.length - 6} more</div>
+                )}
+              </div>
+            )}
+
+            {stripeError && <InlineError message={stripeError} className="provider-inline-error" />}
           </div>
-          <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 8 }}>
-            Change payout schedule in your Stripe Dashboard
-          </p>
         </section>
 
-        {/* Payout History */}
+        {/* Africa (Paystack) */}
         <section className="settings-section">
-          <h3 className="section-title">Payout History</h3>
-          <div className="history-card">
-            {payoutHistory.length === 0 ? (
-              <p style={{ padding: '16px', color: 'var(--text-tertiary)', textAlign: 'center', fontSize: 14 }}>
-                No payouts yet
-              </p>
-            ) : (
-              payoutHistory.map((payout) => (
-                <div key={payout.id} className="history-row">
-                  <div className="history-info">
-                    <span className="history-amount">
-                      {formatCurrencyFromCents(payout.amount, payout.currency || 'USD')}
-                    </span>
-                    <span className="history-date">
-                      {new Date(payout.arrivalDate).toLocaleDateString('en-US', {
-                        month: 'short',
-                        day: 'numeric',
-                        year: 'numeric',
-                      })}
-                    </span>
-                  </div>
-                  <span className={`history-status ${payout.status}`}>{payout.status}</span>
+          <h3 className="section-title">Africa (Paystack)</h3>
+          <div className="method-card">
+            <div className="method-row">
+              <div className="method-icon">
+                <Building2 size={20} color={paystackIsConnected ? '#0AA5C2' : undefined} />
+              </div>
+              <div className="method-info">
+                <span className="method-name">Paystack</span>
+                <span className="method-detail">
+                  {paystackIsActive
+                    ? `Connected${defaultProvider === 'paystack' ? ' · Default' : ''}`
+                    : paystackIsInactive
+                      ? 'Inactive subaccount (contact support)'
+                      : 'Accept local cards (NGN, KES, ZAR)'}
+                </span>
+              </div>
+
+              {!paystackIsConnected ? (
+                <Pressable
+                  className="provider-connect-btn secondary"
+                  onClick={() => navigate('/onboarding/paystack')}
+                >
+                  Connect
+                </Pressable>
+              ) : (
+                <div className={['method-status', paystackIsActive ? 'success' : 'warning'].join(' ')}>
+                  {paystackIsActive ? <Check size={14} /> : <TriangleAlert size={14} />}
+                  <span>{paystackIsActive ? 'Connected' : 'Inactive'}</span>
                 </div>
-              ))
+              )}
+            </div>
+
+            {paystackIsConnected && paystackStatus?.details && (
+              <div className="provider-details">
+                <div className="provider-details-row">
+                  <span className="provider-details-label">Bank</span>
+                  <span className="provider-details-value">{paystackStatus.details.bank}</span>
+                </div>
+                <div className="provider-details-row">
+                  <span className="provider-details-label">Account</span>
+                  <span className="provider-details-value">{paystackStatus.details.accountNumber || '****'}</span>
+                </div>
+                {paystackStatus.details.accountName && (
+                  <div className="provider-details-row">
+                    <span className="provider-details-label">Name</span>
+                    <span className="provider-details-value">{paystackStatus.details.accountName}</span>
+                  </div>
+                )}
+                {typeof paystackStatus.details.percentageCharge === 'number' && (
+                  <div className="provider-details-row">
+                    <span className="provider-details-label">Paystack fee</span>
+                    <span className="provider-details-value">{paystackStatus.details.percentageCharge}%</span>
+                  </div>
+                )}
+              </div>
             )}
+
+            {paystackError && <InlineError message={paystackError} className="provider-inline-error" />}
           </div>
         </section>
       </div>

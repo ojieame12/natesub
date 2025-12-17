@@ -389,7 +389,8 @@ function AppShell() {
   const bypassSplash = isPublic || shouldBypassSplash(location.pathname)
   useEffect(() => {
     if (bypassSplash && minTimeElapsed) {
-      setShowSplash(false)
+      const timer = setTimeout(() => setShowSplash(false), 0)
+      return () => clearTimeout(timer)
     }
   }, [bypassSplash, minTimeElapsed])
 
@@ -484,16 +485,16 @@ function AppShell() {
           <Route path="/r/:token" element={<PublicRequestPage />} />
           <Route path="/r/:token/success" element={<PublicRequestPage />} />
 
-	          {/* Screenshot / marketing mocks (only when enabled) */}
-	          {enableMockRoutes && (
-	            <>
-	              <Route path="/mock" element={<MockIndex />} />
-	              <Route path="/mock/dashboard" element={<MockDashboard />} />
-	              <Route path="/mock/profile" element={<MockProfile />} />
-	              <Route path="/mock/invoices" element={<MockInvoices />} />
-	              <Route path="/mock/payroll" element={<MockPayroll />} />
-	            </>
-	          )}
+          {/* Screenshot / marketing mocks (only when enabled) */}
+          {enableMockRoutes && (
+            <>
+              <Route path="/mocks" element={<MockIndex />} />
+              <Route path="/mocks/dashboard" element={<MockDashboard />} />
+              <Route path="/mocks/profile" element={<MockProfile />} />
+              <Route path="/mocks/invoices" element={<MockInvoices />} />
+              <Route path="/mocks/payroll" element={<MockPayroll />} />
+            </>
+          )}
 
 
 

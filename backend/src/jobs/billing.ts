@@ -37,7 +37,7 @@ function addMonthSafe(date: Date, months: number): Date {
   return result
 }
 
-interface BillingResult {
+export interface BillingResult {
   processed: number
   succeeded: number
   failed: number

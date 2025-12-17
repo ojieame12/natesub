@@ -87,8 +87,36 @@ function withDefaultEmailAttachments(options: CreateEmailOptions): CreateEmailOp
   return { ...options, attachments: [INLINE_EMAIL_LOGO_ATTACHMENT, ...existing] }
 }
 
-function sendEmail(options: CreateEmailOptions): Promise<EmailResult> {
+import { emailQueue } from '../lib/queue.js'
+
+// ... existing imports
+
+// Rename original function to internal
+export function _sendEmail(options: CreateEmailOptions): Promise<EmailResult> {
   return sendWithRetry(() => resend.emails.send(withDefaultEmailAttachments(options)))
+}
+
+// New public function adds to queue
+async function sendEmail(options: CreateEmailOptions): Promise<EmailResult> {
+  try {
+    // Add job to BullMQ
+    // We only pass necessary data. Attachments are large/binary, so we handle them in the worker (loadInlineEmailLogoAttachment).
+    // The worker will call _sendEmail which adds attachments.
+    await emailQueue.add('send-email', {
+      to: Array.isArray(options.to) ? options.to[0] : options.to,
+      subject: options.subject,
+      html: options.html,
+      text: options.text,
+      from: options.from,
+    })
+    
+    return { success: true, attempts: 0, messageId: 'queued' }
+  } catch (err: any) {
+    console.error('[email] Failed to queue email:', err)
+    // Fallback: try sending directly if queue fails
+    console.warn('[email] Falling back to direct send')
+    return _sendEmail(options)
+  }
 }
 
 // Track email send attempts for monitoring

@@ -276,7 +276,7 @@ export default function SubscriptionLiquid({ profile, canceled, isOwner }: Subsc
             // Redirect to checkout (Stripe or Paystack based on creator's provider)
             if (result.url) {
                 setIsRedirecting(true)
-                window.location.href = result.url
+                window.location.assign(result.url)
             } else {
                 setCheckoutError('Unable to create checkout session. Please try again.')
             }
@@ -566,7 +566,6 @@ export default function SubscriptionLiquid({ profile, canceled, isOwner }: Subsc
             <div
                 className="sub-card"
                 style={{
-                    // @ts-ignore
                     '--glow-bg': contentGlow
                 } as React.CSSProperties}
             >

@@ -37,11 +37,11 @@ const countries = [
     { code: 'MX', name: 'Mexico', flag: '🇲🇽', currency: 'MXN' },
     { code: 'BR', name: 'Brazil', flag: '🇧🇷', currency: 'BRL' },
     { code: 'IN', name: 'India', flag: '🇮🇳', currency: 'INR' },
-    // Cross-border countries: prices in USD, payouts in local currency
-    { code: 'NG', name: 'Nigeria', flag: '🇳🇬', currency: 'USD', crossBorder: true },
-    { code: 'ZA', name: 'South Africa', flag: '🇿🇦', currency: 'USD', crossBorder: true },
-    { code: 'KE', name: 'Kenya', flag: '🇰🇪', currency: 'USD', crossBorder: true },
-    { code: 'GH', name: 'Ghana', flag: '🇬🇭', currency: 'USD', crossBorder: true },
+    // Paystack supported countries: default to local currency, but allow USD choice later if needed
+    { code: 'NG', name: 'Nigeria', flag: '🇳🇬', currency: 'NGN', crossBorder: true },
+    { code: 'ZA', name: 'South Africa', flag: '🇿🇦', currency: 'ZAR', crossBorder: true },
+    { code: 'KE', name: 'Kenya', flag: '🇰🇪', currency: 'KES', crossBorder: true },
+    { code: 'GH', name: 'Ghana', flag: '🇬🇭', currency: 'GHS', crossBorder: true },
     { code: 'AE', name: 'United Arab Emirates', flag: '🇦🇪', currency: 'AED' },
     { code: 'PH', name: 'Philippines', flag: '🇵🇭', currency: 'PHP' },
     { code: 'MY', name: 'Malaysia', flag: '🇲🇾', currency: 'MYR' },

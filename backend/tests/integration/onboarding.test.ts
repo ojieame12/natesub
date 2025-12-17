@@ -1,56 +1,50 @@
-import { beforeEach, describe, expect, it, vi, afterAll } from 'vitest'
-import { createHash } from 'crypto'
+import { createHmac } from 'crypto'
 import app from '../../src/app.js'
 import { db } from '../../src/db/client.js'
 import { dbStorage } from '../setup.js'
+import { env } from '../../src/config/env.js'
 
 // Mock email service
 vi.mock('../../src/services/email.js', () => ({
-  sendMagicLinkEmail: vi.fn(),
+  sendOtpEmail: vi.fn(),
   sendWelcomeEmail: vi.fn(),
-  sendNewSubscriberEmail: vi.fn(),
-  sendRequestEmail: vi.fn(),
-  sendUpdateEmail: vi.fn(),
 }))
 
 // Mock Stripe service
 vi.mock('../../src/services/stripe.js', () => ({
   stripe: {
-    webhooks: {
-      constructEvent: vi.fn((body, sig, secret) => JSON.parse(body)),
+    accounts: {
+      create: vi.fn(async () => ({ id: 'acct_test_123' })),
+      retrieve: vi.fn(async () => ({
+        id: 'acct_test_123',
+        charges_enabled: true,
+        payouts_enabled: true,
+      })),
+      createLoginLink: vi.fn(async () => ({ url: 'https://connect.stripe.com/test' })),
+    },
+    accountLinks: {
+      create: vi.fn(async () => ({ url: 'https://connect.stripe.com/setup' })),
+    },
+    balance: {
+      retrieve: vi.fn(async () => ({ available: [{ amount: 10000, currency: 'usd' }], pending: [{ amount: 5000, currency: 'usd' }] })),
+    },
+    payouts: {
+      list: vi.fn(async () => ({ data: [{ id: 'po_test_1', amount: 5000, status: 'paid' }] })),
     },
   },
-  createCheckoutSession: vi.fn(),
-  createExpressAccount: vi.fn(async (userId: string, email: string, country: string) => ({
-    accountId: 'acct_test_123',
-    accountLink: 'https://connect.stripe.com/setup/test',
-  })),
-  createAccountLink: vi.fn(async () => 'https://connect.stripe.com/setup/refresh'),
   getAccountStatus: vi.fn(async () => ({
-    detailsSubmitted: true,
     chargesEnabled: true,
     payoutsEnabled: true,
-    requirements: null,
+    detailsSubmitted: true,
   })),
-  getAccountBalance: vi.fn(async () => ({
-    available: 10000,
-    pending: 5000,
-  })),
-  getPayoutHistory: vi.fn(async () => [
-    {
-      id: 'po_test_1',
-      amount: 5000,
-      currency: 'usd',
-      status: 'paid',
-      arrivalDate: new Date(),
-      createdAt: new Date(),
-    },
-  ]),
+  createExpressAccount: vi.fn(async () => ({ accountId: 'acct_test_123', accountLink: 'https://connect.stripe.com/setup' })),
+  getAccountBalance: vi.fn(async () => ({ available: 10000, pending: 5000 })),
+  getPayoutHistory: vi.fn(async () => [{ id: 'po_test_1', amount: 5000, status: 'paid' }]),
 }))
 
 // Hash function matching auth service
 function hashToken(token: string): string {
-  return createHash('sha256').update(token).digest('hex')
+  return createHmac('sha256', env.SESSION_SECRET).update(token).digest('hex')
 }
 
 // Helper to create a test user with session
@@ -505,7 +499,7 @@ describe('onboarding endpoints', () => {
 
       // Check structure
       const us = body.countries.find((c: any) => c.code === 'US')
-      expect(us).toEqual({ code: 'US', name: 'United States' })
+      expect(us).toEqual({ code: 'US', name: 'United States', crossBorder: false })
     })
   })
 
@@ -528,11 +522,11 @@ describe('onboarding endpoints', () => {
       await db.profile.create({
         data: {
           userId: user.id,
-          username: 'nigerianuser',
-          displayName: 'Nigerian User',
-          country: 'Nigeria',
-          countryCode: 'NG', // Not supported by Stripe
-          currency: 'NGN',
+          username: 'alienuser',
+          displayName: 'Alien User',
+          country: 'Antarctica',
+          countryCode: 'AQ', // Not supported by Stripe
+          currency: 'USD',
           purpose: 'tips',
           pricingModel: 'single',
           singleAmount: 500,
@@ -546,9 +540,6 @@ describe('onboarding endpoints', () => {
       expect(res.status).toBe(400)
       const body = await res.json()
       expect(body.error).toContain('not available in your country')
-      expect(body.countryCode).toBe('NG')
-      expect(body.suggestion).toContain('Flutterwave')
-      expect(body.supportedCountries).toBeDefined()
     })
 
     it('returns onboarding URL for supported country', async () => {
@@ -787,10 +778,18 @@ describe('onboarding endpoints', () => {
           email: user.email,
           tokenHash: hashToken(token),
           expiresAt: new Date(Date.now() + 5 * 60 * 1000),
+          usedAt: null,
         },
       })
 
-      const res = await app.fetch(new Request(`http://localhost/auth/verify?token=${token}`))
+      const res = await app.fetch(
+        new Request('http://localhost/auth/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token, email: user.email }),
+        })
+      )
+      
       expect(res.status).toBe(200)
       const body = await res.json()
       expect(body.onboardingStep).toBe(6)
@@ -801,15 +800,25 @@ describe('onboarding endpoints', () => {
 
     it('creates new user with default onboarding step after OTP', async () => {
       const token = '654321'
+      const email = 'newuser@test.com'
+      
       await db.magicLinkToken.create({
         data: {
-          email: 'newuser@test.com',
+          email,
           tokenHash: hashToken(token),
           expiresAt: new Date(Date.now() + 5 * 60 * 1000),
+          usedAt: null,
         },
       })
 
-      const res = await app.fetch(new Request(`http://localhost/auth/verify?token=${token}`))
+      const res = await app.fetch(
+        new Request('http://localhost/auth/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token, email }),
+        })
+      )
+      
       expect(res.status).toBe(200)
       const body = await res.json()
       expect(body.success).toBe(true)

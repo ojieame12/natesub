@@ -1,0 +1,656 @@
+import Stripe from 'stripe'
+import { stripe, setSubscriptionDefaultFee } from '../../../services/stripe.js'
+import { db } from '../../../db/client.js'
+import { sendNewSubscriberEmail, sendSubscriptionConfirmationEmail, sendPlatformDebitRecoveredNotification } from '../../../services/email.js'
+import { cancelAllRemindersForEntity } from '../../../jobs/reminders.js'
+import { calculateLegacyFee } from '../../../services/fees.js'
+import { withLock } from '../../../services/lock.js'
+import {
+  validateCheckoutMetadata,
+  parseMetadataAmount,
+  sanitizeForLog,
+} from '../../../utils/webhookValidation.js'
+import { normalizeEmailAddress } from '../utils.js'
+
+async function resolveStripeCheckoutCustomer(session: Stripe.Checkout.Session): Promise<{ email: string; name: string | null }> {
+  const directEmail = session.customer_details?.email || session.customer_email || null
+  const directName = session.customer_details?.name || null
+
+  if (directEmail) {
+    return { email: normalizeEmailAddress(directEmail), name: directName }
+  }
+
+  const customerId = typeof session.customer === 'string' ? session.customer : null
+  if (customerId) {
+    try {
+      const customer = await stripe.customers.retrieve(customerId)
+      if (!('deleted' in customer && customer.deleted)) {
+        const email = customer.email || null
+        const name = customer.name || null
+        if (email) {
+          return { email: normalizeEmailAddress(email), name: directName || name }
+        }
+      }
+    } catch (err) {
+      console.error(`[stripe] Failed to retrieve customer ${sanitizeForLog(customerId)} for session ${session.id}:`, err)
+    }
+  }
+
+  throw new Error(`[stripe][checkout] Missing customer email for session ${session.id}`)
+}
+
+// Handle checkout.session.completed
+export async function handleCheckoutCompleted(event: Stripe.Event) {
+  const session = event.data.object as Stripe.Checkout.Session
+
+  // IMPORTANT: Check payment_status before processing
+  // For async payment methods (bank transfers, etc), payment_status can be 'unpaid'
+  const isAsyncPayment = session.payment_status !== 'paid'
+  const isSubscriptionMode = session.mode === 'subscription'
+
+  // For ONE-TIME payments with async payment: defer to checkout.session.async_payment_succeeded
+  // For SUBSCRIPTIONS with async payment: create subscription record now, invoice.paid will create payment
+  if (isAsyncPayment && !isSubscriptionMode) {
+    console.log(`[checkout.session.completed] Skipping one-time session ${session.id} with payment_status: ${session.payment_status}`)
+    return
+  }
+
+  if (isAsyncPayment && isSubscriptionMode) {
+    console.log(`[checkout.session.completed] Creating subscription record for async payment session ${session.id}`)
+    // Continue processing to create subscription record, but skip payment creation
+  }
+
+  // Validate webhook metadata - provider signature already verified, this validates data integrity
+  const metadataValidation = validateCheckoutMetadata(session.metadata as Record<string, string>)
+  if (!metadataValidation.valid) {
+    console.error(`[checkout.session.completed] Invalid metadata for session ${session.id}: ${metadataValidation.error}`)
+    throw new Error(`Invalid metadata: ${metadataValidation.error}`)
+  }
+
+  const validatedMeta = metadataValidation.data!
+  const creatorId = validatedMeta.creatorId
+  const tierId = validatedMeta.tierId
+  const requestId = validatedMeta.requestId
+  const viewId = validatedMeta.viewId
+
+  // Fee metadata from validated schema
+  const feeModel = validatedMeta.feeModel || null
+  const feeMode = validatedMeta.feeMode || 'pass_to_subscriber'
+  const netAmount = parseMetadataAmount(validatedMeta.netAmount)
+  const serviceFee = parseMetadataAmount(validatedMeta.serviceFee)
+  const feeEffectiveRate = validatedMeta.feeEffectiveRate ? parseFloat(validatedMeta.feeEffectiveRate) : null
+  const feeWasCapped = validatedMeta.feeWasCapped === 'true'
+
+  // Platform debit recovery (for service providers with lapsed platform subscription)
+  const platformDebitRecovered = parseMetadataAmount(validatedMeta.platformDebitRecovered)
+
+  // Log with sanitized values for audit trail
+  console.log(`[checkout.session.completed] Processing session ${session.id} for creator ${sanitizeForLog(creatorId)}`)
+
+  // Server-side conversion tracking (more reliable than client-side)
+  // IMPORTANT: Only mark as completed if payment actually succeeded
+  // For async payment subscriptions, invoice.paid will handle this
+  if (!isAsyncPayment && viewId) {
+    // Only update the specific view that was passed - no fallback to avoid overcounting
+    await db.pageView.update({
+      where: { id: viewId },
+      data: { startedCheckout: true, completedCheckout: true },
+    }).catch(() => { }) // Ignore if view doesn't exist
+  }
+
+  // If this checkout was triggered by a request, finalize it
+  // IMPORTANT: Only mark as accepted if payment actually succeeded
+  // For async payment subscriptions, invoice.paid will handle this
+  if (requestId && !isAsyncPayment) {
+    await db.request.update({
+      where: { id: requestId },
+      data: {
+        status: 'accepted',
+        respondedAt: new Date(),
+      },
+    })
+
+    // Cancel any scheduled reminders for this request
+    await cancelAllRemindersForEntity({
+      entityType: 'request',
+      entityId: requestId,
+    })
+
+    // Get request details for activity logging
+    const request = await db.request.findUnique({ where: { id: requestId } })
+    if (request) {
+      await db.activity.create({
+        data: {
+          userId: creatorId,
+          type: 'request_accepted',
+          payload: {
+            requestId: request.id,
+            recipientName: request.recipientName,
+            amount: request.amountCents,
+          },
+        },
+      })
+    }
+  }
+
+  const { email: subscriberEmail, name: subscriberName } = await resolveStripeCheckoutCustomer(session)
+
+  // Get or create subscriber user (normalize email to match auth flow)
+  let subscriber = await db.user.findUnique({ where: { email: subscriberEmail } })
+  if (!subscriber) {
+    try {
+      subscriber = await db.user.create({ data: { email: subscriberEmail } })
+    } catch {
+      // Race-safe fallback (unique email)
+      subscriber = await db.user.findUnique({ where: { email: subscriberEmail } })
+    }
+  }
+  if (!subscriber) {
+    throw new Error(`[stripe][checkout] Could not find or create subscriber for session ${session.id}`)
+  }
+
+  // Get creator profile for tier info
+  const creatorProfile = await db.profile.findUnique({
+    where: { userId: creatorId },
+  })
+
+  let tierName: string | null = null
+  if (tierId && creatorProfile?.tiers) {
+    const tiers = creatorProfile.tiers as any[]
+    const tier = tiers.find(t => t.id === tierId)
+    tierName = tier?.name || null
+  }
+
+  // Calculate fees - use new model if metadata present, else fallback to legacy
+  let feeCents: number
+  let netCents: number
+  let grossCents: number | null = null
+  let basePrice: number  // Creator's set price - this is what fees are calculated on for renewals
+
+  // Check if new fee model is in use (netAmount and serviceFee are set via validated metadata)
+  const hasNewFeeModel = feeModel && netAmount > 0
+
+  if (feeModel === 'flat' && hasNewFeeModel) {
+    // New flat fee model with feeMode (absorb or pass_to_subscriber)
+    grossCents = session.amount_total || 0  // Total subscriber paid
+    feeCents = serviceFee
+    netCents = netAmount  // What creator receives (depends on feeMode)
+
+    // CRITICAL: Store creator's set price for renewal fee calculation
+    // In absorb mode: creator sets price = what subscriber pays (gross)
+    // In pass_to_subscriber mode: creator sets price = what they receive (net)
+    basePrice = feeMode === 'absorb' ? grossCents : netCents
+  } else if (feeModel?.startsWith('progressive') && hasNewFeeModel) {
+    // Legacy progressive model (backward compatibility)
+    grossCents = session.amount_total || 0
+    feeCents = serviceFee
+    netCents = netAmount
+    basePrice = feeMode === 'absorb' ? grossCents : netCents
+  } else {
+    // Legacy model: fee deducted from creator's earnings (no feeMode)
+    const purpose = creatorProfile?.purpose as 'personal' | 'service' | null
+    const legacyFees = calculateLegacyFee(session.amount_total || 0, purpose)
+    feeCents = legacyFees.feeCents
+    netCents = legacyFees.netCents
+    basePrice = session.amount_total || 0  // Legacy used gross as base
+  }
+
+  // Use transaction to ensure atomic creation/update of subscription + payment + activity
+  // isSubscriptionMode is already defined at the top of the function
+  const subscriptionInterval = isSubscriptionMode ? 'month' : 'one_time'
+
+  // DISTRIBUTED LOCK: Prevent race conditions when processing concurrent webhooks
+  // Lock key based on subscriber email + creator to prevent duplicate subscriptions
+  const lockKey = `sub:${subscriber.id}:${creatorId}:${subscriptionInterval}`
+  const subscription = await withLock(lockKey, 30000, async () => {
+    return await db.$transaction(async (tx) => {
+      // UPSERT subscription to handle resubscribe scenarios
+      // Uniqueness constraint: subscriberId_creatorId_interval
+      // This allows a subscriber to resubscribe after cancellation
+      const newSubscription = await tx.subscription.upsert({
+        where: {
+          subscriberId_creatorId_interval: {
+            subscriberId: subscriber.id,
+            creatorId,
+            interval: subscriptionInterval,
+          },
+        },
+        create: {
+          creatorId,
+          subscriberId: subscriber.id,
+          tierId: tierId || null,
+          tierName,
+          amount: basePrice, // Creator's SET PRICE - fees calculated on this for renewals
+          currency: session.currency?.toUpperCase() || 'USD',
+          interval: subscriptionInterval,
+          // Use 'pending' for async payments until payment confirms
+          status: isAsyncPayment ? 'pending' : 'active',
+          stripeSubscriptionId: session.subscription as string || null,
+          stripeCustomerId: session.customer as string || null,
+          feeModel: feeModel || null,
+          feeMode: feeMode || null,
+          // Store async payment follow-up data for invoice.paid to complete
+          asyncViewId: isAsyncPayment ? (viewId || null) : null,
+          asyncRequestId: isAsyncPayment ? (requestId || null) : null,
+        },
+        update: {
+          // Reactivate subscription with new details
+          // Use 'pending' for async payments until payment confirms
+          status: isAsyncPayment ? 'pending' : 'active',
+          tierId: tierId || null,
+          tierName,
+          amount: basePrice,
+          stripeSubscriptionId: session.subscription as string || null,
+          stripeCustomerId: session.customer as string || null,
+          feeModel: feeModel || null,
+          feeMode: feeMode || null,
+          canceledAt: null, // Clear cancellation
+          cancelAtPeriodEnd: false,
+          // Store async payment follow-up data for invoice.paid to complete
+          asyncViewId: isAsyncPayment ? (viewId || null) : null,
+          asyncRequestId: isAsyncPayment ? (requestId || null) : null,
+        },
+      })
+
+      // For SUBSCRIPTIONS: Don't create payment here - invoice.paid handles it
+      // This prevents double-counting the first payment
+      // For ONE-TIME payments: Create payment record here
+      if (!isSubscriptionMode) {
+        // Get charge ID from payment intent if available
+        let stripeChargeId: string | null = null
+        if (session.payment_intent) {
+          try {
+            const paymentIntent = await stripe.paymentIntents.retrieve(session.payment_intent as string)
+            stripeChargeId = paymentIntent.latest_charge as string || null
+          } catch (err) {
+            console.warn('Could not retrieve payment intent for charge ID:', err)
+          }
+        }
+
+        // Create payment record for one-time payments only
+        await tx.payment.create({
+          data: {
+            subscriptionId: newSubscription.id,
+            creatorId,
+            subscriberId: subscriber.id,
+            grossCents: grossCents,
+            amountCents: grossCents || session.amount_total || 0,
+            currency: session.currency?.toUpperCase() || 'USD',
+            feeCents,
+            netCents,
+            feeModel: feeModel || null,
+            feeEffectiveRate: feeEffectiveRate,
+            feeWasCapped: feeWasCapped,
+            platformDebitRecoveredCents: platformDebitRecovered, // Track debit recovery
+            type: 'one_time',
+            status: 'succeeded',
+            stripeEventId: event.id,
+            stripePaymentIntentId: session.payment_intent as string || null,
+            stripeChargeId,
+          },
+        })
+
+        // Clear platform debit if recovered from this payment
+        if (platformDebitRecovered > 0) {
+          await tx.profile.update({
+            where: { userId: creatorId },
+            data: {
+              platformDebitCents: { decrement: platformDebitRecovered },
+            },
+          })
+
+          // Create activity for audit trail
+          await tx.activity.create({
+            data: {
+              userId: creatorId,
+              type: 'platform_debit_recovered',
+              payload: {
+                amountCents: platformDebitRecovered,
+                source: 'stripe_one_time_payment',
+                paymentIntentId: session.payment_intent as string || null,
+              },
+            },
+          })
+
+          console.log(`[checkout] Recovered $${(platformDebitRecovered / 100).toFixed(2)} platform debit from creator ${creatorId}`)
+        }
+      }
+
+      // Create activity event
+      await tx.activity.create({
+        data: {
+          userId: creatorId,
+          type: 'subscription_created',
+          payload: {
+            subscriptionId: newSubscription.id,
+            subscriberEmail,
+            subscriberName,
+            tierName,
+            amount: session.amount_total,
+            currency: session.currency,
+          },
+        },
+      })
+
+      return newSubscription
+    })
+  })
+
+  // If lock couldn't be acquired, another process is handling this
+  if (!subscription) {
+    console.log(`[checkout.session.completed] Lock not acquired for ${lockKey}, skipping (another process handling)`)
+    return
+  }
+
+  // For subscriptions with tracked fee model, set default fee metadata
+  // This helps with invoice.created webhook to know expected fee amount
+  if (session.subscription && feeModel && serviceFee) {
+    try {
+      await setSubscriptionDefaultFee(session.subscription as string, serviceFee)
+    } catch (err) {
+      // Non-fatal: log but continue
+      console.error(`[stripe] Failed to set default fee on subscription:`, err)
+    }
+  }
+
+  // Send notification email to creator
+  const creator = await db.user.findUnique({
+    where: { id: creatorId },
+    include: { profile: { select: { displayName: true, username: true, platformDebitCents: true } } },
+  })
+  if (creator) {
+    await sendNewSubscriberEmail(
+      creator.email,
+      subscriberName || subscriberEmail || 'Someone',
+      tierName,
+      session.amount_total || 0,
+      session.currency?.toUpperCase() || 'USD'
+    )
+
+    // Send confirmation email to subscriber with manage subscription link
+    if (subscriberEmail) {
+      try {
+        await sendSubscriptionConfirmationEmail(
+          subscriberEmail,
+          subscriberName || 'there',
+          creator.profile?.displayName || creator.email,
+          creator.profile?.username || '',
+          tierName,
+          session.amount_total || 0,
+          session.currency?.toUpperCase() || 'USD'
+        )
+      } catch (emailErr) {
+        console.error(`[checkout] Failed to send subscriber confirmation email:`, emailErr)
+      }
+    }
+
+    // Send debit recovery email if we recovered any debit
+    if (platformDebitRecovered > 0) {
+      const remainingDebit = creator.profile?.platformDebitCents || 0
+      try {
+        await sendPlatformDebitRecoveredNotification(
+          creator.email,
+          creator.profile?.displayName || 'there',
+          platformDebitRecovered,
+          remainingDebit
+        )
+      } catch (emailErr) {
+        console.error(`[checkout] Failed to send debit recovery email:`, emailErr)
+      }
+    }
+  }
+}
+
+/**
+ * Handle checkout.session.async_payment_succeeded
+ *
+ * This fires for payment methods that don't complete immediately
+ * (e.g., bank transfers, SEPA, Boleto, OXXO, etc.)
+ *
+ * When checkout.session.completed fires with payment_status='unpaid',
+ * we skip processing. This handler processes when payment actually succeeds.
+ */
+export async function handleAsyncPaymentSucceeded(event: Stripe.Event) {
+  const session = event.data.object as Stripe.Checkout.Session
+
+  console.log(`[async_payment_succeeded] Processing session ${session.id}`)
+
+  // For subscriptions, invoice.paid handles the payment
+  // This handler is primarily for one-time payments with async methods
+  if (session.mode === 'subscription') {
+    console.log(`[async_payment_succeeded] Subscription mode - invoice.paid will handle payment`)
+    return
+  }
+
+  // Validate webhook metadata
+  const metadataValidation = validateCheckoutMetadata(session.metadata as Record<string, string>)
+  if (!metadataValidation.valid) {
+    console.error(`[async_payment_succeeded] Invalid metadata for session ${session.id}: ${metadataValidation.error}`)
+    throw new Error(`Invalid metadata: ${metadataValidation.error}`)
+  }
+
+  const validatedMeta = metadataValidation.data!
+  const creatorId = validatedMeta.creatorId
+  const tierId = validatedMeta.tierId
+  const viewId = validatedMeta.viewId
+  const requestId = validatedMeta.requestId
+
+  // Fee metadata from validated schema
+  const feeModel = validatedMeta.feeModel || null
+  const feeMode = validatedMeta.feeMode || 'pass_to_subscriber'
+  const netAmount = parseMetadataAmount(validatedMeta.netAmount)
+  const serviceFee = parseMetadataAmount(validatedMeta.serviceFee)
+  const feeEffectiveRate = validatedMeta.feeEffectiveRate ? parseFloat(validatedMeta.feeEffectiveRate) : null
+  const feeWasCapped = validatedMeta.feeWasCapped === 'true'
+
+  console.log(`[async_payment_succeeded] Processing session ${session.id} for creator ${sanitizeForLog(creatorId)}`)
+
+  // Conversion tracking
+  if (viewId) {
+    await db.pageView.update({
+      where: { id: viewId },
+      data: { startedCheckout: true, completedCheckout: true },
+    }).catch(() => { })
+  }
+
+  // If this checkout was triggered by a request, finalize it
+  if (requestId) {
+    await db.request.update({
+      where: { id: requestId },
+      data: {
+        status: 'accepted',
+        respondedAt: new Date(),
+      },
+    }).catch(() => { }) // Ignore if request doesn't exist
+
+    // Get request details for activity logging
+    const request = await db.request.findUnique({ where: { id: requestId } })
+    if (request) {
+      await db.activity.create({
+        data: {
+          userId: creatorId,
+          type: 'request_accepted',
+          payload: {
+            requestId: request.id,
+            recipientName: request.recipientName,
+            amount: request.amountCents,
+            asyncPayment: true,
+          },
+        },
+      })
+    }
+  }
+
+  const { email: subscriberEmail, name: subscriberName } = await resolveStripeCheckoutCustomer(session)
+
+  // Get or create subscriber (normalize email to match auth flow)
+  let subscriber = await db.user.findUnique({ where: { email: subscriberEmail } })
+  if (!subscriber) {
+    try {
+      subscriber = await db.user.create({ data: { email: subscriberEmail } })
+    } catch {
+      subscriber = await db.user.findUnique({ where: { email: subscriberEmail } })
+    }
+  }
+  if (!subscriber) {
+    throw new Error(`[stripe][async_payment_succeeded] Could not find or create subscriber for session ${session.id}`)
+  }
+
+  // Get tier info
+  const creatorProfile = await db.profile.findUnique({
+    where: { userId: creatorId },
+    select: { tiers: true, purpose: true },
+  })
+
+  let tierName: string | null = null
+  if (tierId && creatorProfile?.tiers) {
+    const tiers = creatorProfile.tiers as any[]
+    const tier = tiers.find(t => t.id === tierId)
+    tierName = tier?.name || null
+  }
+
+  // Calculate fees
+  let feeCents: number
+  let netCents: number
+  let grossCents: number | null = null
+
+  const hasNewFeeModel = feeModel && netAmount > 0
+  if (hasNewFeeModel) {
+    grossCents = session.amount_total || 0
+    feeCents = serviceFee
+    netCents = netAmount
+  } else {
+    const purpose = creatorProfile?.purpose as 'personal' | 'service' | null
+    const legacyFees = calculateLegacyFee(session.amount_total || 0, purpose)
+    feeCents = legacyFees.feeCents
+    netCents = legacyFees.netCents
+  }
+
+  // Create or update one-time subscription record (upsert to handle repeat payments)
+  const subscription = await db.subscription.upsert({
+    where: {
+      subscriberId_creatorId_interval: {
+        subscriberId: subscriber.id,
+        creatorId,
+        interval: 'one_time',
+      },
+    },
+    create: {
+      creatorId,
+      subscriberId: subscriber.id,
+      tierId: tierId || null,
+      tierName,
+      amount: netCents,
+      currency: session.currency?.toUpperCase() || 'USD',
+      interval: 'one_time',
+      status: 'active',
+      ltvCents: netCents, // Initialize LTV with first payment
+      stripeCustomerId: session.customer as string || null,
+      feeModel: feeModel || null,
+      feeMode: feeMode || null,
+    },
+    update: {
+      tierId: tierId || null,
+      tierName,
+      amount: netCents,
+      stripeCustomerId: session.customer as string || null,
+      ltvCents: { increment: netCents }, // Increment LTV for repeat payment
+    },
+  })
+
+  // Get charge ID from payment intent
+  let stripeChargeId: string | null = null
+  if (session.payment_intent) {
+    try {
+      const paymentIntent = await stripe.paymentIntents.retrieve(session.payment_intent as string)
+      stripeChargeId = typeof paymentIntent.latest_charge === 'string'
+        ? paymentIntent.latest_charge
+        : paymentIntent.latest_charge?.id || null
+    } catch {
+      // Ignore - charge ID is optional
+    }
+  }
+
+  // Create payment record
+  await db.payment.create({
+    data: {
+      subscriptionId: subscription.id,
+      creatorId,
+      subscriberId: subscriber.id,
+      grossCents,
+      amountCents: session.amount_total || 0,
+      currency: session.currency?.toUpperCase() || 'USD',
+      feeCents,
+      netCents,
+      feeModel: feeModel || null,
+      feeEffectiveRate,
+      feeWasCapped,
+      type: 'one_time',
+      status: 'succeeded',
+      stripeEventId: event.id,
+      stripePaymentIntentId: session.payment_intent as string || null,
+      stripeChargeId,
+    },
+  })
+
+  // Create activity
+  await db.activity.create({
+    data: {
+      userId: creatorId,
+      type: 'subscription_created',
+      payload: {
+        subscriptionId: subscription.id,
+        subscriberEmail,
+        tierName,
+        amount: session.amount_total,
+        currency: session.currency,
+        asyncPayment: true,
+      },
+    },
+  })
+
+  // Send notification email to creator
+  const creator = await db.user.findUnique({ where: { id: creatorId } })
+  if (creator) {
+    await sendNewSubscriberEmail(
+      creator.email,
+      subscriberName || subscriberEmail || 'Someone',
+      tierName,
+      session.amount_total || 0,
+      session.currency?.toUpperCase() || 'USD'
+    )
+  }
+
+  console.log(`[async_payment_succeeded] Created subscription ${subscription.id} for async payment`)
+}
+
+// Handle checkout session expired (user abandoned payment)
+export async function handleCheckoutExpired(event: Stripe.Event) {
+  const session = event.data.object as Stripe.Checkout.Session
+
+  const requestId = session.metadata?.requestId
+  if (!requestId) return
+
+  // Find the request by checkout session ID
+  const request = await db.request.findFirst({
+    where: {
+      id: requestId,
+      stripeCheckoutSessionId: session.id,
+      status: 'pending_payment',
+    },
+  })
+
+  if (!request) return
+
+  // Revert request to 'sent' status so they can try again
+  // Alternative: set to 'expired' if you want to track abandoned checkouts
+  await db.request.update({
+    where: { id: request.id },
+    data: {
+      status: 'sent',
+      stripeCheckoutSessionId: null, // Clear the expired session
+    },
+  })
+
+  console.log(`Checkout expired for request ${requestId}, reverted to sent status`)
+}

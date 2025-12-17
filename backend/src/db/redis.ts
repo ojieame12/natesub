@@ -22,6 +22,13 @@ class MockRedis {
 
 let redisClient: Redis | any
 
+// Enterprise Requirement: Redis is critical for rate limits, locks, and idempotency.
+// In production, we must fail fast if Redis is missing to prevent unsafe operation.
+if (env.NODE_ENV === 'production' && !env.REDIS_URL) {
+  console.error('❌ FATAL: REDIS_URL is required in production (rate limits, locks, idempotency).')
+  process.exit(1)
+}
+
 if (env.REDIS_URL) {
   redisClient = new Redis(env.REDIS_URL, {
     maxRetriesPerRequest: 3,

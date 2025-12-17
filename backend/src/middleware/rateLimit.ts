@@ -52,7 +52,7 @@ function getClientIp(c: Context): string | null {
   const forwarded = c.req.header('forwarded')
   if (forwarded) {
     // RFC 7239: Forwarded: for=192.0.2.60;proto=http;by=203.0.113.43
-    const match = forwarded.match(/for=(?:"?)([^;,\"]+)/i)
+    const match = forwarded.match(/for=(?:"?)([^;,"]+)/i)
     if (match?.[1]) {
       let value = match[1].trim()
       value = value.replace(/^"|"$/g, '')

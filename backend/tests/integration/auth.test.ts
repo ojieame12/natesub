@@ -62,11 +62,17 @@ describe('auth magic link flow', () => {
     )
 
     expect(mockSendOtpEmail).toHaveBeenCalledTimes(1)
-    const token = mockSendOtpEmail.mock.calls[0]?.[1] as string
-    expect(token).toBeTruthy()
+    // Capture the generated OTP
+    const otp = mockSendOtpEmail.mock.calls[0][1]
+    expect(otp).toBeTruthy()
 
+    // Verify magic link with correct OTP
     const verifyRes = await app.fetch(
-      new Request(`http://localhost/auth/verify?token=${token}`)
+      new Request('http://localhost/auth/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: otp, email: 'flow@example.com' }),
+      })
     )
 
     expect(verifyRes.status).toBe(200)

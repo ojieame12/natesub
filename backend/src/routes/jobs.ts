@@ -1,10 +1,7 @@
-// Job Routes - Protected endpoints for scheduled tasks
-// These should be called by cron/scheduler with the JOBS_API_KEY
-
 import { Hono } from 'hono'
 import { env } from '../config/env.js'
 import { db } from '../db/client.js'
-import { processRecurringBilling, processRetries } from '../jobs/billing.js'
+import { billingQueue } from '../lib/queue.js'
 import { generatePayrollPeriods } from '../jobs/payroll.js'
 import { sendRenewalReminders, sendDunningEmails, sendCancellationEmails } from '../jobs/notifications.js'
 import { monitorStuckTransfers } from '../jobs/transfers.js'
@@ -37,39 +34,27 @@ jobs.use('*', requireJobsAuth)
 
 // Process recurring billing (run daily)
 jobs.post('/billing', async (c) => {
-  console.log('[jobs] Starting recurring billing job')
+  console.log('[jobs] Queuing recurring billing job')
 
   try {
-    const result = await processRecurringBilling()
-
-    console.log(`[jobs] Billing complete: ${result.succeeded}/${result.processed} succeeded`)
-
-    return c.json({
-      success: true,
-      ...result,
-    })
+    await billingQueue.add('recurring-billing', { type: 'recurring' })
+    return c.json({ success: true, message: 'Billing job queued' })
   } catch (error: any) {
-    console.error('[jobs] Billing job failed:', error.message)
-    return c.json({ error: 'Billing job failed', message: error.message }, 500)
+    console.error('[jobs] Failed to queue billing job:', error.message)
+    return c.json({ error: 'Failed to queue billing job', message: error.message }, 500)
   }
 })
 
 // Process retry queue (run hourly)
 jobs.post('/retries', async (c) => {
-  console.log('[jobs] Starting retry job')
+  console.log('[jobs] Queuing retry job')
 
   try {
-    const result = await processRetries()
-
-    console.log(`[jobs] Retries complete: ${result.succeeded}/${result.processed} succeeded`)
-
-    return c.json({
-      success: true,
-      ...result,
-    })
+    await billingQueue.add('retry-billing', { type: 'retry' })
+    return c.json({ success: true, message: 'Retry job queued' })
   } catch (error: any) {
-    console.error('[jobs] Retry job failed:', error.message)
-    return c.json({ error: 'Retry job failed', message: error.message }, 500)
+    console.error('[jobs] Failed to queue retry job:', error.message)
+    return c.json({ error: 'Failed to queue retry job', message: error.message }, 500)
   }
 })
 

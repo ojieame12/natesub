@@ -163,7 +163,11 @@ export function isValidUUID(value: string | undefined | null): boolean {
  */
 export function sanitizeForLog(value: string | undefined | null, maxLength = 100): string {
   if (!value) return ''
-  return value
-    .replace(/[\x00-\x1F\x7F]/g, '') // Remove control characters
-    .substring(0, maxLength)
+  let sanitized = ''
+  for (let i = 0; i < value.length && sanitized.length < maxLength; i++) {
+    const code = value.charCodeAt(i)
+    if (code < 32 || code === 127) continue
+    sanitized += value[i]
+  }
+  return sanitized
 }
