@@ -1,11 +1,22 @@
 import { useState, useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Camera, Plus, GripVertical, Trash2, ExternalLink, Check, X, Loader2 } from 'lucide-react'
+import { ArrowLeft, Camera, Plus, GripVertical, Trash2, ExternalLink, Check, X, Loader2, ChevronDown, Heart, Star, Wallet, Users, Lock, Briefcase, Sparkles } from 'lucide-react'
 import { Pressable, useToast, Skeleton, LoadingButton } from './components'
 import { useProfile, useUpdateProfile, useUpdateSettings, uploadFile } from './api/hooks'
 import { getCurrencySymbol, formatCompactNumber, centsToDisplayAmount, displayAmountToCents } from './utils/currency'
 import { calculateFeePreview, getPricing } from './utils/pricing'
-import type { Tier } from './api/client'
+import type { Tier, Profile } from './api/client'
+
+// Purpose options with icons
+const PURPOSE_OPTIONS: { value: Profile['purpose']; label: string; icon: React.ElementType }[] = [
+  { value: 'tips', label: 'Tips & Appreciation', icon: Heart },
+  { value: 'support', label: 'Support Me', icon: Star },
+  { value: 'allowance', label: 'Allowance', icon: Wallet },
+  { value: 'fan_club', label: 'Fan Club', icon: Users },
+  { value: 'exclusive_content', label: 'Exclusive Content', icon: Lock },
+  { value: 'service', label: 'Service Provider', icon: Briefcase },
+  { value: 'other', label: 'Something Else', icon: Sparkles },
+]
 import './EditPage.css'
 
 export default function EditPage() {
@@ -22,6 +33,7 @@ export default function EditPage() {
   // Local state for editing - simplified to only essential fields
   const [displayName, setDisplayName] = useState('')
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+  const [purpose, setPurpose] = useState<Profile['purpose']>('support')
   const [pricingModel, setPricingModel] = useState<'single' | 'tiers'>('single')
   const [singleAmount, setSingleAmount] = useState<number>(10)
   const [tiers, setTiers] = useState<Tier[]>([])
@@ -29,6 +41,7 @@ export default function EditPage() {
   const [hasChanges, setHasChanges] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [isContinuing, setIsContinuing] = useState(false)
+  const [showPurposePicker, setShowPurposePicker] = useState(false)
 
   // When navigating from the dashboard "Launch My Page" card, we enter a guided flow
   const isLaunchFlow = new URLSearchParams(location.search).get('launch') === '1'
@@ -39,6 +52,7 @@ export default function EditPage() {
       const currency = profile.currency || 'USD'
       setDisplayName(profile.displayName || '')
       setAvatarUrl(profile.avatarUrl)
+      setPurpose(profile.purpose || 'support')
       setPricingModel(profile.pricingModel || 'single')
       setSingleAmount(profile.singleAmount ? centsToDisplayAmount(profile.singleAmount, currency) : 10)
       setTiers((profile.tiers || []).map(t => ({
@@ -63,12 +77,13 @@ export default function EditPage() {
     const changed =
       displayName !== (profile.displayName || '') ||
       avatarUrl !== (profile.avatarUrl || null) ||
+      purpose !== (profile.purpose || 'support') ||
       pricingModel !== profile.pricingModel ||
       singleAmount !== profileAmountDisplay ||
       JSON.stringify(tiers) !== JSON.stringify(profileTiersDisplay) ||
       feeMode !== (profile.feeMode || 'pass_to_subscriber')
     setHasChanges(changed)
-  }, [displayName, avatarUrl, pricingModel, singleAmount, tiers, feeMode, profile])
+  }, [displayName, avatarUrl, purpose, pricingModel, singleAmount, tiers, feeMode, profile])
 
   // Avatar upload handler
   const handleAvatarClick = () => {
@@ -181,6 +196,7 @@ export default function EditPage() {
         ...profile,
         displayName,
         avatarUrl,
+        purpose,
         pricingModel,
         singleAmount: pricingModel === 'single' ? singleAmount : null,
         tiers: pricingModel === 'tiers' ? tiers : null,
@@ -328,6 +344,30 @@ export default function EditPage() {
               </div>
             </div>
           </div>
+        </section>
+
+        {/* Purpose Section */}
+        <section className="edit-section">
+          <h3 className="section-title">Page Type</h3>
+          <Pressable
+            className="country-selector"
+            onClick={() => setShowPurposePicker(true)}
+          >
+            {(() => {
+              const selected = PURPOSE_OPTIONS.find(p => p.value === purpose)
+              if (selected) {
+                const Icon = selected.icon
+                return (
+                  <>
+                    <Icon size={20} className="purpose-icon" />
+                    <span className="country-name">{selected.label}</span>
+                  </>
+                )
+              }
+              return <span className="country-placeholder">Select purpose</span>
+            })()}
+            <ChevronDown size={20} className="country-chevron" />
+          </Pressable>
         </section>
 
         {/* Pricing Section */}
@@ -498,6 +538,41 @@ export default function EditPage() {
             : 'Save Changes'}
         </LoadingButton>
       </div>
+
+      {/* Purpose Picker Drawer */}
+      {showPurposePicker && (
+        <>
+          <div
+            className="drawer-overlay"
+            onClick={() => setShowPurposePicker(false)}
+          />
+          <div className="country-drawer">
+            <div className="drawer-handle" />
+            <h3 className="drawer-title">Select Page Type</h3>
+            <div className="country-list">
+              {PURPOSE_OPTIONS.map((option) => {
+                const Icon = option.icon
+                return (
+                  <Pressable
+                    key={option.value}
+                    className={`country-option ${option.value === purpose ? 'selected' : ''}`}
+                    onClick={() => {
+                      setPurpose(option.value)
+                      setShowPurposePicker(false)
+                    }}
+                  >
+                    <Icon size={20} className="purpose-option-icon" />
+                    <span className="country-option-name">{option.label}</span>
+                    {option.value === purpose && (
+                      <Check size={20} className="country-option-check" />
+                    )}
+                  </Pressable>
+                )
+              })}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }
