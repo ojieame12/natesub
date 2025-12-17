@@ -29,7 +29,7 @@ const BRANCH_OPTIONS: BranchOption[] = [
 ]
 
 export default function BranchSelectorStep() {
-    const { branch, setBranch, setPricingModel, setPurpose, nextStep, prevStep, goToStep, currentStep } = useOnboardingStore()
+    const { branch, setBranch, setPricing, setPurpose, nextStep, prevStep, goToStep, currentStep } = useOnboardingStore()
     const [selected, setSelected] = useState<BranchType>(branch)
     const { mutateAsync: saveProgress } = useSaveOnboardingProgress()
 
@@ -46,10 +46,10 @@ export default function BranchSelectorStep() {
 
         // Set appropriate defaults based on branch
         if (type === 'personal') {
-            setPricingModel('single')
+            setPricing('single', [], 10)
             setPurpose('support') // Default purpose for personal
         } else {
-            setPricingModel('tiers') // Service defaults to tiers (retainer packages)
+            setPricing('tiers', [], null) // Service defaults to tiers (retainer packages)
             // Purpose will be 'service' - set in PaymentMethodStep
         }
     }

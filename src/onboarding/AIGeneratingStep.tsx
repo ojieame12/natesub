@@ -62,9 +62,7 @@ export default function AIGeneratingStep() {
             })
 
             setGeneratedContent(
-                result.bio,
-                result.perks,
-                result.impactItems
+                result.bio
             )
             setIsGenerating(false)
             nextStep()
@@ -89,7 +87,7 @@ export default function AIGeneratingStep() {
 
     // Skip and enter content manually
     const handleSkip = () => {
-        setGeneratedContent('', [], [])
+        setGeneratedContent('')
         nextStep()
     }
 

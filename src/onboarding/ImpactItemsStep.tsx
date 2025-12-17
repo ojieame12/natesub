@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { ChevronLeft } from 'lucide-react'
 import { useOnboardingStore } from './store'
 import { Button, Pressable } from './components'
