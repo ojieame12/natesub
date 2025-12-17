@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Search, ChevronDown, ChevronUp, Mail, MessageCircle, FileText, Shield } from 'lucide-react'
 import { Pressable, useToast } from './components'
+import { TERMS_URL, PRIVACY_URL } from './utils/constants'
 import './HelpSupport.css'
 
 const faqs = [
@@ -56,11 +57,11 @@ export default function HelpSupport() {
   }
 
   const handleTerms = () => {
-    window.open('/terms', '_blank')
+    window.open(TERMS_URL, '_blank')
   }
 
   const handlePrivacy = () => {
-    window.open('/privacy', '_blank')
+    window.open(PRIVACY_URL, '_blank')
   }
 
   return (

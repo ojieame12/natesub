@@ -22,8 +22,7 @@ const routeImports: Record<string, () => Promise<unknown>> = {
   '/updates/new': () => import('../updates/NewUpdate'),
   '/payroll': () => import('../payroll/PayrollHistory'),
   '/requests': () => import('../SentRequests'),
-  '/request/new': () => import('../request/SelectRecipient'),
-  '/new-request': () => import('../request/SelectRecipient'), // Alias for FAB
+  '/new-request': () => import('../request/SelectRecipient'),
 }
 
 // Track which routes have been prefetched to avoid duplicate requests

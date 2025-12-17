@@ -3,6 +3,7 @@ import { Mail, RefreshCw } from 'lucide-react'
 import { useOnboardingStore } from './store'
 import { Button } from './components'
 import { useReducedMotion } from '../hooks'
+import { TERMS_URL, PRIVACY_URL } from '../utils/constants'
 import '../Dashboard.css'
 import './onboarding.css'
 
@@ -41,13 +42,13 @@ export default function StartStep() {
     const prefersReducedMotion = useReducedMotion()
     const [activeIndex, setActiveIndex] = useState(0)
     const [isAnimating, setIsAnimating] = useState(false)
-    const [loadedTick, setLoadedTick] = useState(0)
+    const [loadedImages, setLoadedImages] = useState<Set<string>>(() => new Set())
     const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
     const transitionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const touchStartRef = useRef<number | null>(null)
     const activeIndexRef = useRef(0)
     const isAnimatingRef = useRef(false)
-    const loadedImagesRef = useRef<Set<string>>(new Set())
+    const loadedImagesRef = useRef<Set<string>>(new Set()) // Mirror of state for callback access
     const preloadingRef = useRef<Set<string>>(new Set())
 
     const hasExistingProgress = Boolean(email || name)
@@ -55,7 +56,11 @@ export default function StartStep() {
     const markImageLoaded = useCallback((src: string) => {
         if (loadedImagesRef.current.has(src)) return
         loadedImagesRef.current.add(src)
-        setLoadedTick((t) => t + 1)
+        setLoadedImages((prev) => {
+            const next = new Set(prev)
+            next.add(src)
+            return next
+        })
     }, [])
 
     const preloadImage = useCallback((src: string) => {
@@ -198,7 +203,7 @@ export default function StartStep() {
     }
 
     const currentProp = VALUE_PROPS[activeIndex]
-    const currentImageLoaded = Boolean(currentProp?.image && loadedImagesRef.current.has(currentProp.image))
+    const currentImageLoaded = Boolean(currentProp?.image && loadedImages.has(currentProp.image))
 
     // Preload the next slide once the current image is ready (reduces hitching on rotate).
     useEffect(() => {
@@ -209,7 +214,7 @@ export default function StartStep() {
         const nextIndex = (activeIndex + 1) % VALUE_PROPS.length
         const nextSrc = VALUE_PROPS[nextIndex]?.image
         if (nextSrc) preloadImage(nextSrc)
-    }, [activeIndex, currentImageLoaded, currentProp?.image, loadedTick, prefersReducedMotion, preloadImage])
+    }, [activeIndex, currentImageLoaded, currentProp?.image, prefersReducedMotion, preloadImage])
 
     return (
         <div className="onboarding">
@@ -288,9 +293,9 @@ export default function StartStep() {
 
                         <p className="start-legal">
                             By continuing, you agree to our{' '}
-                            <a href="/terms" target="_blank" rel="noopener noreferrer">Terms</a>
+                            <a href={TERMS_URL} target="_blank" rel="noopener noreferrer">Terms</a>
                             {' '}and{' '}
-                            <a href="/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy</a>
+                            <a href={PRIVACY_URL} target="_blank" rel="noopener noreferrer">Privacy Policy</a>
                         </p>
                     </div>
                 </div>

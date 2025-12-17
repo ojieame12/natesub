@@ -81,10 +81,10 @@ function BottomNav() {
                     onTouchStart={() => {
                         setCenterPressed(true)
                         impact('medium')
-                        prefetchRoute('/request/new')
+                        prefetchRoute('/new-request')
                     }}
                     onTouchEnd={() => setCenterPressed(false)}
-                    onMouseEnter={() => prefetchRoute('/request/new')}
+                    onMouseEnter={() => prefetchRoute('/new-request')}
                 >
                     <Plus size={24} className="tab-icon" />
                 </button>

@@ -7,7 +7,7 @@ import { useCallback } from 'react'
  * The View Transitions API was causing flickering and glitchy behavior,
  * especially on iOS. This provides instant, clean navigation.
  */
-export function useViewTransition() {
+export function useViewTransition(fallback = '/dashboard') {
     const routerNavigate = useNavigate()
 
     // Simple navigate - instant, no delays, no fancy transitions
@@ -19,10 +19,19 @@ export function useViewTransition() {
         }
     }, [routerNavigate])
 
-    // goBack that can be used directly in onClick handlers
+    // Safe goBack - handles deep links by checking history
+    // If there's no history (user opened link directly), navigates to fallback
     const goBack = useCallback(() => {
-        routerNavigate(-1)
-    }, [routerNavigate])
+        // window.history.length > 2 because:
+        // - 1 = blank page (initial)
+        // - 2 = current page (direct link)
+        // - 3+ = has previous pages
+        if (window.history.length > 2) {
+            routerNavigate(-1)
+        } else {
+            routerNavigate(fallback, { replace: true })
+        }
+    }, [routerNavigate, fallback])
 
     // Alias for compatibility
     const navigateWithSharedElements = useCallback((to: string) => {

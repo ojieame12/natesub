@@ -453,10 +453,8 @@ function AppShell() {
           <Route path="/requests" element={<RequireAuth><SentRequests /></RequireAuth>} />
 
           {/* Targeted Request Flow */}
-          <Route path="/request/new" element={<RequireAuth><SelectRecipient /></RequireAuth>} />
-
-          <Route path="/request/preview" element={<RequireAuth><RequestPreview /></RequireAuth>} />
           <Route path="/new-request" element={<RequireAuth><SelectRecipient /></RequireAuth>} />
+          <Route path="/request/preview" element={<RequireAuth><RequestPreview /></RequireAuth>} />
 
           <Route path="/edit-page" element={<RequireAuth><EditPage /></RequireAuth>} />
           <Route path="/setup-page" element={<RequireAuth><PageSetupWizard /></RequireAuth>} />

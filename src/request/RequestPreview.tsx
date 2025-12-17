@@ -66,7 +66,7 @@ export default function RequestPreview() {
     // Redirect if no recipient (useEffect to avoid render-time side effects)
     useEffect(() => {
         if (!recipient) {
-            navigate('/request/new', { replace: true })
+            navigate('/new-request', { replace: true })
         }
     }, [recipient, navigate])
 

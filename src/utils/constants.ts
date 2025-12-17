@@ -28,6 +28,8 @@ export const RESERVED_ROUTES = [
   'verify',            // payroll verification /verify/:id
   'r',                 // public request pages /r/:token
   'payment',           // /payment/success
+  'scan',              // previously used, reserved to prevent username collision
+  'mocks',             // screenshot/marketing mock routes
 
   // System/reserved words
   'admin',
@@ -190,3 +192,8 @@ export function getShareableLink(username: string): string {
 export function getShareableLinkFull(username: string): string {
   return `${PUBLIC_PAGE_URL}/${normalizeUsernameSegment(username)}`
 }
+
+// Legal page URLs - use full URLs for compatibility with native HashRouter
+// These open in new tabs, so we use the public domain to avoid routing issues
+export const TERMS_URL = `${PUBLIC_PAGE_URL}/terms`
+export const PRIVACY_URL = `${PUBLIC_PAGE_URL}/privacy`

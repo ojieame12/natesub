@@ -7,6 +7,7 @@ import { useCreateCheckout, useRecordPageView, useUpdatePageView, useUpdateSetti
 import * as api from '../api/client'
 import type { Profile } from '../api/client'
 import { calculateFeePreview, displayAmountToCents, formatCurrency } from '../utils/currency'
+import { TERMS_URL, PRIVACY_URL } from '../utils/constants'
 
 // --- SLIDE TO PAY (DARK VARIANT WITH SHIMMER) ---
 function SlideToPayDark({ onComplete, disabled }: { onComplete: () => void, disabled?: boolean }) {
@@ -571,8 +572,8 @@ export default function SubscribeMidnight({ profile, isOwner }: SubscribeMidnigh
                     <div style={{ fontSize: 9, marginBottom: 12, letterSpacing: 1.5, textTransform: 'uppercase', color: '#666' }}>Powered By</div>
                     <img src="/logo.svg" alt="NatePay" style={{ height: 28, filter: 'brightness(0) invert(1)' }} />
                     <div style={{ marginTop: 15, fontSize: 9, color: '#666' }}>
-                        <a href="/terms" style={{ color: 'inherit', textDecoration: 'none', marginRight: 10 }}>Terms</a>
-                        <a href="/privacy" style={{ color: 'inherit', textDecoration: 'none' }}>Privacy</a>
+                        <a href={TERMS_URL} target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', textDecoration: 'none', marginRight: 10 }}>Terms</a>
+                        <a href={PRIVACY_URL} target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', textDecoration: 'none' }}>Privacy</a>
                     </div>
                 </div>
             </div>

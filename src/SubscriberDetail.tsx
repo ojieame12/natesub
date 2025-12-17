@@ -183,7 +183,7 @@ export default function SubscriberDetail() {
                         </Pressable>
                         <Pressable
                             className="quick-action-btn"
-                            onClick={() => navigate('/request/new')}
+                            onClick={() => navigate('/new-request')}
                         >
                             <Send size={18} />
                             <span>Request</span>
@@ -314,7 +314,7 @@ export default function SubscriberDetail() {
                             <MessageSquare size={20} />
                             <span>Send Message</span>
                         </Pressable>
-                        <Pressable className="sheet-action" onClick={() => { setShowActions(false); navigate('/request/new'); }}>
+                        <Pressable className="sheet-action" onClick={() => { setShowActions(false); navigate('/new-request'); }}>
                             <Send size={20} />
                             <span>Send Request</span>
                         </Pressable>
