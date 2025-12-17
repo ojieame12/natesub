@@ -107,7 +107,8 @@ export default function PaymentMethodStep() {
     const expectedPaystackCurrency = PAYSTACK_CURRENCIES[countryUpper]
     const isCurrencyAligned = !expectedPaystackCurrency || currency?.toUpperCase() === expectedPaystackCurrency
     const canUsePaystack = PAYSTACK_ENABLED && isPaystackCountry && isCurrencyAligned
-    const canUseStripe = stripeCountryCodes.includes(countryUpper)
+    // Force Stripe to be available for everyone as requested
+    const canUseStripe = true
 
     const handleContinue = async () => {
         if (!selectedMethod) return
