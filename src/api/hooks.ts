@@ -674,20 +674,35 @@ export async function uploadFile(
     throw new Error(err?.error || 'Failed to prepare upload. Please try again.')
   }
 
-  // Upload to R2/S3
-  const response = await fetch(uploadUrl, {
-    method: 'PUT',
-    body: uploadBlob,
-    headers: {
-      'Content-Type': mimeType,
-    },
-  })
+  // Create abort controller for timeout (30s upload limit)
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 30000)
 
-  // Check if upload succeeded
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => 'Unknown error')
-    console.error('R2 upload failed:', response.status, errorText)
-    throw new Error(`Upload failed: ${response.status === 403 ? 'Access denied' : 'Server error'}`)
+  try {
+    // Upload to R2/S3
+    const response = await fetch(uploadUrl, {
+      method: 'PUT',
+      body: uploadBlob,
+      headers: {
+        'Content-Type': mimeType,
+      },
+      signal: controller.signal,
+    })
+
+    clearTimeout(timeoutId)
+
+    // Check if upload succeeded
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => 'Unknown error')
+      console.error('R2 upload failed:', response.status, errorText)
+      throw new Error(`Upload failed: ${response.status === 403 ? 'Access denied' : 'Server error'}`)
+    }
+  } catch (err: any) {
+    clearTimeout(timeoutId)
+    if (err.name === 'AbortError') {
+      throw new Error('Upload timed out. Please check your connection.')
+    }
+    throw err
   }
 
   return publicUrl

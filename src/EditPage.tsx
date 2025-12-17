@@ -138,8 +138,18 @@ export default function EditPage() {
     let didNavigate = false
     try {
       // Save any pending edits first
-      const ok = hasChanges ? await saveProfileAndSettings({ showSuccessToast: false }) : true
-      if (!ok) return
+      if (hasChanges) {
+        if (singleAmount <= 0) {
+          toast.error('Price must be greater than 0')
+          setIsContinuing(false)
+          return
+        }
+        const ok = await saveProfileAndSettings({ showSuccessToast: false })
+        if (!ok) {
+          setIsContinuing(false)
+          return
+        }
+      }
 
       // If payments are not active yet, guide user to connect/finish payments next
       if (profile.payoutStatus !== 'active') {
