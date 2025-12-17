@@ -205,6 +205,8 @@
     /* Fixed container - centered */
     min-height: 250px;
     max-height: 280px;
+    overflow: hidden;
+    contain: paint;
 }
 
 .start-hero img {
@@ -218,8 +220,11 @@
 /* Placeholder while hero image loads */
 .start-hero-placeholder {
     position: absolute;
-    width: 616px;
-    height: 616px;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 240px;
+    height: 240px;
     border-radius: var(--radius-xl);
     background: linear-gradient(90deg,
             rgba(245, 245, 244, 0.6) 25%,
@@ -227,6 +232,7 @@
             rgba(245, 245, 244, 0.6) 75%);
     background-size: 200% 100%;
     animation: ob-shimmer 1.8s infinite linear;
+    will-change: background-position;
 }
 
 @keyframes ob-shimmer {
@@ -270,7 +276,8 @@
 /* === CAROUSEL ANIMATIONS === */
 .carousel-headline,
 .carousel-subtext {
-    transition: opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: opacity 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    will-change: opacity;
 }
 
 .carousel-headline.fade-in,
@@ -285,13 +292,15 @@
 
 /* Carousel Image - smooth crossfade, centered, 0.85x scale */
 .carousel-image {
-    transition: opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: opacity 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    will-change: opacity;
     /* 0.85x scale (280 * 0.85 = 238) - centered */
     width: 238px !important;
     height: 238px !important;
     object-fit: contain;
     margin: 0 auto;
     display: block;
+    backface-visibility: hidden;
 }
 
 .carousel-image.fade-in {
@@ -329,6 +338,14 @@
     .carousel-headline,
     .carousel-subtext {
         transition: none;
+    }
+
+    .carousel-image {
+        transition: none;
+    }
+
+    .start-hero-placeholder {
+        animation: none;
     }
 
     .carousel-dot {

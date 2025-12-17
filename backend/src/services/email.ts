@@ -98,6 +98,18 @@ export function _sendEmail(options: CreateEmailOptions): Promise<EmailResult> {
 
 // New public function adds to queue
 async function sendEmail(options: CreateEmailOptions): Promise<EmailResult> {
+  // In production with Redis, enqueue for async processing (higher throughput + better retries).
+  // In tests, skip sending entirely. In local envs without Redis, send directly to avoid silently dropping emails.
+  const shouldQueue = env.NODE_ENV !== 'test' && Boolean(env.REDIS_URL)
+
+  if (!shouldQueue) {
+    if (env.NODE_ENV === 'test') {
+      return { success: true, attempts: 0, messageId: 'skipped_test' }
+    }
+
+    return _sendEmail(options)
+  }
+
   try {
     // Add job to BullMQ
     // We only pass necessary data. Attachments are large/binary, so we handle them in the worker (loadInlineEmailLogoAttachment).
@@ -109,7 +121,7 @@ async function sendEmail(options: CreateEmailOptions): Promise<EmailResult> {
       text: options.text,
       from: options.from,
     })
-    
+
     return { success: true, attempts: 0, messageId: 'queued' }
   } catch (err: any) {
     console.error('[email] Failed to queue email:', err)
@@ -454,7 +466,7 @@ function infoRow(label: string, value: string): string {
  * Test email delivery - sends a test email to verify Resend is working
  */
 export async function sendTestEmail(to: string): Promise<EmailResult> {
-  return sendEmail({
+  return _sendEmail({
     from: env.EMAIL_FROM,
     to,
     subject: `${BRAND_NAME} Email Test`,
@@ -494,7 +506,14 @@ export async function checkEmailHealth(): Promise<{ healthy: boolean; error?: st
 // ============================================
 
 export async function sendOtpEmail(to: string, otp: string): Promise<EmailResult> {
-  return sendEmail({
+  if (env.NODE_ENV === 'test') {
+    return { success: true, attempts: 0, messageId: 'skipped_test' }
+  }
+
+  console.log(`[email] Sending OTP to ${to.substring(0, 3)}***@***`)
+
+  // Auth OTPs are time-sensitive and should not depend on background workers.
+  const result = await _sendEmail({
     from: env.EMAIL_FROM,
     to,
     subject: sanitizeEmailSubject(`${otp} is your ${BRAND_NAME} verification code`),
@@ -516,6 +535,15 @@ export async function sendOtpEmail(to: string, otp: string): Promise<EmailResult
       `,
     }),
   })
+
+  console.log(`[email] OTP send result: success=${result.success}, messageId=${result.messageId || 'none'}, attempts=${result.attempts}`)
+
+  if (!result.success) {
+    console.error('[email] Failed to send OTP email:', { to, error: result.error })
+    throw new Error('Failed to send verification code. Please try again.')
+  }
+
+  return result
 }
 
 // ============================================

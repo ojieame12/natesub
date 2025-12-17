@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { Mail, RefreshCw } from 'lucide-react'
 import { useOnboardingStore } from './store'
 import { Button } from './components'
+import { useReducedMotion } from '../hooks'
 import '../Dashboard.css'
 import './onboarding.css'
 
@@ -10,70 +11,163 @@ const VALUE_PROPS = [
     {
         headline: "Never chase\nanother invoice.",
         subtext: "Set it up once. Get paid every month. On autopilot.",
-        image: "/images/New3.png"
+        image: "/images/New3-512.png"
     },
     {
         headline: "Get paid from\nanywhere in the world.",
         subtext: "Accept global subscriptions. We convert and deposit directly to your local bank.",
-        image: "/images/Pizza.png"
+        image: "/images/Pizza-512.png"
     },
     {
         headline: "Everyone deserves\na payroll.",
         subtext: "Freelancers, creators, coaches — get the consistent income you've earned.",
-        image: "/images/Sleeping.png"
+        image: "/images/Sleeping-512.png"
     },
     {
         headline: "Turn any bank account\ninto a salary account.",
         subtext: "Get paid on schedule, every month, without the paperwork.",
-        image: "/images/comixss.png"
+        image: "/images/comixss-512.png"
     },
 ]
 
 const ROTATION_INTERVAL = 4000 // 4 seconds per slide
+const TRANSITION_MS = 350
 
 export default function StartStep() {
     const nextStep = useOnboardingStore((s) => s.nextStep)
     const reset = useOnboardingStore((s) => s.reset)
     const email = useOnboardingStore((s) => s.email)
     const name = useOnboardingStore((s) => s.name)
-    const [imageLoaded, setImageLoaded] = useState(false)
+    const prefersReducedMotion = useReducedMotion()
     const [activeIndex, setActiveIndex] = useState(0)
     const [isAnimating, setIsAnimating] = useState(false)
+    const [loadedTick, setLoadedTick] = useState(0)
     const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+    const transitionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const touchStartRef = useRef<number | null>(null)
+    const activeIndexRef = useRef(0)
+    const isAnimatingRef = useRef(false)
+    const loadedImagesRef = useRef<Set<string>>(new Set())
+    const preloadingRef = useRef<Set<string>>(new Set())
 
     const hasExistingProgress = Boolean(email || name)
 
+    const markImageLoaded = useCallback((src: string) => {
+        if (loadedImagesRef.current.has(src)) return
+        loadedImagesRef.current.add(src)
+        setLoadedTick((t) => t + 1)
+    }, [])
+
+    const preloadImage = useCallback((src: string) => {
+        if (typeof window === 'undefined') return
+        if (loadedImagesRef.current.has(src) || preloadingRef.current.has(src)) return
+
+        preloadingRef.current.add(src)
+        const img = new Image()
+        img.decoding = 'async'
+        img.onload = () => {
+            preloadingRef.current.delete(src)
+            markImageLoaded(src)
+        }
+        img.onerror = () => {
+            preloadingRef.current.delete(src)
+        }
+        img.src = src
+    }, [markImageLoaded])
+
+    const endTransition = useCallback(() => {
+        if (transitionTimeoutRef.current) {
+            clearTimeout(transitionTimeoutRef.current)
+            transitionTimeoutRef.current = null
+        }
+        isAnimatingRef.current = false
+        setIsAnimating(false)
+    }, [])
+
     // Start/restart auto-rotate timer
     const startAutoRotate = useCallback(() => {
+        if (prefersReducedMotion) return
         if (intervalRef.current) clearInterval(intervalRef.current)
         intervalRef.current = setInterval(() => {
+            // Don't advance while transitioning or while the current image hasn't loaded yet.
+            const currentSrc = VALUE_PROPS[activeIndexRef.current]?.image
+            if (!currentSrc || !loadedImagesRef.current.has(currentSrc)) return
+            if (isAnimatingRef.current) return
+
+            const nextIndex = (activeIndexRef.current + 1) % VALUE_PROPS.length
+            const nextSrc = VALUE_PROPS[nextIndex]?.image
+            if (!nextSrc) return
+
+            // Preload ahead; only animate once the next image is ready.
+            if (!loadedImagesRef.current.has(nextSrc)) {
+                preloadImage(nextSrc)
+                return
+            }
+
+            isAnimatingRef.current = true
             setIsAnimating(true)
-            setTimeout(() => {
-                setActiveIndex((prev) => (prev + 1) % VALUE_PROPS.length)
-                setIsAnimating(false)
-            }, 800)
+            if (transitionTimeoutRef.current) clearTimeout(transitionTimeoutRef.current)
+            transitionTimeoutRef.current = setTimeout(() => {
+                activeIndexRef.current = nextIndex
+                setActiveIndex(nextIndex)
+                endTransition()
+            }, TRANSITION_MS)
         }, ROTATION_INTERVAL)
-    }, [])
+    }, [endTransition, prefersReducedMotion, preloadImage])
 
     // Auto-rotate carousel on mount
     useEffect(() => {
         startAutoRotate()
         return () => {
             if (intervalRef.current) clearInterval(intervalRef.current)
+            if (transitionTimeoutRef.current) clearTimeout(transitionTimeoutRef.current)
         }
     }, [startAutoRotate])
 
+    // Keep refs in sync to avoid stale values inside timers.
+    useEffect(() => {
+        activeIndexRef.current = activeIndex
+    }, [activeIndex])
+
+    useEffect(() => {
+        isAnimatingRef.current = isAnimating
+    }, [isAnimating])
+
     // Navigate to specific slide
     const goToSlide = useCallback((index: number) => {
+        if (index < 0 || index >= VALUE_PROPS.length) return
         if (isAnimating) return
-        setIsAnimating(true)
-        setTimeout(() => {
+
+        // If the target image hasn't loaded yet, preload it and switch immediately (no fade)
+        // to avoid "fade to blank" jank on slow devices.
+        const targetSrc = VALUE_PROPS[index]?.image
+        if (targetSrc && !loadedImagesRef.current.has(targetSrc)) {
+            preloadImage(targetSrc)
+            activeIndexRef.current = index
             setActiveIndex(index)
-            setIsAnimating(false)
-        }, 800)
+            endTransition()
+            startAutoRotate()
+            return
+        }
+
+        if (prefersReducedMotion) {
+            activeIndexRef.current = index
+            setActiveIndex(index)
+            endTransition()
+            startAutoRotate()
+            return
+        }
+
+        isAnimatingRef.current = true
+        setIsAnimating(true)
+        if (transitionTimeoutRef.current) clearTimeout(transitionTimeoutRef.current)
+        transitionTimeoutRef.current = setTimeout(() => {
+            activeIndexRef.current = index
+            setActiveIndex(index)
+            endTransition()
+        }, TRANSITION_MS)
         startAutoRotate() // Reset timer on manual navigation
-    }, [isAnimating, startAutoRotate])
+    }, [endTransition, isAnimating, prefersReducedMotion, preloadImage, startAutoRotate])
 
     // Swipe handlers
     const handleTouchStart = (e: React.TouchEvent) => {
@@ -104,6 +198,18 @@ export default function StartStep() {
     }
 
     const currentProp = VALUE_PROPS[activeIndex]
+    const currentImageLoaded = Boolean(currentProp?.image && loadedImagesRef.current.has(currentProp.image))
+
+    // Preload the next slide once the current image is ready (reduces hitching on rotate).
+    useEffect(() => {
+        if (prefersReducedMotion) return
+        if (!currentProp?.image) return
+        if (!currentImageLoaded) return
+
+        const nextIndex = (activeIndex + 1) % VALUE_PROPS.length
+        const nextSrc = VALUE_PROPS[nextIndex]?.image
+        if (nextSrc) preloadImage(nextSrc)
+    }, [activeIndex, currentImageLoaded, currentProp?.image, loadedTick, prefersReducedMotion, preloadImage])
 
     return (
         <div className="onboarding">
@@ -119,14 +225,16 @@ export default function StartStep() {
                         onTouchStart={handleTouchStart}
                         onTouchEnd={handleTouchEnd}
                     >
-                        {!imageLoaded && (
+                        {!currentImageLoaded && (
                             <div className="start-hero-placeholder" aria-hidden="true" />
                         )}
                         <img
                             src={currentProp.image}
                             alt="Hero"
                             className={`carousel-image ${isAnimating ? 'fade-out' : 'fade-in'}`}
-                            onLoad={() => setImageLoaded(true)}
+                            decoding="async"
+                            fetchPriority="high"
+                            onLoad={() => markImageLoaded(currentProp.image)}
                         />
                     </div>
 
