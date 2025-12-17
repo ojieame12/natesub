@@ -8,8 +8,8 @@ import './onboarding.css'
 // Value propositions for the carousel - each with unique image from /public/images/
 const VALUE_PROPS = [
     {
-        headline: "Own your\nrecurring income.",
-        subtext: "No invoices. No chasing. Just recurring payments from the people who value you.",
+        headline: "Never chase\nanother invoice.",
+        subtext: "Set it up once. Get paid every month. On autopilot.",
         image: "/images/New3.png"
     },
     {
