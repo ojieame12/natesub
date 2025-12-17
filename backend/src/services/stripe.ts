@@ -26,7 +26,6 @@ export const stripe = new Stripe(env.STRIPE_SECRET_KEY, {
 type AccountLinkType = Stripe.AccountLinkCreateParams['type']
 
 // Create Express account for a user
-// Supports both native Stripe countries and cross-border payout countries
 export async function createExpressAccount(
   userId: string,
   email: string,
@@ -47,35 +46,23 @@ export async function createExpressAccount(
 
     const account = await stripe.accounts.retrieve(profile.stripeAccountId)
 
-    // FIX: If this is a cross-border country (NG/KE/ZA) but the account is 'express',
-    // it means it was created before we switched to 'standard'. We must abandon this
-    // account and create a new Standard one, as Express is not fully supported for these regions.
-    const userCountry = profile.countryCode || country
-    const isCrossBorderTarget = isStripeCrossBorderSupported(userCountry)
-    const isWrongType = isCrossBorderTarget && account.type === 'express'
+    const needsOnboarding = !account.details_submitted
+    const currentlyDue = account.requirements?.currently_due || []
+    const disabledReason = account.requirements?.disabled_reason || null
+    const needsUpdate = currentlyDue.length > 0 || Boolean(disabledReason)
 
-    if (!isWrongType) {
-      const needsOnboarding = !account.details_submitted
-      const currentlyDue = account.requirements?.currently_due || []
-      const disabledReason = account.requirements?.disabled_reason || null
-      const needsUpdate = currentlyDue.length > 0 || Boolean(disabledReason)
-
-      if (needsOnboarding) {
-        const accountLink = await createAccountLink(profile.stripeAccountId, { type: 'account_onboarding' })
-        return { accountId: profile.stripeAccountId, accountLink }
-      }
-
-      if (needsUpdate) {
-        const accountLink = await createAccountLink(profile.stripeAccountId, { type: 'account_update' })
-        return { accountId: profile.stripeAccountId, accountLink }
-      }
-
-      return { accountId: profile.stripeAccountId, accountLink: null, alreadyOnboarded: true }
+    if (needsOnboarding) {
+      const accountLink = await createAccountLink(profile.stripeAccountId, { type: 'account_onboarding' })
+      return { accountId: profile.stripeAccountId, accountLink }
     }
-  }
 
-  // Check if this is a cross-border payout country (e.g., Nigeria, Ghana, Kenya)
-  const isCrossBorder = isStripeCrossBorderSupported(country)
+    if (needsUpdate) {
+      const accountLink = await createAccountLink(profile.stripeAccountId, { type: 'account_update' })
+      return { accountId: profile.stripeAccountId, accountLink }
+    }
+
+    return { accountId: profile.stripeAccountId, accountLink: null, alreadyOnboarded: true }
+  }
 
   // Parse name for KYC prefill
   const nameParts = displayName?.trim().split(' ') || []
@@ -86,23 +73,15 @@ export async function createExpressAccount(
   // Use idempotency key to prevent duplicate accounts on retry/double-click
   const idempotencyKey = generateIdempotencyKey('acct_create', userId, email)
 
-  // Use Standard accounts for cross-border (NG, GH, KE, ZA) to ensure support
-  // Express accounts have stricter regional availability
-  const accountType = isCrossBorder ? 'standard' : 'express'
-
-  // Capabilities are managed by Stripe for Standard accounts
-  const capabilities = accountType === 'express' ? {
-    transfers: { requested: true },
-    card_payments: { requested: true },
-  } : undefined
-
-  // For cross-border payouts, use recipient service agreement
-  // This enables the platform to send payouts to these accounts
+  // All countries use Express accounts
   const accountParams: Stripe.AccountCreateParams = {
-    type: accountType,
+    type: 'express',
     email,
     country,
-    capabilities,
+    capabilities: {
+      transfers: { requested: true },
+      card_payments: { requested: true },
+    },
     business_type: 'individual',
     // Prefill KYC data to speed up onboarding
     individual: {
@@ -134,7 +113,7 @@ export async function createExpressAccount(
   // Create account link for onboarding
   const accountLink = await createAccountLink(account.id, { type: 'account_onboarding' })
 
-  return { accountId: account.id, accountLink, crossBorder: isCrossBorder }
+  return { accountId: account.id, accountLink }
 }
 
 // Create account link for onboarding

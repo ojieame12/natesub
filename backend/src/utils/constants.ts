@@ -168,18 +168,17 @@ export const STRIPE_SUPPORTED_COUNTRIES: Record<string, string> = {
   // Other
   AE: 'United Arab Emirates',
   BR: 'Brazil',
-}
-
-// Countries supported via Stripe Cross-Border Payouts
-// These countries can receive payouts from a US-based platform
-// https://docs.stripe.com/connect/cross-border-payouts
-export const STRIPE_CROSS_BORDER_COUNTRIES: Record<string, string> = {
-  // Africa
+  // Africa (Standard Connect accounts)
   NG: 'Nigeria',
   GH: 'Ghana',
   KE: 'Kenya',
   ZA: 'South Africa',
-  // Add more as needed - Stripe supports 80+ countries for cross-border
+}
+
+// Countries supported via Stripe Cross-Border Payouts (currently disabled - all use standard Connect)
+// Keep this empty since we're treating all countries the same way now
+export const STRIPE_CROSS_BORDER_COUNTRIES: Record<string, string> = {
+  // All African countries moved to STRIPE_SUPPORTED_COUNTRIES above
 }
 
 // Countries where Stripe is NOT available at all
