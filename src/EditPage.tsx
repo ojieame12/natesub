@@ -5,7 +5,6 @@ import { Pressable, useToast, Skeleton, LoadingButton } from './components'
 import { useProfile, useUpdateProfile, uploadFile } from './api/hooks'
 import { getCurrencySymbol, formatCompactNumber, centsToDisplayAmount, displayAmountToCents } from './utils/currency'
 import { calculateFeePreview, getPricing } from './utils/pricing'
-import type { Profile } from './api/client'
 import './EditPage.css'
 
 export default function EditPage() {

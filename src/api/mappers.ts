@@ -2,9 +2,13 @@
 // These handle the differences between frontend stores and API contracts
 
 import type { RelationshipType } from '../request/store'
-import type { SubscriptionPurpose, PricingModel, SubscriptionTier, ImpactItem, PerkItem } from '../onboarding/store'
+import type { SubscriptionPurpose, PricingModel, SubscriptionTier } from '../onboarding/store'
 import type { UpdateAudience } from '../updates/store'
 import { centsToDisplayAmount, displayAmountToCents } from '../utils/currency'
+
+// Local types for deprecated fields still used in maps
+interface ImpactItem { id: string; title: string; subtitle: string }
+interface PerkItem { id: string; title: string; enabled: boolean }
 
 // ============================================
 // AMOUNT CONVERSION HELPERS

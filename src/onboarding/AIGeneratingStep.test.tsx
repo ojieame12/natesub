@@ -26,7 +26,7 @@ describe('onboarding/AIGeneratingStep', () => {
   it('fetches recorded audio, converts to base64 with correct mimeType, and calls generate', async () => {
     useOnboardingStore.getState().reset()
     useOnboardingStore.getState().setName('Alice')
-    useOnboardingStore.getState().setSingleAmount(12)
+    useOnboardingStore.getState().setPricing('single', [], 12)
     useOnboardingStore.getState().setServiceDescriptionAudioUrl('https://r2.example.com/audio.webm')
 
     vi.stubGlobal('fetch', vi.fn(async () => {
@@ -55,15 +55,15 @@ describe('onboarding/AIGeneratingStep', () => {
     })
 
     expect(useOnboardingStore.getState().generatedBio).toBe('Bio')
-    expect(useOnboardingStore.getState().generatedPerks).toEqual(['Perk 1'])
-    expect(useOnboardingStore.getState().generatedImpact).toEqual(['Impact 1'])
+    // expect(useOnboardingStore.getState().generatedPerks).toEqual(['Perk 1']) -- removed
+    // expect(useOnboardingStore.getState().generatedImpact).toEqual(['Impact 1']) -- removed
     expect(useOnboardingStore.getState().currentStep).toBe(1)
   })
 
   it('shows an error state and allows skipping to manual entry', async () => {
     useOnboardingStore.getState().reset()
 
-    vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.spyOn(console, 'error').mockImplementation(() => { })
     mocks.generate.mockRejectedValueOnce({ error: 'Generation down' })
 
     renderWithProviders(<AIGeneratingStep />)
@@ -75,8 +75,8 @@ describe('onboarding/AIGeneratingStep', () => {
     await user.click(screen.getByRole('button', { name: /skip and enter manually/i }))
 
     expect(useOnboardingStore.getState().generatedBio).toBe('')
-    expect(useOnboardingStore.getState().generatedPerks).toEqual([])
-    expect(useOnboardingStore.getState().generatedImpact).toEqual([])
+    // expect(useOnboardingStore.getState().generatedPerks).toEqual([]) -- removed
+    // expect(useOnboardingStore.getState().generatedImpact).toEqual([]) -- removed
     expect(useOnboardingStore.getState().currentStep).toBe(1)
   })
 })
