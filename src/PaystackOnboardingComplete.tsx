@@ -30,8 +30,8 @@ export default function PaystackOnboardingComplete() {
     if (!hasProcessed.current) {
       hasProcessed.current = true
 
-      // Reset onboarding store
-      resetOnboarding()
+      // Reset onboarding store - REMOVED to preserve state for Launch Review
+      // resetOnboarding()
 
       // Set flag so AuthRedirect knows payment is active (survives page refresh)
       setPaymentConfirmed()
@@ -87,7 +87,7 @@ export default function PaystackOnboardingComplete() {
 
   const handleContinue = () => {
     setIsNavigating(true)
-    navigate('/dashboard', { replace: true })
+    navigate('/onboarding?step=6', { replace: true })
   }
 
   return (

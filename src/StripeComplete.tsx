@@ -259,10 +259,14 @@ export default function StripeComplete() {
       // Return to Onboarding Step 6 (Launch Review)
       // Step indices are 0-based, so 6 is the 7th step (Launch Review)
       navigate('/onboarding?step=6', { replace: true })
+    } else if (profile && !profile.isPublic) {
+      // Fallback: If source is unknown (lost session) but profile is not public, 
+      // assume we are in onboarding flow and need to launch.
+      navigate('/onboarding?step=6', { replace: true })
     } else {
       navigate('/dashboard', { replace: true })
     }
-  }, [navigate, source])
+  }, [navigate, source, profile])
 
   // Auto-continue after success for a smoother flow (especially on mobile).
   // Only do this when user came from a known flow, so manual visits don't instantly redirect away.
@@ -442,20 +446,20 @@ export default function StripeComplete() {
               >
                 Continue to {destinationText}
               </LoadingButton>
-	              <Pressable
-	                className="btn-secondary"
-	                onClick={async () => {
-	                  try {
-	                    const result = await api.stripe.getDashboardLink()
-	                    if (result.url) window.open(result.url, '_blank', 'noopener,noreferrer')
-	                  } catch (err) {
-	                    if (import.meta.env.DEV) console.debug('[stripe] open dashboard failed', err)
-	                  }
-	                }}
-	              >
-	                <span>Stripe Dashboard</span>
-	                <ExternalLink size={16} />
-	              </Pressable>
+              <Pressable
+                className="btn-secondary"
+                onClick={async () => {
+                  try {
+                    const result = await api.stripe.getDashboardLink()
+                    if (result.url) window.open(result.url, '_blank', 'noopener,noreferrer')
+                  } catch (err) {
+                    if (import.meta.env.DEV) console.debug('[stripe] open dashboard failed', err)
+                  }
+                }}
+              >
+                <span>Stripe Dashboard</span>
+                <ExternalLink size={16} />
+              </Pressable>
             </div>
           </>
         )}
