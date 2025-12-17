@@ -193,7 +193,7 @@ export default function EditPage() {
     return (
       <div className="edit-page">
         <header className="edit-page-header">
-          <Pressable className="back-btn" onClick={() => navigate(-1)}>
+          <Pressable className="back-btn" onClick={() => navigate('/dashboard')}>
             <ArrowLeft size={20} />
           </Pressable>
           <img src="/logo.svg" alt="NatePay" className="header-logo" />
@@ -218,7 +218,7 @@ export default function EditPage() {
     return (
       <div className="edit-page">
         <header className="edit-page-header">
-          <Pressable className="back-btn" onClick={() => navigate(-1)}>
+          <Pressable className="back-btn" onClick={() => navigate('/dashboard')}>
             <ArrowLeft size={20} />
           </Pressable>
           <img src="/logo.svg" alt="NatePay" className="header-logo" />
@@ -240,7 +240,7 @@ export default function EditPage() {
     <div className="edit-page">
       {/* Header */}
       <header className="edit-page-header">
-        <Pressable className="back-btn" onClick={() => navigate(-1)}>
+        <Pressable className="back-btn" onClick={() => navigate('/dashboard')}>
           <ArrowLeft size={20} />
         </Pressable>
         <img src="/logo.svg" alt="NatePay" className="header-logo" />
