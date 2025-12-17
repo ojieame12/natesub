@@ -150,7 +150,12 @@ export default function PaymentSettings() {
       }
     } else {
       setStripeStatus({ connected: false, status: 'not_started' } as StripeStatus)
-      setStripeError(getErrorMessage(stripeResult.reason))
+      const errorMsg = getErrorMessage(stripeResult.reason)
+      // Suppress "not supported" errors for users in unsupported regions (e.g. NG)
+      // since they likely use Paystack instead.
+      if (!errorMsg.toLowerCase().includes('not currently supported')) {
+        setStripeError(errorMsg)
+      }
     }
 
     if (paystackResult.status === 'fulfilled') {
@@ -206,7 +211,10 @@ export default function PaymentSettings() {
         void loadPaymentData()
       }
     } catch (err) {
-      setStripeError(getErrorMessage(err))
+      const errorMsg = getErrorMessage(err)
+      if (!errorMsg.toLowerCase().includes('not currently supported')) {
+        setStripeError(errorMsg)
+      }
     } finally {
       if (isMountedRef.current) setStripeConnecting(false)
     }

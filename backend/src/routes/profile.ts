@@ -85,6 +85,7 @@ const profileSchema = z.object({
   city: z.string().optional().nullable(),
   state: z.string().optional().nullable(),
   zip: z.string().optional().nullable(),
+  isPublic: z.boolean().optional(),
 })
 
 const profilePatchSchema = profileSchema
@@ -312,6 +313,15 @@ profile.patch(
 
     if (data.impactItems !== undefined) {
       updateData.impactItems = data.impactItems === null ? Prisma.JsonNull : data.impactItems
+    }
+
+    // FORCE PUBLIC: Ensure page stays public on updates
+    if (data.isPublic !== undefined) {
+      updateData.isPublic = true
+    } else {
+      // Optional: Should we always force it true on any edit? 
+      // If the goal is "Force Public", we can start passively enforcing it here:
+      updateData.isPublic = true
     }
 
     const updatedProfile = await db.profile.update({

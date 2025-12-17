@@ -23,10 +23,10 @@ import {
   Clock,
   Activity,
   FileText,
-  Eye,
-  TrendingUp,
-
   Heart,
+  Home,
+  ArrowDownLeft,
+  ScanLine,
 } from 'lucide-react'
 import { Pressable, useToast, Skeleton, SkeletonList, ErrorState, AnimatedNumber } from './components'
 import { useViewTransition } from './hooks'
@@ -125,12 +125,11 @@ export default function Dashboard() {
   const { data: profileData, isLoading: profileLoading, refetch: refetchProfile } = useProfile()
   const { data: metricsData, isLoading: metricsLoading, isError: metricsError, refetch: refetchMetrics } = useMetrics()
   const { data: activityData, isLoading: activityLoading, isError: activityError, refetch: refetchActivity } = useActivity(5)
-  const { data: analyticsData, refetch: refetchAnalytics } = useAnalyticsStats()
+  const { refetch: refetchAnalytics } = useAnalyticsStats()
 
   const profile = profileData?.profile
   const metrics = metricsData?.metrics
   const activities = activityData?.pages?.[0]?.activities || []
-  const analytics = analyticsData
   const currencyCode = (profile?.currency || currentUser?.profile?.currency || 'USD').toUpperCase()
   // Avoid "Clients ↔ Subscribers" flicker while /profile loads by using the already-loaded /auth/me profile.
   const isService = (profile?.purpose || currentUser?.profile?.purpose) === 'service'
@@ -574,51 +573,6 @@ export default function Dashboard() {
               />
             </section>
 
-            {/* Analytics Card */}
-            {analytics && (analytics.views.week > 0 || analytics.funnel.conversions > 0) && (
-              <section className="analytics-card">
-                <div className="analytics-header">
-                  <span className="analytics-title">Page Analytics</span>
-                  <span className="analytics-period">Last 7 days</span>
-                </div>
-                <div className="analytics-metrics">
-                  <div className="analytics-metric">
-                    <div className="analytics-metric-icon">
-                      <Eye size={16} />
-                    </div>
-                    <div className="analytics-metric-content">
-                      <span className="analytics-metric-value">
-                        <AnimatedNumber value={analytics.views.week} duration={500} format={(n) => formatCompactNumber(n)} />
-                      </span>
-                      <span className="analytics-metric-label">Views</span>
-                    </div>
-                  </div>
-                  <div className="analytics-metric">
-                    <div className="analytics-metric-icon">
-                      <UserPlus size={16} />
-                    </div>
-                    <div className="analytics-metric-content">
-                      <span className="analytics-metric-value">
-                        <AnimatedNumber value={analytics.uniqueVisitors.week} duration={500} format={(n) => formatCompactNumber(n)} />
-                      </span>
-                      <span className="analytics-metric-label">Visitors</span>
-                    </div>
-                  </div>
-                  <div className="analytics-metric">
-                    <div className="analytics-metric-icon">
-                      <TrendingUp size={16} />
-                    </div>
-                    <div className="analytics-metric-content">
-                      <span className="analytics-metric-value">
-                        <AnimatedNumber value={analytics.rates.overall} duration={500} format={(n) => `${n}%`} />
-                      </span>
-                      <span className="analytics-metric-label">Conversion</span>
-                    </div>
-                  </div>
-                </div>
-              </section>
-            )}
-
             {/* Payment Status Banner */}
             {profile?.payoutStatus === 'pending' && (
               <Pressable
@@ -735,6 +689,58 @@ export default function Dashboard() {
           </>
         )}
       </main>
+
+      {/* Footer Navigation */}
+      <div className="dashboard-footer">
+        <Pressable
+          className="footer-tab active"
+          onClick={() => navigate('/dashboard')}
+        >
+          <div className="tab-icon">
+            <Home size={24} strokeWidth={2.5} />
+          </div>
+        </Pressable>
+
+        <Pressable
+          className="footer-tab"
+          onClick={() => navigate('/requests')}
+        >
+          <div className="tab-icon">
+            <ArrowDownLeft size={24} strokeWidth={2.5} />
+          </div>
+        </Pressable>
+
+        <Pressable
+          className="footer-tab scan-tab"
+          onClick={() => navigate('/scan')}
+        >
+          <div className="scan-button">
+            <ScanLine size={24} strokeWidth={2.5} />
+          </div>
+        </Pressable>
+
+        <Pressable
+          className="footer-tab"
+          onClick={() => navigate('/activity')}
+        >
+          <div className="tab-icon">
+            <Clock size={24} strokeWidth={2.5} />
+          </div>
+        </Pressable>
+
+        <Pressable
+          className="footer-tab"
+          onClick={() => navigate('/profile')}
+        >
+          <div className="tab-icon">
+            <img
+              src={currentUser?.profile?.avatarUrl || `https://ui-avatars.com/api/?name=${currentUser?.email}&background=random`}
+              alt="Profile"
+              className="tab-avatar"
+            />
+          </div>
+        </Pressable>
+      </div>
     </div>
   )
 }

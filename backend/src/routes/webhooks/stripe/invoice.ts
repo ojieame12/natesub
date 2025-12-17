@@ -3,7 +3,7 @@ import { stripe } from '../../../services/stripe.js'
 import { db } from '../../../db/client.js'
 import { calculateServiceFee, calculateLegacyFee } from '../../../services/fees.js'
 import { withLock } from '../../../services/lock.js'
-import { sendPlatformDebitRecoveredNotification } from '../../../services/email.js'
+import { sendPlatformDebitRecoveredNotification, sendNewSubscriberEmail } from '../../../services/email.js'
 import { isStripeCrossBorderSupported } from '../../../utils/constants.js'
 import {
   validateCheckoutMetadata,
@@ -87,7 +87,7 @@ export async function handleInvoiceCreated(event: Stripe.Event) {
   const creatorAmount = subscription.amount
   const currency = invoice.currency.toUpperCase()
   const creatorPurpose = subscription.creator?.profile?.purpose
-  
+
   // Check cross-border status for correct fee buffer
   const countryCode = subscription.creator?.profile?.countryCode
   const isCrossBorder = countryCode ? isStripeCrossBorderSupported(countryCode) : false
@@ -108,27 +108,52 @@ export async function handleInvoiceCreated(event: Stripe.Event) {
   }
 }
 
-async function backfillStripeSubscriptionForInvoicePaid(invoice: Stripe.Invoice, stripeSubscriptionId: string) {
+export async function backfillStripeSubscriptionForInvoicePaid(invoice: Stripe.Invoice, stripeSubscriptionId: string) {
   const stripeSubscription = await stripe.subscriptions.retrieve(stripeSubscriptionId)
 
+  let creatorId: string | null = null
+  let tierId: string | undefined = undefined
+  let feeModel: string | undefined = undefined
+  let feeMode: string | undefined = undefined
+  let basePrice: number = invoice.amount_paid // Default fallback
+
+  // 1. Try metadata first (Primary)
   const metadataValidation = validateCheckoutMetadata(stripeSubscription.metadata as Record<string, string>)
-  if (!metadataValidation.valid) {
-    throw new Error(`[invoice.paid] Missing/invalid subscription metadata for ${stripeSubscriptionId}: ${metadataValidation.error}`)
+  if (metadataValidation.valid && metadataValidation.data) {
+    const meta = metadataValidation.data
+    creatorId = meta.creatorId
+    tierId = meta.tierId
+    feeModel = meta.feeModel
+    feeMode = meta.feeMode
+    const netAmount = parseMetadataAmount(meta.netAmount)
+    const grossAmount = parseMetadataAmount(meta.grossAmount) || invoice.amount_paid
+    basePrice = (feeMode === 'absorb' ? grossAmount : netAmount) || grossAmount
+  } else {
+    console.warn(`[invoice.paid] Invalid metadata for ${stripeSubscriptionId}, attempting fallback via transfer destination...`)
+
+    // 2. Fallback: Find creator via transfer destination (Connected Account ID)
+    const destination = stripeSubscription.transfer_data?.destination ||
+      (invoice as any).transfer_data?.destination
+
+    if (typeof destination === 'string') {
+      const creatorProfile = await db.profile.findFirst({
+        where: { stripeAccountId: destination },
+        select: { userId: true }
+      })
+      if (creatorProfile) {
+        creatorId = creatorProfile.userId
+        console.log(`[invoice.paid] Recovered creatorId ${creatorId} from destination ${destination}`)
+      }
+    }
   }
 
-  const meta = metadataValidation.data!
-  const creatorId = meta.creatorId
-  const tierId = meta.tierId || null
-
-  const feeModel = meta.feeModel || null
-  const feeMode = meta.feeMode || null
-  const netAmount = parseMetadataAmount(meta.netAmount)
-  const serviceFee = parseMetadataAmount(meta.serviceFee)
-  const grossAmount = parseMetadataAmount(meta.grossAmount) || invoice.amount_paid
-  const basePrice = (feeMode === 'absorb' ? grossAmount : netAmount) || grossAmount
+  if (!creatorId) {
+    throw new Error(`[invoice.paid] Could not identify creator for subscription ${stripeSubscriptionId} (missing metadata and transfer destination)`)
+  }
 
   const subscriberEmail = await resolveStripeInvoiceCustomerEmail(invoice, 'invoice.paid')
 
+  // Get or create subscriber
   let subscriber = await db.user.findUnique({ where: { email: subscriberEmail } })
   if (!subscriber) {
     try {
@@ -141,11 +166,14 @@ async function backfillStripeSubscriptionForInvoicePaid(invoice: Stripe.Invoice,
     throw new Error(`[invoice.paid] Could not find or create subscriber`)
   }
 
-  // Get tier name (best-effort)
+  // Get tier info
   const creatorProfile = await db.profile.findUnique({
     where: { userId: creatorId },
-    select: { tiers: true },
+    select: { tiers: true, displayName: true, username: true },
   })
+
+  // Try to find creator user for email sending
+  const creatorUser = await db.user.findUnique({ where: { id: creatorId } })
 
   let tierName: string | null = null
   if (tierId && creatorProfile?.tiers) {
@@ -162,9 +190,8 @@ async function backfillStripeSubscriptionForInvoicePaid(invoice: Stripe.Invoice,
     ? stripeSubscription.customer
     : null
 
-  // Create the subscription record so invoice.paid can proceed normally.
-  // Use pending first, then invoice.paid will activate + update period/LTV.
-  await db.subscription.upsert({
+  // Create the subscription
+  const subscription = await db.subscription.upsert({
     where: {
       subscriberId_creatorId_interval: {
         subscriberId: subscriber.id,
@@ -175,7 +202,7 @@ async function backfillStripeSubscriptionForInvoicePaid(invoice: Stripe.Invoice,
     create: {
       creatorId,
       subscriberId: subscriber.id,
-      tierId,
+      tierId: tierId || null,
       tierName,
       amount: basePrice,
       currency: invoice.currency.toUpperCase(),
@@ -183,26 +210,42 @@ async function backfillStripeSubscriptionForInvoicePaid(invoice: Stripe.Invoice,
       status: 'pending',
       stripeSubscriptionId: stripeSubscriptionId,
       stripeCustomerId,
-      feeModel,
-      feeMode,
+      feeModel: feeModel || null,
+      feeMode: feeMode || null,
       currentPeriodEnd: periodEnd,
     },
     update: {
       status: 'pending',
-      tierId,
+      tierId: tierId || null,
       tierName,
       amount: basePrice,
       currency: invoice.currency.toUpperCase(),
       stripeSubscriptionId: stripeSubscriptionId,
       stripeCustomerId,
-      feeModel,
-      feeMode,
+      feeModel: feeModel || null,
+      feeMode: feeMode || null,
       canceledAt: null,
       cancelAtPeriodEnd: false,
       currentPeriodEnd: periodEnd,
     },
   })
+
+  // Send "New Subscriber" email since checkout.session.completed likely failed
+  if (creatorUser) {
+    console.log(`[invoice.paid] Sending new subscriber email for backfilled subscription ${subscription.id}`)
+    // We don't await this to avoid blocking the webhook
+    sendNewSubscriberEmail(
+      creatorUser.email,
+      subscriber.email || 'Someone', // Use email if name unknown
+      tierName,
+      invoice.amount_paid,
+      invoice.currency.toUpperCase()
+    ).catch(err => console.error('[invoice.paid] Failed to send backfill email:', err))
+  }
+
+  return subscription
 }
+
 
 // Handle invoice.paid (recurring payments)
 export async function handleInvoicePaid(event: Stripe.Event) {

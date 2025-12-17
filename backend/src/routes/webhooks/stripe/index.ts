@@ -37,7 +37,30 @@ export async function stripeWebhookHandler(c: Context) {
 
   try {
     const body = await c.req.text()
-    event = stripe.webhooks.constructEvent(body, signature, env.STRIPE_WEBHOOK_SECRET)
+
+    // Try both webhook secrets (platform and connected accounts)
+    // This allows both endpoints to work with different signing secrets
+    const secrets = [
+      env.STRIPE_WEBHOOK_SECRET,
+      env.STRIPE_WEBHOOK_SECRET_CONNECT
+    ].filter(Boolean) as string[]
+
+    let lastError: Error | null = null
+    for (const secret of secrets) {
+      try {
+        event = stripe.webhooks.constructEvent(body, signature, secret)
+        // Success! Break out of loop
+        break
+      } catch (err) {
+        lastError = err as Error
+        // Continue to try next secret
+      }
+    }
+
+    // If event is still undefined after trying all secrets, throw the last error
+    if (!event!) {
+      throw lastError || new Error('No valid webhook secret configured')
+    }
   } catch (err) {
     console.error('Webhook signature verification failed:', err)
     return c.json({ error: 'Invalid signature' }, 400)
