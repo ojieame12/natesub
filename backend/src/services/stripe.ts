@@ -69,26 +69,24 @@ export async function createExpressAccount(
   const firstName = nameParts[0] || undefined
   const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : undefined
 
-  // Create new account with prefilled KYC data
+  // Create new Express account with prefilled KYC data
   // Use idempotency key to prevent duplicate accounts on retry/double-click
   const idempotencyKey = generateIdempotencyKey('acct_create', userId, email)
 
-  // Nigeria, Ghana, Kenya, South Africa need Standard accounts (Express not fully supported)
-  const STANDARD_ACCOUNT_COUNTRIES = ['NG', 'GH', 'KE', 'ZA']
-  const needsStandardAccount = STANDARD_ACCOUNT_COUNTRIES.includes(country.toUpperCase())
-  const accountType = needsStandardAccount ? 'standard' : 'express'
+  // Check if this is a cross-border payout country (Nigeria, Ghana, Kenya)
+  const isCrossBorder = isStripeCrossBorderSupported(country)
 
-  // Capabilities are only for Express accounts
-  const capabilities = accountType === 'express' ? {
-    transfers: { requested: true },
-    card_payments: { requested: true },
-  } : undefined
-
+  // For cross-border countries, use recipient service agreement
+  // This enables payouts to countries not natively supported by Stripe
+  // https://docs.stripe.com/connect/cross-border-payouts
   const accountParams: Stripe.AccountCreateParams = {
-    type: accountType,
+    type: 'express',
     email,
     country,
-    capabilities,
+    capabilities: {
+      transfers: { requested: true },
+      ...(isCrossBorder ? {} : { card_payments: { requested: true } }),
+    },
     business_type: 'individual',
     // Prefill KYC data to speed up onboarding
     individual: {
@@ -96,6 +94,12 @@ export async function createExpressAccount(
       first_name: firstName,
       last_name: lastName,
     },
+    // For cross-border: use recipient TOS (platform is business of record)
+    ...(isCrossBorder && {
+      tos_acceptance: {
+        service_agreement: 'recipient',
+      },
+    }),
     settings: {
       payouts: {
         schedule: {
