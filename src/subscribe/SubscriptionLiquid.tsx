@@ -107,6 +107,7 @@ export default function SubscriptionLiquid({ profile, canceled, isOwner }: Subsc
     const [subscriberEmail, setSubscriberEmail] = useState('')
     const [emailError, setEmailError] = useState<string | null>(null)
     const [isRedirecting, setIsRedirecting] = useState(false)
+    const [payerCountry, setPayerCountry] = useState<string | null>(null) // For geo-based provider selection
 
     // Tier selection state - default to popular tier or first tier
     // Show tier selection UI if there are multiple tiers, otherwise use single tier pricing
@@ -146,6 +147,14 @@ export default function SubscriptionLiquid({ profile, canceled, isOwner }: Subsc
 
         trackView()
     }, [profileId, recordPageView, searchParams])
+
+    // Detect payer country via IP for geo-based provider selection
+    useEffect(() => {
+        fetch('https://ipapi.co/country/')
+            .then(r => r.text())
+            .then(code => setPayerCountry(code.trim().toUpperCase()))
+            .catch(() => setPayerCountry(null)) // Fallback: backend uses creator default
+    }, [])
 
     // Track when user reaches payment screen
     useEffect(() => {
@@ -241,15 +250,15 @@ export default function SubscriptionLiquid({ profile, canceled, isOwner }: Subsc
 
         // Validate email (required for everyone)
         if (!subscriberEmail.trim()) {
-                setEmailError('Email is required to proceed')
-                return
-            }
-            // Basic email validation
-            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-            if (!emailRegex.test(subscriberEmail.trim())) {
-                setEmailError('Please enter a valid email address')
-                return
-            }
+            setEmailError('Email is required to proceed')
+            return
+        }
+        // Basic email validation
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+        if (!emailRegex.test(subscriberEmail.trim())) {
+            setEmailError('Please enter a valid email address')
+            return
+        }
 
         // Track checkout start
         if (viewIdRef.current) {
@@ -270,6 +279,8 @@ export default function SubscriptionLiquid({ profile, canceled, isOwner }: Subsc
                 ...(useTierPricing && tiers && tiers.length > 0 ? { tierId: selectedTierId || tiers[0].id } : {}),
                 // Pass email for Paystack (required) or Stripe (optional)
                 ...(subscriberEmail.trim() ? { subscriberEmail: subscriberEmail.trim() } : {}),
+                // Pass payer country for geo-based provider selection
+                ...(payerCountry ? { payerCountry } : {}),
                 // Analytics: pass viewId for accurate conversion tracking
                 ...(viewIdRef.current ? { viewId: viewIdRef.current } : {}),
             })

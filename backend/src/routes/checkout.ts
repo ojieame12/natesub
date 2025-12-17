@@ -35,10 +35,11 @@ checkout.post(
     amount: z.number().positive().max(500000000), // Max in smallest unit (e.g., ₦5M in kobo)
     interval: z.enum(['month', 'one_time']),
     subscriberEmail: z.string().email().optional(),
+    payerCountry: z.string().length(2).optional(), // ISO 2-letter code for geo-based provider selection
     viewId: z.string().optional(), // Analytics: page view ID for conversion tracking
   })),
   async (c) => {
-    const { creatorUsername, tierId, amount, interval, subscriberEmail, viewId } = c.req.valid('json')
+    const { creatorUsername, tierId, amount, interval, subscriberEmail, payerCountry, viewId } = c.req.valid('json')
 
     // Find creator
     const profile = await db.profile.findUnique({
@@ -60,12 +61,24 @@ checkout.post(
     // NOTE: paymentProvider may be null (e.g., new "naked onboarding"), so infer from stored IDs.
     const hasStripeAccount = Boolean(profile.stripeAccountId)
     const hasPaystackAccount = Boolean(profile.paystackSubaccountCode)
+    const hasBothProviders = hasStripeAccount && hasPaystackAccount
 
-    let inferredProvider = profile.paymentProvider as 'stripe' | 'paystack' | 'flutterwave' | null
-    if (inferredProvider === 'stripe' && !hasStripeAccount) inferredProvider = null
-    if (inferredProvider === 'paystack' && !hasPaystackAccount) inferredProvider = null
-    if (!inferredProvider) {
-      inferredProvider = hasStripeAccount ? 'stripe' : hasPaystackAccount ? 'paystack' : null
+    // Paystack-supported countries (local payments)
+    const PAYSTACK_COUNTRIES = ['NG', 'KE', 'ZA', 'GH']
+    const payerIsPaystackEligible = payerCountry && PAYSTACK_COUNTRIES.includes(payerCountry.toUpperCase())
+
+    // Smart provider selection based on payer location
+    // If creator has BOTH providers, route based on payer geo
+    // Otherwise, use whichever provider they have
+    let inferredProvider: 'stripe' | 'paystack' | null = null
+
+    if (hasBothProviders) {
+      // Smart selection: local payers → Paystack, global payers → Stripe
+      inferredProvider = payerIsPaystackEligible ? 'paystack' : 'stripe'
+    } else if (hasStripeAccount) {
+      inferredProvider = 'stripe'
+    } else if (hasPaystackAccount) {
+      inferredProvider = 'paystack'
     }
 
     const hasStripe = inferredProvider === 'stripe' && hasStripeAccount

@@ -654,6 +654,7 @@ export const checkout = {
     amount: number
     interval: 'month' | 'one_time'
     subscriberEmail?: string
+    payerCountry?: string  // ISO 2-letter code for geo-based provider selection
     viewId?: string  // Analytics: page view ID for conversion tracking
   }) =>
     apiFetch<{
