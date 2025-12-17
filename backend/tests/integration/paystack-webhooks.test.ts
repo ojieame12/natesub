@@ -65,7 +65,7 @@ describe('paystack webhooks', () => {
     expect(updated?.status).toBe('succeeded')
 
     const webhookEvent = await db.webhookEvent.findUnique({
-      where: { eventId: 'paystack_PAYOUT-TEST-1' },
+      where: { eventId: 'paystack_transfer.success_PAYOUT-TEST-1' },
     })
     expect(webhookEvent?.status).toBe('processed')
   })
@@ -101,9 +101,8 @@ describe('paystack webhooks', () => {
     expect(payments.length).toBe(1)
 
     const webhookEvent = await db.webhookEvent.findUnique({
-      where: { eventId: 'paystack_CHG-TEST-1' },
+      where: { eventId: 'paystack_charge.success_CHG-TEST-1' },
     })
     expect(webhookEvent?.status).toBe('skipped')
   })
 })
-

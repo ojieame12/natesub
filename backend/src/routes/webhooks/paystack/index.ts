@@ -3,7 +3,27 @@ import crypto from 'crypto'
 import { env } from '../../../config/env.js'
 import { db } from '../../../db/client.js'
 import { logger } from '../../../utils/logger.js'
-import { webhookQueue } from '../../../lib/queue.js'
+
+type WebhookJobData = {
+  provider: 'stripe' | 'paystack'
+  event: any
+  webhookEventId: string
+}
+
+async function dispatchWebhookJob(jobName: string, data: WebhookJobData) {
+  // In production with Redis, enqueue for async processing (higher throughput + better retries).
+  // In tests (and local envs without Redis), process inline to avoid hard Redis dependency.
+  const shouldQueue = env.NODE_ENV !== 'test' && Boolean(env.REDIS_URL)
+
+  if (shouldQueue) {
+    const { webhookQueue } = await import('../../../lib/queue.js')
+    await webhookQueue.add(jobName, data)
+    return
+  }
+
+  const { webhookProcessor } = await import('../../../workers/webhookProcessor.js')
+  await webhookProcessor({ data } as any)
+}
 
 // Verify Paystack webhook signature (uses constant-time comparison to prevent timing attacks)
 function verifyPaystackSignature(body: string, signature: string): boolean {
@@ -114,15 +134,9 @@ export async function paystackWebhookHandler(c: Context) {
     }
   }
 
-  // Mark as processing
-  await db.webhookEvent.update({
-    where: { id: webhookEvent.id },
-    data: { status: 'processing' },
-  })
-
-  // Add to queue for async processing
+  // Process inline in tests (or when Redis isn't configured), otherwise enqueue.
   try {
-    await webhookQueue.add('paystack-webhook', {
+    await dispatchWebhookJob('paystack-webhook', {
       provider: 'paystack',
       event: payload, // Pass full payload object ({ event, data })
       webhookEventId: webhookEvent.id,

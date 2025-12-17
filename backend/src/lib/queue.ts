@@ -1,27 +1,73 @@
-import { Queue, Worker, type Job, type Processor } from 'bullmq'
+import { Queue, Worker, type Processor } from 'bullmq'
 import { env } from '../config/env.js'
-import { redis } from '../db/redis.js'
 
-// Reuse the existing Redis connection if possible, or create a new one for BullMQ
-// BullMQ requires a dedicated connection for blocking commands, so we pass the URL string
-// and let it manage its own connections.
-const connection = {
-  url: env.REDIS_URL,
+type QueueLike = {
+  add: (name: string, data: any) => Promise<any>
+  close: () => Promise<void>
 }
 
+type WorkerLike = {
+  close: () => Promise<void>
+}
+
+class InMemoryQueue implements QueueLike {
+  private jobs: Array<{ name: string; data: any }> = []
+  constructor(public readonly queueName: string) {}
+
+  async add(name: string, data: any) {
+    this.jobs.push({ name, data })
+    return { name, data }
+  }
+
+  async close() {}
+}
+
+// BullMQ requires Redis. In tests (and local envs without Redis), fall back to an in-process
+// no-op queue so imports don't try to open network sockets.
+const useBullMQ = env.NODE_ENV !== 'test' && Boolean(env.REDIS_URL)
+
+// BullMQ uses its own Redis connections (blocking commands), so pass the URL and let it manage them.
+const connection = useBullMQ ? { url: env.REDIS_URL! } : null
+
 // Queue Definitions
-export const emailQueue = new Queue('email-queue', { connection })
-export const billingQueue = new Queue('billing-queue', { connection })
-export const webhookQueue = new Queue('webhook-queue', { connection })
+const defaultJobOptions = {
+  attempts: 5,
+  backoff: {
+    type: 'exponential',
+    delay: 1000, // 1s, 2s, 4s, 8s, 16s
+  },
+  removeOnComplete: { count: 100 },
+  removeOnFail: { count: 1000 },
+}
+
+export const emailQueue: QueueLike = useBullMQ
+  ? new Queue('email-queue', { connection: connection!, defaultJobOptions })
+  : new InMemoryQueue('email-queue')
+
+export const billingQueue: QueueLike = useBullMQ
+  ? new Queue('billing-queue', { connection: connection!, defaultJobOptions })
+  : new InMemoryQueue('billing-queue')
+
+export const webhookQueue: QueueLike = useBullMQ
+  ? new Queue('webhook-queue', { connection: connection!, defaultJobOptions })
+  : new InMemoryQueue('webhook-queue')
 
 // Worker Factory Helper
 export function createWorker<T>(
   queueName: string,
   processor: Processor<T>,
   concurrency = 1
-) {
+) : WorkerLike {
+  if (!useBullMQ) {
+    // No background processing in in-memory mode. Routes that need synchronous processing
+    // should call processors directly (webhooks already do this in tests).
+    return {
+      async close() { },
+    }
+  }
+
   return new Worker(queueName, processor, {
-    connection,
+    connection: connection!,
     concurrency,
     // Remove completed jobs to save Redis memory (keep last 100)
     removeOnComplete: { count: 100 },

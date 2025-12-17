@@ -221,6 +221,7 @@ export async function checkMissingWebhookEvents(): Promise<{
       id: true,
       stripeEventId: true,
       paystackEventId: true,
+      paystackTransactionRef: true,
       createdAt: true,
     },
   })
@@ -229,7 +230,15 @@ export async function checkMissingWebhookEvents(): Promise<{
   const missingDetails: Array<{ paymentId: string; provider: string; createdAt: Date }> = []
 
   for (const payment of paymentsWithoutEvents) {
-    const eventId = payment.stripeEventId || (payment.paystackEventId ? `paystack_${payment.paystackEventId}` : null)
+    const eventId =
+      payment.stripeEventId ||
+      // Paystack webhook events are keyed by (eventType + reference/id). For succeeded inbound payments,
+      // the canonical identifier is the charge reference we store in paystackTransactionRef.
+      (payment.paystackTransactionRef
+        ? `paystack_charge.success_${payment.paystackTransactionRef}`
+        : payment.paystackEventId
+          ? `paystack_charge.success_${payment.paystackEventId}`
+          : null)
     if (!eventId) continue
 
     const webhookEvent = await db.webhookEvent.findUnique({

@@ -58,7 +58,14 @@ async function isPlatformSubscriptionEvent(event: any): Promise<boolean> {
 export async function webhookProcessor(job: Job<WebhookJobData>) {
   const { provider, event, webhookEventId } = job.data
   const startTime = Date.now()
-  const eventId = provider === 'stripe' ? event.id : (event.reference || event.id?.toString()) // Unified ID logic
+  const eventId =
+    provider === 'stripe'
+      ? event.id
+      : (event?.data?.reference || event?.data?.id?.toString())
+
+  if (provider === 'paystack' && !eventId) {
+    throw new Error('[worker] Paystack webhook missing data.reference/data.id (cannot ensure idempotency)')
+  }
 
   console.log(`[worker] Processing ${provider} webhook ${eventId} (type: ${provider === 'stripe' ? event.type : event.event})`)
 

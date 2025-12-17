@@ -4,7 +4,27 @@ import { db } from '../../../db/client.js'
 import { stripe } from '../../../services/stripe.js'
 import { env } from '../../../config/env.js'
 import { logger } from '../../../utils/logger.js'
-import { webhookQueue } from '../../../lib/queue.js'
+
+type WebhookJobData = {
+  provider: 'stripe' | 'paystack'
+  event: any
+  webhookEventId: string
+}
+
+async function dispatchWebhookJob(jobName: string, data: WebhookJobData) {
+  // In production with Redis, enqueue for async processing (higher throughput + better retries).
+  // In tests (and local envs without Redis), process inline to avoid hard Redis dependency.
+  const shouldQueue = env.NODE_ENV !== 'test' && Boolean(env.REDIS_URL)
+
+  if (shouldQueue) {
+    const { webhookQueue } = await import('../../../lib/queue.js')
+    await webhookQueue.add(jobName, data)
+    return
+  }
+
+  const { webhookProcessor } = await import('../../../workers/webhookProcessor.js')
+  await webhookProcessor({ data } as any)
+}
 
 export async function stripeWebhookHandler(c: Context) {
   const signature = c.req.header('stripe-signature')
@@ -60,9 +80,9 @@ export async function stripeWebhookHandler(c: Context) {
     return c.json({ received: true, status: 'already_processed' })
   }
 
-  // Add to queue for async processing
+  // Process inline in tests (or when Redis isn't configured), otherwise enqueue.
   try {
-    await webhookQueue.add('stripe-webhook', {
+    await dispatchWebhookJob('stripe-webhook', {
       provider: 'stripe',
       event,
       webhookEventId: webhookEvent.id,
