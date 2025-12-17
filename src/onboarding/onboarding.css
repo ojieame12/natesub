@@ -202,13 +202,17 @@
     justify-content: center;
     padding: var(--space-xl) 0;
     position: relative;
+    /* Fixed container - centered */
+    min-height: 250px;
+    max-height: 280px;
 }
 
 .start-hero img {
-    max-width: 616px;
-    max-height: 616px;
-    width: 80vw;
+    /* 0.85x scale (280 * 0.85 = 238) - centered */
+    width: 238px;
+    height: 238px;
     object-fit: contain;
+    margin: 0 auto;
 }
 
 /* Placeholder while hero image loads */
@@ -261,6 +265,75 @@
     max-width: 280px;
     margin-left: auto;
     margin-right: auto;
+}
+
+/* === CAROUSEL ANIMATIONS === */
+.carousel-headline,
+.carousel-subtext {
+    transition: opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.carousel-headline.fade-in,
+.carousel-subtext.fade-in {
+    opacity: 1;
+}
+
+.carousel-headline.fade-out,
+.carousel-subtext.fade-out {
+    opacity: 0;
+}
+
+/* Carousel Image - smooth crossfade, centered, 0.85x scale */
+.carousel-image {
+    transition: opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+    /* 0.85x scale (280 * 0.85 = 238) - centered */
+    width: 238px !important;
+    height: 238px !important;
+    object-fit: contain;
+    margin: 0 auto;
+    display: block;
+}
+
+.carousel-image.fade-in {
+    opacity: 1;
+}
+
+.carousel-image.fade-out {
+    opacity: 0;
+}
+
+/* Carousel Dots */
+.carousel-dots {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin-top: var(--space-md);
+}
+
+.carousel-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--neutral-300);
+    transition: background 0.3s ease, transform 0.3s ease;
+}
+
+.carousel-dot.active {
+    background: var(--neutral-900);
+    transform: scale(1.2);
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+
+    .carousel-headline,
+    .carousel-subtext {
+        transition: none;
+    }
+
+    .carousel-dot {
+        transition: none;
+    }
 }
 
 .start-buttons {
@@ -2710,7 +2783,9 @@ button.btn .spinning {
     text-align: center;
     margin-top: var(--space-lg);
     line-height: 1.5;
-}/* === PAYSTACK STYLES === */
+}
+
+/* === PAYSTACK STYLES === */
 .payment-methods-grid {
     display: flex;
     flex-direction: column;
