@@ -213,7 +213,7 @@ export const authVerifyRateLimit = rateLimit({
  */
 export const paymentRateLimit = rateLimit({
   windowMs: 60 * 60 * 1000,  // 1 hour
-  maxRequests: 10,
+  maxRequests: 50,  // Increased for testing (was 10)
   keyPrefix: 'payment_ratelimit',
   message: 'Too many payment requests. Please try again later.',
 })
