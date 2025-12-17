@@ -8,7 +8,7 @@ import type { Profile } from '../api/client'
 import { getCurrencySymbol, formatCompactNumber, formatAmountWithSeparators, calculateFeePreview, displayAmountToCents } from '../utils/currency'
 import './template-one.css'
 
-type ViewType = 'welcome' | 'impact' | 'perks' | 'tiers' | 'payment'
+type ViewType = 'welcome' | 'tiers' | 'payment'
 
 // Curated palette of "Premium" colors - defined outside component for stability
 const ACCENT_COLORS = [
@@ -79,8 +79,7 @@ export default function SubscriptionLiquid({ profile, canceled, isOwner }: Subsc
         pricingModel,
         singleAmount,
         tiers,
-        perks: profilePerks,
-        impactItems: profileImpactItems,
+
         currency,
         paymentProvider,
         paymentsReady,
@@ -203,18 +202,15 @@ export default function SubscriptionLiquid({ profile, canceled, isOwner }: Subsc
     const currentAmount = useTierPricing
         ? (selectedTier?.amount || tiers?.[0]?.amount || 0)
         : (singleAmount || 0)
-    const validImpactItems = (profileImpactItems || []).filter(item => item.title.trim() !== '')
-    const enabledPerks = (profilePerks || []).filter(perk => perk.enabled)
+
 
     // Fallback avatar
     const fallbackAvatar = 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&q=80'
 
     // View sequence - include tiers view for service accounts with multiple tiers
-    const viewSequence: ViewType[] = ['welcome', 'impact']
+    const viewSequence: ViewType[] = ['welcome']
     if (hasTiers) {
         viewSequence.push('tiers')
-    } else {
-        viewSequence.push('perks')
     }
     viewSequence.push('payment')
     const currentIndex = viewSequence.indexOf(currentView)
@@ -707,55 +703,9 @@ export default function SubscriptionLiquid({ profile, canceled, isOwner }: Subsc
                         </div>
                     )}
 
-                    {/* Impact View */}
-                    {currentView === 'impact' && (
-                        <div className={getViewClass('sub-view-impact')}>
-                            <h2 className="sub-section-title">
-                                {isService ? 'Why Work With Me' : 'How it would Help Me'}
-                            </h2>
 
-                            <div className="sub-items-free">
-                                {validImpactItems.map((item, index) => (
-                                    <div key={item.id || index} className="sub-item sub-item-numbered">
-                                        <span className="sub-item-number">{index + 1}</span>
-                                        <div className="sub-item-content">
-                                            <span className="sub-item-title">{item.title}</span>
-                                            {item.subtitle && <span className="sub-item-subtitle">{item.subtitle}</span>}
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
 
-                    {/* Perks View */}
-                    {currentView === 'perks' && (
-                        <div className={getViewClass('sub-view-perks')}>
-                            <h2 className="sub-section-title">
-                                {isService ? "What's Included" : 'What You would Get'}
-                            </h2>
 
-                            <div className="sub-items-free">
-                                {enabledPerks.length > 0 ? (
-                                    enabledPerks.map((perk) => (
-                                        <div key={perk.id} className="sub-item sub-item-checked">
-                                            <img src="/check-badge.svg" alt="" className="sub-item-badge" />
-                                            <div className="sub-item-content">
-                                                <span className="sub-item-title">{perk.title}</span>
-                                            </div>
-                                        </div>
-                                    ))
-                                ) : (
-                                    <div className="sub-item sub-item-checked">
-                                        <img src="/check-badge.svg" alt="" className="sub-item-badge" />
-                                        <div className="sub-item-content">
-                                            <span className="sub-item-title">Support {name}</span>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    )}
 
                     {/* Tiers View - For service accounts with multiple tiers */}
                     {currentView === 'tiers' && hasTiers && tiers && (
@@ -1032,9 +982,7 @@ export default function SubscriptionLiquid({ profile, canceled, isOwner }: Subsc
                                 <ChevronLeft size={16} className="sub-swipe-chevron sub-swipe-chevron-3" />
                             </div>
                             <span className="sub-swipe-text">
-                                {currentView === 'welcome' && (isService ? 'Why Work With Me' : 'How it would help Me')}
-                                {currentView === 'impact' && (hasTiers ? 'Choose Plan' : (isService ? "What's Included" : 'What You would Get'))}
-                                {currentView === 'perks' && 'Make Payment'}
+                                {currentView === 'welcome' && (hasTiers ? 'Choose Plan' : 'Make Payment')}
                                 {currentView === 'tiers' && 'Make Payment'}
                             </span>
                         </div>
@@ -1055,7 +1003,7 @@ export default function SubscriptionLiquid({ profile, canceled, isOwner }: Subsc
                     <div className="sub-button-wrapper">
                         <Pressable
                             className="sub-subscribe-btn"
-                            onClick={(currentView === 'perks' || currentView === 'tiers') ? () => setCurrentView('payment') : handleNext}
+                            onClick={(currentView === 'tiers') ? () => setCurrentView('payment') : handleNext}
                         >
                             <span className="sub-btn-text">{isOwner ? 'Next' : 'Subscribe Now'}</span>
                             <ArrowRight size={20} className="sub-btn-arrow" />

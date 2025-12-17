@@ -34,19 +34,7 @@ export interface SubscriptionTier {
     isPopular?: boolean
 }
 
-// Impact item - "How it would help me"
-export interface ImpactItem {
-    id: string
-    title: string
-    subtitle: string
-}
 
-// Perk item - "What you'll get from me"
-export interface PerkItem {
-    id: string
-    title: string
-    enabled: boolean
-}
 
 // Service deliverable - structured input for AI
 export interface ServiceDeliverable {
@@ -78,8 +66,7 @@ interface OnboardingStore {
 
     // AI-generated content (for service branch)
     generatedBio: string
-    generatedPerks: string[]
-    generatedImpact: string[]
+
     isGenerating: boolean
 
     // Auth
@@ -100,24 +87,13 @@ interface OnboardingStore {
     singleAmount: number | null
     tiers: SubscriptionTier[]
 
-    // Impact - how it would help me
-    impactItems: ImpactItem[]
 
-    // Perks - what subscribers get
-    perks: PerkItem[]
 
-    // Voice intro
-    hasVoiceIntro: boolean
-    voiceIntroUrl: string | null
-
-    // About
-    bio: string
-
-    // Username
+    // Profile Content
     username: string
-
-    // Avatar
+    bio: string
     avatarUrl: string | null
+    avatarFile: Blob | null
 
     // Payment provider
     paymentProvider: PaymentProvider
@@ -134,7 +110,7 @@ interface OnboardingStore {
     toggleServiceDeliverable: (id: string) => void
     updateServiceDeliverable: (id: string, updates: Partial<ServiceDeliverable>) => void
     setServiceCredential: (credential: string) => void
-    setGeneratedContent: (bio: string, perks: string[], impact: string[]) => void
+    setGeneratedContent: (bio: string) => void
     setIsGenerating: (isGenerating: boolean) => void
     setEmail: (email: string) => void
     setOtp: (otp: string) => void
@@ -142,24 +118,11 @@ interface OnboardingStore {
     setCountry: (country: string, countryCode: string) => void
     setCurrency: (currency: string) => void
     setPurpose: (purpose: SubscriptionPurpose) => void
-    setPricingModel: (model: PricingModel) => void
-    setSingleAmount: (amount: number | null) => void
-    setTiers: (tiers: SubscriptionTier[]) => void
-    addTier: (tier: SubscriptionTier) => void
-    updateTier: (id: string, updates: Partial<SubscriptionTier>) => void
-    removeTier: (id: string) => void
-    setImpactItems: (items: ImpactItem[]) => void
-    updateImpactItem: (id: string, updates: Partial<ImpactItem>) => void
-    setPerks: (perks: PerkItem[]) => void
-    togglePerk: (id: string) => void
-    addPerk: (perk: PerkItem) => void
-    updatePerk: (id: string, title: string) => void
-    removePerk: (id: string) => void
-    setHasVoiceIntro: (has: boolean) => void
-    setVoiceIntroUrl: (url: string | null) => void
+    setPricing: (model: PricingModel, tiers: SubscriptionTier[], singleAmount: number | null) => void
     setBio: (bio: string) => void
     setUsername: (username: string) => void
     setAvatarUrl: (url: string | null) => void
+    setAvatarFile: (file: Blob | null) => void
     setPaymentProvider: (provider: PaymentProvider) => void
     setFeeMode: (mode: FeeMode) => void
     nextStep: () => void
@@ -182,21 +145,6 @@ const defaultTiers: SubscriptionTier[] = [
     { id: 'tier-3', name: 'VIP', amount: 25, perks: ['All perks', 'Monthly shoutout', 'Direct messages'] },
 ]
 
-const defaultImpactItems: ImpactItem[] = [
-    { id: 'impact-1', title: 'Focus on My Craft', subtitle: 'More time creating, less time worrying' },
-    { id: 'impact-2', title: 'Help with My Groceries', subtitle: 'Cover the basics while I build' },
-    { id: 'impact-3', title: 'Help with Some Bills', subtitle: 'Keep the lights on and the dream alive' },
-]
-
-const defaultPerks: PerkItem[] = [
-    { id: 'perk-1', title: 'Weekly Updates', enabled: true },
-    { id: 'perk-2', title: 'Ask Me Anything', enabled: true },
-    { id: 'perk-3', title: 'Subscription to my thoughts', enabled: true },
-    { id: 'perk-4', title: 'Direct messages & priority replies', enabled: false },
-    { id: 'perk-5', title: 'Monthly supporter shoutouts', enabled: false },
-    { id: 'perk-6', title: 'Behind the scenes access', enabled: false },
-]
-
 const defaultServiceDeliverables: ServiceDeliverable[] = [
     { id: 'del-1', type: 'calls', label: 'Calls', enabled: false, quantity: 2, unit: 'per month' },
     { id: 'del-2', type: 'async', label: 'Async support', enabled: false, detail: 'Slack or Email' },
@@ -212,8 +160,6 @@ const initialState = {
     serviceDeliverables: defaultServiceDeliverables,
     serviceCredential: '',
     generatedBio: '',
-    generatedPerks: [] as string[],
-    generatedImpact: [] as string[],
     isGenerating: false,
     email: '',
     otp: '',
@@ -225,13 +171,10 @@ const initialState = {
     pricingModel: 'single' as PricingModel,
     singleAmount: 10,
     tiers: defaultTiers,
-    impactItems: defaultImpactItems,
-    perks: defaultPerks,
-    hasVoiceIntro: false,
-    voiceIntroUrl: null as string | null,
     bio: '',
     username: '',
     avatarUrl: null as string | null,
+    avatarFile: null as Blob | null,
     paymentProvider: null as PaymentProvider,
     feeMode: 'pass_to_subscriber' as FeeMode, // Default: subscriber pays the fee
 }
@@ -260,10 +203,8 @@ export const useOnboardingStore = create<OnboardingStore>()(
                 )
             })),
             setServiceCredential: (serviceCredential) => set({ serviceCredential }),
-            setGeneratedContent: (generatedBio, generatedPerks, generatedImpact) => set({
-                generatedBio,
-                generatedPerks,
-                generatedImpact
+            setGeneratedContent: (generatedBio) => set({
+                generatedBio
             }),
             setIsGenerating: (isGenerating) => set({ isGenerating }),
 
@@ -280,66 +221,35 @@ export const useOnboardingStore = create<OnboardingStore>()(
             setPurpose: (purpose) => set({ purpose }),
 
             // Pricing
-            setPricingModel: (pricingModel) => set({ pricingModel }),
-            setSingleAmount: (singleAmount) => set({ singleAmount }),
-            setTiers: (tiers) => set({ tiers }),
-            addTier: (tier) => set((state) => ({ tiers: [...state.tiers, tier] })),
-            updateTier: (id, updates) => set((state) => ({
-                tiers: state.tiers.map((t) => t.id === id ? { ...t, ...updates } : t)
-            })),
-            removeTier: (id) => set((state) => ({
-                tiers: state.tiers.filter((t) => t.id !== id)
-            })),
+            setPricing: (model, tiers, singleAmount) => set({ pricingModel: model, tiers, singleAmount }),
 
-            // Impact
-            setImpactItems: (impactItems) => set({ impactItems }),
-            updateImpactItem: (id, updates) => set((state) => ({
-                impactItems: state.impactItems.map((item) =>
-                    item.id === id ? { ...item, ...updates } : item
-                )
-            })),
-
-            // Perks
-            setPerks: (perks) => set({ perks }),
-            togglePerk: (id) => set((state) => ({
-                perks: state.perks.map((perk) =>
-                    perk.id === id ? { ...perk, enabled: !perk.enabled } : perk
-                )
-            })),
-            addPerk: (perk) => set((state) => ({ perks: [...state.perks, perk] })),
-            updatePerk: (id, title) => set((state) => ({
-                perks: state.perks.map((perk) =>
-                    perk.id === id ? { ...perk, title } : perk
-                )
-            })),
-            removePerk: (id) => set((state) => ({
-                perks: state.perks.filter((perk) => perk.id !== id)
-            })),
-
-            // Voice
-            setHasVoiceIntro: (hasVoiceIntro) => set({ hasVoiceIntro }),
-            setVoiceIntroUrl: (voiceIntroUrl) => set({ voiceIntroUrl }),
-
-            // About
+            // Profile Content
             setBio: (bio) => set({ bio }),
-
-            // Username
             setUsername: (username) => set({ username }),
-
-            // Avatar
             setAvatarUrl: (avatarUrl) => set({ avatarUrl }),
+            setAvatarFile: (avatarFile) => set({ avatarFile }),
 
             // Payment provider
-            setPaymentProvider: (paymentProvider) => set({ paymentProvider }),
+            setPaymentProvider: (provider) => set({ paymentProvider: provider }),
 
             // Fee mode
-            setFeeMode: (feeMode) => set({ feeMode }),
+            setFeeMode: (mode) => set({ feeMode: mode }),
 
             // Navigation
             nextStep: () => set((state) => ({ currentStep: state.currentStep + 1 })),
             prevStep: () => set((state) => ({ currentStep: Math.max(0, state.currentStep - 1) })),
             goToStep: (step) => set({ currentStep: step }),
-            reset: () => set(initialState),
+            reset: () => set({
+                ...initialState,
+                // Reset specific fields to their initial values,
+                // but keep some user-entered data if it makes sense for a soft reset
+                username: '',
+                bio: '',
+                avatarUrl: null,
+                avatarFile: null,
+                paymentProvider: null, // Reset to null so we re-evaluate safest option
+                feeMode: 'pass_to_subscriber',
+            }),
 
             // Hydrate from server data (for resume flows)
             hydrateFromServer: (serverData) => set(() => {
@@ -370,17 +280,12 @@ export const useOnboardingStore = create<OnboardingStore>()(
                     // Content
                     if (d.bio) updates.bio = d.bio
                     if (d.avatarUrl) updates.avatarUrl = d.avatarUrl
-                    if (d.voiceIntroUrl) updates.voiceIntroUrl = d.voiceIntroUrl
-                    if (d.hasVoiceIntro !== undefined) updates.hasVoiceIntro = d.hasVoiceIntro
-                    if (d.perks) updates.perks = d.perks
-                    if (d.impactItems) updates.impactItems = d.impactItems
+                    // Removed: voiceIntroUrl, hasVoiceIntro, perks, impactItems
                     // Service-specific
                     if (d.serviceDescription) updates.serviceDescription = d.serviceDescription
                     if (d.serviceDeliverables) updates.serviceDeliverables = d.serviceDeliverables
                     if (d.serviceCredential) updates.serviceCredential = d.serviceCredential
                     if (d.generatedBio) updates.generatedBio = d.generatedBio
-                    if (d.generatedPerks) updates.generatedPerks = d.generatedPerks
-                    if (d.generatedImpact) updates.generatedImpact = d.generatedImpact
                     // Payment
                     if (d.paymentProvider) updates.paymentProvider = d.paymentProvider
                     if (d.feeMode) updates.feeMode = d.feeMode
@@ -399,7 +304,7 @@ export const useOnboardingStore = create<OnboardingStore>()(
             partialize: (state) => ({
                 // Persist key state for resume
                 // Note: serviceDescriptionAudio (Blob) is NOT persisted - only the URL after upload
-                // Note: isGenerating excluded as it's transient
+                // Note: isGenerating, avatarFile excluded as they are transient or in-memory
                 currentStep: state.currentStep,
                 branch: state.branch,
                 serviceDescription: state.serviceDescription,
@@ -407,8 +312,6 @@ export const useOnboardingStore = create<OnboardingStore>()(
                 serviceDeliverables: state.serviceDeliverables,
                 serviceCredential: state.serviceCredential,
                 generatedBio: state.generatedBio,
-                generatedPerks: state.generatedPerks,
-                generatedImpact: state.generatedImpact,
                 email: state.email,
                 name: state.name,
                 country: state.country,
@@ -418,10 +321,6 @@ export const useOnboardingStore = create<OnboardingStore>()(
                 pricingModel: state.pricingModel,
                 singleAmount: state.singleAmount,
                 tiers: state.tiers,
-                impactItems: state.impactItems,
-                perks: state.perks,
-                hasVoiceIntro: state.hasVoiceIntro,
-                voiceIntroUrl: state.voiceIntroUrl,
                 bio: state.bio,
                 username: state.username,
                 avatarUrl: state.avatarUrl,

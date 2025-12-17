@@ -128,13 +128,10 @@ export default function PersonalReviewStep() {
         pricingModel,
         singleAmount,
         tiers,
-        impactItems,
-        perks,
         country,
         countryCode,
         currency,
         avatarUrl,
-        voiceIntroUrl,
         paymentProvider,
         feeMode,
         setName,
@@ -161,7 +158,6 @@ export default function PersonalReviewStep() {
                 username,
                 displayName: name,
                 avatarUrl,
-                voiceIntroUrl,
                 purpose: resolvedPurpose,
                 feeMode,
                 currency,
@@ -170,16 +166,7 @@ export default function PersonalReviewStep() {
                 pricingModel,
                 singleAmount: pricingModel === 'single' ? singleAmount : null,
                 tiers: pricingModel === 'tiers' ? tiers : null,
-                perks: perks.map(p => ({
-                    id: p.id,
-                    title: p.title,
-                    enabled: p.enabled,
-                })),
-                impactItems: impactItems.map(i => ({
-                    id: i.id,
-                    title: i.title,
-                    subtitle: i.subtitle,
-                })),
+
                 paymentProvider,
             })
 

@@ -18,7 +18,6 @@ export default function SubscribeEditorial() {
         pricingModel,
         singleAmount,
         tiers,
-        impactItems,
         currency,
     } = useOnboardingStore()
 
@@ -34,7 +33,7 @@ export default function SubscribeEditorial() {
     const displayName = name || urlUsername || 'Someone'
     const selectedTier = tiers.find(t => t.id === selectedTierId)
     const currentAmount = pricingModel === 'single' ? singleAmount : selectedTier?.amount
-    const validImpactItems = impactItems.filter(item => item.title.trim() !== '')
+
 
     // Fallback images from Unsplash
     const fallbackCover = 'https://images.unsplash.com/photo-1534088568595-a066f410bcda?w=800&q=80'
@@ -42,7 +41,7 @@ export default function SubscribeEditorial() {
 
     // Build view sequence based on available content
     const viewSequence: ViewType[] = ['main']
-    if (validImpactItems.length > 0) viewSequence.push('impact')
+    // Impact step removed
     if (pricingModel === 'tiers') viewSequence.push('tiers')
     viewSequence.push('payment')
 
@@ -130,11 +129,7 @@ export default function SubscribeEditorial() {
                                     <span className="sub-stat-value">{currencySymbol}{formatCompactNumber(currentAmount || 0)}</span>
                                     <span className="sub-stat-label">Monthly</span>
                                 </div>
-                                <div className="sub-stat-divider" />
-                                <div className="sub-stat">
-                                    <span className="sub-stat-value">{validImpactItems.length}</span>
-                                    <span className="sub-stat-label">Goals</span>
-                                </div>
+
                                 <div className="sub-stat-divider" />
                                 <div className="sub-stat">
                                     <span className="sub-stat-value">{pricingModel === 'tiers' ? tiers.length : 1}</span>
@@ -144,25 +139,7 @@ export default function SubscribeEditorial() {
                         </div>
                     )}
 
-                    {/* Impact View */}
-                    {currentView === 'impact' && (
-                        <div className="sub-view">
-                            <h2 className="sub-view-title">How it helps</h2>
-                            <div className="sub-impact-list">
-                                {validImpactItems.map((item, i) => (
-                                    <div key={item.id} className="sub-impact-item">
-                                        <div className="sub-impact-num">{i + 1}</div>
-                                        <div className="sub-impact-text">
-                                            <span className="sub-impact-title">{item.title}</span>
-                                            {item.subtitle && (
-                                                <span className="sub-impact-subtitle">{item.subtitle}</span>
-                                            )}
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
+
 
                     {/* Tiers View */}
                     {currentView === 'tiers' && (

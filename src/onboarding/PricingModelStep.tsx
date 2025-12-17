@@ -28,12 +28,12 @@ const PRICING_OPTIONS: PricingModelOption[] = [
 ]
 
 export default function PricingModelStep() {
-    const { pricingModel, setPricingModel, nextStep, prevStep } = useOnboardingStore()
+    const { pricingModel, tiers, singleAmount, setPricing, nextStep, prevStep } = useOnboardingStore()
     const [selected, setSelected] = useState<PricingModel>(pricingModel)
 
     const handleSelect = (model: PricingModel) => {
         setSelected(model)
-        setPricingModel(model)
+        setPricing(model, tiers, singleAmount)
     }
 
     return (
