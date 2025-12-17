@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Camera, Loader2, ExternalLink } from 'lucide-react'
 import { Pressable, useToast, Skeleton, LoadingButton } from './components'
-import { useProfile, useUpdateProfile, useUpdateSettings, uploadFile } from './api/hooks'
+import { useProfile, useUpdateProfile, uploadFile } from './api/hooks'
 import { getCurrencySymbol, formatCompactNumber, centsToDisplayAmount, displayAmountToCents } from './utils/currency'
 import { calculateFeePreview, getPricing } from './utils/pricing'
 import type { Profile } from './api/client'
@@ -14,7 +14,6 @@ export default function EditPage() {
   const toast = useToast()
   const { data: profileData, isLoading, error } = useProfile()
   const { mutateAsync: updateProfile, isPending: isSaving } = useUpdateProfile()
-  const { mutateAsync: updateSettings } = useUpdateSettings()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const profile = profileData?.profile
@@ -49,292 +48,290 @@ export default function EditPage() {
     if (!profile) return
     const currency = profile.currency || 'USD'
     const profileAmountDisplay = profile.singleAmount ? centsToDisplayAmount(profile.singleAmount, currency) : 10
-    const profileAmountDisplay = profile.singleAmount ? centsToDisplayAmount(profile.singleAmount, currency) : 10
-      ...t,
-    amount: centsToDisplayAmount(t.amount, currency)
-    }))
-const changed =
-  displayName !== (profile.displayName || '') ||
-  avatarUrl !== (profile.avatarUrl || null) ||
-  singleAmount !== profileAmountDisplay ||
-  feeMode !== (profile.feeMode || 'pass_to_subscriber')
-setHasChanges(changed)
+
+    const changed =
+      displayName !== (profile.displayName || '') ||
+      avatarUrl !== (profile.avatarUrl || null) ||
+      singleAmount !== profileAmountDisplay ||
+      feeMode !== (profile.feeMode || 'pass_to_subscriber')
+    setHasChanges(changed)
   }, [displayName, avatarUrl, singleAmount, feeMode, profile])
 
-// Avatar upload handler
-const handleAvatarClick = () => {
-  fileInputRef.current?.click()
-}
-
-const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-  const file = e.target.files?.[0]
-  if (!file) return
-
-  const isImage = file.type.startsWith('image/') ||
-    file.type === 'image/heic' ||
-    file.type === 'image/heif' ||
-    file.name.toLowerCase().endsWith('.heic') ||
-    file.name.toLowerCase().endsWith('.heif')
-
-  if (!isImage) {
-    toast.error('Please upload an image file')
-    return
+  // Avatar upload handler
+  const handleAvatarClick = () => {
+    fileInputRef.current?.click()
   }
 
-  if (file.size > 10 * 1024 * 1024) {
-    toast.error('Image must be less than 10MB')
-    return
-  }
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
 
-  setIsUploading(true)
-  try {
-    const url = await uploadFile(file, 'avatar')
-    setAvatarUrl(url)
-    toast.success('Avatar uploaded')
-  } catch (err: any) {
-    toast.error(err?.error || err?.message || 'Failed to upload avatar')
-  } finally {
-    setIsUploading(false)
-    if (fileInputRef.current) {
-      fileInputRef.current.value = ''
-    }
-  }
-}
+    const isImage = file.type.startsWith('image/') ||
+      file.type === 'image/heic' ||
+      file.type === 'image/heif' ||
+      file.name.toLowerCase().endsWith('.heic') ||
+      file.name.toLowerCase().endsWith('.heif')
 
-const handlePreview = () => {
-  if (profile?.username) {
-    window.open(`/ ${profile.username} `, '_blank')
-  }
-}
-
-const saveProfileAndSettings = async (options: { showSuccessToast?: boolean } = {}) => {
-  if (!profile) return
-  const { showSuccessToast = true } = options
-
-  try {
-    // Update Profile Data
-    await updateProfile({
-      ...profile,
-      displayName,
-      avatarUrl,
-      pricingModel: 'single',
-      singleAmount,
-      tiers: null,
-      feeMode,
-    })
-
-    setHasChanges(false)
-    if (showSuccessToast) toast.success('Changes saved')
-    return true
-  } catch (err: any) {
-    toast.error(err?.error || 'Failed to save changes')
-    return false
-  }
-}
-
-const handleSave = async () => {
-  await saveProfileAndSettings({ showSuccessToast: true })
-}
-
-const handleContinue = async () => {
-  if (!profile) return
-
-  setIsContinuing(true)
-  let didNavigate = false
-  try {
-    // Save any pending edits first
-    const ok = hasChanges ? await saveProfileAndSettings({ showSuccessToast: false }) : true
-    if (!ok) return
-
-    // If payments are not active yet, guide user to connect/finish payments next
-    if (profile.payoutStatus !== 'active') {
-      toast.info('Next: connect payments to start earning.')
-      didNavigate = true
-      navigate('/settings/payments', { state: { returnTo: '/dashboard' } })
+    if (!isImage) {
+      toast.error('Please upload an image file')
       return
     }
 
-    toast.success('Your page is live!')
-    didNavigate = true
-    navigate('/dashboard')
-  } finally {
-    if (!didNavigate) setIsContinuing(false)
-  }
-}
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('Image must be less than 10MB')
+      return
+    }
 
-if (isLoading) {
+    setIsUploading(true)
+    try {
+      const url = await uploadFile(file, 'avatar')
+      setAvatarUrl(url)
+      toast.success('Avatar uploaded')
+    } catch (err: any) {
+      toast.error(err?.error || err?.message || 'Failed to upload avatar')
+    } finally {
+      setIsUploading(false)
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+    }
+  }
+
+  const handlePreview = () => {
+    if (profile?.username) {
+      window.open(`/ ${profile.username} `, '_blank')
+    }
+  }
+
+  const saveProfileAndSettings = async (options: { showSuccessToast?: boolean } = {}) => {
+    if (!profile) return
+    const { showSuccessToast = true } = options
+
+    try {
+      // Update Profile Data
+      await updateProfile({
+        ...profile,
+        displayName,
+        avatarUrl,
+        pricingModel: 'single',
+        singleAmount,
+        tiers: null,
+        feeMode,
+      })
+
+      setHasChanges(false)
+      if (showSuccessToast) toast.success('Changes saved')
+      return true
+    } catch (err: any) {
+      toast.error(err?.error || 'Failed to save changes')
+      return false
+    }
+  }
+
+  const handleSave = async () => {
+    await saveProfileAndSettings({ showSuccessToast: true })
+  }
+
+  const handleContinue = async () => {
+    if (!profile) return
+
+    setIsContinuing(true)
+    let didNavigate = false
+    try {
+      // Save any pending edits first
+      const ok = hasChanges ? await saveProfileAndSettings({ showSuccessToast: false }) : true
+      if (!ok) return
+
+      // If payments are not active yet, guide user to connect/finish payments next
+      if (profile.payoutStatus !== 'active') {
+        toast.info('Next: connect payments to start earning.')
+        didNavigate = true
+        navigate('/settings/payments', { state: { returnTo: '/dashboard' } })
+        return
+      }
+
+      toast.success('Your page is live!')
+      didNavigate = true
+      navigate('/dashboard')
+    } finally {
+      if (!didNavigate) setIsContinuing(false)
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="edit-page">
+        <header className="edit-page-header">
+          <Pressable className="back-btn" onClick={() => navigate(-1)}>
+            <ArrowLeft size={20} />
+          </Pressable>
+          <img src="/logo.svg" alt="NatePay" className="header-logo" />
+          <div style={{ width: 36 }} />
+        </header>
+        <div className="edit-page-content">
+          <section className="edit-section">
+            <Skeleton width={80} height={16} style={{ marginBottom: 16 }} />
+            <div className="profile-card">
+              <Skeleton width={80} height={80} borderRadius="50%" />
+              <div className="profile-fields" style={{ flex: 1 }}>
+                <Skeleton width="100%" height={40} style={{ marginBottom: 12 }} />
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+    )
+  }
+
+  if (error || !profile) {
+    return (
+      <div className="edit-page">
+        <header className="edit-page-header">
+          <Pressable className="back-btn" onClick={() => navigate(-1)}>
+            <ArrowLeft size={20} />
+          </Pressable>
+          <img src="/logo.svg" alt="NatePay" className="header-logo" />
+          <div style={{ width: 36 }} />
+        </header>
+        <div className="edit-page-content">
+          <div className="edit-error">
+            <p>Failed to load profile. Please try again.</p>
+            <Pressable className="retry-btn" onClick={() => window.location.reload()}>
+              Retry
+            </Pressable>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="edit-page">
+      {/* Header */}
       <header className="edit-page-header">
         <Pressable className="back-btn" onClick={() => navigate(-1)}>
           <ArrowLeft size={20} />
         </Pressable>
         <img src="/logo.svg" alt="NatePay" className="header-logo" />
-        <div style={{ width: 36 }} />
+        <Pressable className="preview-btn" onClick={handlePreview}>
+          <ExternalLink size={18} />
+        </Pressable>
       </header>
+
       <div className="edit-page-content">
+        {/* Profile Section - Avatar + Display Name only */}
         <section className="edit-section">
-          <Skeleton width={80} height={16} style={{ marginBottom: 16 }} />
+          <h3 className="section-title">Profile</h3>
           <div className="profile-card">
-            <Skeleton width={80} height={80} borderRadius="50%" />
-            <div className="profile-fields" style={{ flex: 1 }}>
-              <Skeleton width="100%" height={40} style={{ marginBottom: 12 }} />
+            <Pressable className="avatar-edit" onClick={handleAvatarClick} disabled={isUploading}>
+              {avatarUrl ? (
+                <img src={avatarUrl} alt="" className="avatar-image" />
+              ) : (
+                <div className="avatar-placeholder">
+                  {displayName ? displayName.charAt(0).toUpperCase() : 'U'}
+                </div>
+              )}
+              <div className="avatar-overlay">
+                {isUploading ? <Loader2 size={16} className="animate-spin" /> : <Camera size={16} />}
+              </div>
+            </Pressable>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*,.heic,.heif"
+              onChange={handleFileChange}
+              className="hidden-input"
+            />
+            <div className="profile-fields">
+              <div className="field">
+                <label className="field-label">Display Name</label>
+                <input
+                  type="text"
+                  className="field-input"
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  placeholder="Your name or brand"
+                />
+              </div>
             </div>
           </div>
         </section>
-      </div>
-    </div>
-  )
-}
 
-if (error || !profile) {
-  return (
-    <div className="edit-page">
-      <header className="edit-page-header">
-        <Pressable className="back-btn" onClick={() => navigate(-1)}>
-          <ArrowLeft size={20} />
-        </Pressable>
-        <img src="/logo.svg" alt="NatePay" className="header-logo" />
-        <div style={{ width: 36 }} />
-      </header>
-      <div className="edit-page-content">
-        <div className="edit-error">
-          <p>Failed to load profile. Please try again.</p>
-          <Pressable className="retry-btn" onClick={() => window.location.reload()}>
-            Retry
-          </Pressable>
-        </div>
-      </div>
-    </div>
-  )
-}
 
-return (
-  <div className="edit-page">
-    {/* Header */}
-    <header className="edit-page-header">
-      <Pressable className="back-btn" onClick={() => navigate(-1)}>
-        <ArrowLeft size={20} />
-      </Pressable>
-      <img src="/logo.svg" alt="NatePay" className="header-logo" />
-      <Pressable className="preview-btn" onClick={handlePreview}>
-        <ExternalLink size={18} />
-      </Pressable>
-    </header>
 
-    <div className="edit-page-content">
-      {/* Profile Section - Avatar + Display Name only */}
-      <section className="edit-section">
-        <h3 className="section-title">Profile</h3>
-        <div className="profile-card">
-          <Pressable className="avatar-edit" onClick={handleAvatarClick} disabled={isUploading}>
-            {avatarUrl ? (
-              <img src={avatarUrl} alt="" className="avatar-image" />
-            ) : (
-              <div className="avatar-placeholder">
-                {displayName ? displayName.charAt(0).toUpperCase() : 'U'}
+        {/* Pricing Section */}
+        <section className="edit-section">
+          <h3 className="section-title">Pricing</h3>
+
+          <div className="single-price-card">
+            <span className="price-currency">{currencySymbol}</span>
+            <input
+              type="number"
+              className="price-input"
+              value={singleAmount}
+              onChange={(e) => setSingleAmount(parseFloat(e.target.value) || 0)}
+              min={1}
+            />
+            <span className="price-period">/month</span>
+          </div>
+        </section>
+
+        {/* Fee Mode Section */}
+        <section className="edit-section">
+          <h3 className="section-title">Platform Fee ({getPricing(profile.purpose).transactionFeeLabel})</h3>
+
+          <div className="fee-mode-toggle">
+            <Pressable
+              className={`toggle-option ${feeMode === 'absorb' ? 'active' : ''}`}
+              onClick={() => setFeeMode('absorb')}
+            >
+              I absorb
+            </Pressable>
+            <Pressable
+              className={`toggle-option ${feeMode === 'pass_to_subscriber' ? 'active' : ''}`}
+              onClick={() => setFeeMode('pass_to_subscriber')}
+            >
+              User pays app fee
+            </Pressable>
+          </div>
+
+          {(() => {
+            const currency = profile.currency || 'USD'
+            const baseAmountCents = displayAmountToCents(singleAmount || 0, currency)
+            const preview = calculateFeePreview(baseAmountCents, profile.purpose, feeMode)
+            const subscriberPaysDisplay = centsToDisplayAmount(preview.subscriberPays, currency)
+            const creatorReceivesDisplay = centsToDisplayAmount(preview.creatorReceives, currency)
+            return (
+              <div className="fee-mode-preview">
+                <div className="fee-preview-row">
+                  <span>Subscribers pay</span>
+                  <span className="fee-preview-amount">{currencySymbol}{formatCompactNumber(subscriberPaysDisplay)}</span>
+                </div>
+                <div className="fee-preview-row">
+                  <span>You receive</span>
+                  <span className="fee-preview-amount">{currencySymbol}{formatCompactNumber(creatorReceivesDisplay)}</span>
+                </div>
               </div>
-            )}
-            <div className="avatar-overlay">
-              {isUploading ? <Loader2 size={16} className="animate-spin" /> : <Camera size={16} />}
-            </div>
-          </Pressable>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*,.heic,.heif"
-            onChange={handleFileChange}
-            className="hidden-input"
-          />
-          <div className="profile-fields">
-            <div className="field">
-              <label className="field-label">Display Name</label>
-              <input
-                type="text"
-                className="field-input"
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                placeholder="Your name or brand"
-              />
-            </div>
-          </div>
-        </div>
-      </section>
+            )
+          })()}
+        </section>
+      </div>
 
+      {/* Save Button */}
+      <div className="edit-page-footer">
+        <LoadingButton
+          className="save-btn"
+          onClick={isLaunchFlow ? handleContinue : handleSave}
+          disabled={isLaunchFlow ? false : !hasChanges}
+          loading={isSaving || isUploading || isContinuing}
+          fullWidth
+        >
+          {isLaunchFlow
+            ? (profile.payoutStatus === 'active' ? 'Continue to Dashboard' : 'Continue to Payments')
+            : 'Save Changes'}
+        </LoadingButton>
+      </div>
 
-
-      {/* Pricing Section */}
-      <section className="edit-section">
-        <h3 className="section-title">Pricing</h3>
-
-        <div className="single-price-card">
-          <span className="price-currency">{currencySymbol}</span>
-          <input
-            type="number"
-            className="price-input"
-            value={singleAmount}
-            onChange={(e) => setSingleAmount(parseFloat(e.target.value) || 0)}
-            min={1}
-          />
-          <span className="price-period">/month</span>
-        </div>
-      </section>
-
-      {/* Fee Mode Section */}
-      <section className="edit-section">
-        <h3 className="section-title">Platform Fee ({getPricing(profile.purpose).transactionFeeLabel})</h3>
-
-        <div className="fee-mode-toggle">
-          <Pressable
-            className={`toggle - option ${feeMode === 'absorb' ? 'active' : ''} `}
-            onClick={() => setFeeMode('absorb')}
-          >
-            I absorb
-          </Pressable>
-          className={`toggle-option ${feeMode === 'pass_to_subscriber' ? 'active' : ''}`}
-          onClick={() => setFeeMode('pass_to_subscriber')}
-          >
-          User pays app fee
-        </Pressable>
     </div>
-
-    {(() => {
-      const currency = profile.currency || 'USD'
-      const baseAmountCents = displayAmountToCents(singleAmount || 0, currency)
-      const preview = calculateFeePreview(baseAmountCents, profile.purpose, feeMode)
-      const subscriberPaysDisplay = centsToDisplayAmount(preview.subscriberPays, currency)
-      const creatorReceivesDisplay = centsToDisplayAmount(preview.creatorReceives, currency)
-      return (
-        <div className="fee-mode-preview">
-          <div className="fee-preview-row">
-            <span>Subscribers pay</span>
-            <span className="fee-preview-amount">{currencySymbol}{formatCompactNumber(subscriberPaysDisplay)}</span>
-          </div>
-          <div className="fee-preview-row">
-            <span>You receive</span>
-            <span className="fee-preview-amount">{currencySymbol}{formatCompactNumber(creatorReceivesDisplay)}</span>
-          </div>
-        </div>
-      )
-    })()}
-  </section>
-    </div >
-
-  {/* Save Button */ }
-  < div className = "edit-page-footer" >
-    <LoadingButton
-      className="save-btn"
-      onClick={isLaunchFlow ? handleContinue : handleSave}
-      disabled={isLaunchFlow ? false : !hasChanges}
-      loading={isSaving || isUploading || isContinuing}
-      fullWidth
-    >
-      {isLaunchFlow
-        ? (profile.payoutStatus === 'active' ? 'Continue to Dashboard' : 'Continue to Payments')
-        : 'Save Changes'}
-    </LoadingButton>
-    </div >
-
-  </div >
-)
+  )
 }
