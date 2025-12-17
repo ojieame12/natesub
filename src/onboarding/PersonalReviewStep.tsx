@@ -19,7 +19,7 @@ const PURPOSE_LABELS: Record<string, string> = {
     other: 'Other',
 }
 
-type EditingField = 'name' | 'bio' | 'username' | null
+type EditingField = 'name' | 'username' | null
 
 interface ReviewRowProps {
     label: string
@@ -123,7 +123,6 @@ export default function PersonalReviewStep() {
     const {
         name,
         username,
-        bio,
         purpose,
         branch,
         pricingModel,
@@ -139,7 +138,6 @@ export default function PersonalReviewStep() {
         paymentProvider,
         feeMode,
         setName,
-        setBio,
         setUsername,
         setFeeMode,
         prevStep,
@@ -162,7 +160,6 @@ export default function PersonalReviewStep() {
             await api.profile.update({
                 username,
                 displayName: name,
-                bio: bio || null,
                 avatarUrl,
                 voiceIntroUrl,
                 purpose: resolvedPurpose,
@@ -252,15 +249,6 @@ export default function PersonalReviewStep() {
                             onEdit={setName}
                             editing={editingField === 'name'}
                             onStartEdit={() => setEditingField('name')}
-                            onEndEdit={() => setEditingField(null)}
-                        />
-                        <ReviewRow
-                            label="About"
-                            value={bio}
-                            onEdit={setBio}
-                            multiline
-                            editing={editingField === 'bio'}
-                            onStartEdit={() => setEditingField('bio')}
                             onEndEdit={() => setEditingField(null)}
                         />
                         <ReviewRow
