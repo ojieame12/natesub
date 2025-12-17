@@ -2,13 +2,14 @@ import { useState, useEffect } from 'react'
 import { ChevronLeft, Loader2, Check, X } from 'lucide-react'
 import { useOnboardingStore } from './store'
 import { Button, Pressable } from './components'
-import { useCheckUsername } from '../api/hooks'
+import { useCheckUsername, useSaveOnboardingProgress } from '../api/hooks'
 import { PUBLIC_DOMAIN } from '../utils/constants'
 import '../Dashboard.css'
 import './onboarding.css'
 
 export default function PersonalUsernameStep() {
-    const { username, setUsername, nextStep, prevStep } = useOnboardingStore()
+    const { username, setUsername, nextStep, prevStep, currentStep } = useOnboardingStore()
+    const { mutateAsync: saveProgress } = useSaveOnboardingProgress()
     const [debouncedUsername, setDebouncedUsername] = useState(username)
 
     // Debounce username for API check
@@ -39,6 +40,19 @@ export default function PersonalUsernameStep() {
         if (isTaken) return <X size={18} style={{ color: 'var(--status-error)' }} />
         if (isAvailable) return <Check size={18} style={{ color: 'var(--status-success)' }} />
         return null
+    }
+
+    const handleContinue = async () => {
+        // Save progress to server
+        try {
+            await saveProgress({
+                step: currentStep + 1,
+                data: { username },
+            })
+        } catch (err) {
+            console.warn('Failed to save onboarding progress:', err)
+        }
+        nextStep()
     }
 
     return (
@@ -109,7 +123,7 @@ export default function PersonalUsernameStep() {
                         variant="primary"
                         size="lg"
                         fullWidth
-                        onClick={nextStep}
+                        onClick={handleContinue}
                         disabled={!canContinue}
                     >
                         Continue

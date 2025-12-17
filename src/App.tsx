@@ -229,19 +229,28 @@ function InitialRouteRedirect() {
     // This handles the case where user returns to /onboarding with saved progress
     if (
       !hasHydrated.current &&
-      onboarding?.step &&
-      onboarding.step > 0 &&
-      currentStep === 0
+      ((onboarding?.step && onboarding.step > 0) || currentStep < 3)
     ) {
       hasHydrated.current = true
-      hydrateFromServer({
-        step: onboarding.step,
-        branch: onboarding.branch,
-        data: onboarding.data,
-      })
+
+      // If server has a saved step, use it.
+      // If not, but we are authenticated, we must be at least at Step 3 (Identity).
+      // This prevents the "Login Loop" (Start -> Email -> OTP -> Start).
+      const serverStep = onboarding?.step || 0
+      const safeStep = Math.max(serverStep, 3)
+
+      // Only force update if we are sitting at Step 0, 1, or 2 (Auth steps)
+      if (currentStep < 3) {
+        hydrateFromServer({
+          step: safeStep,
+          branch: onboarding?.branch,
+          data: onboarding?.data,
+        })
+      }
       // Don't navigate - let user continue onboarding from restored step
       return
     }
+
 
     // Authenticated - decide where to go
     hasNavigated.current = true
