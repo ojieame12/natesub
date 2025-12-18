@@ -79,12 +79,19 @@ export async function createExpressAccount(
   // For cross-border countries, use recipient service agreement
   // This enables payouts to countries not natively supported by Stripe
   // https://docs.stripe.com/connect/cross-border-payouts
+  //
+  // IMPORTANT: For cross-border, the Stripe account MUST be created in a supported
+  // country (US), not the recipient's country. Stripe will reject country: "NG".
+  // The recipient can still receive payouts to their Nigerian bank account.
   const accountParams: Stripe.AccountCreateParams = {
     type: 'express',
     email,
-    country,
+    // Cross-border: create account in platform country (US), not recipient's country
+    // Native: use the user's actual country
+    country: isCrossBorder ? 'US' : country,
     capabilities: {
       transfers: { requested: true },
+      // Cross-border accounts only need transfers capability (no card_payments)
       ...(isCrossBorder ? {} : { card_payments: { requested: true } }),
     },
     business_type: 'individual',
@@ -95,6 +102,7 @@ export async function createExpressAccount(
       last_name: lastName,
     },
     // For cross-border: use recipient TOS (platform is business of record)
+    // This means the platform (NatePay) handles compliance, not the Nigerian user
     ...(isCrossBorder && {
       tos_acceptance: {
         service_agreement: 'recipient',
@@ -107,6 +115,12 @@ export async function createExpressAccount(
         },
       },
     },
+    // Store the actual recipient country in metadata for reference
+    ...(isCrossBorder && {
+      metadata: {
+        recipient_country: country,
+      },
+    }),
   }
 
   const account = await stripe.accounts.create(accountParams, { idempotencyKey })
