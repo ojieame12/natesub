@@ -139,27 +139,66 @@ export default function Dashboard() {
 
   // ============================================
   // Pull-to-refresh + Manual Refresh
+  // Uses direct DOM manipulation to avoid React re-renders during drag
   // ============================================
 
   const PULL_MAX_PX = 120
   const PULL_TRIGGER_PX = 72
   const PULL_HOLD_PX = 56
-  const PULL_RESISTANCE = 0.5
 
-  const [pullOffsetPx, setPullOffsetPxState] = useState(0)
-  const pullOffsetPxRef = useRef(0)
-  const setPullOffsetPx = useCallback((next: number) => {
-    pullOffsetPxRef.current = next
-    setPullOffsetPxState(next)
+  // Rubber-band curve: asymptotic approach to max (feels like stretching elastic)
+  const rubberBand = useCallback((deltaY: number) => {
+    if (deltaY <= 0) return 0
+    // Asymptotic curve: PULL_MAX_PX * (1 - e^(-deltaY/factor))
+    // factor controls how "stiff" the rubber band feels
+    const factor = 180
+    return PULL_MAX_PX * (1 - Math.exp(-deltaY / factor))
   }, [])
 
-  const [isPulling, setIsPulling] = useState(false)
+  // Refs for pull state - no React state during drag to avoid re-renders
+  const pullOffsetRef = useRef(0)
+  const isPullingRef = useRef(false)
+  const dashboardRef = useRef<HTMLDivElement>(null)
 
-  const [isRefreshing, setIsRefreshingState] = useState(false)
+  // Ref for refreshing state - no React state needed since we update DOM directly
   const isRefreshingRef = useRef(false)
   const setIsRefreshing = useCallback((next: boolean) => {
     isRefreshingRef.current = next
-    setIsRefreshingState(next)
+  }, [])
+
+  // Apply pull offset directly to DOM via CSS variable (no React re-render)
+  const applyPullOffset = useCallback((offset: number, animate = false) => {
+    const el = dashboardRef.current
+    if (!el) return
+
+    pullOffsetRef.current = offset
+    el.style.setProperty('--pull-offset', `${offset}px`)
+
+    if (animate) {
+      el.classList.add('ptr-animating')
+    } else {
+      el.classList.remove('ptr-animating')
+    }
+
+    // Update indicator visibility
+    const indicator = el.querySelector('.ptr-indicator-inner') as HTMLElement
+    if (indicator) {
+      if (offset > 0 || isRefreshingRef.current) {
+        indicator.classList.add('visible')
+      } else {
+        indicator.classList.remove('visible')
+      }
+    }
+
+    // Update indicator text and icon rotation
+    const textSpan = el.querySelector('.ptr-indicator span') as HTMLElement
+    const iconEl = el.querySelector('.ptr-indicator .lucide-refresh-cw') as SVGElement
+    if (textSpan && !isRefreshingRef.current) {
+      textSpan.textContent = offset >= PULL_TRIGGER_PX ? 'Release to refresh' : 'Pull to refresh'
+    }
+    if (iconEl && !isRefreshingRef.current) {
+      iconEl.style.transform = `rotate(${Math.min(180, (offset / PULL_TRIGGER_PX) * 180)}deg)`
+    }
   }, [])
 
   const isMountedRef = useRef(true)
@@ -174,9 +213,20 @@ export default function Dashboard() {
 
     setIsRefreshing(true)
 
-    // If this refresh was triggered by pulling, snap to a stable "hold" height.
+    // If this refresh was triggered by pulling, snap to a stable "hold" height with animation
     if (source === 'pull') {
-      setPullOffsetPx(PULL_HOLD_PX)
+      applyPullOffset(PULL_HOLD_PX, true)
+      // Update indicator to show refreshing state
+      const el = dashboardRef.current
+      if (el) {
+        const textSpan = el.querySelector('.ptr-indicator span') as HTMLElement
+        const iconEl = el.querySelector('.ptr-indicator .lucide-refresh-cw') as SVGElement
+        if (textSpan) textSpan.textContent = 'Refreshing…'
+        if (iconEl) {
+          iconEl.style.transform = ''
+          iconEl.classList.add('ptr-spinning')
+        }
+      }
     }
 
     try {
@@ -193,11 +243,18 @@ export default function Dashboard() {
       if (isMountedRef.current) {
         setIsRefreshing(false)
         if (source === 'pull') {
-          setPullOffsetPx(0)
+          // Spring back to 0 with animation
+          applyPullOffset(0, true)
+          // Clean up spinning
+          const el = dashboardRef.current
+          if (el) {
+            const iconEl = el.querySelector('.ptr-indicator .lucide-refresh-cw') as SVGElement
+            if (iconEl) iconEl.classList.remove('ptr-spinning')
+          }
         }
       }
     }
-  }, [refetchActivity, refetchAnalytics, refetchMetrics, refetchProfile, setIsRefreshing, setPullOffsetPx, toast])
+  }, [refetchActivity, refetchAnalytics, refetchMetrics, refetchProfile, setIsRefreshing, applyPullOffset, toast])
 
   const loadData = useCallback(() => {
     void refreshDashboard('manual')
@@ -208,70 +265,90 @@ export default function Dashboard() {
     if (!container) return
 
     const startYRef = { current: null as number | null }
-    const pullingRef = { current: false }
+    const startXRef = { current: null as number | null }
+    const intentDetectedRef = { current: null as 'vertical' | 'horizontal' | null }
 
     const getTouchY = (event: TouchEvent) => event.touches[0]?.clientY ?? 0
+    const getTouchX = (event: TouchEvent) => event.touches[0]?.clientX ?? 0
 
     const resetPull = () => {
       startYRef.current = null
-      pullingRef.current = false
-      setIsPulling(false)
-      setPullOffsetPx(0)
+      startXRef.current = null
+      intentDetectedRef.current = null
+      isPullingRef.current = false
+      applyPullOffset(0, true) // Animate back to 0
     }
 
     const handleTouchStart = (event: TouchEvent) => {
       if (isRefreshingRef.current) return
       if (container.scrollTop > 0) return
       startYRef.current = getTouchY(event)
-      pullingRef.current = false
+      startXRef.current = getTouchX(event)
+      intentDetectedRef.current = null
+      isPullingRef.current = false
     }
 
     const handleTouchMove = (event: TouchEvent) => {
       const startY = startYRef.current
-      if (startY == null) return
+      const startX = startXRef.current
+      if (startY == null || startX == null) return
 
-      // If user started scrolling, abort pulling.
+      // If user started scrolling, abort pulling
       if (container.scrollTop > 0) {
         resetPull()
         return
       }
 
       const currentY = getTouchY(event)
+      const currentX = getTouchX(event)
       const deltaY = currentY - startY
+      const deltaX = currentX - startX
+
+      // Intent detection: determine if this is a vertical or horizontal gesture
+      if (intentDetectedRef.current === null && (Math.abs(deltaY) > 10 || Math.abs(deltaX) > 10)) {
+        intentDetectedRef.current = Math.abs(deltaY) > Math.abs(deltaX) ? 'vertical' : 'horizontal'
+      }
+
+      // If horizontal intent, don't interfere (let swipe gestures work)
+      if (intentDetectedRef.current === 'horizontal') {
+        return
+      }
 
       // Only handle downward pull
       if (deltaY <= 0) {
-        if (pullOffsetPxRef.current !== 0) {
-          setPullOffsetPx(0)
+        if (pullOffsetRef.current !== 0) {
+          applyPullOffset(0)
         }
         return
       }
 
-      const nextPull = Math.min(PULL_MAX_PX, deltaY * PULL_RESISTANCE)
-      if (!pullingRef.current) {
-        pullingRef.current = true
-        setIsPulling(true)
+      // Apply rubber-band resistance curve (no React state, just DOM)
+      const nextPull = rubberBand(deltaY)
+      if (!isPullingRef.current) {
+        isPullingRef.current = true
       }
-      setPullOffsetPx(nextPull)
+      applyPullOffset(nextPull)
 
-      // Prevent native overscroll while we render our own elastic pull.
+      // Prevent native overscroll while we render our own elastic pull
       event.preventDefault()
     }
 
     const handleTouchEnd = () => {
-      const pulled = pullOffsetPxRef.current
+      const pulled = pullOffsetRef.current
       const shouldRefresh = pulled >= PULL_TRIGGER_PX
 
       startYRef.current = null
-      pullingRef.current = false
-      setIsPulling(false)
+      startXRef.current = null
+      intentDetectedRef.current = null
+      isPullingRef.current = false
 
       if (shouldRefresh) {
         void refreshDashboard('pull')
         return
       }
 
-      setPullOffsetPx(0)
+      // Spring back to 0 with animation
+      applyPullOffset(0, true)
     }
 
     container.addEventListener('touchstart', handleTouchStart, { passive: true })
@@ -285,7 +362,7 @@ export default function Dashboard() {
       container.removeEventListener('touchend', handleTouchEnd)
       container.removeEventListener('touchcancel', handleTouchEnd)
     }
-  }, [refreshDashboard, setPullOffsetPx])
+  }, [refreshDashboard, applyPullOffset, rubberBand])
 
   // Memoized handlers to prevent unnecessary re-renders
   const openMenu = useCallback(() => setMenuOpen(true), [])
@@ -350,7 +427,7 @@ export default function Dashboard() {
   }, [username, queryClient])
 
   return (
-    <div className="dashboard">
+    <div className="dashboard" ref={dashboardRef} style={{ '--pull-offset': '0px' } as React.CSSProperties}>
       {/* Header */}
       <header className="header glass-header">
         <div className="header-left">
@@ -367,21 +444,11 @@ export default function Dashboard() {
         </div>
       </header>
 
-      {/* Pull-to-refresh indicator (Dashboard only) */}
-      <div className="ptr-indicator" aria-hidden={!isPulling && !isRefreshing && pullOffsetPx <= 0}>
-        <div className={`ptr-indicator-inner ${(isPulling || isRefreshing || pullOffsetPx > 0) ? 'visible' : ''}`}>
-          <RefreshCw
-            size={16}
-            className={isRefreshing ? 'ptr-spinning' : ''}
-            style={!isRefreshing ? { transform: `rotate(${Math.min(180, (pullOffsetPx / PULL_TRIGGER_PX) * 180)}deg)` } : undefined}
-          />
-          <span>
-            {isRefreshing
-              ? 'Refreshing…'
-              : pullOffsetPx >= PULL_TRIGGER_PX
-                ? 'Release to refresh'
-                : 'Pull to refresh'}
-          </span>
+      {/* Pull-to-refresh indicator (Dashboard only) - controlled via CSS variable */}
+      <div className="ptr-indicator">
+        <div className="ptr-indicator-inner">
+          <RefreshCw size={16} />
+          <span>Pull to refresh</span>
         </div>
       </div>
 
@@ -477,15 +544,8 @@ export default function Dashboard() {
         </>
       )}
 
-      {/* Main Content */}
-      <main
-        className="main"
-        style={{
-          transform: pullOffsetPx ? `translateY(${pullOffsetPx}px)` : undefined,
-          transition: isPulling ? 'none' : 'transform 220ms var(--ease-out, ease-out)',
-          willChange: (isPulling || isRefreshing) ? 'transform' : undefined,
-        }}
-      >
+      {/* Main Content - transform controlled by --pull-offset CSS variable */}
+      <main className="main">
         {hasError ? (
           <ErrorState
             title="Couldn't load dashboard"

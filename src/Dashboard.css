@@ -137,6 +137,8 @@
 }
 
 /* === PULL TO REFRESH (Dashboard) === */
+/* Uses CSS variable --pull-offset set via JS for zero-rerender performance */
+
 .ptr-indicator {
     position: fixed;
     top: calc(env(safe-area-inset-top, 12px) + 60px);
@@ -148,6 +150,13 @@
     justify-content: center;
     pointer-events: none;
     z-index: 49; /* under fixed header (50) */
+    /* Move indicator with content for elastic illusion */
+    transform: translateY(var(--pull-offset, 0px));
+}
+
+/* Spring animation when animating */
+.dashboard.ptr-animating .ptr-indicator {
+    transition: transform 350ms cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
 .ptr-indicator-inner {
@@ -164,13 +173,13 @@
     font-size: 13px;
     color: var(--text-secondary);
     opacity: 0;
-    transform: translateY(-6px);
+    transform: translateY(-6px) scale(0.95);
     transition: opacity 160ms ease, transform 160ms ease;
 }
 
 .ptr-indicator-inner.visible {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
 }
 
 .ptr-spinning {
@@ -190,6 +199,19 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-xl);
+    /* Transform controlled by CSS variable - no React re-renders during drag */
+    transform: translateY(var(--pull-offset, 0px));
+    will-change: transform;
+}
+
+/* Spring animation when releasing or settling */
+.dashboard.ptr-animating .main {
+    transition: transform 350ms cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+/* Disable will-change when not pulling to save memory */
+.dashboard:not(.ptr-animating) .main {
+    will-change: auto;
 }
 
 /* === STATS CARD === */
