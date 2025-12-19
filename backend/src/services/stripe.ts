@@ -4,6 +4,7 @@ import { env } from '../config/env.js'
 import { db } from '../db/client.js'
 import { redis } from '../db/redis.js'
 import { stripeCircuitBreaker, CircuitBreakerError } from '../utils/circuitBreaker.js'
+import { isStripeCrossBorderSupported } from '../utils/constants.js'
 
 // Cache TTL for Stripe account status (5 minutes)
 // Status changes are rare and webhooks update payoutStatus in DB
@@ -72,15 +73,20 @@ export async function createExpressAccount(
   // Use idempotency key to prevent duplicate accounts on retry/double-click
   const idempotencyKey = generateIdempotencyKey('acct_create', userId, email)
 
-  // Create Express account with the user's actual country
-  // Stripe supports Nigerian Express accounts natively with automatic currency conversion
+  // Check if this is a cross-border payout country (Nigeria, Ghana, Kenya)
+  // These use the recipient service agreement - platform is business of record
+  // User provides their local details and receives payouts to their local bank
+  const isCrossBorder = isStripeCrossBorderSupported(country)
+
   const accountParams: Stripe.AccountCreateParams = {
     type: 'express',
     email,
-    country,
+    country, // User's actual country (NG, GH, KE, etc.)
     capabilities: {
       transfers: { requested: true },
-      card_payments: { requested: true },
+      // Cross-border accounts can only have transfers capability
+      // Native accounts can also process card payments
+      ...(isCrossBorder ? {} : { card_payments: { requested: true } }),
     },
     business_type: 'individual',
     individual: {
@@ -88,6 +94,13 @@ export async function createExpressAccount(
       first_name: firstName,
       last_name: lastName,
     },
+    // Cross-border: use recipient service agreement
+    // Platform is business of record, user just receives payouts
+    ...(isCrossBorder && {
+      tos_acceptance: {
+        service_agreement: 'recipient',
+      },
+    }),
     settings: {
       payouts: {
         schedule: {

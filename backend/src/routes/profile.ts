@@ -18,85 +18,15 @@ import {
   type UserPurpose,
 } from '../services/pricing.js'
 import { startPlatformTrial } from '../services/platformSubscription.js'
+import {
+  profileSchema,
+  profilePatchSchema,
+  templateSchema,
+  type Profile,
+  type ProfilePatch
+} from '../schemas/profile.js'
 
 const profile = new Hono()
-
-// Tier schema
-const tierSchema = z.object({
-  id: z.string().max(50),
-  name: z.string().min(1).max(50),
-  amount: z.number().positive().max(100000), // Max $100k per tier
-  perks: z.array(z.string().max(200)).max(20),
-  isPopular: z.boolean().optional(),
-})
-
-// Perk schema
-const perkSchema = z.object({
-  id: z.string(),
-  title: z.string(),
-  enabled: z.boolean(),
-})
-
-// Impact item schema
-const impactItemSchema = z.object({
-  id: z.string(),
-  title: z.string(),
-  subtitle: z.string(),
-})
-
-// URL validator - only accepts http(s) URLs
-// Data URLs are rejected to prevent DB bloat and enforce proper upload flow
-const httpsUrl = z.string().refine(
-  (val) => {
-    if (!val) return true
-    try {
-      const url = new URL(val)
-      return url.protocol === 'http:' || url.protocol === 'https:'
-    } catch {
-      return false
-    }
-  },
-  { message: 'Must be a valid HTTP(S) URL' }
-)
-
-// Profile create/update schema
-const templateSchema = z.enum(['boundary', 'midnight', 'liquid', 'minimal', 'editorial'])
-
-const profileSchema = z.object({
-  username: z.string().min(3).max(20).regex(/^[a-z0-9_]+$/),
-  displayName: z.string().min(2).max(50),
-  bio: z.string().max(500).optional().nullable(),
-  avatarUrl: httpsUrl.optional().nullable(),
-  voiceIntroUrl: httpsUrl.optional().nullable(),
-  country: z.string(),
-  countryCode: z.string().length(2),
-  currency: z.string().length(3).default('USD'),
-  purpose: z.enum(['tips', 'support', 'allowance', 'fan_club', 'exclusive_content', 'service', 'other']),
-  pricingModel: z.enum(['single', 'tiers']),
-  singleAmount: z.number().positive().max(100000).optional().nullable(), // Max $100k
-  tiers: z.array(tierSchema).optional().nullable(),
-  perks: z.array(perkSchema).optional().nullable(),
-  impactItems: z.array(impactItemSchema).optional().nullable(),
-  paymentProvider: z.enum(['stripe', 'paystack', 'flutterwave']).optional().nullable(),
-  template: templateSchema.optional(),
-  feeMode: z.enum(['absorb', 'pass_to_subscriber']).optional(),
-  // Address fields
-  address: z.string().optional().nullable(),
-  city: z.string().optional().nullable(),
-  state: z.string().optional().nullable(),
-  zip: z.string().optional().nullable(),
-  isPublic: z.boolean().optional(),
-})
-
-const profilePatchSchema = profileSchema
-  .partial()
-  .extend({
-    // Allow explicitly clearing JSON fields with null
-    tiers: z.array(tierSchema).optional().nullable(),
-    perks: z.array(perkSchema).optional().nullable(),
-    impactItems: z.array(impactItemSchema).optional().nullable(),
-    template: templateSchema.optional(),
-  })
 
 type TemplateId = z.infer<typeof templateSchema>
 

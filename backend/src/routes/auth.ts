@@ -321,7 +321,8 @@ if (env.NODE_ENV !== 'production') {
   )
 }
 
-export default auth
+// Delete account (soft delete)
+auth.delete(
   '/account',
   requireAuth,
   zValidator('json', z.object({
