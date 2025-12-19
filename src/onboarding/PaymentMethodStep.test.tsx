@@ -36,9 +36,9 @@ describe('PaymentMethodStep', () => {
     vi.clearAllMocks()
     useOnboardingStore.getState().reset()
     
-    // Ensure mocks return promises
-    vi.mocked(api.auth.saveOnboardingProgress).mockResolvedValue({})
-    vi.mocked(api.profile.update).mockResolvedValue({})
+    // Ensure mocks return promises with correct types
+    vi.mocked(api.auth.saveOnboardingProgress).mockResolvedValue({ success: true })
+    vi.mocked(api.profile.update).mockResolvedValue({ profile: {} as any })
     
     // Setup minimal store state required for validation
     useOnboardingStore.setState({
@@ -64,9 +64,9 @@ describe('PaymentMethodStep', () => {
 
   it('selects Stripe and initiates connect flow', async () => {
     // Mock Stripe connect response
-    const mockConnectRes = { onboardingUrl: 'https://connect.stripe.com/setup' }
+    const mockConnectRes = { success: true, onboardingUrl: 'https://connect.stripe.com/setup' }
     vi.mocked(api.stripe.connect).mockResolvedValue(mockConnectRes)
-    vi.mocked(api.profile.update).mockResolvedValue({})
+    vi.mocked(api.profile.update).mockResolvedValue({ profile: {} as any })
 
     // Assign window.location for redirect test
     const originalLocation = window.location
@@ -92,7 +92,7 @@ describe('PaymentMethodStep', () => {
     })
 
     // Restore location
-    window.location = originalLocation
+    ;(window as any).location = originalLocation
   })
 
   it('selects Paystack and navigates to bank setup', async () => {

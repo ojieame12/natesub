@@ -130,6 +130,6 @@ describe('StripeComplete', () => {
       expect(window.location.href).toBe('https://connect.stripe.com/retry')
     })
     
-    window.location = originalLocation
+    ;(window as any).location = originalLocation
   })
 })
