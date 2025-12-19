@@ -176,6 +176,47 @@ checkout.post(
       isCrossBorder
     )
 
+    // STUB MODE: Simulate checkout if configured
+    if (env.PAYMENTS_MODE === 'stub') {
+      const isPaystack = hasPaystack && profile.paystackSubaccountCode && 
+        (inferredProvider === 'paystack' || (!hasStripe && hasPaystack))
+      
+      const provider = isPaystack ? 'paystack' : 'stripe'
+      const reference = `stub_${Date.now()}_${Math.random().toString(36).substring(7)}`
+      
+      // Stub URL that immediately redirects to the success page
+      // Paystack expects: /payment/success?reference=...
+      // Stripe expects: /:username?success=true&session_id=...
+      let stubUrl: string
+      if (provider === 'paystack') {
+        stubUrl = `${env.APP_URL}/payment/success?creator=${profile.username}&reference=${reference}&stub=true`
+      } else {
+        stubUrl = `${env.APP_URL}/${profile.username}?success=true&provider=stripe&session_id=stub_cs_${reference}`
+      }
+      
+      // Breakdown logic reuse
+      const currency = isPaystack ? profile.currency : (isCrossBorder ? 'USD' : profile.currency)
+      const breakdown = buildBreakdown(feeCalc, currency)
+
+      console.log(`[checkout] Stub mode active. Returning fake ${provider} checkout:`, stubUrl)
+
+      if (provider === 'paystack') {
+        return c.json({
+          provider: 'paystack',
+          url: stubUrl, // Frontend redirects here, which bounces back to success
+          reference,
+          breakdown,
+        })
+      } else {
+        return c.json({
+          provider: 'stripe',
+          sessionId: `stub_cs_${reference}`,
+          url: stubUrl,
+          breakdown,
+        })
+      }
+    }
+
     try {
       // Use Paystack for creators who have Paystack connected
       if (hasPaystack && profile.paystackSubaccountCode) {
@@ -340,6 +381,20 @@ checkout.get(
       return c.json({ error: 'Reference is required' }, 400)
     }
 
+    // STUB MODE: Verify fake reference
+    if (env.PAYMENTS_MODE === 'stub' && reference.startsWith('stub_')) {
+      return c.json({
+        verified: true,
+        status: 'success',
+        amount: 500000, // Dummy amount
+        currency: 'NGN',
+        reference,
+        paidAt: new Date().toISOString(),
+        channel: 'stub',
+        metadata: { stub: true },
+      })
+    }
+
     try {
       // Import dynamically to avoid circular deps
       const { verifyTransaction } = await import('../services/paystack.js')
@@ -378,8 +433,28 @@ checkout.get(
     const { sessionId } = c.req.param()
     const creatorUsername = c.req.query('username')
 
-    if (!sessionId || !sessionId.startsWith('cs_')) {
+    if (!sessionId || !sessionId.startsWith('cs_') && !sessionId.startsWith('stub_cs_')) {
       return c.json({ error: 'Invalid session ID' }, 400)
+    }
+
+    // STUB MODE: Verify fake session
+    if (env.PAYMENTS_MODE === 'stub' && sessionId.startsWith('stub_cs_')) {
+       // Validate creator ownership if username provided
+       if (creatorUsername) {
+         // In a real stub implementation, we might encode creatorId in the stub ID,
+         // but for E2E simplicity we assume valid ownership if in stub mode.
+         // Or we could check if the creator exists in DB.
+       }
+
+       return c.json({
+         verified: true,
+         status: 'paid',
+         maskedEmail: 'stub@example.com',
+         creatorId: 'stub_creator_id',
+         amountTotal: 5000,
+         currency: 'usd',
+         mode: 'payment',
+       })
     }
 
     try {

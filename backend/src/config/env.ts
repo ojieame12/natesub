@@ -92,6 +92,9 @@ const envSchema = z.object({
 
   // Encryption
   ENCRYPTION_KEY: z.string().min(32).optional(), // For encrypting PII (account numbers)
+
+  // Testing
+  PAYMENTS_MODE: z.enum(['live', 'test', 'stub']).default('live'),
 })
 
 function loadEnv() {

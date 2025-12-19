@@ -15,7 +15,7 @@ import {
   type PaystackCountry,
 } from '../services/paystack.js'
 import { maskAccountNumber } from '../utils/pii.js'
-import { decryptAccountNumber } from '../utils/encryption.js'
+import { decryptAccountNumber, encryptAccountNumber } from '../utils/encryption.js'
 
 const paystackRoutes = new Hono()
 
@@ -221,11 +221,19 @@ paystackRoutes.post(
         email: user.email,
       })
 
-      // Store verified account name
+      // Encrypt account number before storage
+      const encryptedAccountNumber = encryptAccountNumber(data.accountNumber)
+
+      // Store verified account details
       await db.profile.update({
         where: { userId },
         data: {
+          paystackSubaccountCode: result.subaccountCode,
+          paystackBankCode: data.bankCode,
+          paystackAccountNumber: encryptedAccountNumber,
           paystackAccountName: data.accountName,
+          paymentProvider: 'paystack', // Auto-switch to Paystack
+          payoutStatus: 'active', // Mark as active
         },
       })
 

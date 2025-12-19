@@ -26,12 +26,12 @@ export interface OnboardingState {
 
 // Hash token for storage (never store raw tokens)
 // SECURITY: Uses HMAC with SESSION_SECRET to prevent offline hash cracking
-function hashToken(token: string): string {
+export function hashToken(token: string): string {
   return createHmac('sha256', env.SESSION_SECRET).update(token).digest('hex')
 }
 
 // Generate a secure session token
-function generateToken(): string {
+export function generateToken(): string {
   return randomBytes(32).toString('hex')
 }
 

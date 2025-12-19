@@ -9,6 +9,9 @@ import {
   getCurrentUser,
   getCurrentUserWithOnboarding,
   saveOnboardingProgress,
+  hashToken,
+  generateToken,
+  computeOnboardingState,
 } from '../services/auth.js'
 import { requireAuth } from '../middleware/auth.js'
 import { authVerifyRateLimit, authMagicLinkRateLimit } from '../middleware/rateLimit.js'
@@ -257,8 +260,68 @@ auth.put(
   }
 )
 
-// Delete account (soft delete)
-auth.delete(
+// E2E Test Login Helper (Test/Dev only)
+if (env.NODE_ENV !== 'production') {
+  auth.post(
+    '/e2e-login',
+    zValidator('json', z.object({
+      email: z.string().email(),
+    })),
+    async (c) => {
+      const { email } = c.req.valid('json')
+      const normalizedEmail = email.toLowerCase().trim()
+
+      const { user, sessionToken } = await db.$transaction(async (tx) => {
+        let user = await tx.user.findUnique({
+          where: { email: normalizedEmail },
+          include: { profile: true },
+        })
+
+        if (!user) {
+          user = await tx.user.create({
+            data: {
+              email: normalizedEmail,
+              onboardingStep: 3, // Start at identity step
+            },
+            include: { profile: true },
+          })
+        }
+
+        const sessionToken = generateToken() // You need to export this from services/auth or re-implement
+        const sessionTokenHash = hashToken(sessionToken) // Export this too
+        const sessionExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+
+        await tx.session.create({
+          data: {
+            userId: user.id,
+            token: sessionTokenHash,
+            expiresAt: sessionExpiresAt,
+          },
+        })
+
+        return { user, sessionToken }
+      })
+
+      setCookie(c, 'session', sessionToken, {
+        httpOnly: true,
+        secure: false, // Local/Test usually http
+        sameSite: 'Strict',
+        maxAge: 7 * 24 * 60 * 60,
+        path: '/',
+      })
+
+      const onboarding = computeOnboardingState(user)
+
+      return c.json({
+        success: true,
+        token: sessionToken,
+        onboarding,
+      })
+    }
+  )
+}
+
+export default auth
   '/account',
   requireAuth,
   zValidator('json', z.object({
