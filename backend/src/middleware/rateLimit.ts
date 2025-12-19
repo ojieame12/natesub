@@ -118,9 +118,18 @@ export function rateLimit(options: Partial<RateLimitOptions> = {}) {
 
       await next()
     } catch (error) {
-      // If Redis fails, log and fail CLOSED for security-critical endpoints
-      // This prevents abuse during Redis outages
+      // If Redis fails, log and decide whether to fail open or closed
       console.error('Rate limit error:', error)
+
+      // In pre-production, allow failing open to prevent total outage
+      // Set REDIS_FAIL_OPEN=true in Railway when Redis quota is exceeded
+      const failOpen = process.env.REDIS_FAIL_OPEN === 'true'
+
+      if (failOpen) {
+        console.warn(`[rateLimit] Redis unavailable, failing OPEN for ${config.keyPrefix}`)
+        await next()
+        return
+      }
 
       // Check if this is a security-critical endpoint that should fail closed
       const criticalPrefixes = ['auth_verify', 'auth_magic', 'payment', 'checkout']

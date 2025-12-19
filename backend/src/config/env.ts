@@ -2,8 +2,18 @@ import { z } from 'zod'
 
 function normalizeUrlEnv(value: unknown): unknown {
   if (typeof value !== 'string') return value
-  const trimmed = value.trim()
+  // Strip whitespace aggressively to avoid broken URLs from env var copy/paste.
+  const trimmed = value.trim().replace(/\s+/g, '')
   if (!trimmed) return trimmed
+
+  // Fix accidental double scheme prefixes (e.g., "https://https://natepay.co").
+  if (/^(https?:\/\/){2,}/i.test(trimmed)) {
+    const withoutScheme = trimmed.replace(/^(https?:\/\/)+/i, '')
+    const isLocalhost = /^(localhost|127\\.0\\.0\\.1|0\\.0\\.0\\.0)(:|$)/.test(withoutScheme)
+    const protocol = isLocalhost ? 'http://' : 'https://'
+    return `${protocol}${withoutScheme}`
+  }
+
   // If already has a scheme, keep as-is.
   if (/^[a-zA-Z][a-zA-Z\\d+.-]*:\/\//.test(trimmed)) return trimmed
 

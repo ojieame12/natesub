@@ -19,7 +19,7 @@ const faqs = [
   {
     id: 3,
     question: 'What are the fees?',
-    answer: 'NatePay charges 5% on all transactions plus standard payment processing fees. Instant payouts have an additional 1.5% fee.',
+    answer: 'NatePay charges 8% on all transactions. This covers payment processing and platform costs. No hidden fees.',
   },
   {
     id: 4,

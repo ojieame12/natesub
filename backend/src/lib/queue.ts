@@ -69,6 +69,11 @@ export function createWorker<T>(
   return new Worker(queueName, processor, {
     connection: connection!,
     concurrency,
+    // CRITICAL: Wait 5 seconds before polling again when queue is empty
+    // Default is 5ms which burns through Redis quota insanely fast
+    drainDelay: 5000,
+    // Check for stalled jobs less frequently (default 30s, bump to 60s)
+    stalledInterval: 60000,
     // Remove completed jobs to save Redis memory (keep last 100)
     removeOnComplete: { count: 100 },
     // Keep failed jobs for inspection (keep last 1000)

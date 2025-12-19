@@ -66,20 +66,26 @@ export default function OtpStep() {
             const result = await verifyCode({ otp, email: normalizedEmail })
 
             // Smart routing based on user state
-            if (result.hasProfile && result.hasActivePayment) {
-                // Fully set up - go to dashboard
-                navigate('/dashboard', { replace: true })
-            } else if (result.hasProfile && !result.hasActivePayment) {
-                // Profile exists but no payment - go to payment settings
-                navigate('/settings/payments', { replace: true })
-            } else if (result.onboardingStep && result.onboardingStep >= 3) {
-                // Has progress - resume from saved step
+            // If backend provides onboarding progress, hydrate store first
+            if (result.onboardingStep && result.onboardingStep >= 3) {
                 hydrateFromServer({
                     step: result.onboardingStep,
                     branch: result.onboardingBranch,
                     data: result.onboardingData,
                 })
-                // Stay in onboarding, store will update currentStep
+            }
+
+            // Honor backend's redirectTo if provided (most reliable)
+            if (result.redirectTo) {
+                navigate(result.redirectTo, { replace: true })
+            } else if (result.hasProfile && result.hasActivePayment) {
+                // Fully set up - go to dashboard
+                navigate('/dashboard', { replace: true })
+            } else if (result.onboardingStep && result.onboardingStep >= 3) {
+                // Has progress - stay in onboarding (store already hydrated above)
+            } else if (result.hasProfile && !result.hasActivePayment) {
+                // Profile exists but no payment - go to payment settings
+                navigate('/settings/payments', { replace: true })
             } else {
                 // Fresh user - continue to next step (identity)
                 nextStep()

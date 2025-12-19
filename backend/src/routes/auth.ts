@@ -171,6 +171,11 @@ auth.get('/me', requireAuth, async (c) => {
     currency: user.profile.currency,
     purpose: user.profile.purpose,
     payoutStatus: user.profile.payoutStatus,
+    // Billing address fields (for Settings page)
+    address: user.profile.address,
+    city: user.profile.city,
+    state: user.profile.state,
+    zip: user.profile.zip,
   } : null
 
   return c.json({

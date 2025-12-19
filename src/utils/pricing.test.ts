@@ -24,9 +24,9 @@ describe('utils/pricing', () => {
   })
 
   it('calculates fee + net amounts (personal vs service)', () => {
-    // $10.00 gross
-    expect(calculateFee(1000, 'personal')).toBe(100) // 10%
-    expect(calculateNet(1000, 'personal')).toBe(900)
+    // $10.00 gross - both personal and service use 8% fee
+    expect(calculateFee(1000, 'personal')).toBe(80) // 8%
+    expect(calculateNet(1000, 'personal')).toBe(920)
 
     expect(calculateFee(1000, 'service')).toBe(80) // 8%
     expect(calculateNet(1000, 'service')).toBe(920)
@@ -42,11 +42,11 @@ describe('utils/pricing', () => {
 
   it('calculates fee preview when subscriber pays the fee', () => {
     const preview = calculateFeePreview(1000, 'personal', 'pass_to_subscriber')
-    // subscriberPays = 1000 / 0.9 = 1111.11 -> rounded
-    expect(preview.subscriberPays).toBe(1111)
+    // subscriberPays = 1000 / 0.92 = 1086.96 -> rounded to 1087
+    expect(preview.subscriberPays).toBe(1087)
     expect(preview.creatorReceives).toBe(1000)
-    expect(preview.feeAmount).toBe(111)
-    expect(preview.feePercent).toBe(10)
+    expect(preview.feeAmount).toBe(87)
+    expect(preview.feePercent).toBe(8)
   })
 })
 

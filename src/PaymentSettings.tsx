@@ -200,7 +200,8 @@ export default function PaymentSettings() {
 
       if (result.onboardingUrl) {
         // Set sessionStorage only after successful API call, before redirect
-        if (returnTo) sessionStorage.setItem('stripe_return_to', returnTo)
+        // Always return to payment settings after Stripe onboarding from settings
+        sessionStorage.setItem('stripe_return_to', returnTo || '/settings/payments')
         sessionStorage.setItem('stripe_onboarding_source', 'settings')
         sessionStorage.setItem('stripe_onboarding_started_at', Date.now().toString())
         window.location.href = result.onboardingUrl

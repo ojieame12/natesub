@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, ChevronRight, Mail, Bell, Eye, Download, Trash2, LogOut, CreditCard, Loader2, MapPin, X, Check } from 'lucide-react'
+import { ArrowLeft, ChevronRight, Mail, Bell, Download, Trash2, LogOut, CreditCard, Loader2, MapPin, X, Check } from 'lucide-react'
 import { Pressable, useToast, Toggle } from './components'
 import { useCurrentUser, useLogout, useDeleteAccount, useSettings, useUpdateSettings, useBillingStatus, useUpdateProfile } from './api/hooks'
 import { useOnboardingStore } from './onboarding/store'
@@ -146,7 +146,6 @@ export default function Settings() {
   const [emailNotifications, setEmailNotifications] = useState(true)
   const [newSubscriberAlerts, setNewSubscriberAlerts] = useState(true)
   const [paymentAlerts, setPaymentAlerts] = useState(true)
-  const [isPublic, setIsPublic] = useState(true)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   // Sync local state with server data
@@ -158,7 +157,6 @@ export default function Settings() {
         setEmailNotifications(prefs?.email ?? true)
         setNewSubscriberAlerts(prefs?.subscriberAlerts ?? true)
         setPaymentAlerts(prefs?.paymentAlerts ?? true)
-        setIsPublic(settings.isPublic ?? true)
       }, 0)
       return () => window.clearTimeout(timer)
     }
@@ -197,20 +195,6 @@ export default function Settings() {
     }
   }
 
-  // Toggle profile visibility
-  const handleVisibilityToggle = async () => {
-    const newValue = !isPublic
-    setIsPublic(newValue)
-
-    try {
-      await updateSettings({ isPublic: newValue })
-      toast.success(newValue ? 'Profile is now public' : 'Profile is now private')
-    } catch {
-      setIsPublic(!newValue)
-      toast.error('Failed to update visibility')
-    }
-  }
-
   const handleLogout = async () => {
     try {
       await logout()
@@ -227,6 +211,8 @@ export default function Settings() {
   const handleDeleteAccount = async () => {
     try {
       await deleteAccount()
+      // Reset Zustand store in-memory state (same as logout)
+      useOnboardingStore.getState().reset()
       localStorage.clear()
       setShowDeleteConfirm(false)
       toast.success('Account deleted')
@@ -334,18 +320,10 @@ export default function Settings() {
           </div>
         </section>
 
-        {/* Privacy Section */}
+        {/* Data Section */}
         <section className="settings-section">
-          <h3 className="section-label">Privacy</h3>
+          <h3 className="section-label">Data</h3>
           <div className="settings-card">
-            <div className="settings-row">
-              <Eye size={20} className="settings-icon" />
-              <div className="settings-info">
-                <span className="settings-row-title">Profile Visibility</span>
-                <span className="settings-row-value">{isPublic ? 'Public' : 'Private'}</span>
-              </div>
-              <Toggle value={isPublic} onChange={handleVisibilityToggle} />
-            </div>
             <Pressable className="settings-row" onClick={handleExportData}>
               <Download size={20} className="settings-icon" />
               <div className="settings-info">

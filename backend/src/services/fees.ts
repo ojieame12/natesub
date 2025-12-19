@@ -5,9 +5,7 @@
  * - absorb: Creator absorbs fee, subscriber pays exact price
  * - pass_to_subscriber: Fee added on top, creator keeps full amount
  *
- * Simple flat rates:
- * - Personal (tips, allowances): 10%
- * - Service (freelancers, businesses): 8%
+ * Simple flat rate: 8% for all purposes
  *
  * No caps. No floors. Simple and fair for everyone.
  */
@@ -17,7 +15,7 @@ export type FeeMode = 'absorb' | 'pass_to_subscriber'
 
 // Fee rates by purpose type
 const FEE_RATES = {
-  personal: 0.10,  // 10% for personal (tips, allowances, support)
+  personal: 0.08,  // 8% for personal (tips, allowances, support)
   service: 0.08,   // 8% for service (freelancers, businesses)
 }
 

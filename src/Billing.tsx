@@ -235,7 +235,7 @@ export default function Billing() {
                                 <span>Transaction fee</span>
                                 <span>8%</span>
                             </div>
-                            <p className="billing-fee-note">Capped at $75 for high earners</p>
+                            <p className="billing-fee-note">Simple flat rate, no hidden fees</p>
                         </div>
 
                         {/* What's Included - Service */}
