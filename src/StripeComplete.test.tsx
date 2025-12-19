@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { screen, waitFor, fireEvent } from '@testing-library/react'
 import StripeComplete from './StripeComplete'
 import { renderWithProviders } from './test/testUtils'
@@ -51,7 +51,7 @@ describe('StripeComplete', () => {
   })
 
   it('shows success state when status is active', async () => {
-    vi.mocked(api.stripe.getStatus).mockResolvedValue({ status: 'active', details: {} as any })
+    vi.mocked(api.stripe.getStatus).mockResolvedValue({ connected: true, status: 'active', details: {} as any })
     
     renderWithProviders(<StripeComplete />)
     
@@ -63,9 +63,10 @@ describe('StripeComplete', () => {
   })
 
   it('shows restricted state when status is restricted', async () => {
-    vi.mocked(api.stripe.getStatus).mockResolvedValue({ 
-      status: 'restricted', 
-      details: { requirements: { currentlyDue: ['individual.id_number'] } } as any 
+    vi.mocked(api.stripe.getStatus).mockResolvedValue({
+      connected: true,
+      status: 'restricted',
+      details: { requirements: { currentlyDue: ['individual.id_number'] } } as any
     })
     
     renderWithProviders(<StripeComplete />)
@@ -79,7 +80,7 @@ describe('StripeComplete', () => {
   })
 
   it('shows pending state when status is pending', async () => {
-    vi.mocked(api.stripe.getStatus).mockResolvedValue({ status: 'pending', details: {} as any })
+    vi.mocked(api.stripe.getStatus).mockResolvedValue({ connected: true, status: 'pending', details: {} as any })
     
     renderWithProviders(<StripeComplete />)
     
@@ -91,7 +92,7 @@ describe('StripeComplete', () => {
   })
 
   it('navigates to dashboard on continue', async () => {
-    vi.mocked(api.stripe.getStatus).mockResolvedValue({ status: 'active', details: {} as any })
+    vi.mocked(api.stripe.getStatus).mockResolvedValue({ connected: true, status: 'active', details: {} as any })
     
     renderWithProviders(<StripeComplete />)
     
@@ -107,7 +108,7 @@ describe('StripeComplete', () => {
   })
 
   it('retries setup when restricted', async () => {
-    vi.mocked(api.stripe.getStatus).mockResolvedValue({ status: 'restricted', details: {} as any })
+    vi.mocked(api.stripe.getStatus).mockResolvedValue({ connected: true, status: 'restricted', details: {} as any })
     vi.mocked(api.stripe.refreshOnboarding).mockResolvedValue({ onboardingUrl: 'https://connect.stripe.com/retry' })
     
     // Mock location
