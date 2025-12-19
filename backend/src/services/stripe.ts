@@ -1,3 +1,42 @@
+/**
+ * STRIPE INTEGRATION - READ THIS BEFORE MAKING CHANGES
+ * =====================================================
+ *
+ * BUSINESS MODEL:
+ * - Subscribers pay creators via Apple Pay/Card (recurring subscriptions)
+ * - Payments go through NatePay platform (destination charges)
+ * - Stripe AUTOMATICALLY disburses to creator's bank (minus platform fee)
+ * - NatePay NEVER holds customer funds
+ *
+ * NIGERIAN CREATORS (and Ghana, Kenya):
+ * - Stripe DOES support Nigerian Express accounts natively
+ * - Use country: 'NG' (the user's ACTUAL country, NOT 'US' or 'GB')
+ * - Use tos_acceptance.service_agreement: 'recipient' (platform is business of record)
+ * - Only request 'transfers' capability (NOT 'card_payments')
+ * - Creator goes through Express onboarding with Nigerian details + Nigerian bank
+ * - Payouts go to their Nigerian bank in NGN with automatic conversion
+ *
+ * WHY 'transfers' ONLY (not 'card_payments'):
+ * - The PLATFORM (NatePay) processes card payments from subscribers
+ * - The CREATOR only receives transfers from the automatic split
+ * - card_payments would only be needed if creator ran their own checkout
+ *
+ * FUND FLOW (Destination Charges):
+ * 1. Subscriber pays $10 with Apple Pay
+ * 2. Stripe checkout has: transfer_data.destination = creator's stripeAccountId
+ * 3. Stripe AUTOMATICALLY splits: $1 → NatePay, $9 → Creator
+ * 4. Creator receives payout to Nigerian bank (24hr delay for cross-border)
+ *
+ * DO NOT:
+ * - Change country to 'US' or 'GB' for Nigerian users
+ * - Add card_payments capability for cross-border recipients
+ * - Remove the recipient service agreement for NG/GH/KE
+ *
+ * References:
+ * - https://docs.stripe.com/connect/cross-border-payouts
+ * - https://docs.stripe.com/connect/service-agreement-types
+ */
+
 import Stripe from 'stripe'
 import crypto from 'crypto'
 import { env } from '../config/env.js'
