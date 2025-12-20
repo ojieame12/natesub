@@ -873,6 +873,159 @@ admin.delete('/users/:id', adminSensitiveRateLimit, async (c) => {
 })
 
 // ============================================
+// TEST USER CLEANUP
+// ============================================
+
+/**
+ * GET /admin/users/test-cleanup/preview
+ * Preview test users that would be cleaned up
+ * Matches: *@test.com, test@*, *+test*, demo@*, *@example.com
+ */
+admin.get('/users/test-cleanup/preview', async (c) => {
+  const testUsers = await db.user.findMany({
+    where: {
+      OR: [
+        { email: { endsWith: '@test.com' } },
+        { email: { endsWith: '@example.com' } },
+        { email: { startsWith: 'test@' } },
+        { email: { startsWith: 'demo@' } },
+        { email: { contains: '+test' } },
+        { email: { contains: 'testuser' } },
+      ],
+      // Exclude already deleted
+      deletedAt: null,
+    },
+    select: {
+      id: true,
+      email: true,
+      createdAt: true,
+      profile: {
+        select: {
+          username: true,
+          displayName: true,
+        },
+      },
+      _count: {
+        select: {
+          subscriptions: true,
+          subscribedTo: true,
+        },
+      },
+    },
+    orderBy: { createdAt: 'desc' },
+  })
+
+  return c.json({
+    count: testUsers.length,
+    users: testUsers,
+    patterns: [
+      '*@test.com',
+      '*@example.com',
+      'test@*',
+      'demo@*',
+      '*+test*',
+      '*testuser*',
+    ],
+  })
+})
+
+/**
+ * POST /admin/users/test-cleanup/delete
+ * Bulk delete test users (soft delete, GDPR compliant)
+ * Requires confirmation in body: { confirm: true }
+ */
+admin.post('/users/test-cleanup/delete', adminSensitiveRateLimit, async (c) => {
+  const body = z.object({
+    confirm: z.boolean(),
+    dryRun: z.boolean().default(false),
+  }).parse(await c.req.json())
+
+  if (!body.confirm) {
+    return c.json({ error: 'Must confirm deletion with { confirm: true }' }, 400)
+  }
+
+  // Find test users
+  const testUsers = await db.user.findMany({
+    where: {
+      OR: [
+        { email: { endsWith: '@test.com' } },
+        { email: { endsWith: '@example.com' } },
+        { email: { startsWith: 'test@' } },
+        { email: { startsWith: 'demo@' } },
+        { email: { contains: '+test' } },
+        { email: { contains: 'testuser' } },
+      ],
+      deletedAt: null,
+    },
+    select: { id: true, email: true },
+  })
+
+  if (body.dryRun) {
+    return c.json({
+      dryRun: true,
+      wouldDelete: testUsers.length,
+      users: testUsers.map(u => u.email),
+    })
+  }
+
+  // Bulk cleanup - for each user:
+  // 1. Cancel subscriptions (simplified - just marks as canceled)
+  // 2. Soft delete user
+  // 3. Anonymize email
+  // 4. Delete profile
+  let deleted = 0
+  const errors: string[] = []
+
+  for (const user of testUsers) {
+    try {
+      // Cancel all subscriptions as creator and subscriber
+      await db.subscription.updateMany({
+        where: { OR: [{ creatorId: user.id }, { subscriberId: user.id }] },
+        data: { status: 'canceled', canceledAt: new Date() },
+      })
+
+      // Delete sessions
+      await db.session.deleteMany({ where: { userId: user.id } })
+
+      // Delete profile
+      await db.profile.deleteMany({ where: { userId: user.id } })
+
+      // Soft delete and anonymize
+      await db.user.update({
+        where: { id: user.id },
+        data: {
+          deletedAt: new Date(),
+          email: `deleted_${user.id}@deleted.natepay.co`,
+        },
+      })
+
+      deleted++
+    } catch (err) {
+      errors.push(`${user.email}: ${err instanceof Error ? err.message : 'Unknown error'}`)
+    }
+  }
+
+  // Log admin action
+  await db.activity.create({
+    data: {
+      userId: testUsers[0]?.id || 'system',
+      type: 'admin_bulk_cleanup',
+      payload: {
+        deletedCount: deleted,
+        errors: errors.length,
+        performedAt: new Date().toISOString(),
+      },
+    },
+  })
+
+  return c.json({
+    success: true,
+    deleted,
+    errors: errors.length > 0 ? errors : undefined,
+  })
+})
+
+// ============================================
 // PAYMENTS (for Retool)
 // ============================================
 
