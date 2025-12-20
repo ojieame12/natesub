@@ -4,7 +4,7 @@
  * Tests authentication enforcement for admin routes.
  * Admin routes accept either:
  * 1. x-admin-api-key header matching ADMIN_API_KEY env var
- * 2. Valid session cookie for a user in ADMIN_EMAILS whitelist
+ * 2. Valid session cookie for a user with admin or super_admin role
  */
 
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -79,7 +79,7 @@ describe('admin auth', () => {
     it('rejects request with expired session', async () => {
       // Create admin user with expired session
       const user = await db.user.create({
-        data: { email: 'nathan@insitepro.co' }, // Admin email
+        data: { email: 'nathan@insitepro.co', role: 'super_admin' },
       })
 
       const rawToken = 'expired-admin-token'
@@ -123,9 +123,9 @@ describe('admin auth', () => {
     })
 
     it('allows request with valid admin session', async () => {
-      // Create admin user
+      // Create admin user with super_admin role
       const user = await db.user.create({
-        data: { email: 'nathan@insitepro.co' }, // In ADMIN_EMAILS whitelist
+        data: { email: 'nathan@insitepro.co', role: 'super_admin' },
       })
 
       const rawToken = 'admin-session-token'
@@ -150,9 +150,9 @@ describe('admin auth', () => {
     })
 
     it('allows request with Bearer token auth', async () => {
-      // Create admin user
+      // Create admin user with super_admin role
       const user = await db.user.create({
-        data: { email: 'nathan@insitepro.co' },
+        data: { email: 'nathan@insitepro.co', role: 'super_admin' },
       })
 
       const rawToken = 'bearer-admin-token'

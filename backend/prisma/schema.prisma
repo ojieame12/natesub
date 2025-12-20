@@ -122,9 +122,16 @@ enum FeeMode {
 // USER & PROFILE
 // ============================================
 
+enum UserRole {
+  user        // Regular user (default)
+  admin       // Can view admin dashboard, limited actions
+  super_admin // Full admin access including destructive actions
+}
+
 model User {
   id          String    @id @default(uuid())
   email       String    @unique
+  role        UserRole  @default(user)
   createdAt   DateTime  @default(now())
   lastLoginAt DateTime?
   deletedAt   DateTime? // Soft delete timestamp
@@ -148,6 +155,7 @@ model User {
   sessions         Session[]
   payrollPeriods   PayrollPeriod[]
 
+  @@index([role])
   @@map("users")
 }
 

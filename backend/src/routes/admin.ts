@@ -20,12 +20,11 @@ import { checkEmailHealth, sendTestEmail, sendSupportTicketReplyEmail, sendCreat
 import { stripe } from '../services/stripe.js'
 import { handleInvoicePaid } from './webhooks/stripe/invoice.js'
 import { env } from '../config/env.js'
-import { isAdminEmail } from '../config/admin.js'
 import { listBanks, resolveAccount, createSubaccount, isPaystackSupported, type PaystackCountry } from '../services/paystack.js'
 import { RESERVED_USERNAMES } from '../utils/constants.js'
 import { displayAmountToCents } from '../utils/currency.js'
 import { adminSensitiveRateLimit } from '../middleware/rateLimit.js'
-import { adminAuth, adminAuthOptional, logAdminAction, getSessionToken } from '../middleware/adminAuth.js'
+import { adminAuth, adminAuthOptional, logAdminAction, getSessionToken, isAdminRole } from '../middleware/adminAuth.js'
 import { validateSession } from '../services/auth.js'
 
 const admin = new Hono()
@@ -71,15 +70,15 @@ admin.get('/me', async (c) => {
       return c.json({ isAdmin: false })
     }
 
-    // Check if user email is in admin whitelist
+    // Check if user has admin role
     const user = await db.user.findUnique({
       where: { id: session.userId },
-      select: { email: true },
+      select: { email: true, role: true },
     })
 
-    if (user && isAdminEmail(user.email)) {
-      // Only return email for actual admins
-      return c.json({ isAdmin: true, email: user.email })
+    if (user && isAdminRole(user.role)) {
+      // Only return email and role for actual admins
+      return c.json({ isAdmin: true, email: user.email, role: user.role })
     }
 
     // SECURITY: Don't leak email for non-admins

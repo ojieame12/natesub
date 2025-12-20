@@ -5,6 +5,11 @@
  * 1. API key auth (for Retool/external tools) - via x-admin-api-key header
  * 2. Session auth (for frontend dashboard) - via cookie or Bearer token
  *
+ * Role-based access control:
+ * - user: Regular user (no admin access)
+ * - admin: Can view admin dashboard, limited actions
+ * - super_admin: Full admin access including destructive actions
+ *
  * Also includes access logging to SystemLog for audit trail.
  */
 
@@ -13,15 +18,34 @@ import { HTTPException } from 'hono/http-exception'
 import { getCookie } from 'hono/cookie'
 import { db } from '../db/client.js'
 import { validateSession } from '../services/auth.js'
-import { isAdminEmail } from '../config/admin.js'
+import type { UserRole } from '@prisma/client'
+
+// Roles that have admin access (can access admin dashboard)
+const ADMIN_ROLES: UserRole[] = ['admin', 'super_admin']
 
 // Extend Hono context with admin info
 declare module 'hono' {
   interface ContextVariableMap {
     adminUserId?: string
     adminEmail?: string
+    adminRole?: UserRole
     adminAuthMethod?: 'api-key' | 'session'
   }
+}
+
+/**
+ * Check if a role has admin access
+ */
+export function isAdminRole(role: UserRole | undefined | null): boolean {
+  if (!role) return false
+  return ADMIN_ROLES.includes(role)
+}
+
+/**
+ * Check if a role is super_admin
+ */
+export function isSuperAdmin(role: UserRole | undefined | null): boolean {
+  return role === 'super_admin'
 }
 
 /**
@@ -47,7 +71,7 @@ export function getSessionToken(c: Context): string | undefined {
 async function logAdminAccess(
   c: Context,
   success: boolean,
-  details?: { userId?: string; email?: string; authMethod?: string }
+  details?: { userId?: string; email?: string; role?: string; authMethod?: string }
 ): Promise<void> {
   try {
     await db.systemLog.create({
@@ -63,6 +87,7 @@ async function logAdminAccess(
           userAgent: c.req.header('user-agent'),
           userId: details?.userId,
           email: details?.email,
+          role: details?.role,
           authMethod: details?.authMethod,
         },
       },
@@ -90,6 +115,7 @@ export async function logAdminAction(
           ...details,
           adminUserId: c.get('adminUserId'),
           adminEmail: c.get('adminEmail'),
+          adminRole: c.get('adminRole'),
           adminAuthMethod: c.get('adminAuthMethod'),
           path: c.req.path,
           method: c.req.method,
@@ -104,16 +130,19 @@ export async function logAdminAction(
 
 /**
  * Admin auth middleware - requires valid admin access
+ * Allows: admin, super_admin roles
  * Use this for all protected admin routes
  */
 export async function adminAuth(c: Context, next: Next): Promise<void> {
   // Option 1: API key auth (for Retool/external tools)
+  // API key grants super_admin level access
   const apiKey = c.req.header('x-admin-api-key')
   const expectedKey = process.env.ADMIN_API_KEY
 
   if (apiKey && expectedKey && apiKey === expectedKey) {
     c.set('adminAuthMethod', 'api-key')
-    await logAdminAccess(c, true, { authMethod: 'api-key' })
+    c.set('adminRole', 'super_admin')
+    await logAdminAccess(c, true, { authMethod: 'api-key', role: 'super_admin' })
     await next()
     return
   }
@@ -125,16 +154,18 @@ export async function adminAuth(c: Context, next: Next): Promise<void> {
     if (session) {
       const user = await db.user.findUnique({
         where: { id: session.userId },
-        select: { id: true, email: true },
+        select: { id: true, email: true, role: true },
       })
 
-      if (user && isAdminEmail(user.email)) {
+      if (user && isAdminRole(user.role)) {
         c.set('adminUserId', user.id)
         c.set('adminEmail', user.email)
+        c.set('adminRole', user.role)
         c.set('adminAuthMethod', 'session')
         await logAdminAccess(c, true, {
           userId: user.id,
           email: user.email,
+          role: user.role,
           authMethod: 'session',
         })
         await next()
@@ -159,6 +190,7 @@ export async function adminAuthOptional(c: Context, next: Next): Promise<void> {
 
   if (apiKey && expectedKey && apiKey === expectedKey) {
     c.set('adminAuthMethod', 'api-key')
+    c.set('adminRole', 'super_admin')
     await next()
     return
   }
@@ -170,16 +202,48 @@ export async function adminAuthOptional(c: Context, next: Next): Promise<void> {
     if (session) {
       const user = await db.user.findUnique({
         where: { id: session.userId },
-        select: { id: true, email: true },
+        select: { id: true, email: true, role: true },
       })
 
-      if (user && isAdminEmail(user.email)) {
+      if (user && isAdminRole(user.role)) {
         c.set('adminUserId', user.id)
         c.set('adminEmail', user.email)
+        c.set('adminRole', user.role)
         c.set('adminAuthMethod', 'session')
       }
     }
   }
 
   await next()
+}
+
+/**
+ * Require a specific role (or higher) for a route
+ * Use this to protect destructive actions that need super_admin
+ *
+ * Example:
+ *   admin.delete('/users/:id', requireRole('super_admin'), async (c) => { ... })
+ */
+export function requireRole(requiredRole: UserRole) {
+  return async (c: Context, next: Next): Promise<void> => {
+    const userRole = c.get('adminRole')
+
+    // Role hierarchy: super_admin > admin > user
+    const roleHierarchy: Record<UserRole, number> = {
+      user: 0,
+      admin: 1,
+      super_admin: 2,
+    }
+
+    const userLevel = userRole ? roleHierarchy[userRole] : -1
+    const requiredLevel = roleHierarchy[requiredRole]
+
+    if (userLevel < requiredLevel) {
+      throw new HTTPException(403, {
+        message: `This action requires ${requiredRole} role`,
+      })
+    }
+
+    await next()
+  }
 }
