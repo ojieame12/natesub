@@ -87,22 +87,22 @@ adminRevenue.get('/overview', async (c) => {
   ] = await Promise.all([
     db.payment.aggregate({
       where: { status: 'succeeded', type: { in: ['recurring', 'one_time'] } },
-      _sum: { grossCents: true, feeCents: true, netCents: true },
+      _sum: { grossCents: true, amountCents: true, feeCents: true, netCents: true },
       _count: true
     }),
     db.payment.aggregate({
       where: { status: 'succeeded', type: { in: ['recurring', 'one_time'] }, createdAt: { gte: startOfMonth } },
-      _sum: { grossCents: true, feeCents: true, netCents: true },
+      _sum: { grossCents: true, amountCents: true, feeCents: true, netCents: true },
       _count: true
     }),
     db.payment.aggregate({
       where: { status: 'succeeded', type: { in: ['recurring', 'one_time'] }, createdAt: { gte: startOfLastMonth, lte: endOfLastMonth } },
-      _sum: { grossCents: true, feeCents: true, netCents: true },
+      _sum: { grossCents: true, amountCents: true, feeCents: true, netCents: true },
       _count: true
     }),
     db.payment.aggregate({
       where: { status: 'succeeded', type: { in: ['recurring', 'one_time'] }, createdAt: { gte: startOfDay } },
-      _sum: { grossCents: true, feeCents: true, netCents: true },
+      _sum: { grossCents: true, amountCents: true, feeCents: true, netCents: true },
       _count: true
     }),
     db.payment.groupBy({
@@ -114,27 +114,28 @@ adminRevenue.get('/overview', async (c) => {
 
   const statusCounts = Object.fromEntries(paymentCounts.map(p => [p.status, p._count]))
 
+  // Use grossCents if available, fallback to amountCents for older records
   return c.json({
     allTime: {
-      totalVolumeCents: allTimeStats._sum.grossCents || 0,
+      totalVolumeCents: allTimeStats._sum.grossCents || allTimeStats._sum.amountCents || 0,
       platformFeeCents: allTimeStats._sum.feeCents || 0,
       creatorPayoutsCents: allTimeStats._sum.netCents || 0,
       paymentCount: allTimeStats._count
     },
     thisMonth: {
-      totalVolumeCents: thisMonthStats._sum.grossCents || 0,
+      totalVolumeCents: thisMonthStats._sum.grossCents || thisMonthStats._sum.amountCents || 0,
       platformFeeCents: thisMonthStats._sum.feeCents || 0,
       creatorPayoutsCents: thisMonthStats._sum.netCents || 0,
       paymentCount: thisMonthStats._count
     },
     lastMonth: {
-      totalVolumeCents: lastMonthStats._sum.grossCents || 0,
+      totalVolumeCents: lastMonthStats._sum.grossCents || lastMonthStats._sum.amountCents || 0,
       platformFeeCents: lastMonthStats._sum.feeCents || 0,
       creatorPayoutsCents: lastMonthStats._sum.netCents || 0,
       paymentCount: lastMonthStats._count
     },
     today: {
-      totalVolumeCents: todayStats._sum.grossCents || 0,
+      totalVolumeCents: todayStats._sum.grossCents || todayStats._sum.amountCents || 0,
       platformFeeCents: todayStats._sum.feeCents || 0,
       creatorPayoutsCents: todayStats._sum.netCents || 0,
       paymentCount: todayStats._count
