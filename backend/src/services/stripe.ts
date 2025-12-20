@@ -294,9 +294,13 @@ export async function createCheckoutSession(params: {
   viewId?: string          // Analytics: page view ID for conversion tracking
   feeMetadata?: {
     feeModel: string
-    feeMode: string         // 'absorb' | 'pass_to_subscriber'
+    feeMode: string         // 'absorb' | 'pass_to_subscriber' | 'split'
     feeEffectiveRate: number
     feeWasCapped?: boolean  // Optional - flat fee model has no caps
+    // Split fee fields (v2 model)
+    subscriberFeeCents?: number   // Subscriber's portion (4%)
+    creatorFeeCents?: number      // Creator's portion (4%)
+    baseAmountCents?: number      // Creator's set price
   }
 }) {
   // Get creator's Stripe account
@@ -366,10 +370,14 @@ export async function createCheckoutSession(params: {
     grossAmount: params.grossAmount.toString(),   // What subscriber paid
     netAmount: params.netAmount.toString(),       // What creator receives (was creatorAmount)
     serviceFee: params.serviceFee.toString(),     // Platform fee
-    feeModel: params.feeMetadata?.feeModel || 'flat',
-    feeMode: params.feeMetadata?.feeMode || 'pass_to_subscriber',
+    feeModel: params.feeMetadata?.feeModel || 'split_v1',
+    feeMode: params.feeMetadata?.feeMode || 'split',
     feeEffectiveRate: params.feeMetadata?.feeEffectiveRate?.toString() || '',
     feeWasCapped: params.feeMetadata?.feeWasCapped ? 'true' : 'false',
+    // Split fee fields (v2 model)
+    subscriberFeeCents: params.feeMetadata?.subscriberFeeCents?.toString() || '',
+    creatorFeeCents: params.feeMetadata?.creatorFeeCents?.toString() || '',
+    baseAmountCents: params.feeMetadata?.baseAmountCents?.toString() || '',
     // Platform debit recovery tracking
     platformDebitRecovered: platformDebitToRecover.toString(),
   }

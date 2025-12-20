@@ -337,9 +337,13 @@ export async function initializePaystackCheckout(params: {
     creatorAmount: number
     serviceFee: number
     feeModel: string
-    feeMode: string         // 'absorb' | 'pass_to_subscriber'
+    feeMode: string         // 'absorb' | 'pass_to_subscriber' | 'split'
     feeEffectiveRate: number
     feeWasCapped?: boolean  // Optional - flat fee model has no caps
+    // Split fee fields (v2 model)
+    baseAmount?: number     // Creator's set price
+    subscriberFee?: number  // Subscriber's portion (4%)
+    creatorFee?: number     // Creator's portion (4%)
   }
 }): Promise<TransactionInit> {
   // Platform receives full payment (no subaccount split)
