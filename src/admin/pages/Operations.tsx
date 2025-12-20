@@ -69,7 +69,7 @@ export default function Operations() {
     queryFn: () => adminFetch<{
       failed: Record<string, number>
       deadLetter: number
-      recentProcessed: number
+      processedLast24h: number
     }>('/admin/webhooks/stats'),
     staleTime: 60 * 1000,
   })
@@ -78,7 +78,7 @@ export default function Operations() {
   const { data: failedWebhooks } = useQuery({
     queryKey: ['admin', 'webhooks', 'failed'],
     queryFn: () => adminFetch<{
-      webhooks: Array<{
+      events: Array<{
         id: string
         provider: string
         type: string
@@ -185,13 +185,13 @@ export default function Operations() {
           <div className="admin-stats-grid">
             <StatCard
               label="API Status"
-              value={healthData?.status === 'ok' ? 'Healthy' : 'Unknown'}
-              variant={healthData?.status === 'ok' ? 'success' : 'default'}
+              value={healthData?.status === 'healthy' ? 'Healthy' : healthData?.status === 'degraded' ? 'Degraded' : healthData?.status === 'unhealthy' ? 'Unhealthy' : 'Unknown'}
+              variant={healthData?.status === 'healthy' ? 'success' : healthData?.status === 'degraded' ? 'warning' : healthData?.status === 'unhealthy' ? 'error' : 'default'}
               loading={healthLoading}
             />
             <StatCard
               label="Webhooks (24h)"
-              value={webhookStats?.recentProcessed?.toString() || '0'}
+              value={webhookStats?.processedLast24h?.toString() || '0'}
               loading={webhooksLoading}
             />
             <StatCard
@@ -233,7 +233,7 @@ export default function Operations() {
             ))}
           </div>
 
-          {failedWebhooks?.webhooks && failedWebhooks.webhooks.length > 0 && (
+          {failedWebhooks?.events && failedWebhooks.events.length > 0 && (
             <div className="admin-table-container" style={{ marginTop: '24px' }}>
               <h3 style={{ marginBottom: '16px' }}>Failed Webhooks</h3>
               <table className="admin-table">
@@ -249,7 +249,7 @@ export default function Operations() {
                   </tr>
                 </thead>
                 <tbody>
-                  {failedWebhooks.webhooks.map((wh) => (
+                  {failedWebhooks.events.map((wh) => (
                     <tr key={wh.id}>
                       <td>{wh.provider}</td>
                       <td style={{ fontFamily: 'monospace', fontSize: '12px' }}>{wh.type}</td>
@@ -278,7 +278,7 @@ export default function Operations() {
             </div>
           )}
 
-          {(!failedWebhooks?.webhooks || failedWebhooks.webhooks.length === 0) && (
+          {(!failedWebhooks?.events || failedWebhooks.events.length === 0) && (
             <div className="admin-empty" style={{ marginTop: '24px' }}>
               <p>No failed webhooks</p>
             </div>

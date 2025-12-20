@@ -151,7 +151,7 @@ export default function Privacy() {
                     </ul>
                     <p>
                         To exercise these rights, contact us at{' '}
-                        <a href="mailto:privacy@natepay.com">privacy@natepay.com</a>.
+                        <a href="mailto:privacy@natepay.co">privacy@natepay.co</a>.
                     </p>
                 </section>
 
@@ -194,7 +194,7 @@ export default function Privacy() {
                 <div className="legal-contact">
                     <p>
                         Questions about your privacy? Contact us at{' '}
-                        <a href="mailto:privacy@natepay.com">privacy@natepay.com</a>
+                        <a href="mailto:privacy@natepay.co">privacy@natepay.co</a>
                     </p>
                 </div>
             </div>

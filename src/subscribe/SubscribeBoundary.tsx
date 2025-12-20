@@ -3,7 +3,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Banknote, Briefcase, Pencil, Check, ChevronsRight, ArrowLeft, AlertCircle } from 'lucide-react'
 import { useToast } from '../components'
-import { useCreateCheckout, useRecordPageView, useUpdatePageView, useUpdateSettings } from '../api/hooks'
+import { useCreateCheckout, useRecordPageView, useUpdatePageView } from '../api/hooks'
 import * as api from '../api/client'
 import type { Profile } from '../api/client'
 import { calculateFeePreview, displayAmountToCents, formatCurrency } from '../utils/currency'
@@ -128,11 +128,9 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
     const { mutateAsync: createCheckout } = useCreateCheckout()
     const { mutateAsync: recordPageView } = useRecordPageView()
     const { mutateAsync: updatePageView } = useUpdatePageView()
-    const { mutateAsync: updateSettings, isPending: isSettingsLoading } = useUpdateSettings()
 
     // State
     const [mount, setMount] = useState(false)
-    const [feeMode, setFeeMode] = useState<'absorb' | 'pass_to_subscriber'>(profile.feeMode || 'pass_to_subscriber')
     const [subscriberEmail, setSubscriberEmail] = useState('')
     const [emailFocused, setEmailFocused] = useState(false)
     const [status, setStatus] = useState<'idle' | 'processing' | 'verifying' | 'success'>(isSuccessReturn ? 'verifying' : 'idle')
@@ -152,13 +150,11 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
     const isReadyToPay = paymentsReady && currentAmount > 0
     const isValidEmail = subscriberEmail.trim().length > 3 && subscriberEmail.includes('@')
 
-    // Fee Calculations (Parity with Display Component)
-    const feePreview = calculateFeePreview(currentAmount, currency, profile.purpose, feeMode)
+    // Fee Calculations - Split model: 4% subscriber + 4% creator
+    const feePreview = calculateFeePreview(currentAmount, currency)
 
-    // Derived Visuals
-    const subscriberPaysFee = feeMode === 'pass_to_subscriber'
-    const feeToDisplay = subscriberPaysFee ? feePreview.serviceFee : 0
-    const total = currentAmount + feeToDisplay
+    // Derived Visuals - subscriber always pays their portion now
+    const total = feePreview.subscriberPays
 
     useEffect(() => {
         // Small delay to ensure initial state is painted before animating
@@ -239,19 +235,6 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
     }, [profile.id, profile.username, recordPageView, isSuccessReturn, searchParams, toast, isOwner])
 
     // Handlers
-    const handleFeeToggle = async () => {
-        if (!isOwner) return
-        const newMode = feeMode === 'absorb' ? 'pass_to_subscriber' : 'absorb'
-        setFeeMode(newMode) // Optimistic
-        try {
-            await updateSettings({ feeMode: newMode })
-            toast.success('Fee preference updated')
-        } catch {
-            setFeeMode(feeMode) // Revert
-            toast.error('Failed to update')
-        }
-    }
-
     const handleShare = async () => {
         const url = `${window.location.origin}/${profile.username}`
         if (navigator.share) {
@@ -419,37 +402,30 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                         <span>{formatCurrency(currentAmount, currency)}/mo</span>
                     </div>
 
-                    {/* Fee Row: Hidden if Owner absorbs, OR visible if Owner is viewing to show context */}
-                    {(subscriberPaysFee || isOwner) && (
-                        <div style={{
-                            display: 'flex', justifyContent: 'space-between', marginBottom: 8,
-                            opacity: subscriberPaysFee ? 0.7 : 0.4,
-                            textDecoration: !subscriberPaysFee ? 'line-through' : 'none'
-                        }}>
-                            <span>Service Fee {!subscriberPaysFee && '(Absorbed)'}</span>
-                            <span>+{formatCurrency(feePreview.serviceFee, currency)}</span>
-                        </div>
-                    )}
+                    {/* Fee Row - always shown with split model */}
+                    <div style={{
+                        display: 'flex', justifyContent: 'space-between', marginBottom: 8,
+                        opacity: 0.7
+                    }}>
+                        <span>Secure payment</span>
+                        <span>+{formatCurrency(feePreview.serviceFee, currency)}</span>
+                    </div>
 
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 15 }}>
                         <span style={{ fontWeight: 'bold', fontSize: 14, textTransform: 'uppercase' }}>Total Due</span>
                         <div style={{ fontWeight: 'bold', fontSize: 24, letterSpacing: -1 }}>{formatCurrency(total, currency)}</div>
                     </div>
 
-                    {/* OWNER CONTROLS: Fee Toggle */}
+                    {/* OWNER INFO: Show creator's fee portion */}
                     {isOwner && (
                         <div style={{ marginTop: 15, padding: 10, background: '#f5f5f5', borderRadius: 8, fontSize: 11 }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <span>Fee Mode:</span>
-                                <button
-                                    onClick={handleFeeToggle} disabled={isSettingsLoading}
-                                    style={{
-                                        border: 'none', background: 'white', padding: '4px 8px', borderRadius: 4,
-                                        boxShadow: '0 1px 3px rgba(0,0,0,0.1)', cursor: 'pointer', fontWeight: 'bold'
-                                    }}
-                                >
-                                    {feeMode === 'absorb' ? 'I Absorb' : 'User Pays'}
-                                </button>
+                                <span>Subscription management</span>
+                                <span style={{ fontWeight: 'bold' }}>-{formatCurrency(feePreview.creatorFee, currency)}</span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+                                <span>You receive</span>
+                                <span style={{ fontWeight: 'bold' }}>{formatCurrency(feePreview.creatorReceives, currency)}</span>
                             </div>
                         </div>
                     )}

@@ -2,6 +2,7 @@ import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import app from '../../src/app.js'
 import { db } from '../../src/db/client.js'
 import { resetDatabase, disconnectDatabase } from '../helpers/db.js'
+import { hashToken } from '../../src/services/auth.js'
 
 // Mock services
 const mockCreateCheckoutSession = vi.fn()
@@ -220,12 +221,257 @@ describe('checkout flow', () => {
     })
 
     // Mock auth middleware by injecting user into request (Hono-specific)
-    // Actually, since app.fetch simulates an external request, we can't easily inject context 
+    // Actually, since app.fetch simulates an external request, we can't easily inject context
     // unless we use a token. For now, we'll skip this or mock the auth middleware if possible.
     // Alternatively, we can rely on the fact that optionalAuth middleware is used.
     // If we want to test "self-subscribe", we need to be authenticated as the creator.
-    
+
     // We'll skip this specific test case for now as it requires full auth mocking setup
     // which is complex without a helper to generate a valid session cookie.
+  })
+
+  describe('split fee model', () => {
+    it('passes split fee metadata to Stripe checkout', async () => {
+      const profile = await createCreator({
+        stripeAccountId: 'acct_123',
+        singleAmount: 10000, // $100.00 in cents (larger to avoid processor buffer)
+        currency: 'USD',
+        countryCode: 'US', // Non-cross-border
+      })
+
+      mockCreateCheckoutSession.mockResolvedValue({
+        id: 'cs_test_split',
+        url: 'https://checkout.stripe.com/test'
+      })
+
+      const res = await app.fetch(
+        new Request('http://localhost/checkout/session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            creatorUsername: profile.username,
+            subscriberEmail: 'sub@example.com',
+            payerCountry: 'US',
+            amount: 10000,
+            interval: 'month',
+          }),
+        })
+      )
+
+      expect(res.status).toBe(200)
+
+      // Verify split fee fields in the call to Stripe
+      // $100.00 base + 4% subscriber fee = $104.00 gross
+      // $100.00 base - 4% creator fee = $96.00 net
+      expect(mockCreateCheckoutSession).toHaveBeenCalledWith(
+        expect.objectContaining({
+          grossAmount: 10400,
+          netAmount: 9600,
+          serviceFee: 800, // 8% total
+        })
+      )
+
+      // Verify feeMetadata includes split_v1 fee model
+      const callArgs = mockCreateCheckoutSession.mock.calls[0][0]
+      expect(callArgs.feeMetadata).toMatchObject({
+        feeModel: 'split_v1',
+        subscriberFeeCents: 400,
+        creatorFeeCents: 400,
+        baseAmountCents: 10000,
+      })
+    })
+
+    it('applies cross-border buffer for Nigerian creator with US payer', async () => {
+      const profile = await createCreator({
+        stripeAccountId: 'acct_123',
+        singleAmount: 10000, // $100.00 in cents
+        currency: 'USD',
+        countryCode: 'NG', // Cross-border country
+      })
+
+      mockCreateCheckoutSession.mockResolvedValue({
+        id: 'cs_test_crossborder',
+        url: 'https://checkout.stripe.com/test'
+      })
+
+      // Cross-border accounts don't have chargesEnabled
+      mockGetAccountStatus.mockResolvedValue({
+        chargesEnabled: false,
+        payoutsEnabled: true,
+        detailsSubmitted: true,
+      })
+
+      const res = await app.fetch(
+        new Request('http://localhost/checkout/session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            creatorUsername: profile.username,
+            subscriberEmail: 'sub@example.com',
+            payerCountry: 'US',
+            amount: 10000,
+            interval: 'month',
+          }),
+        })
+      )
+
+      expect(res.status).toBe(200)
+
+      // Verify cross-border buffer: 4.75% each (4% + 0.75%)
+      // $100.00 base + 4.75% = $104.75
+      const callArgs = mockCreateCheckoutSession.mock.calls[0][0]
+      expect(callArgs.grossAmount).toBe(10475) // $104.75
+      expect(callArgs.serviceFee).toBe(950)    // 9.5% total (4.75% × 2)
+      expect(callArgs.feeMetadata.subscriberFeeCents).toBe(475) // 4.75%
+      expect(callArgs.feeMetadata.creatorFeeCents).toBe(475)    // 4.75%
+    })
+
+    it('passes split fee metadata to Paystack checkout', async () => {
+      // Use ₦50,000 (5000000 kobo) to avoid processor buffer
+      const profile = await createCreator({
+        paystackSubaccountCode: 'ACCT_123',
+        singleAmount: 5000000, // ₦50,000 in kobo
+        currency: 'NGN',
+        countryCode: 'NG',
+      })
+
+      mockInitializePaystackCheckout.mockResolvedValue({
+        authorization_url: 'https://paystack.com/pay/test',
+        reference: 'ref_split_123'
+      })
+
+      const res = await app.fetch(
+        new Request('http://localhost/checkout/session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            creatorUsername: profile.username,
+            subscriberEmail: 'sub@example.com',
+            payerCountry: 'NG', // Local payer → Paystack
+            amount: 5000000,
+            interval: 'month',
+          }),
+        })
+      )
+
+      expect(res.status).toBe(200)
+
+      // Verify split fee fields in Paystack call
+      // ₦50,000 base + 4% = ₦52,000 gross
+      const callArgs = mockInitializePaystackCheckout.mock.calls[0][0]
+      expect(callArgs.totalAmount).toBe(5200000) // ₦52,000 in kobo
+      expect(callArgs.metadata).toMatchObject({
+        feeModel: 'split_v1',
+        subscriberFee: 200000,  // 4% of ₦50,000
+        creatorFee: 200000,     // 4% of ₦50,000
+        baseAmount: 5000000,
+      })
+    })
+  })
+
+  describe('subscriber blocking', () => {
+    it('should reject checkout for blocked subscribers', async () => {
+      // Create a blocked subscriber
+      const blockedUser = await db.user.create({
+        data: {
+          email: 'blocked@example.com',
+          blockedReason: 'Multiple chargebacks filed',
+          disputeCount: 2,
+        },
+      })
+
+      // Create a session for the blocked user
+      const rawToken = 'blocked-user-token'
+      const session = await db.session.create({
+        data: {
+          userId: blockedUser.id,
+          token: hashToken(rawToken), // Store hashed token
+          expiresAt: new Date(Date.now() + 86400000),
+        },
+      })
+
+      // Create a creator with Stripe
+      const profile = await createCreator({
+        stripeAccountId: 'acct_blocked_test',
+        paymentProvider: 'stripe',
+      })
+
+      mockCreateCheckoutSession.mockResolvedValue({
+        id: 'cs_blocked_test',
+        url: 'https://checkout.stripe.com/blocked',
+      })
+
+      const res = await app.fetch(
+        new Request('http://localhost/checkout/session', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Cookie: `session=${rawToken}`, // Use raw token in cookie
+          },
+          body: JSON.stringify({
+            creatorUsername: profile.username,
+            subscriberEmail: 'blocked@example.com',
+            payerCountry: 'US',
+            amount: 500000,
+            interval: 'month',
+          }),
+        })
+      )
+
+      expect(res.status).toBe(403)
+      const data = await res.json()
+      expect(data.code).toBe('SUBSCRIBER_BLOCKED')
+      expect(data.error).toContain('payment disputes')
+    })
+
+    it('should allow checkout for non-blocked subscribers', async () => {
+      // Create a user with 1 dispute (not yet blocked)
+      const warningUser = await db.user.create({
+        data: {
+          email: 'warning@example.com',
+          disputeCount: 1,
+          blockedReason: null, // Not blocked yet
+        },
+      })
+
+      const rawToken = 'warning-user-token'
+      const session = await db.session.create({
+        data: {
+          userId: warningUser.id,
+          token: hashToken(rawToken), // Store hashed token
+          expiresAt: new Date(Date.now() + 86400000),
+        },
+      })
+
+      const profile = await createCreator({
+        stripeAccountId: 'acct_warning_test',
+        paymentProvider: 'stripe',
+      })
+
+      mockCreateCheckoutSession.mockResolvedValue({
+        id: 'cs_warning_test',
+        url: 'https://checkout.stripe.com/warning',
+      })
+
+      const res = await app.fetch(
+        new Request('http://localhost/checkout/session', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Cookie: `session=${rawToken}`, // Use raw token in cookie
+          },
+          body: JSON.stringify({
+            creatorUsername: profile.username,
+            subscriberEmail: 'warning@example.com',
+            payerCountry: 'US',
+            amount: 500000,
+            interval: 'month',
+          }),
+        })
+      )
+
+      // Should succeed (1 dispute doesn't block)
+      expect(res.status).toBe(200)
+    })
   })
 })

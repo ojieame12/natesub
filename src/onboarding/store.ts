@@ -19,8 +19,8 @@ export type SubscriptionPurpose =
 // Pricing model - single amount or tiered
 export type PricingModel = 'single' | 'tiers'
 
-// Fee mode - who pays the platform fee
-export type FeeMode = 'absorb' | 'pass_to_subscriber'
+// Fee mode - who pays the platform fee (legacy: absorb/pass_to_subscriber, new: split)
+export type FeeMode = 'absorb' | 'pass_to_subscriber' | 'split'
 
 // Payment provider selection
 export type PaymentProvider = 'stripe' | 'paystack' | 'flutterwave' | null
@@ -176,7 +176,7 @@ const initialState = {
     avatarUrl: null as string | null,
     avatarFile: null as Blob | null,
     paymentProvider: null as PaymentProvider,
-    feeMode: 'pass_to_subscriber' as FeeMode, // Default: subscriber pays the fee
+    feeMode: 'split' as FeeMode, // Default: 4%/4% split between subscriber and creator
 }
 
 // === Store ===
@@ -248,7 +248,7 @@ export const useOnboardingStore = create<OnboardingStore>()(
                 avatarUrl: null,
                 avatarFile: null,
                 paymentProvider: null, // Reset to null so we re-evaluate safest option
-                feeMode: 'pass_to_subscriber',
+                feeMode: 'split',
             }),
 
             // Hydrate from server data (for resume flows)

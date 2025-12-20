@@ -82,6 +82,13 @@ const envSchema = z.object({
   BIRD_CHANNEL_ID: z.string().optional(),        // SMS channel ID
   BIRD_SENDER_ID: z.string().default('NatePay'), // Sender name (alphanumeric, max 11 chars)
 
+  // Bird WhatsApp (same workspace, different channel)
+  BIRD_WHATSAPP_CHANNEL_ID: z.string().optional(),
+  ENABLE_WHATSAPP: z.string().transform(v => v === 'true').default('false'),
+
+  // Slack Alerts
+  SLACK_WEBHOOK_URL: z.string().url().optional(),
+
   // AI Services
   GOOGLE_AI_API_KEY: z.string().optional(),     // Gemini 3 Pro - voice + content generation
   PERPLEXITY_API_KEY: z.string().optional(),    // Sonar Pro - market research

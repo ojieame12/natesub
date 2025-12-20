@@ -315,7 +315,7 @@ describe('E2E Flows', () => {
     it('returns correct settings for creator', async () => {
       const { user, cookie } = await createAuthenticatedUser()
       await createCreatorProfile(user.id, {
-        feeMode: 'absorb',
+        feeMode: 'absorb', // Legacy value, should return 'split' regardless
         notificationPrefs: {
           push: true,
           email: false,
@@ -329,14 +329,15 @@ describe('E2E Flows', () => {
       expect(res.status).toBe(200)
       const body = await res.json()
       expect(body.isPublic).toBe(true)
-      expect(body.feeMode).toBe('absorb')
+      expect(body.feeMode).toBe('split') // Always returns 'split' now
       expect(body.notificationPrefs.email).toBe(false)
     })
 
-    it('allows updating fee mode', async () => {
+    it('ignores feeMode updates and always returns split', async () => {
       const { user, cookie } = await createAuthenticatedUser()
       await createCreatorProfile(user.id, { feeMode: 'pass_to_subscriber' })
 
+      // Try to update feeMode - should be ignored
       const res = await authRequest('/profile/settings', cookie, {
         method: 'PATCH',
         body: JSON.stringify({ feeMode: 'absorb' }),
@@ -344,7 +345,7 @@ describe('E2E Flows', () => {
 
       expect(res.status).toBe(200)
       const body = await res.json()
-      expect(body.settings.feeMode).toBe('absorb')
+      expect(body.settings.feeMode).toBe('split') // Always returns 'split'
     })
   })
 

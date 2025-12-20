@@ -17,10 +17,6 @@ export default function PaymentBreakdown({
     isOwner,
     interval = 'mo'
 }: PaymentBreakdownProps) {
-    // If creator absorbs fees, we don't show the fee line to the subscriber
-    // unless it's the owner viewing it (transparency)
-    const showFeeLine = isOwner || feePreview.serviceFee > 0
-
     return (
         <div className="sub-breakdown-card">
             <div className="sub-breakdown-row">
@@ -30,44 +26,52 @@ export default function PaymentBreakdown({
                 </span>
             </div>
 
-            {showFeeLine && (
-                <div className={`sub-breakdown-row sub-breakdown-fee ${isOwner ? 'is-owner' : ''}`}>
-                    <div className="sub-breakdown-label-group">
-                        <span>Service fee</span>
-                        {isOwner && (
-                            <span className="sub-fee-badge">
-                                {feePreview.effectiveRatePercent}
-                            </span>
-                        )}
-                    </div>
-                    <span className="sub-breakdown-value">
-                        {isOwner ? '-' : '+'}{formatAmountWithSeparators(feePreview.serviceFee, currency)}
+            {/* Subscriber's fee portion (4%) */}
+            <div className="sub-breakdown-row sub-breakdown-fee">
+                <div className="sub-breakdown-label-group">
+                    <span>Secure payment</span>
+                </div>
+                <span className="sub-breakdown-value">
+                    +{formatAmountWithSeparators(feePreview.serviceFee, currency)}
+                </span>
+            </div>
+
+            <div className="sub-breakdown-divider" />
+
+            {/* For subscribers: show what they pay */}
+            {!isOwner && (
+                <div className="sub-breakdown-row sub-breakdown-total">
+                    <span className="sub-breakdown-label">Total Due</span>
+                    <span className="sub-breakdown-total-value">
+                        {formatAmountWithSeparators(feePreview.subscriberPays, currency)}
                     </span>
                 </div>
             )}
 
-            <div className="sub-breakdown-divider" />
-
-            <div className="sub-breakdown-row sub-breakdown-total">
-                <span className="sub-breakdown-label">
-                    {isOwner ? 'You Receive' : 'Total Due'}
-                </span>
-                <span className="sub-breakdown-total-value">
-                    {formatAmountWithSeparators(
-                        isOwner ? feePreview.creatorReceives : feePreview.subscriberPays,
-                        currency
-                    )}
-                </span>
-            </div>
-
+            {/* For owners: show their fee and what they receive */}
             {isOwner && (
-                <div className="sub-breakdown-note">
-                    <Info size={12} style={{ marginRight: 4 }} />
-                    {feePreview.serviceFee === 0
-                        ? "Subscriber pays processing fees"
-                        : "You are absorbing processing fees"
-                    }
-                </div>
+                <>
+                    <div className="sub-breakdown-row sub-breakdown-fee is-owner">
+                        <div className="sub-breakdown-label-group">
+                            <span>Subscription management</span>
+                        </div>
+                        <span className="sub-breakdown-value">
+                            -{formatAmountWithSeparators(feePreview.creatorFee, currency)}
+                        </span>
+                    </div>
+
+                    <div className="sub-breakdown-row sub-breakdown-total">
+                        <span className="sub-breakdown-label">You Receive</span>
+                        <span className="sub-breakdown-total-value">
+                            {formatAmountWithSeparators(feePreview.creatorReceives, currency)}
+                        </span>
+                    </div>
+
+                    <div className="sub-breakdown-note">
+                        <Info size={12} style={{ marginRight: 4 }} />
+                        Covers billing, retries, and payment processing
+                    </div>
+                </>
             )}
         </div>
     )

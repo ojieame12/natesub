@@ -32,21 +32,28 @@ describe('utils/pricing', () => {
     expect(calculateNet(1000, 'service')).toBe(920)
   })
 
-  it('calculates fee preview when creator absorbs fee', () => {
-    const preview = calculateFeePreview(1000, 'service', 'absorb')
-    expect(preview.subscriberPays).toBe(1000)
-    expect(preview.creatorReceives).toBe(920)
-    expect(preview.feeAmount).toBe(80)
+  it('calculates fee preview using split model (ignores legacy feeMode)', () => {
+    // Split model: 4% subscriber + 4% creator = 8% total
+    // $10.00 base -> subscriber pays $10.40, creator receives $9.60
+    const preview = calculateFeePreview(1000, 'service', 'absorb') // feeMode ignored
+    expect(preview.subscriberPays).toBe(1040)    // base + 4%
+    expect(preview.creatorReceives).toBe(960)    // base - 4%
+    expect(preview.subscriberFee).toBe(40)       // 4% of 1000
+    expect(preview.creatorFee).toBe(40)          // 4% of 1000
+    expect(preview.feeAmount).toBe(80)           // total 8%
     expect(preview.feePercent).toBe(8)
   })
 
-  it('calculates fee preview when subscriber pays the fee', () => {
-    const preview = calculateFeePreview(1000, 'personal', 'pass_to_subscriber')
-    // subscriberPays = 1000 / 0.92 = 1086.96 -> rounded to 1087
-    expect(preview.subscriberPays).toBe(1087)
-    expect(preview.creatorReceives).toBe(1000)
-    expect(preview.feeAmount).toBe(87)
-    expect(preview.feePercent).toBe(8)
+  it('calculates split fee preview for all purpose types', () => {
+    // Both personal and service use same split model
+    const personalPreview = calculateFeePreview(1000, 'personal')
+    const servicePreview = calculateFeePreview(1000, 'service')
+
+    // Same split for both
+    expect(personalPreview.subscriberPays).toBe(1040)
+    expect(personalPreview.creatorReceives).toBe(960)
+    expect(servicePreview.subscriberPays).toBe(1040)
+    expect(servicePreview.creatorReceives).toBe(960)
   })
 })
 

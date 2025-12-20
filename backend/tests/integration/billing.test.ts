@@ -338,3 +338,332 @@ describe('Billing Jobs', () => {
 
   })
 })
+
+// ============================================
+// BILLING ROUTES TESTS
+// ============================================
+
+import { createHmac } from 'crypto'
+import app from '../../src/app.js'
+import { db } from '../../src/db/client.js'
+import { env } from '../../src/config/env.js'
+
+// Mock platform subscription service
+vi.mock('../../src/services/platformSubscription.js', () => ({
+  createPlatformCheckout: vi.fn(),
+  createPortalSession: vi.fn(),
+  getPlatformSubscriptionStatus: vi.fn(),
+}))
+
+import {
+  createPlatformCheckout,
+  createPortalSession,
+  getPlatformSubscriptionStatus,
+} from '../../src/services/platformSubscription.js'
+
+const mockCreatePlatformCheckout = vi.mocked(createPlatformCheckout)
+const mockCreatePortalSession = vi.mocked(createPortalSession)
+const mockGetPlatformSubscriptionStatus = vi.mocked(getPlatformSubscriptionStatus)
+
+// Hash function matching auth service
+function hashToken(token: string): string {
+  return createHmac('sha256', env.SESSION_SECRET).update(token).digest('hex')
+}
+
+// Helper to create a service provider (requires platform subscription)
+async function createServiceProviderWithSession(email?: string, platformDebitCents: number = 0) {
+  const user = await db.user.create({
+    data: { email: email || `service-route-${Date.now()}@test.com` },
+  })
+
+  const profile = await db.profile.create({
+    data: {
+      userId: user.id,
+      username: `serviceroute${Date.now()}`,
+      displayName: 'Test Service Provider',
+      country: 'United States',
+      countryCode: 'US',
+      currency: 'USD',
+      purpose: 'service',
+      pricingModel: 'single',
+      singleAmount: 10000,
+      stripeAccountId: 'acct_test123',
+      payoutStatus: 'active',
+      platformDebitCents,
+    },
+  })
+
+  const rawToken = `test-session-${Date.now()}-${Math.random()}`
+  const hashedToken = hashToken(rawToken)
+
+  const session = await db.session.create({
+    data: {
+      userId: user.id,
+      token: hashedToken,
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    },
+  })
+
+  dbStorage.sessions.set(session.id, { ...session, user })
+
+  return { user, profile, session, rawToken }
+}
+
+// Helper to create a personal user (doesn't require platform subscription)
+async function createPersonalUserWithSession(email?: string) {
+  const user = await db.user.create({
+    data: { email: email || `personal-route-${Date.now()}@test.com` },
+  })
+
+  const profile = await db.profile.create({
+    data: {
+      userId: user.id,
+      username: `personalroute${Date.now()}`,
+      displayName: 'Test Personal User',
+      country: 'United States',
+      countryCode: 'US',
+      currency: 'USD',
+      purpose: 'tips',
+      pricingModel: 'single',
+      singleAmount: 1000,
+    },
+  })
+
+  const rawToken = `test-session-${Date.now()}-${Math.random()}`
+  const hashedToken = hashToken(rawToken)
+
+  const session = await db.session.create({
+    data: {
+      userId: user.id,
+      token: hashedToken,
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    },
+  })
+
+  dbStorage.sessions.set(session.id, { ...session, user })
+
+  return { user, profile, session, rawToken }
+}
+
+// Helper to make authenticated request
+function authRequest(path: string, options: RequestInit = {}, rawToken: string) {
+  return app.fetch(
+    new Request(`http://localhost${path}`, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        Cookie: `session=${rawToken}`,
+        ...options.headers,
+      },
+    })
+  )
+}
+
+// Helper to make public request
+function publicRequest(path: string, options: RequestInit = {}) {
+  return app.fetch(
+    new Request(`http://localhost${path}`, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+    })
+  )
+}
+
+describe('billing routes', () => {
+  beforeEach(() => {
+    Object.values(dbStorage).forEach(store => store.clear())
+    vi.clearAllMocks()
+  })
+
+  describe('GET /billing/status', () => {
+    it('requires authentication', async () => {
+      const res = await publicRequest('/billing/status', { method: 'GET' })
+      expect(res.status).toBe(401)
+    })
+
+    it('returns personal plan for tips/personal users', async () => {
+      const { rawToken } = await createPersonalUserWithSession()
+
+      const res = await authRequest('/billing/status', { method: 'GET' }, rawToken)
+      expect(res.status).toBe(200)
+
+      const body = await res.json()
+      expect(body.plan).toBe('personal')
+      expect(body.subscriptionRequired).toBe(false)
+      expect(body.subscription).toBeNull()
+      expect(body.debit).toBeNull()
+    })
+
+    it('returns service plan with subscription status for service providers', async () => {
+      const { rawToken } = await createServiceProviderWithSession()
+
+      mockGetPlatformSubscriptionStatus.mockResolvedValue({
+        status: 'active',
+        subscriptionId: 'sub_test123',
+        currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        trialEndsAt: null,
+        cancelAtPeriodEnd: false,
+      })
+
+      const res = await authRequest('/billing/status', { method: 'GET' }, rawToken)
+      expect(res.status).toBe(200)
+
+      const body = await res.json()
+      expect(body.plan).toBe('service')
+      expect(body.subscriptionRequired).toBe(true)
+      expect(body.subscription.status).toBe('active')
+      expect(body.subscription.subscriptionId).toBe('sub_test123')
+      expect(body.debit).toBeNull()
+    })
+
+    it('returns debit info when platform debit exists', async () => {
+      const { rawToken } = await createServiceProviderWithSession('service-debit@test.com', 1500)
+
+      mockGetPlatformSubscriptionStatus.mockResolvedValue({
+        status: 'canceled',
+        subscriptionId: null,
+        currentPeriodEnd: null,
+        trialEndsAt: null,
+        cancelAtPeriodEnd: false,
+      })
+
+      const res = await authRequest('/billing/status', { method: 'GET' }, rawToken)
+      expect(res.status).toBe(200)
+
+      const body = await res.json()
+      expect(body.debit).toBeDefined()
+      expect(body.debit.amountCents).toBe(1500)
+      expect(body.debit.amountDisplay).toBe('$15.00')
+      expect(body.debit.willRecoverFromNextPayment).toBe(true)
+      expect(body.debit.atCapLimit).toBe(false)
+    })
+
+    it('shows cap limit warning when debit reaches $30', async () => {
+      const { rawToken } = await createServiceProviderWithSession('service-cap@test.com', 3000)
+
+      mockGetPlatformSubscriptionStatus.mockResolvedValue({
+        status: 'canceled',
+        subscriptionId: null,
+        currentPeriodEnd: null,
+        trialEndsAt: null,
+        cancelAtPeriodEnd: false,
+      })
+
+      const res = await authRequest('/billing/status', { method: 'GET' }, rawToken)
+      expect(res.status).toBe(200)
+
+      const body = await res.json()
+      expect(body.debit.atCapLimit).toBe(true)
+      expect(body.debit.message).toContain('reached maximum')
+    })
+  })
+
+  describe('POST /billing/checkout', () => {
+    it('requires authentication', async () => {
+      const res = await publicRequest('/billing/checkout', { method: 'POST' })
+      expect(res.status).toBe(401)
+    })
+
+    it('returns 400 for personal users', async () => {
+      const { rawToken } = await createPersonalUserWithSession()
+
+      const res = await authRequest('/billing/checkout', { method: 'POST' }, rawToken)
+      expect(res.status).toBe(400)
+
+      const body = await res.json()
+      expect(body.error).toContain('service providers')
+    })
+
+    it('creates checkout session for service providers', async () => {
+      const { rawToken } = await createServiceProviderWithSession()
+
+      mockCreatePlatformCheckout.mockResolvedValue({
+        url: 'https://checkout.stripe.com/session/test123',
+        sessionId: 'cs_test123',
+      })
+
+      const res = await authRequest('/billing/checkout', { method: 'POST' }, rawToken)
+      expect(res.status).toBe(200)
+
+      const body = await res.json()
+      expect(body.url).toBe('https://checkout.stripe.com/session/test123')
+      expect(body.sessionId).toBe('cs_test123')
+
+      expect(mockCreatePlatformCheckout).toHaveBeenCalled()
+    })
+
+    it('returns 400 if already subscribed', async () => {
+      const { rawToken } = await createServiceProviderWithSession()
+
+      mockCreatePlatformCheckout.mockRejectedValue(new Error('Already subscribed to platform'))
+
+      const res = await authRequest('/billing/checkout', { method: 'POST' }, rawToken)
+      expect(res.status).toBe(400)
+
+      const body = await res.json()
+      expect(body.error).toContain('Already subscribed')
+    })
+
+    it('returns 500 on checkout creation failure', async () => {
+      const { rawToken } = await createServiceProviderWithSession()
+
+      mockCreatePlatformCheckout.mockRejectedValue(new Error('Stripe API error'))
+
+      const res = await authRequest('/billing/checkout', { method: 'POST' }, rawToken)
+      expect(res.status).toBe(500)
+
+      const body = await res.json()
+      expect(body.error).toContain('Failed to create checkout')
+    })
+  })
+
+  describe('POST /billing/portal', () => {
+    it('requires authentication', async () => {
+      const res = await publicRequest('/billing/portal', { method: 'POST' })
+      expect(res.status).toBe(401)
+    })
+
+    it('creates portal session for subscribed users', async () => {
+      const { rawToken } = await createServiceProviderWithSession()
+
+      mockCreatePortalSession.mockResolvedValue({
+        url: 'https://billing.stripe.com/session/test123',
+      })
+
+      const res = await authRequest('/billing/portal', { method: 'POST' }, rawToken)
+      expect(res.status).toBe(200)
+
+      const body = await res.json()
+      expect(body.url).toBe('https://billing.stripe.com/session/test123')
+
+      expect(mockCreatePortalSession).toHaveBeenCalled()
+    })
+
+    it('returns 400 if no customer found', async () => {
+      const { rawToken } = await createServiceProviderWithSession()
+
+      mockCreatePortalSession.mockRejectedValue(new Error('No platform customer found'))
+
+      const res = await authRequest('/billing/portal', { method: 'POST' }, rawToken)
+      expect(res.status).toBe(400)
+
+      const body = await res.json()
+      expect(body.error).toContain('No subscription found')
+    })
+
+    it('returns 500 on portal creation failure', async () => {
+      const { rawToken } = await createServiceProviderWithSession()
+
+      mockCreatePortalSession.mockRejectedValue(new Error('Stripe API error'))
+
+      const res = await authRequest('/billing/portal', { method: 'POST' }, rawToken)
+      expect(res.status).toBe(500)
+
+      const body = await res.json()
+      expect(body.error).toContain('Failed to create portal')
+    })
+  })
+})

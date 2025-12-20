@@ -163,7 +163,7 @@ users.get(
       paymentProvider: inferredPaymentProvider,
       // Normalize legacy 'liquid' template to 'midnight' for frontend consistency
       template: (profile.template === 'liquid' ? 'midnight' : profile.template) || 'boundary',
-      feeMode: profile.feeMode || 'pass_to_subscriber', // Default behavior
+      feeMode: 'split' as const, // Always split model - 4% subscriber + 4% creator
       paymentsReady,
       crossBorder: isCrossBorder, // Flag for frontend to show cross-border info
     }

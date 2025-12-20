@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { useCreateCheckout, useRecordPageView, useUpdatePageView, useUpdateSettings } from '../api/hooks'
+import { useCreateCheckout, useRecordPageView, useUpdatePageView } from '../api/hooks'
 import { api } from '../api/client'
 import { calculateFeePreview } from '../utils/pricing'
 import { useToast } from '../components'
@@ -24,11 +24,9 @@ export function useCheckoutEngine({ profile, isOwner }: CheckoutEngineProps) {
     const { mutateAsync: createCheckout } = useCreateCheckout()
     const { mutateAsync: recordPageView } = useRecordPageView()
     const { mutateAsync: updatePageView } = useUpdatePageView()
-    const { mutateAsync: updateSettings, isPending: isSettingsLoading } = useUpdateSettings()
 
     // State
     const [mount, setMount] = useState(false)
-    const [feeMode, setFeeMode] = useState<'absorb' | 'pass_to_subscriber'>(profile.feeMode || 'pass_to_subscriber')
     const [subscriberEmail, setSubscriberEmail] = useState('')
     const [emailFocused, setEmailFocused] = useState(false)
     const [status, setStatus] = useState<'idle' | 'processing' | 'verifying' | 'success'>(
@@ -43,15 +41,10 @@ export function useCheckoutEngine({ profile, isOwner }: CheckoutEngineProps) {
     const isReadyToPay = paymentsReady && currentAmount > 0
     const isValidEmail = subscriberEmail.trim().length > 3 && subscriberEmail.includes('@')
 
-    // Fees
-    // Removed 'currency' arg as calculateFeePreview (pricing.ts) takes (amount, purpose, feeMode)
-    const feePreview = calculateFeePreview(currentAmount, profile.purpose, feeMode)
-    // Check the return type of calculateFeePreview in pricing.ts:
-    // It returns { subscriberPays, creatorReceives, feeAmount, feePercent }
-    // It does NOT return { serviceFee }. We need to map it.
-    const subscriberPaysFee = feeMode === 'pass_to_subscriber'
-    // If subscriber pays fee, feeToDisplay is the formatted fee amount to show they are paying extra
-    const feeToDisplay = feePreview.feeAmount
+    // Fees - Split model: subscriber pays 4%, creator pays 4%
+    const feePreview = calculateFeePreview(currentAmount, profile.purpose)
+    // feePreview returns: { subscriberPays, creatorReceives, feeAmount, subscriberFee, creatorFee, feePercent }
+    const subscriberFee = feePreview.subscriberFee
     const total = feePreview.subscriberPays
 
     // 1. Mount animation
@@ -172,35 +165,18 @@ export function useCheckoutEngine({ profile, isOwner }: CheckoutEngineProps) {
         }
     }
 
-    const handleToggleFeeMode = async () => {
-        if (!isOwner) return
-        const newMode = feeMode === 'absorb' ? 'pass_to_subscriber' : 'absorb'
-        setFeeMode(newMode) // Optimistic
-        try {
-            await updateSettings({ feeMode: newMode })
-            toast.success(`Fees will be ${newMode === 'absorb' ? 'absorbed by you' : 'passed to subscriber'}`)
-        } catch {
-            setFeeMode(profile.feeMode || 'pass_to_subscriber') // Revert
-            toast.error('Failed to update fee setting')
-        }
-    }
-
     return {
         mount,
         status,
-        feeMode,
         subscriberEmail,
         emailFocused,
         setSubscriberEmail,
         setEmailFocused,
         isReadyToPay,
         isValidEmail,
-        feeToDisplay,
+        subscriberFee,
         total,
         currency,
-        subscriberPaysFee,
         handlePayment,
-        handleToggleFeeMode,
-        isSettingsLoading
     }
 }

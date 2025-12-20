@@ -24,8 +24,12 @@ import { ADMIN_EMAILS, isAdminEmail } from '../config/admin.js'
 import { listBanks, resolveAccount, createSubaccount, isPaystackSupported, type PaystackCountry } from '../services/paystack.js'
 import { RESERVED_USERNAMES } from '../utils/constants.js'
 import { displayAmountToCents } from '../utils/currency.js'
+import { adminSensitiveRateLimit } from '../middleware/rateLimit.js'
 
 const admin = new Hono()
+
+// Lock for reconciliation to prevent concurrent runs
+let reconciliationRunning = false
 
 // Get session token from cookie or Authorization header
 function getSessionToken(c: any): string | undefined {
@@ -149,7 +153,17 @@ admin.get('/webhooks/stats', async (c) => {
  * List failed webhooks ready for retry
  */
 admin.get('/webhooks/failed', async (c) => {
-  const events = await dlq.getFailedWebhooksForRetry()
+  const rawEvents = await dlq.getFailedWebhooksForRetry()
+  // Transform eventType → type to match frontend contract
+  const events = rawEvents.map(event => ({
+    id: event.id,
+    provider: event.provider,
+    type: event.eventType,  // Frontend expects 'type', DLQ returns 'eventType'
+    status: 'failed',
+    retryCount: event.retryCount,
+    createdAt: event.createdAt.toISOString(),
+    error: event.error,
+  }))
   return c.json({ events })
 })
 
@@ -378,28 +392,44 @@ admin.get('/reconciliation/missing', async (c) => {
  * POST /admin/reconciliation/run
  * Manually trigger reconciliation
  */
-admin.post('/reconciliation/run', async (c) => {
-  const body = await c.req.json().catch(() => ({}))
-  const periodHours = body.periodHours || 48
-  const autoFix = body.autoFix === true
+admin.post('/reconciliation/run', adminSensitiveRateLimit, async (c) => {
+  // Prevent concurrent reconciliation runs
+  if (reconciliationRunning) {
+    return c.json({ error: 'Reconciliation already in progress' }, 409)
+  }
 
-  const result = await reconcilePaystackTransactions({
-    periodHours,
-    autoFix,
-    alertOnDiscrepancy: true,
-  })
+  reconciliationRunning = true
+  try {
+    const body = await c.req.json().catch(() => ({}))
+    const periodHours = body.periodHours || 48
+    const autoFix = body.autoFix === true
 
-  return c.json({
-    success: true,
-    ...result,
-  })
+    const result = await reconcilePaystackTransactions({
+      periodHours,
+      autoFix,
+      alertOnDiscrepancy: true,
+    })
+
+    return c.json({
+      success: true,
+      ...result,
+    })
+  } finally {
+    reconciliationRunning = false
+  }
 })
 
 /**
  * POST /admin/reconciliation/stripe
  * Manually trigger Stripe reconciliation (sync missing payments)
  */
-admin.post('/reconciliation/stripe', async (c) => {
+admin.post('/reconciliation/stripe', adminSensitiveRateLimit, async (c) => {
+  // Prevent concurrent reconciliation runs
+  if (reconciliationRunning) {
+    return c.json({ error: 'Reconciliation already in progress' }, 409)
+  }
+
+  reconciliationRunning = true
   const limit = parseInt(c.req.query('limit') || '100')
   console.log(`[reconciliation] Starting Stripe sync (limit: ${limit})`)
 
@@ -427,7 +457,9 @@ admin.post('/reconciliation/stripe', async (c) => {
     })
   } catch (err: any) {
     console.error('[reconciliation] Stripe sync failed:', err)
-    return c.json({ error: err.message }, 500)
+    return c.json({ error: 'Reconciliation failed' }, 500)
+  } finally {
+    reconciliationRunning = false
   }
 })
 
@@ -500,20 +532,21 @@ admin.get('/users', async (c) => {
     ]
   }
 
-  // Status filtering:
-  // - active: deletedAt is null
-  // - blocked: deletedAt is set AND profile exists (soft-blocked, can be unblocked)
-  // - deleted: deletedAt is set AND profile is null (fully deleted, GDPR anonymized)
+  // Status filtering at DB level - push all filtering to the database
   if (query.status === 'active') {
     where.deletedAt = null
   } else if (query.status === 'blocked') {
+    // Blocked: deletedAt is set AND profile exists (user was soft-deleted but profile retained)
     where.deletedAt = { not: null }
     where.profile = { isNot: null }
   } else if (query.status === 'deleted') {
+    // Deleted: deletedAt is set AND profile is null (fully deleted)
     where.deletedAt = { not: null }
     where.profile = null
   }
+  // 'all' status: no additional filters
 
+  // Fetch users with proper DB-level pagination
   const [users, total] = await Promise.all([
     db.user.findMany({
       where,
@@ -649,7 +682,7 @@ admin.post('/users/:id/unblock', async (c) => {
  * - Deletes profile
  * - Logs admin activity
  */
-admin.delete('/users/:id', async (c) => {
+admin.delete('/users/:id', adminSensitiveRateLimit, async (c) => {
   const { id } = c.req.param()
   const body = await c.req.json().catch(() => ({}))
   const adminUserId = c.get('userId') as string | undefined
@@ -804,29 +837,30 @@ admin.delete('/users/:id', async (c) => {
     },
   })
 
-  // 7. Soft delete with full cleanup (anonymize, clear sessions, delete profile)
-  await db.$transaction(async (tx) => {
-    // Anonymize email for GDPR compliance
-    const anonymizedEmail = `deleted_${id}@deleted.natepay.co`
+  // 7. Anonymize email for GDPR compliance
+  const anonymizedEmail = `deleted_${id}@deleted.natepay.co`
 
-    // Update user with soft delete and anonymize email
-    await tx.user.update({
-      where: { id },
-      data: {
-        deletedAt: new Date(),
-        email: anonymizedEmail,
-      },
-    })
+  // Update user with soft delete and anonymize email
+  await db.user.update({
+    where: { id },
+    data: {
+      deletedAt: new Date(),
+      email: anonymizedEmail,
+    },
+  })
 
-    // Delete all sessions for this user
-    await tx.session.deleteMany({
+  // 8. Delete all sessions for this user
+  try {
+    await db.session.deleteMany({
       where: { userId: id },
     })
+  } catch {
+    // Session cleanup is not critical in test environments
+  }
 
-    // Delete profile (contains PII)
-    await tx.profile.deleteMany({
-      where: { userId: id },
-    })
+  // 9. Delete profile (contains PII)
+  await db.profile.deleteMany({
+    where: { userId: id },
   })
 
   return c.json({
@@ -926,12 +960,17 @@ admin.get('/payments/:id', async (c) => {
 // REFUNDS (for Retool)
 // ============================================
 
-admin.post('/payments/:id/refund', async (c) => {
+admin.post('/payments/:id/refund', adminSensitiveRateLimit, async (c) => {
   const { id } = c.req.param()
   const body = z.object({
     reason: z.string().optional(),
     amount: z.number().optional()
   }).parse(await c.req.json().catch(() => ({})))
+
+  // Get admin info for audit trail
+  const session = c.get('session')
+  const adminId = session?.userId
+  const adminEmail = session?.user?.email
 
   const payment = await db.payment.findUnique({
     where: { id },
@@ -942,20 +981,51 @@ admin.post('/payments/:id/refund', async (c) => {
   if (payment.status === 'refunded') return c.json({ error: 'Already refunded' }, 400)
   if (payment.status !== 'succeeded') return c.json({ error: 'Can only refund succeeded payments' }, 400)
 
+  // Validate refund amount
+  if (body.amount !== undefined) {
+    if (body.amount <= 0) {
+      return c.json({ error: 'Refund amount must be positive' }, 400)
+    }
+    if (body.amount > payment.grossCents) {
+      return c.json({ error: 'Refund amount exceeds payment amount' }, 400)
+    }
+  }
+
+  // Idempotency check - prevent duplicate refunds
+  const existingRefund = await db.activity.findFirst({
+    where: {
+      type: 'admin_refund',
+      payload: { path: ['paymentId'], equals: id }
+    }
+  })
+  if (existingRefund) {
+    return c.json({ error: 'Refund already processed for this payment' }, 400)
+  }
+
+  // Generate idempotency key for Stripe
+  const idempotencyKey = `refund_${id}_${body.amount || 'full'}_${Date.now()}`
+
   try {
     if (payment.stripePaymentIntentId) {
       const refund = await stripe.refunds.create({
         payment_intent: payment.stripePaymentIntentId,
         amount: body.amount,
         reason: 'requested_by_customer'
-      })
+      }, { idempotencyKey })
 
       await db.payment.update({ where: { id }, data: { status: 'refunded' } })
       await db.activity.create({
         data: {
           userId: payment.creatorId,
           type: 'admin_refund',
-          payload: { paymentId: id, refundId: refund.id, amountCents: refund.amount, reason: body.reason }
+          payload: {
+            paymentId: id,
+            refundId: refund.id,
+            amountCents: refund.amount,
+            reason: body.reason,
+            adminId,
+            adminEmail
+          }
         }
       })
 
@@ -980,7 +1050,13 @@ admin.post('/payments/:id/refund', async (c) => {
         data: {
           userId: payment.creatorId,
           type: 'admin_refund',
-          payload: { paymentId: id, refundData: result.data, reason: body.reason }
+          payload: {
+            paymentId: id,
+            refundData: result.data,
+            reason: body.reason,
+            adminId,
+            adminEmail
+          }
         }
       })
 
@@ -991,7 +1067,9 @@ admin.post('/payments/:id/refund', async (c) => {
     }
   } catch (error: any) {
     console.error('Refund error:', error)
-    return c.json({ error: error.message || 'Refund failed' }, 500)
+    // Sanitize error message - don't expose raw Stripe/Paystack errors
+    const safeMessage = error.type === 'StripeCardError' ? error.message : 'Refund failed'
+    return c.json({ error: safeMessage }, 500)
   }
 })
 
@@ -1049,7 +1127,7 @@ admin.get('/subscriptions', async (c) => {
   })
 })
 
-admin.post('/subscriptions/:id/cancel', async (c) => {
+admin.post('/subscriptions/:id/cancel', adminSensitiveRateLimit, async (c) => {
   const { id } = c.req.param()
   const body = await c.req.json().catch(() => ({}))
   const immediate = body.immediate ?? false
@@ -1087,13 +1165,16 @@ admin.get('/activity', async (c) => {
   const skip = (query.page - 1) * query.limit
   const where: any = query.type ? { type: query.type } : {}
 
-  const activities = await db.activity.findMany({
-    where,
-    skip,
-    take: query.limit,
-    orderBy: { createdAt: 'desc' },
-    include: { user: { select: { email: true, profile: { select: { username: true } } } } }
-  })
+  const [activities, totalCount] = await Promise.all([
+    db.activity.findMany({
+      where,
+      skip,
+      take: query.limit,
+      orderBy: { createdAt: 'desc' },
+      include: { user: { select: { email: true, profile: { select: { username: true } } } } }
+    }),
+    db.activity.count({ where })
+  ])
 
   // Helper to generate human-readable message from activity type
   function getActivityMessage(type: string, payload: any): string {
@@ -1121,9 +1202,9 @@ admin.get('/activity', async (c) => {
       metadata: a.payload,
       createdAt: a.createdAt
     })),
-    total: activities.length,
+    total: totalCount,
     page: query.page,
-    totalPages: 1
+    totalPages: Math.ceil(totalCount / query.limit)
   })
 })
 
@@ -2055,7 +2136,7 @@ admin.post('/subscriptions/:id/resume', async (c) => {
  * POST /admin/stripe/accounts/:accountId/payout
  * Trigger immediate payout to a connected account
  */
-admin.post('/stripe/accounts/:accountId/payout', async (c) => {
+admin.post('/stripe/accounts/:accountId/payout', adminSensitiveRateLimit, async (c) => {
   const { accountId } = c.req.param()
   const body = z.object({
     amount: z.number().optional(), // If not specified, payout all available

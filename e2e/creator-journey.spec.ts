@@ -1,94 +1,113 @@
 import { test, expect } from '@playwright/test';
 
-const CREATOR_EMAIL = `creator_${Date.now()}@example.com`;
-const CREATOR_USERNAME = `creator_${Date.now()}`;
-const SUBSCRIBER_EMAIL = `sub_${Date.now()}@example.com`;
+// Always use local backend for E2E tests (not production)
+const API_URL = 'http://localhost:3001';
+
+// Use shorter unique IDs for testing
+const uniqueId = Date.now().toString(36);
+const CREATOR_EMAIL = `e2e_${uniqueId}@test.com`;
+const CREATOR_USERNAME = `e2e${uniqueId}`;
+const SUBSCRIBER_EMAIL = `sub_${uniqueId}@test.com`;
 
 test.describe('Creator Journey (Golden Path)', () => {
-  
-  test('Full flow: Onboard -> Connect Stripe (Stub) -> Public Page -> Subscribe (Stub)', async ({ page, request, baseURL }) => {
-    // 1. Creator Login (Backdoor)
-    const loginRes = await request.post(`${baseURL}/api/auth/e2e-login`, {
+
+  test('Full flow: Onboard -> Connect Stripe (Stub) -> Public Page -> Subscribe (Stub)', async ({ page, request }) => {
+    // 1. Creator Login (Backdoor) - calls backend directly
+    console.log(`[E2E] Logging in with email: ${CREATOR_EMAIL}`);
+    const loginRes = await request.post(`${API_URL}/auth/e2e-login`, {
       data: { email: CREATOR_EMAIL }
     });
+    console.log(`[E2E] Login response status: ${loginRes.status()}`);
     expect(loginRes.ok()).toBeTruthy();
-    
-    // Set cookie in browser context (Playwright automatically shares cookies if we used browser context, but here we used APIRequest context which is separate. We need to manually set cookie or visit a page to set it.)
-    // Actually, request.post sets cookies in the APIRequestContext, not the BrowserContext of 'page'.
-    // We need to get the cookie from loginRes and add it to 'page'.
+
+    // Get the login response body which includes the token
     const loginBody = await loginRes.json();
-    const headers = loginRes.headers();
-    // In a real app, the cookie is set via Set-Cookie header. 
-    // Playwright APIRequestContext handles this automatically for subsequent API calls, but for 'page' we need to transfer it.
-    // However, our backend e2e-login also returns the token in the body for mobile apps. We can use that if we want, 
-    // but typically web relies on httpOnly cookies.
-    
-    // Easier way: Extract Set-Cookie header manually or just use the token to set a cookie.
-    // Since our backend sets httpOnly cookie, we can't read it via document.cookie.
-    // We'll parse the Set-Cookie header.
-    const setCookie = headers['set-cookie'];
-    if (setCookie) {
-      const sessionPart = setCookie.split(';')[0];
-      const [name, value] = sessionPart.split('=');
-      await page.context().addCookies([{
-        name,
-        value,
-        domain: 'localhost', // or 127.0.0.1
-        path: '/',
-      }]);
-    }
+    const token = loginBody.token;
+    const redirectTo = loginBody.onboarding?.redirectTo || '/onboarding?step=3';
+    console.log(`[E2E] Redirect URL: ${redirectTo}`);
 
-    // 2. Onboarding: Identity Step
-    await page.goto('/onboarding');
+    // Visit the app first to access localStorage on the correct origin
+    await page.goto('/');
+
+    // Set the auth token in localStorage (like mobile auth flow)
+    // This is more reliable than cookies for cross-port E2E testing
+    await page.evaluate((authToken) => {
+      localStorage.setItem('nate_auth_token', authToken);
+      localStorage.setItem('nate_has_session', 'true');
+    }, token);
+
+    // 2. Navigate to onboarding with the step parameter
+    // e2e-login creates user with onboardingStep: 3
+    await page.goto(redirectTo);
     await expect(page).toHaveURL(/\/onboarding/);
-    
-    // Fill Identity
-    await page.fill('input[name="username"]', CREATOR_USERNAME);
-    await page.fill('input[name="displayName"]', 'Test Creator');
-    // Country might be a select or inferred. Assuming defaults or simple input for now.
-    // If it's a select:
-    // await page.click('text=Select Country');
-    // await page.click('text=United States');
-    // For now, let's assume the test user creation in e2e-login didn't set full profile, so we are at step 3.
-    
+
+    // Wait for the IdentityStep to load - look for the heading
+    await expect(page.locator('h1:has-text("What should we call you?")')).toBeVisible({ timeout: 10000 });
+
+    // Fill name (placeholder="Your name")
+    await page.fill('input[placeholder="Your name"]', 'Test Creator');
+
+    // Select country - click the country selector and choose United States
+    await page.click('.country-selector');
+    await expect(page.locator('.country-drawer')).toBeVisible();
+    await page.click('.country-option:has-text("United States")');
+
+    // Click Continue
     await page.click('button:has-text("Continue")');
 
-    // 3. Profile Step (Bio)
-    await expect(page.locator('text=Tell us about yourself')).toBeVisible();
-    await page.fill('textarea[name="bio"]', 'This is an E2E test bio.');
+    // 3. PersonalUsernameStep - "Claim your link"
+    await expect(page.locator('h1:has-text("Claim your link")')).toBeVisible({ timeout: 10000 });
+
+    // Fill username (placeholder="yourname")
+    await page.fill('input[placeholder="yourname"]', CREATOR_USERNAME);
+
+    // Wait for availability check to complete - look for "✓ Available" or just the success indicator
+    await expect(page.locator('.username-helper-success')).toBeVisible({ timeout: 10000 });
+
+    // Click Continue
     await page.click('button:has-text("Continue")');
 
-    // 4. Payment Method Step (Connect Stripe)
-    await expect(page.locator('text=Connect payments')).toBeVisible();
-    await page.click('text=Stripe'); // Select Stripe
+    // 4. PaymentMethodStep - "Connect payments"
+    await expect(page.locator('h1:has-text("Connect payments")')).toBeVisible({ timeout: 10000 });
+
+    // Select Stripe (click the payment method card)
+    await page.click('.payment-method-card:has-text("Stripe")');
+
+    // Click "Connect with Stripe" - in stub mode, this returns alreadyOnboarded: true
+    // which immediately proceeds to the next step
     await page.click('button:has-text("Connect with Stripe")');
 
-    // STUB REDIRECT CHECK
-    // Should go to /payment/stub?... -> then redirect back to /onboarding?step=6 (Launch)
-    // We expect to end up at Launch Review
-    await expect(page.locator('text=Review & Launch')).toBeVisible({ timeout: 10000 });
+    // 5. PersonalReviewStep - "Ready to launch?"
+    await expect(page.locator('h1:has-text("Ready to launch?")')).toBeVisible({ timeout: 15000 });
 
-    // 5. Launch
-    await page.click('button:has-text("Launch Page")');
-    await expect(page).toHaveURL('/dashboard');
+    // Click "Launch My Page"
+    await page.click('button:has-text("Launch My Page")');
+
+    // Should redirect to dashboard
+    await expect(page).toHaveURL('/dashboard', { timeout: 15000 });
 
     // 6. Visit Public Page (as Subscriber)
-    // Clear cookies to simulate new user
+    // Clear cookies to simulate a new anonymous user
     await page.context().clearCookies();
     await page.goto(`/${CREATOR_USERNAME}`);
-    await expect(page.locator(`text=${CREATOR_USERNAME}`)).toBeVisible();
 
-    // 7. Subscribe
-    await page.click('button:has-text("Subscribe")'); // Or whatever the main CTA is
-    
-    // Enter Email
+    // Verify creator page loaded - look for the creator's name or username
+    await expect(page.locator(`text=Test Creator`)).toBeVisible({ timeout: 10000 });
+
+    // 7. Subscribe flow
+    // Click the main subscribe button
+    await page.click('button:has-text("Subscribe")');
+
+    // A subscription form/modal should appear - fill email
     await page.fill('input[type="email"]', SUBSCRIBER_EMAIL);
-    await page.click('button:has-text("Continue")'); // Or "Subscribe"
 
-    // STUB CHECKOUT
-    // Should redirect to stub URL and back to success
-    // Verification: Look for success message
-    await expect(page.locator('text=Payment Successful')).toBeVisible({ timeout: 15000 });
+    // Click the confirm/continue button
+    await page.click('button:has-text("Continue")');
+
+    // 8. STUB CHECKOUT - should redirect back with success
+    // In stub mode, the checkout URL immediately redirects to success page
+    // Look for success indicators (the exact text may vary)
+    await expect(page.locator('text=/success|subscribed|thank you/i')).toBeVisible({ timeout: 15000 });
   });
 
 });

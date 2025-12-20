@@ -26,6 +26,8 @@ export async function getFailedWebhooksForRetry(): Promise<{
   eventType: string
   payload: any
   retryCount: number
+  createdAt: Date
+  error: string | null
 }[]> {
   const now = new Date()
 

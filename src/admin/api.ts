@@ -138,12 +138,15 @@ export interface AdminPayment {
   creator: { id: string; email: string; username: string | null }
   subscriber: { id: string; email: string }
   grossCents: number
+  amountCents?: number
   feeCents: number
   netCents: number
   currency: string
   status: string
   type: string
   provider: string
+  stripePaymentIntentId?: string
+  paystackTransactionRef?: string
   createdAt: string
 }
 
@@ -156,6 +159,7 @@ export interface AdminSubscription {
   interval: string
   status: string
   ltvCents: number
+  currentPeriodEnd?: string
   createdAt: string
 }
 

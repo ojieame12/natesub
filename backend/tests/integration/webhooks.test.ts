@@ -392,4 +392,214 @@ describe('stripe webhooks', () => {
       expect(updated?.canceledAt).toBeDefined()
     })
   })
+
+  describe('split fee model', () => {
+    it('stores split fee fields in Payment from checkout.session.completed', async () => {
+      const creator = await db.user.create({
+        data: { email: 'creator@test.com' },
+      })
+
+      await db.profile.create({
+        data: {
+          userId: creator.id,
+          username: 'splitcreator',
+          displayName: 'Split Creator',
+          country: 'US',
+          countryCode: 'US',
+          currency: 'USD',
+          purpose: 'tips',
+          pricingModel: 'single',
+          singleAmount: 10000, // $100 to avoid processor buffer
+        },
+      })
+
+      // Use $100 base to avoid processor buffer complications
+      // $100 + 4% = $104 gross, $100 - 4% = $96 net
+      const event = {
+        id: 'evt_split_checkout',
+        type: 'checkout.session.completed',
+        data: {
+          object: {
+            id: 'cs_split_test',
+            mode: 'payment',
+            payment_status: 'paid',
+            amount_total: 10400, // $104.00 (base + 4% subscriber fee)
+            currency: 'usd',
+            customer: 'cus_split_subscriber',
+            customer_details: {
+              email: 'splitsubscriber@test.com',
+              name: 'Split Subscriber',
+            },
+            metadata: {
+              creatorId: creator.id,
+              feeModel: 'split_v1',
+              serviceFee: '800', // Total platform fee (8%)
+              netAmount: '9600', // What creator receives
+              subscriberFeeCents: '400',
+              creatorFeeCents: '400',
+              baseAmountCents: '10000',
+            },
+          },
+        },
+      }
+
+      const res = await sendWebhook(event)
+      expect(res.status).toBe(200)
+
+      // Verify payment was created with split fee fields
+      const payments = await db.payment.findMany({
+        where: { stripeEventId: 'evt_split_checkout' },
+      })
+      expect(payments.length).toBe(1)
+      expect(payments[0].grossCents).toBe(10400)
+      expect(payments[0].netCents).toBe(9600)
+      expect(payments[0].feeCents).toBe(800) // 4% + 4% = 8%
+      expect(payments[0].subscriberFeeCents).toBe(400)
+      expect(payments[0].creatorFeeCents).toBe(400)
+    })
+
+    it('handles legacy subscriptions without split fee fields', async () => {
+      const creator = await db.user.create({
+        data: { email: 'legacycreator@test.com' },
+      })
+
+      await db.profile.create({
+        data: {
+          userId: creator.id,
+          username: 'legacycreator',
+          displayName: 'Legacy Creator',
+          country: 'US',
+          countryCode: 'US',
+          currency: 'USD',
+          purpose: 'tips',
+          pricingModel: 'single',
+          singleAmount: 10000,
+        },
+      })
+
+      const subscriber = await db.user.create({
+        data: { email: 'legacysubscriber@test.com' },
+      })
+
+      // Create legacy subscription (no feeModel)
+      // Use $100 base amount
+      const subscription = await db.subscription.create({
+        data: {
+          creatorId: creator.id,
+          subscriberId: subscriber.id,
+          amount: 10000, // $100 base
+          currency: 'USD',
+          interval: 'month',
+          status: 'active',
+          stripeSubscriptionId: 'sub_legacy_renewal',
+          stripeCustomerId: 'cus_legacy',
+          feeModel: null, // Legacy - no fee model
+          feeMode: 'pass_to_subscriber',
+        },
+      })
+
+      const event = {
+        id: 'evt_legacy_renewal',
+        type: 'invoice.paid',
+        data: {
+          object: {
+            id: 'inv_legacy_123',
+            subscription: 'sub_legacy_renewal',
+            amount_paid: 10800, // Original price with 8% fee ($108)
+            currency: 'usd',
+            lines: {
+              data: [{ period: { end: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60 } }],
+            },
+          },
+        },
+      }
+
+      const res = await sendWebhook(event)
+      expect(res.status).toBe(200)
+
+      // Verify payment uses legacy fee calculation
+      const payments = await db.payment.findMany({
+        where: { subscriptionId: subscription.id },
+      })
+      expect(payments.length).toBe(1)
+      // Legacy fee: 8% of invoice.amount_paid + 30¢ buffer
+      // Note: Legacy calculation uses the gross amount (10800), not base (10000)
+      // feeCents = round(10800 * 0.08) + 30 = 864 + 30 = 894
+      expect(payments[0].feeCents).toBe(894)
+      // Legacy doesn't use split fields
+      expect(payments[0].subscriberFeeCents).toBeNull()
+      expect(payments[0].creatorFeeCents).toBeNull()
+    })
+
+    it('stores split fee fields for recurring invoice.paid with feeModel', async () => {
+      const creator = await db.user.create({
+        data: { email: 'renewalcreator@test.com' },
+      })
+
+      await db.profile.create({
+        data: {
+          userId: creator.id,
+          username: 'renewalcreator',
+          displayName: 'Renewal Creator',
+          country: 'US',
+          countryCode: 'US',
+          currency: 'USD',
+          purpose: 'tips',
+          pricingModel: 'single',
+          singleAmount: 10000,
+        },
+      })
+
+      const subscriber = await db.user.create({
+        data: { email: 'renewalsubscriber@test.com' },
+      })
+
+      // Create subscription with split_v1 model using $100 base
+      const subscription = await db.subscription.create({
+        data: {
+          creatorId: creator.id,
+          subscriberId: subscriber.id,
+          amount: 10000, // Creator's base price ($100)
+          currency: 'USD',
+          interval: 'month',
+          status: 'active',
+          stripeSubscriptionId: 'sub_split_renewal',
+          stripeCustomerId: 'cus_split_renewal',
+          feeModel: 'split_v1',
+          feeMode: 'split',
+        },
+      })
+
+      const event = {
+        id: 'evt_split_renewal',
+        type: 'invoice.paid',
+        data: {
+          object: {
+            id: 'inv_split_123',
+            subscription: 'sub_split_renewal',
+            amount_paid: 10400, // $104.00 gross
+            currency: 'usd',
+            application_fee_amount: 800, // 8% fee
+            lines: {
+              data: [{ period: { end: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60 } }],
+            },
+          },
+        },
+      }
+
+      const res = await sendWebhook(event)
+      expect(res.status).toBe(200)
+
+      // Verify payment has split fee fields from fee calculation
+      const payments = await db.payment.findMany({
+        where: { subscriptionId: subscription.id },
+      })
+      expect(payments.length).toBe(1)
+      expect(payments[0].feeCents).toBe(800) // 8% total
+      expect(payments[0].subscriberFeeCents).toBe(400) // 4%
+      expect(payments[0].creatorFeeCents).toBe(400) // 4%
+      expect(payments[0].grossCents).toBe(10400)
+      expect(payments[0].netCents).toBe(9600)
+    })
+  })
 })

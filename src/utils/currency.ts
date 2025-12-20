@@ -436,85 +436,70 @@ export function isReasonableAmount(amount: number, currencyCode: string): boolea
 
 // ============================================
 // FEE CALCULATION (mirrors backend/services/fees.ts)
+// Split Fee Model (v2): 4% subscriber + 4% creator = 8% total
 // ============================================
 
-// Simple flat rates - no caps, no floors
-const FEE_RATES = {
-    personal: 0.10,  // 10% for personal (tips, allowances, support)
-    service: 0.08,   // 8% for service (freelancers, businesses)
-}
+// Split rate: each party pays 4%
+const SPLIT_RATE = 0.04
+const CROSS_BORDER_BUFFER = 0.015 // 1.5%
 
 export interface FeePreview {
-    creatorReceives: number    // What creator gets (in dollars)
-    subscriberPays: number     // Total subscriber pays (in dollars)
-    serviceFee: number         // Platform fee (in dollars)
-    effectiveRate: number      // Fee percentage (0.10 = 10%)
-    effectiveRatePercent: string // Formatted as "10%"
+    creatorReceives: number      // What creator gets (in dollars)
+    subscriberPays: number       // Total subscriber pays (in dollars)
+    serviceFee: number           // Subscriber's fee portion (4%)
+    creatorFee: number           // Creator's fee portion (4%)
+    totalFee: number             // Total platform fee (8%)
+    effectiveRate: number        // Fee percentage (0.04 = 4%)
+    effectiveRatePercent: string // Formatted as "4%"
 }
 
 /**
- * Calculate fee preview for subscriber display
- * Simple flat rate: 10% for personal, 8% for service
+ * Calculate fee preview using split model (4%/4%)
+ * Both subscriber and creator pay 4% each = 8% total platform fee
  *
- * @param amountDollars - Creator's price in dollars
- * @param currency - Currency code (unused, kept for API compatibility)
- * @param purpose - Creator's purpose (service or personal)
- * @param feeMode - Who pays the fee: 'absorb' (creator) or 'pass_to_subscriber'
+ * @param amountDollars - Creator's set price in dollars
+ * @param _currency - Currency code (unused, kept for API compatibility)
+ * @param _purpose - Creator's purpose (unused - all purposes use 8% now)
+ * @param _feeMode - DEPRECATED: Ignored, always uses split model
+ * @param isCrossBorder - Whether subscriber is in different country
  */
 export function calculateFeePreview(
     amountDollars: number,
     _currency: string,
-    purpose?: string | null,
-    feeMode?: 'absorb' | 'pass_to_subscriber' | null,
+    _purpose?: string | null,
+    _feeMode?: 'absorb' | 'pass_to_subscriber' | 'split' | null,
     isCrossBorder: boolean = false
 ): FeePreview {
-    const isService = purpose === 'service'
-    let rate = isService ? FEE_RATES.service : FEE_RATES.personal
-
-    // Smart Buffer: Add 1.5% for cross-border transactions (matches backend)
-    // This ensures creators see accurate "net" amounts
-    if (isCrossBorder) {
-        rate += 0.015
-    }
-
-    const creatorAbsorbsFee = feeMode === 'absorb'
-
     if (amountDollars === 0) {
         return {
             creatorReceives: 0,
             subscriberPays: 0,
             serviceFee: 0,
+            creatorFee: 0,
+            totalFee: 0,
             effectiveRate: 0,
             effectiveRatePercent: '0%',
         }
     }
 
-    // Calculate fee based on feeMode
-    let serviceFee = amountDollars * rate
-
-    // Apply minimum fee floor ($0.50) if amount > $1.00
-    // This matches backend logic (backend/src/services/fees.ts)
-    if (amountDollars > 1.00) {
-        serviceFee = Math.max(serviceFee, 0.50)
+    // Calculate split rate (4% base, +0.75% each for cross-border)
+    let splitRate = SPLIT_RATE
+    if (isCrossBorder) {
+        splitRate += CROSS_BORDER_BUFFER / 2 // Split the 1.5% evenly
     }
 
-    if (creatorAbsorbsFee) {
-        // Creator absorbs fee - subscriber pays base price, creator receives less
-        return {
-            creatorReceives: amountDollars - serviceFee,
-            subscriberPays: amountDollars,
-            serviceFee: 0, // Don't show fee to subscriber when creator absorbs
-            effectiveRate: 0,
-            effectiveRatePercent: '0%',
-        }
-    }
+    // Both parties pay the same rate
+    const subscriberFee = amountDollars * splitRate
+    const creatorFee = amountDollars * splitRate
+    const totalFee = subscriberFee + creatorFee
 
-    // Pass fee to subscriber - subscriber pays more
     return {
-        creatorReceives: amountDollars,
-        subscriberPays: amountDollars + serviceFee,
-        serviceFee,
-        effectiveRate: rate,
-        effectiveRatePercent: `${(rate * 100).toFixed(0)}%`,
+        creatorReceives: amountDollars - creatorFee,
+        subscriberPays: amountDollars + subscriberFee,
+        serviceFee: subscriberFee,     // What subscriber pays
+        creatorFee: creatorFee,        // What creator pays
+        totalFee: totalFee,            // Total platform fee
+        effectiveRate: splitRate,
+        effectiveRatePercent: `${(splitRate * 100).toFixed(0)}%`,
     }
 }

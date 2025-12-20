@@ -49,12 +49,17 @@ export async function handlePaystackChargeSuccess(data: any, eventId: string) {
 
   // Fee metadata from validated schema
   const feeModel = validatedMeta.feeModel || null
-  const feeMode = validatedMeta.feeMode || 'pass_to_subscriber'
+  const feeMode = validatedMeta.feeMode || 'split' // Default to split for new subscriptions
   // Paystack metadata uses numbers, not strings
   const netAmount = validatedMeta.creatorAmount || 0
   const serviceFee = validatedMeta.serviceFee || 0
   const feeEffectiveRate = validatedMeta.feeEffectiveRate || null
   const feeWasCapped = validatedMeta.feeWasCapped === true
+
+  // Split fee fields (v2 model)
+  const subscriberFeeMeta = validatedMeta.subscriberFee || 0
+  const creatorFeeMeta = validatedMeta.creatorFee || 0
+  const baseAmountMeta = validatedMeta.baseAmount || 0
 
   console.log(`[paystack] Processing charge ${reference} for creator ${sanitizeForLog(creatorId)}`)
 
@@ -130,10 +135,20 @@ export async function handlePaystackChargeSuccess(data: any, eventId: string) {
   let netCents: number
   let grossCents: number | null = null
   let basePrice: number  // Creator's set price - this is what fees are calculated on for renewals
+  let subscriberFeeCents: number | null = null
+  let creatorFeeCents: number | null = null
 
   const hasNewFeeModel = feeModel && netAmount > 0
-  if (feeModel === 'flat' && hasNewFeeModel) {
-    // New flat fee model with feeMode
+  if (feeModel === 'split_v1' && hasNewFeeModel) {
+    // New split fee model (4%/4%)
+    grossCents = amount  // Total subscriber paid
+    feeCents = serviceFee
+    netCents = netAmount  // What creator receives
+    subscriberFeeCents = subscriberFeeMeta || null
+    creatorFeeCents = creatorFeeMeta || null
+    basePrice = baseAmountMeta || netCents  // Creator's set price
+  } else if (feeModel === 'flat' && hasNewFeeModel) {
+    // Legacy flat fee model with feeMode
     grossCents = amount  // Total subscriber paid
     feeCents = serviceFee
     netCents = netAmount  // What creator receives (depends on feeMode)
@@ -218,6 +233,8 @@ export async function handlePaystackChargeSuccess(data: any, eventId: string) {
           currency: currency?.toUpperCase() || 'NGN',
           feeCents,
           netCents,
+          subscriberFeeCents,   // Split fee: subscriber's portion
+          creatorFeeCents,      // Split fee: creator's portion
           feeModel: feeModel || null,
           feeEffectiveRate,
           feeWasCapped,

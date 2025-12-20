@@ -310,7 +310,7 @@ export default function Billing() {
                             </p>
                             <div className="billing-plan-fee">
                                 <span>Transaction fee</span>
-                                <span>10%</span>
+                                <span>8%</span>
                             </div>
                         </div>
 

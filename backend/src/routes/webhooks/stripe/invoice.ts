@@ -92,7 +92,14 @@ export async function handleInvoiceCreated(event: Stripe.Event) {
   const countryCode = subscription.creator?.profile?.countryCode
   const isCrossBorder = countryCode ? isStripeCrossBorderSupported(countryCode) : false
 
-  const feeCalc = calculateServiceFee(creatorAmount, currency, creatorPurpose, 'pass_to_subscriber', isCrossBorder)
+  // Use split model for new subscriptions, legacy mode for old ones
+  const feeCalc = calculateServiceFee(
+    creatorAmount,
+    currency,
+    creatorPurpose,
+    subscription.feeMode as any, // Pass stored feeMode for legacy subscriptions, ignored for split_v1
+    isCrossBorder
+  )
 
   // Update the invoice with the application fee
   // This must be done before the invoice is finalized
@@ -303,14 +310,22 @@ export async function handleInvoicePaid(event: Stripe.Event) {
     let grossCents: number | null = null
     let feeModel: string | null = null
     let feeEffectiveRate: number | null = null
-    const feeWasCapped = false
+    let subscriberFeeCents: number | null = null
+    let creatorFeeCents: number | null = null
+    let feeWasCapped = false
 
     if (subscription.feeModel) {
-      // New fee model (flat or progressive)
+      // New fee model (split_v1, flat, or progressive)
       // IMPORTANT: Calculate fee on CREATOR'S PRICE (subscription.amount), not invoice total
       const creatorAmount = subscription.amount
       const creatorPurpose = subscription.creator?.profile?.purpose
-      const feeCalc = calculateServiceFee(creatorAmount, invoice.currency.toUpperCase(), creatorPurpose)
+      const feeCalc = calculateServiceFee(
+        creatorAmount,
+        invoice.currency.toUpperCase(),
+        creatorPurpose,
+        subscription.feeMode as any, // Pass stored feeMode for legacy, ignored for split_v1
+        false // Cross-border handled in invoice.created
+      )
 
       // Use actual Stripe fee if available, otherwise use calculated
       // This ensures we store what Stripe actually charged, not what we expected
@@ -361,16 +376,16 @@ export async function handleInvoicePaid(event: Stripe.Event) {
       }
 
       grossCents = invoice.amount_paid
-      // CRITICAL: In absorb mode, subscription.amount = gross (what subscriber pays)
-      // Creator receives gross - fee. In pass_to_subscriber mode, subscription.amount = net.
-      if (subscription.feeMode === 'absorb') {
-        netCents = creatorAmount - feeCents // Creator pays the fee from their earnings
-      } else {
-        netCents = creatorAmount // Creator receives their full price (fee added on top)
-      }
+      netCents = feeCalc.netCents
       feeModel = feeCalc.feeModel
       feeEffectiveRate = feeCalc.effectiveRate
-      // feeWasCapped stays false - flat fee model has no caps
+      feeWasCapped = feeCalc.feeWasCapped
+
+      // Store split fee fields for v2 model
+      if (feeCalc.feeModel === 'split_v1') {
+        subscriberFeeCents = feeCalc.subscriberFeeCents
+        creatorFeeCents = feeCalc.creatorFeeCents
+      }
     } else {
       // Legacy model: fee deducted from creator's earnings
       const purpose = subscription.creator?.profile?.purpose as 'personal' | 'service' | null
@@ -415,6 +430,8 @@ export async function handleInvoicePaid(event: Stripe.Event) {
         currency: invoice.currency.toUpperCase(),
         feeCents,
         netCents,
+        subscriberFeeCents,  // Split fee: subscriber's portion
+        creatorFeeCents,     // Split fee: creator's portion
         feeModel,
         feeEffectiveRate,
         feeWasCapped,

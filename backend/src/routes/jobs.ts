@@ -322,11 +322,59 @@ jobs.post('/cleanup-pageviews', async (c) => {
   }
 })
 
+// Aggregate daily stats (run daily at midnight UTC)
+jobs.post('/stats-aggregate', async (c) => {
+  console.log('[jobs] Starting stats aggregation job')
+
+  try {
+    const { aggregateToday, aggregateYesterday } = await import('../jobs/stats-aggregation.js')
+
+    // Aggregate both today (partial) and yesterday (final)
+    await Promise.all([
+      aggregateToday(),
+      aggregateYesterday(),
+    ])
+
+    console.log('[jobs] Stats aggregation complete')
+
+    return c.json({
+      success: true,
+      message: 'Stats aggregated for today and yesterday',
+    })
+  } catch (error: any) {
+    console.error('[jobs] Stats aggregation job failed:', error.message)
+    return c.json({ error: 'Stats aggregation job failed', message: error.message }, 500)
+  }
+})
+
+// Backfill historical stats (run once, or when needed)
+jobs.post('/stats-backfill', async (c) => {
+  const { days = 30 } = c.req.query()
+  const numDays = Math.min(parseInt(days as string) || 30, 365)
+
+  console.log(`[jobs] Starting stats backfill for ${numDays} days`)
+
+  try {
+    const { backfillStats } = await import('../jobs/stats-aggregation.js')
+    await backfillStats(numDays)
+
+    console.log(`[jobs] Stats backfill complete for ${numDays} days`)
+
+    return c.json({
+      success: true,
+      message: `Stats backfilled for ${numDays} days`,
+    })
+  } catch (error: any) {
+    console.error('[jobs] Stats backfill job failed:', error.message)
+    return c.json({ error: 'Stats backfill job failed', message: error.message }, 500)
+  }
+})
+
 // Health check for job system
 jobs.get('/health', async (c) => {
   return c.json({
     status: 'ok',
-    jobs: ['billing', 'retries', 'payroll', 'reminders', 'dunning', 'cancellations', 'notifications', 'transfers', 'reconciliation', 'scheduled-reminders', 'scan-missed-reminders', 'cleanup-sessions', 'cleanup-otps', 'cleanup-auth', 'cleanup-pageviews'],
+    jobs: ['billing', 'retries', 'payroll', 'reminders', 'dunning', 'cancellations', 'notifications', 'transfers', 'reconciliation', 'scheduled-reminders', 'scan-missed-reminders', 'cleanup-sessions', 'cleanup-otps', 'cleanup-auth', 'cleanup-pageviews', 'stats-aggregate', 'stats-backfill'],
     timestamp: new Date().toISOString(),
   })
 })

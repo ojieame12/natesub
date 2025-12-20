@@ -1,5 +1,7 @@
 import Stripe from 'stripe'
 import { db } from '../../../db/client.js'
+import { notifyPayoutFailed } from '../../../services/notifications.js'
+import { alertPayoutFailed } from '../../../services/slack.js'
 
 // Handle payout.failed - when automatic payout to connected account fails
 export async function handlePayoutFailed(event: Stripe.Event) {
@@ -22,6 +24,12 @@ export async function handlePayoutFailed(event: Stripe.Event) {
     return
   }
 
+  // Get creator details for notifications
+  const creator = await db.user.findUnique({
+    where: { id: profile.userId },
+    select: { email: true },
+  })
+
   // Create activity event to notify creator
   await db.activity.create({
     data: {
@@ -43,6 +51,23 @@ export async function handlePayoutFailed(event: Stripe.Event) {
     where: { id: profile.id },
     data: { payoutStatus: 'restricted' },
   })
+
+  // Send real-time notification (WhatsApp/SMS/Email)
+  notifyPayoutFailed(
+    profile.userId,
+    payout.amount,
+    payout.currency.toUpperCase()
+  ).catch(err => console.error('[payout.failed] Notification failed:', err))
+
+  // Alert ops team via Slack
+  alertPayoutFailed({
+    creatorEmail: creator?.email || 'unknown',
+    creatorName: profile.displayName || 'Unknown Creator',
+    amount: payout.amount,
+    currency: payout.currency.toUpperCase(),
+    error: payout.failure_message || 'Payout failed',
+    stripePayoutId: payout.id,
+  }).catch(err => console.error('[slack] Failed to send payout failed alert:', err))
 
   console.log(`[payout.failed] Recorded failed payout for creator ${profile.userId}: ${payout.failure_message}`)
 }

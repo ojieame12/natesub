@@ -4,9 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { useOnboardingStore } from './store'
 import { Button, Pressable } from './components'
 import { getShareableLink } from '../utils/constants'
-import { getCurrencySymbol, formatCompactNumber } from '../utils/currency'
-import { calculateFeePreview } from '../utils/currency'
-import { getPricing } from '../utils/pricing'
+import { getCurrencySymbol, formatCompactNumber, calculateFeePreview } from '../utils/currency'
 import { api } from '../api'
 import './onboarding.css'
 
@@ -133,10 +131,8 @@ export default function PersonalReviewStep() {
         currency,
         avatarUrl,
         paymentProvider,
-        feeMode,
         setName,
         setUsername,
-        setFeeMode,
         prevStep,
         reset
     } = useOnboardingStore()
@@ -159,14 +155,12 @@ export default function PersonalReviewStep() {
                 displayName: name,
                 avatarUrl,
                 purpose: resolvedPurpose,
-                feeMode,
                 currency,
                 country,
                 countryCode,
                 pricingModel,
                 singleAmount: pricingModel === 'single' ? singleAmount : null,
                 tiers: pricingModel === 'tiers' ? tiers : null,
-
                 paymentProvider,
             })
 
@@ -250,32 +244,17 @@ export default function PersonalReviewStep() {
                         />
                     </div>
 
-                    {/* Fee Mode Toggle */}
+                    {/* Fee Info - Split Model */}
                     <div className="fee-mode-section">
                         <div className="fee-mode-header">
-                            <span className="fee-mode-title">Platform fee ({getPricing(branch === 'service' ? 'service' : 'personal').transactionFeeLabel})</span>
-                        </div>
-
-                        <div className="fee-mode-toggle">
-                            <Pressable
-                                className={`fee-mode-option ${feeMode === 'absorb' ? 'active' : ''}`}
-                                onClick={() => setFeeMode('absorb')}
-                            >
-                                I absorb
-                            </Pressable>
-                            <Pressable
-                                className={`fee-mode-option ${feeMode === 'pass_to_subscriber' ? 'active' : ''}`}
-                                onClick={() => setFeeMode('pass_to_subscriber')}
-                            >
-                                Subscriber pays
-                            </Pressable>
+                            <span className="fee-mode-title">Subscription Management</span>
                         </div>
 
                         {(() => {
                             const baseAmount = pricingModel === 'single'
                                 ? (singleAmount || 0)
                                 : (tiers[0]?.amount || 0)
-                            const preview = calculateFeePreview(baseAmount, currency, resolvedPurpose, feeMode)
+                            const preview = calculateFeePreview(baseAmount, currency)
                             return (
                                 <div className="fee-mode-preview">
                                     <div className="fee-preview-row">

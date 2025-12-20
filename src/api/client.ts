@@ -3,6 +3,10 @@
 import { Capacitor } from '@capacitor/core'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
+
+// Debug: Log API URL at module load (remove after E2E testing)
+console.log('[api/client] API_URL =', API_URL)
+
 const AUTH_TOKEN_KEY = 'nate_auth_token'
 const AUTH_SESSION_KEY = 'nate_has_session'
 
@@ -78,7 +82,7 @@ export interface Profile {
   shareUrl: string | null
   template?: 'boundary' | 'midnight' | 'minimal' | 'editorial' // Subscribe page template
   paymentsReady?: boolean // For public profiles - indicates if checkout will work
-  feeMode?: 'absorb' | 'pass_to_subscriber' // Who pays the platform fee
+  feeMode?: 'absorb' | 'pass_to_subscriber' | 'split' // Fee model (split = 4%/4%)
   crossBorder?: boolean // True if Stripe cross-border account (payments in USD, payouts in local currency)
   notificationPrefs?: NotificationPrefs // Email/push notification preferences
   isPublic?: boolean // True if profile is visible to public (published)
@@ -438,7 +442,7 @@ export interface NotificationPrefs {
 export interface Settings {
   notificationPrefs: NotificationPrefs
   isPublic: boolean
-  feeMode?: 'absorb' | 'pass_to_subscriber'
+  feeMode?: 'absorb' | 'pass_to_subscriber' | 'split'
 }
 
 export const profile = {
@@ -467,7 +471,7 @@ export const profile = {
   // Settings
   getSettings: () => apiFetch<Settings>('/profile/settings'),
 
-  updateSettings: (data: { notificationPrefs?: NotificationPrefs; isPublic?: boolean; feeMode?: 'absorb' | 'pass_to_subscriber' }) =>
+  updateSettings: (data: { notificationPrefs?: NotificationPrefs; isPublic?: boolean; feeMode?: 'absorb' | 'pass_to_subscriber' | 'split' }) =>
     apiFetch<{ success: boolean; settings: Settings }>('/profile/settings', {
       method: 'PATCH',
       body: JSON.stringify(data),

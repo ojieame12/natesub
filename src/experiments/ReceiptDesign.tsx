@@ -4,23 +4,18 @@ import { ArrowLeft, Check, ChevronsRight, Banknote, Briefcase } from 'lucide-rea
 import { useNavigate } from 'react-router-dom'
 
 // Mock Profile Data
-// "Launch my page" setup includes: Name, Avatar, Purpose, Price, Fee Mode (Absorb/Pass), Tiers
+// "Launch my page" setup includes: Name, Avatar, Purpose, Price, Tiers
 const PROFILE = {
     name: 'Jason K.',
     avatar: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36?w=200&q=80',
     amount: 5.50,
     type: 'personal', // 'personal' or 'service'
     currency: 'USD',
-    // Added from "Launch" setup:
-    feeMode: 'pass_to_subscriber' as 'absorb' | 'pass_to_subscriber',
     tierName: 'Supporter' // If Tiers are used
 }
 
-// Fee Constants
-const FEE_RATES = {
-    personal: 0.10,
-    service: 0.08
-}
+// Fee Constants - Split model: 4% subscriber + 4% creator = 8% total
+const SUBSCRIBER_FEE_RATE = 0.04
 
 // --- SLIDE BUTTON COMPONENT ---
 function SlideToPay({ onComplete, disabled }: { onComplete: () => void, disabled?: boolean }) {
@@ -159,16 +154,9 @@ export default function ReceiptDesign() {
 
     useEffect(() => { setMount(true) }, [])
 
-    // Calculations based on Fee Mode logic from Launch Setup
-    const rate = PROFILE.type === 'service' ? FEE_RATES.service : FEE_RATES.personal
-    const rawFee = PROFILE.amount * rate
-
-    // Fee Logic Parity:
-    // If 'pass_to_subscriber': Subscriber pays Amount + Fee
-    // If 'absorb': Subscriber pays Amount (Creator pays fee from that)
-    const subscriberPaysFee = PROFILE.feeMode === 'pass_to_subscriber'
-    const feeToDisplay = subscriberPaysFee ? rawFee : 0
-    const total = PROFILE.amount + feeToDisplay
+    // Split fee model: subscriber pays 4% fee
+    const subscriberFee = PROFILE.amount * SUBSCRIBER_FEE_RATE
+    const total = PROFILE.amount + subscriberFee
 
     // Styles
     const containerStyle: React.CSSProperties = {
@@ -277,11 +265,11 @@ export default function ReceiptDesign() {
                         <span>${PROFILE.amount.toFixed(2)}/mo</span>
                     </div>
 
-                    {/* Fee Row: Only show if Subscriber Pays */}
-                    {subscriberPaysFee && (
+                    {/* Fee Row: Split model - subscriber pays 4% */}
+                    {subscriberFee > 0 && (
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, opacity: 0.7 }}>
-                            <span>Service Fee ({(rate * 100).toFixed(0)}%)</span>
-                            <span>+${rawFee.toFixed(2)}</span>
+                            <span>Service Fee (4%)</span>
+                            <span>+${subscriberFee.toFixed(2)}</span>
                         </div>
                     )}
 

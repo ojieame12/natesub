@@ -1,5 +1,7 @@
 import { db } from '../../../db/client.js'
 import { scheduleReminder } from '../../../jobs/reminders.js'
+import { notifyPayoutCompleted, notifyPayoutFailed } from '../../../services/notifications.js'
+import { alertPayoutFailed } from '../../../services/slack.js'
 
 // Handle Paystack transfer.success - update payout record
 export async function handlePaystackTransferSuccess(data: any) {

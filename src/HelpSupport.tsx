@@ -1,9 +1,12 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Search, ChevronDown, ChevronUp, Mail, MessageCircle, FileText, Shield } from 'lucide-react'
+import { ArrowLeft, Search, ChevronDown, ChevronUp, Mail, FileText, Shield, Send, X, CheckCircle } from 'lucide-react'
 import { Pressable, useToast } from './components'
+import { useAuthState } from './hooks/useAuthState'
 import { TERMS_URL, PRIVACY_URL } from './utils/constants'
 import './HelpSupport.css'
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
 
 const faqs = [
   {
@@ -19,7 +22,7 @@ const faqs = [
   {
     id: 3,
     question: 'What are the fees?',
-    answer: 'NatePay charges 8% on all transactions. This covers payment processing and platform costs. No hidden fees.',
+    answer: 'NatePay uses a split fee model: 4% is added to the subscriber\'s payment, and 4% is deducted from your payout. This totals 8% and covers payment processing and platform costs. For international payments, a small currency conversion fee may apply.',
   },
   {
     id: 4,
@@ -33,11 +36,33 @@ const faqs = [
   },
 ]
 
+const categories = [
+  { value: 'general', label: 'General Question' },
+  { value: 'billing', label: 'Billing & Payments' },
+  { value: 'technical', label: 'Technical Issue' },
+  { value: 'account', label: 'Account Help' },
+  { value: 'payout', label: 'Payout Issue' },
+  { value: 'dispute', label: 'Dispute / Chargeback' },
+]
+
 export default function HelpSupport() {
   const navigate = useNavigate()
+  const { user } = useAuthState()
   const toast = useToast()
   const [searchQuery, setSearchQuery] = useState('')
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null)
+  const [showForm, setShowForm] = useState(false)
+  const [showSuccess, setShowSuccess] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+
+  // Form state
+  const [formData, setFormData] = useState({
+    email: user?.email || '',
+    name: '',
+    category: 'general',
+    subject: '',
+    message: '',
+  })
 
   const filteredFaqs = faqs.filter(faq =>
     faq.question.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -48,12 +73,49 @@ export default function HelpSupport() {
     setExpandedFaq(expandedFaq === id ? null : id)
   }
 
-  const handleEmailSupport = () => {
-    window.location.href = 'mailto:support@natepay.com'
-  }
+  const handleSubmitTicket = async (e: React.FormEvent) => {
+    e.preventDefault()
 
-  const handleLiveChat = () => {
-    toast.info('Live chat coming soon')
+    if (!formData.email || !formData.subject || !formData.message) {
+      toast.error('Please fill in all required fields')
+      return
+    }
+
+    if (formData.message.length < 10) {
+      toast.error('Please provide more detail in your message')
+      return
+    }
+
+    setSubmitting(true)
+
+    try {
+      const response = await fetch(`${API_URL}/support/tickets`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(formData),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to submit ticket')
+      }
+
+      setShowForm(false)
+      setShowSuccess(true)
+      setFormData({
+        email: user?.email || '',
+        name: '',
+        category: 'general',
+        subject: '',
+        message: '',
+      })
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to submit request')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   const handleTerms = () => {
@@ -92,22 +154,22 @@ export default function HelpSupport() {
         <section className="help-section">
           <h3 className="section-label">Contact Us</h3>
           <div className="contact-card">
-            <Pressable className="contact-row" onClick={handleEmailSupport}>
+            <Pressable className="contact-row" onClick={() => setShowForm(true)}>
+              <div className="contact-icon">
+                <Send size={20} />
+              </div>
+              <div className="contact-info">
+                <span className="contact-title">Submit a Request</span>
+                <span className="contact-desc">We typically respond within 1-2 business days</span>
+              </div>
+            </Pressable>
+            <Pressable className="contact-row" onClick={() => window.location.href = 'mailto:support@natepay.co'}>
               <div className="contact-icon">
                 <Mail size={20} />
               </div>
               <div className="contact-info">
                 <span className="contact-title">Email Support</span>
-                <span className="contact-desc">Get a response within 24 hours</span>
-              </div>
-            </Pressable>
-            <Pressable className="contact-row" onClick={handleLiveChat}>
-              <div className="contact-icon">
-                <MessageCircle size={20} />
-              </div>
-              <div className="contact-info">
-                <span className="contact-title">Live Chat</span>
-                <span className="contact-desc">Available 9am - 5pm EST</span>
+                <span className="contact-desc">support@natepay.co</span>
               </div>
             </Pressable>
           </div>
@@ -155,6 +217,110 @@ export default function HelpSupport() {
           </div>
         </section>
       </div>
+
+      {/* Support Request Form Modal */}
+      {showForm && (
+        <div className="help-modal-overlay" onClick={() => setShowForm(false)}>
+          <div className="help-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="help-modal-header">
+              <h2>Submit a Request</h2>
+              <Pressable className="help-modal-close" onClick={() => setShowForm(false)}>
+                <X size={20} />
+              </Pressable>
+            </div>
+
+            <form onSubmit={handleSubmitTicket} className="help-form">
+              {!user && (
+                <div className="help-form-group">
+                  <label htmlFor="email">Email *</label>
+                  <input
+                    id="email"
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    placeholder="your@email.com"
+                    required
+                  />
+                </div>
+              )}
+
+              <div className="help-form-group">
+                <label htmlFor="name">Name (optional)</label>
+                <input
+                  id="name"
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  placeholder="Your name"
+                />
+              </div>
+
+              <div className="help-form-group">
+                <label htmlFor="category">Category *</label>
+                <select
+                  id="category"
+                  value={formData.category}
+                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                  required
+                >
+                  {categories.map((cat) => (
+                    <option key={cat.value} value={cat.value}>{cat.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="help-form-group">
+                <label htmlFor="subject">Subject *</label>
+                <input
+                  id="subject"
+                  type="text"
+                  value={formData.subject}
+                  onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
+                  placeholder="Brief description of your issue"
+                  required
+                  maxLength={200}
+                />
+              </div>
+
+              <div className="help-form-group">
+                <label htmlFor="message">Message *</label>
+                <textarea
+                  id="message"
+                  value={formData.message}
+                  onChange={(e) => setFormData({ ...formData, message: e.target.value })}
+                  placeholder="Please describe your issue in detail..."
+                  required
+                  minLength={10}
+                  maxLength={5000}
+                  rows={5}
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="help-submit-btn"
+                disabled={submitting}
+              >
+                {submitting ? 'Submitting...' : 'Submit Request'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Success Modal */}
+      {showSuccess && (
+        <div className="help-modal-overlay" onClick={() => setShowSuccess(false)}>
+          <div className="help-modal help-modal-success" onClick={(e) => e.stopPropagation()}>
+            <CheckCircle size={48} className="success-icon" />
+            <h2>Request Submitted</h2>
+            <p>We've received your support request and will respond within 1-2 business days.</p>
+            <Pressable className="help-success-btn" onClick={() => setShowSuccess(false)}>
+              Close
+            </Pressable>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

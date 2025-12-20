@@ -295,3 +295,15 @@ export const mediaUploadRateLimit = rateLimit({
   keyPrefix: 'media_upload_ratelimit',
   message: 'Too many uploads. Please try again later.',
 })
+
+/**
+ * Admin sensitive operations rate limiter - Admin user-based
+ * Protects financial and destructive admin operations
+ * 10 requests per minute per admin
+ */
+export const adminSensitiveRateLimit = rateLimit({
+  windowMs: 60 * 1000,  // 1 minute
+  maxRequests: 10,
+  keyPrefix: 'admin_sensitive_ratelimit',
+  message: 'Too many admin operations. Please slow down.',
+})

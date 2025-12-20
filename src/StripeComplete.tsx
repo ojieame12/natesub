@@ -404,11 +404,12 @@ export default function StripeComplete() {
 
             {/* Fee Breakdown - only show if from onboarding (first time) */}
             {source === 'onboarding' && (() => {
-              // Fee rate varies by purpose: 8% for service, 10% for personal
-              const feeRate = profile?.purpose === 'service' ? 8 : 10
+              // Split model: 4% subscriber + 4% creator = 8% total
               const examplePrice = 10
-              const exampleFee = examplePrice * feeRate / 100
-              const exampleTotal = examplePrice + exampleFee
+              const subscriberFee = examplePrice * 0.04  // 4%
+              const creatorFee = examplePrice * 0.04     // 4%
+              const subscriberPays = examplePrice + subscriberFee
+              const creatorReceives = examplePrice - creatorFee
               return (
                 <div className="fee-breakdown">
                   <div className="fee-header">How pricing works</div>
@@ -419,16 +420,16 @@ export default function StripeComplete() {
                     </div>
                     <ArrowRight size={16} className="fee-arrow" />
                     <div className="fee-step">
-                      <span className="fee-amount addition">+${exampleFee.toFixed(2).replace(/\.00$/, '')}</span>
-                      <span className="fee-label">{feeRate}% fee added</span>
+                      <span className="fee-amount">${subscriberPays.toFixed(2).replace(/\.00$/, '')}</span>
+                      <span className="fee-label">Subscriber pays (+4%)</span>
                     </div>
                     <ArrowRight size={16} className="fee-arrow" />
                     <div className="fee-step">
-                      <span className="fee-amount">${exampleTotal.toFixed(2).replace(/\.00$/, '')}</span>
-                      <span className="fee-label">Subscriber pays</span>
+                      <span className="fee-amount">${creatorReceives.toFixed(2).replace(/\.00$/, '')}</span>
+                      <span className="fee-label">You receive (-4%)</span>
                     </div>
                   </div>
-                  <p className="fee-note">You receive your full price. Service fee is added at checkout.</p>
+                  <p className="fee-note">8% total fee split evenly: subscriber pays 4%, you pay 4%.</p>
                 </div>
               )
             })()}

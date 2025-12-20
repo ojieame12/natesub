@@ -115,7 +115,7 @@ profile.put(
       impactItems: impactItemsData,
       paymentProvider: data.paymentProvider || null,
       template: normalizeTemplate(data.template) || 'boundary',
-      feeMode: data.feeMode || 'pass_to_subscriber', // Default: subscriber pays fee
+      feeMode: 'split' as const, // Always split (4%/4% model)
       isPublic: true, // FORCE PUBLIC: All profiles are public by default
       shareUrl: `${env.PUBLIC_PAGE_URL || 'https://natepay.co'}/${data.username.toLowerCase()}`,
       address: data.address || null,
@@ -209,7 +209,7 @@ profile.patch(
     if (data.purpose !== undefined) updateData.purpose = data.purpose
     if (data.pricingModel !== undefined) updateData.pricingModel = data.pricingModel
     if (data.paymentProvider !== undefined) updateData.paymentProvider = data.paymentProvider || null
-    if (data.feeMode !== undefined) updateData.feeMode = data.feeMode
+    // Note: feeMode is ignored - always 'split' (4%/4% model)
 
     // Address fields
     if (data.address !== undefined) updateData.address = data.address || null
@@ -373,10 +373,10 @@ const notificationPrefsSchema = z.object({
 })
 
 // Settings update schema (partial updates)
+// Note: feeMode removed - now always 'split' (4%/4% model)
 const settingsSchema = z.object({
   notificationPrefs: notificationPrefsSchema.optional(),
   isPublic: z.boolean().optional(),
-  feeMode: z.enum(['absorb', 'pass_to_subscriber']).optional(),
 })
 
 // Update settings (notification prefs, visibility)
@@ -403,9 +403,7 @@ profile.patch(
     if (data.isPublic !== undefined) {
       updateData.isPublic = true
     }
-    if (data.feeMode !== undefined) {
-      updateData.feeMode = data.feeMode
-    }
+    // Note: feeMode is no longer configurable - always 'split'
 
     const updatedProfile = await db.profile.update({
       where: { userId },
@@ -417,7 +415,7 @@ profile.patch(
       settings: {
         notificationPrefs: updatedProfile.notificationPrefs,
         isPublic: updatedProfile.isPublic,
-        feeMode: updatedProfile.feeMode,
+        feeMode: 'split', // Always split now
       },
     })
   }
@@ -432,7 +430,6 @@ profile.get('/settings', requireAuth, async (c) => {
     select: {
       notificationPrefs: true,
       isPublic: true,
-      feeMode: true,
     },
   })
 
@@ -447,7 +444,7 @@ profile.get('/settings', requireAuth, async (c) => {
   return c.json({
     notificationPrefs: userProfile?.notificationPrefs || defaultPrefs,
     isPublic: userProfile?.isPublic ?? true,
-    feeMode: userProfile?.feeMode || 'pass_to_subscriber',
+    feeMode: 'split', // Always split now (4%/4% model)
   })
 })
 

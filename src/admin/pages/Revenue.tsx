@@ -230,7 +230,7 @@ export default function Revenue() {
               ) : topCreators?.creators?.length ? (
                 topCreators.creators.map((c) => (
                   <tr key={c.creatorId}>
-                    <td>{c.displayName || c.email}</td>
+                    <td>{c.displayName || c.email || 'Unknown'}</td>
                     <td>{c.username || '-'}</td>
                     <td>{c.country || '-'}</td>
                     <td>{formatCurrency(c.totalVolumeCents)}</td>

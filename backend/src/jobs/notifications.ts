@@ -8,7 +8,7 @@ import {
   sendPaymentFailedEmail,
   sendSubscriptionCanceledEmail,
 } from '../services/email.js'
-import { calculateServiceFee, type FeeMode } from '../services/fees.js'
+import { calculateServiceFee, calculateLegacyServiceFee, type FeeMode } from '../services/fees.js'
 import { acquireLock, releaseLock } from '../services/lock.js'
 
 interface NotificationResult {
@@ -95,17 +95,15 @@ export async function sendRenewalReminders(): Promise<NotificationResult> {
         continue
       }
 
-      // Calculate what the subscriber will actually pay (respects feeMode)
-      let subscriberAmount = sub.amount
-      if (sub.creator.profile?.feeMode === 'pass_to_subscriber') {
-        const feeCalc = calculateServiceFee(
-          sub.amount,
-          sub.currency,
-          sub.creator.profile?.purpose,
-          'pass_to_subscriber'
-        )
-        subscriberAmount = feeCalc.grossCents
-      }
+      // Calculate what the subscriber will actually pay
+      // Uses subscription's feeModel to determine calculation method:
+      // - split_v1: subscriber pays base + 4%
+      // - legacy: respects profile's feeMode (absorb = no extra, pass_to_subscriber = +8%)
+      const feeMode = (sub.creator.profile?.feeMode ?? 'split') as FeeMode
+      const feeCalc = (sub as any).feeModel === 'split_v1'
+        ? calculateServiceFee(sub.amount, sub.currency, sub.creator.profile?.purpose)
+        : calculateLegacyServiceFee(sub.amount, sub.currency, sub.creator.profile?.purpose, feeMode)
+      const subscriberAmount = feeCalc.grossCents
 
       await sendRenewalReminderEmail(
         sub.subscriber.email,
@@ -222,17 +220,15 @@ export async function sendDunningEmails(): Promise<NotificationResult> {
       // Calculate next retry date (1 day after failure)
       const retryDate = new Date(payment.createdAt.getTime() + 24 * 60 * 60 * 1000)
 
-      // Calculate what the subscriber will actually pay (respects feeMode)
-      let subscriberAmount = sub.amount
-      if (sub.creator.profile?.feeMode === 'pass_to_subscriber') {
-        const feeCalc = calculateServiceFee(
-          sub.amount,
-          sub.currency,
-          sub.creator.profile?.purpose,
-          'pass_to_subscriber'
-        )
-        subscriberAmount = feeCalc.grossCents
-      }
+      // Calculate what the subscriber will actually pay
+      // Uses subscription's feeModel to determine calculation method:
+      // - split_v1: subscriber pays base + 4%
+      // - legacy: respects profile's feeMode (absorb = no extra, pass_to_subscriber = +8%)
+      const feeMode = (sub.creator.profile?.feeMode ?? 'split') as FeeMode
+      const feeCalc = (sub as any).feeModel === 'split_v1'
+        ? calculateServiceFee(sub.amount, sub.currency, sub.creator.profile?.purpose)
+        : calculateLegacyServiceFee(sub.amount, sub.currency, sub.creator.profile?.purpose, feeMode)
+      const subscriberAmount = feeCalc.grossCents
 
       await sendPaymentFailedEmail(
         sub.subscriber.email,

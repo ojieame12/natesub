@@ -299,12 +299,15 @@ describe('admin payments', () => {
       })
       expect(payment?.status).toBe('refunded')
 
-      // Verify Stripe was called correctly
-      expect(mockStripeRefund).toHaveBeenCalledWith({
-        payment_intent: 'pi_test_123',
-        amount: undefined, // Full refund
-        reason: 'requested_by_customer',
-      })
+      // Verify Stripe was called correctly (now includes idempotencyKey option)
+      expect(mockStripeRefund).toHaveBeenCalledWith(
+        {
+          payment_intent: 'pi_test_123',
+          amount: undefined, // Full refund
+          reason: 'requested_by_customer',
+        },
+        expect.objectContaining({ idempotencyKey: expect.any(String) })
+      )
     })
 
     it('supports partial refunds', async () => {
@@ -333,7 +336,8 @@ describe('admin payments', () => {
       // The refund response includes amountCents from the Stripe response
       expect(body.refund).toHaveProperty('id', 're_partial_123')
       expect(mockStripeRefund).toHaveBeenCalledWith(
-        expect.objectContaining({ amount: 500 })
+        expect.objectContaining({ amount: 500 }),
+        expect.objectContaining({ idempotencyKey: expect.any(String) })
       )
     })
 

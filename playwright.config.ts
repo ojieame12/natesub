@@ -1,9 +1,14 @@
 import { defineConfig, devices } from '@playwright/test';
-import path from 'path';
+import { fileURLToPath } from 'url';
+import { dirname, resolve } from 'path';
 import dotenv from 'dotenv';
 
+// ESM equivalent of __dirname
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
 // Read from default .env or .env.local
-dotenv.config({ path: path.resolve(__dirname, '.env') });
+dotenv.config({ path: resolve(__dirname, '.env') });
 
 /**
  * Playwright E2E Configuration
@@ -60,18 +65,24 @@ export default defineConfig({
   webServer: [
     {
       // Backend API server with stubbed payments
-      command: 'cd backend && PAYMENTS_MODE=stub NODE_ENV=test npm start',
+      // Load .env for secrets, env config ensures PAYMENTS_MODE=stub
+      command: 'cd backend && npx dotenv -e ../.env -- npm start',
       url: 'http://localhost:3001/health',
-      reuseExistingServer: !process.env.CI,
+      reuseExistingServer: false, // Always start fresh for E2E tests
       timeout: 120 * 1000,
       stdout: 'pipe',
       stderr: 'pipe',
+      env: {
+        PAYMENTS_MODE: 'stub',
+        NODE_ENV: 'test',
+      },
     },
     {
-      // Frontend dev server
-      command: 'npm run dev',
+      // Frontend dev server with local API URL override
+      // Use env command to ensure VITE_API_URL is set before npm runs
+      command: '/usr/bin/env VITE_API_URL=http://localhost:3001 npm run dev',
       url: 'http://localhost:5173',
-      reuseExistingServer: !process.env.CI,
+      reuseExistingServer: false, // Always start fresh for E2E tests
       timeout: 120 * 1000,
     },
   ],

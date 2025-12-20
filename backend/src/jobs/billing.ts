@@ -113,7 +113,7 @@ export async function processRecurringBilling(): Promise<BillingResult> {
     try {
       // Check fee model to determine requirements
       // Both 'flat' and 'progressive' are new models
-      const isNewFeeModel = sub.feeModel === 'flat' || sub.feeModel?.startsWith('progressive')
+      const isNewFeeModel = sub.feeModel === 'flat' || sub.feeModel === 'split_v1' || sub.feeModel?.startsWith('progressive')
 
       // Skip if no authorization code
       // For new model: need bank details for transfer; for legacy: need subaccount
@@ -483,7 +483,7 @@ export async function processRetries(): Promise<BillingResult> {
 
       // Check fee model to determine requirements
       // Both 'flat' and 'progressive' are new models
-      const isNewFeeModel = sub.feeModel === 'flat' || sub.feeModel?.startsWith('progressive')
+      const isNewFeeModel = sub.feeModel === 'flat' || sub.feeModel === 'split_v1' || sub.feeModel?.startsWith('progressive')
 
       // Skip if missing required credentials
       if (!sub.paystackAuthorizationCode) {

@@ -3,8 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Camera, Loader2, ExternalLink } from 'lucide-react'
 import { Pressable, useToast, Skeleton, LoadingButton } from './components'
 import { useProfile, useUpdateProfile, uploadFile } from './api/hooks'
-import { getCurrencySymbol, formatCompactNumber, centsToDisplayAmount, displayAmountToCents } from './utils/currency'
-import { calculateFeePreview, getPricing } from './utils/pricing'
+import { getCurrencySymbol, formatCompactNumber, centsToDisplayAmount, calculateFeePreview } from './utils/currency'
 import './EditPage.css'
 
 export default function EditPage() {
@@ -23,7 +22,6 @@ export default function EditPage() {
   const [singleAmount, setSingleAmount] = useState<number>(10)
   // Use string state for the input to allow free editing (decimals, empty string)
   const [priceInput, setPriceInput] = useState<string>('10')
-  const [feeMode, setFeeMode] = useState<'absorb' | 'pass_to_subscriber'>('pass_to_subscriber')
   const [hasChanges, setHasChanges] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [isContinuing, setIsContinuing] = useState(false)
@@ -41,8 +39,6 @@ export default function EditPage() {
       const amt = profile.singleAmount ? centsToDisplayAmount(profile.singleAmount, currency) : 10
       setSingleAmount(amt)
       setPriceInput(amt.toString())
-
-      setFeeMode(profile.feeMode || 'pass_to_subscriber')
     }
   }, [profile])
 
@@ -60,13 +56,12 @@ export default function EditPage() {
     const changed =
       displayName !== (profile.displayName || '') ||
       avatarUrl !== (profile.avatarUrl || null) ||
-      currentVal !== profileAmountDisplay ||
-      feeMode !== (profile.feeMode || 'pass_to_subscriber')
+      currentVal !== profileAmountDisplay
     setHasChanges(changed)
 
     // Sync numeric state for validation usage elsewhere
     setSingleAmount(currentVal)
-  }, [displayName, avatarUrl, priceInput, feeMode, profile])
+  }, [displayName, avatarUrl, priceInput, profile])
 
   // ... (avatar handlers unchanged) ...
 
@@ -136,7 +131,6 @@ export default function EditPage() {
         avatarUrl,
         pricingModel: 'single',
         singleAmount,
-        feeMode,
         isPublic: true, // Force public on specific save
       })
 
@@ -308,40 +302,22 @@ export default function EditPage() {
           </div>
         </section>
 
-        {/* Fee Mode Section */}
+        {/* Fee Info Section */}
         <section className="edit-section">
-          <h3 className="section-title">Platform Fee ({getPricing(profile.purpose).transactionFeeLabel})</h3>
-
-          <div className="fee-mode-toggle">
-            <Pressable
-              className={`toggle-option ${feeMode === 'absorb' ? 'active' : ''}`}
-              onClick={() => setFeeMode('absorb')}
-            >
-              I absorb
-            </Pressable>
-            <Pressable
-              className={`toggle-option ${feeMode === 'pass_to_subscriber' ? 'active' : ''}`}
-              onClick={() => setFeeMode('pass_to_subscriber')}
-            >
-              User pays app fee
-            </Pressable>
-          </div>
+          <h3 className="section-title">Subscription Management</h3>
 
           {(() => {
             const currency = profile.currency || 'USD'
-            const baseAmountCents = displayAmountToCents(singleAmount || 0, currency)
-            const preview = calculateFeePreview(baseAmountCents, profile.purpose, feeMode)
-            const subscriberPaysDisplay = centsToDisplayAmount(preview.subscriberPays, currency)
-            const creatorReceivesDisplay = centsToDisplayAmount(preview.creatorReceives, currency)
+            const preview = calculateFeePreview(singleAmount || 0, currency)
             return (
               <div className="fee-mode-preview">
                 <div className="fee-preview-row">
                   <span>Subscribers pay</span>
-                  <span className="fee-preview-amount">{currencySymbol}{formatCompactNumber(subscriberPaysDisplay)}</span>
+                  <span className="fee-preview-amount">{currencySymbol}{formatCompactNumber(preview.subscriberPays)}</span>
                 </div>
                 <div className="fee-preview-row">
                   <span>You receive</span>
-                  <span className="fee-preview-amount">{currencySymbol}{formatCompactNumber(creatorReceivesDisplay)}</span>
+                  <span className="fee-preview-amount">{currencySymbol}{formatCompactNumber(preview.creatorReceives)}</span>
                 </div>
               </div>
             )

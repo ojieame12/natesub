@@ -72,19 +72,27 @@ export default function Terms() {
                         Fee rates vary based on your account type and are disclosed before you
                         complete your profile setup.
                     </p>
+                    <h3>Fee Structure (Split Model)</h3>
+                    <p>
+                        NatePay uses a split fee model where the 8% service fee is shared equally
+                        between subscribers and creators:
+                    </p>
+                    <ul>
+                        <li>Subscribers pay 4% on top of the creator's set price</li>
+                        <li>Creators pay 4% deducted from their payout</li>
+                    </ul>
                     <h3>Service Providers</h3>
                     <p>
-                        8% service fee (capped), plus a $5/month platform subscription after the
+                        8% split service fee, plus a $5/month platform subscription after the
                         first month free trial.
                     </p>
                     <h3>Personal Users</h3>
                     <p>
-                        10% service fee (capped), no monthly subscription required.
+                        8% split service fee, no monthly subscription required.
                     </p>
                     <p>
-                        All fees are deducted from payments before transfer to your connected
-                        bank account. Payment processing fees charged by our payment partners
-                        (Stripe, Paystack) are separate and handled by those providers.
+                        Payment processing fees charged by our payment partners (Stripe, Paystack)
+                        are separate and handled by those providers.
                     </p>
                 </section>
 
@@ -163,7 +171,7 @@ export default function Terms() {
                 <div className="legal-contact">
                     <p>
                         Questions about these terms? Contact us at{' '}
-                        <a href="mailto:legal@natepay.com">legal@natepay.com</a>
+                        <a href="mailto:legal@natepay.co">legal@natepay.co</a>
                     </p>
                 </div>
             </div>

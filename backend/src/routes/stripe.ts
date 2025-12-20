@@ -13,6 +13,7 @@ import {
   createExpressDashboardLink,
 } from '../services/stripe.js'
 import { isStripeSupported, isStripeCrossBorderSupported, getStripeSupportedCountries } from '../utils/constants.js'
+import { env } from '../config/env.js'
 
 const stripeRoutes = new Hono()
 
@@ -28,6 +29,8 @@ stripeRoutes.get('/supported-countries', async (c) => {
 // Start Connect onboarding
 stripeRoutes.post('/connect', requireAuth, paymentRateLimit, async (c) => {
   const userId = c.get('userId')
+
+  console.log(`[stripe/connect] Request received. PAYMENTS_MODE=${env.PAYMENTS_MODE}`)
 
   // Get user and profile
   const user = await db.user.findUnique({
@@ -47,6 +50,30 @@ stripeRoutes.post('/connect', requireAuth, paymentRateLimit, async (c) => {
       suggestion: 'Consider using Flutterwave or Paystack for payments in your region.',
       supportedCountries: getStripeSupportedCountries(),
     }, 400)
+  }
+
+  // STUB MODE: Skip actual Stripe onboarding for E2E tests
+  console.log(`[stripe/connect] Checking stub mode: PAYMENTS_MODE='${env.PAYMENTS_MODE}' === 'stub' ? ${env.PAYMENTS_MODE === 'stub'}`)
+  if (env.PAYMENTS_MODE === 'stub') {
+    const stubAccountId = `stub_acct_${Date.now()}`
+
+    // Update profile with stub account ID and mark as active
+    await db.profile.update({
+      where: { userId },
+      data: {
+        stripeAccountId: stubAccountId,
+        paymentProvider: 'stripe',
+        payoutStatus: 'active',
+      },
+    })
+
+    console.log(`[stripe/connect] Stub mode: created fake account ${stubAccountId} for user ${userId}`)
+
+    return c.json({
+      success: true,
+      alreadyOnboarded: true,
+      message: 'Payments connected (stub mode)',
+    })
   }
 
   try {

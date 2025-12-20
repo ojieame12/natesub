@@ -56,7 +56,7 @@ export const profileSchema = z.object({
   impactItems: z.array(impactItemSchema).optional().nullable(),
   paymentProvider: z.enum(['stripe', 'paystack', 'flutterwave']).optional().nullable(),
   template: templateSchema.optional(),
-  feeMode: z.enum(['absorb', 'pass_to_subscriber']).optional(),
+  feeMode: z.enum(['absorb', 'pass_to_subscriber', 'split']).optional(),
   // Address fields
   address: z.string().optional().nullable(),
   city: z.string().optional().nullable(),

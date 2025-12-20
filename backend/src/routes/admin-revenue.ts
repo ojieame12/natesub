@@ -71,7 +71,7 @@ adminRevenue.get('/overview', async (c) => {
   const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
   const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-  const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0)
+  // Note: Use lt: startOfMonth for correct boundary (not lte: endOfLastMonth which misses most of last day)
 
   const [
     // All-time totals
@@ -96,7 +96,7 @@ adminRevenue.get('/overview', async (c) => {
       _count: true
     }),
     db.payment.aggregate({
-      where: { status: 'succeeded', type: { in: ['recurring', 'one_time'] }, createdAt: { gte: startOfLastMonth, lte: endOfLastMonth } },
+      where: { status: 'succeeded', type: { in: ['recurring', 'one_time'] }, createdAt: { gte: startOfLastMonth, lt: startOfMonth } },
       _sum: { grossCents: true, amountCents: true, feeCents: true, netCents: true },
       _count: true
     }),
@@ -404,13 +404,19 @@ adminRevenue.get('/monthly', async (c) => {
 adminRevenue.get('/top-creators', async (c) => {
   const query = z.object({
     limit: z.coerce.number().default(20),
-    period: z.enum(['month', 'year', 'all']).default('month')
+    period: z.enum(['today', 'week', 'month', 'year', 'all']).default('month')
   }).parse(c.req.query())
 
   const now = new Date()
   let startDate: Date | undefined
 
   switch (query.period) {
+    case 'today':
+      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+      break
+    case 'week':
+      startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+      break
     case 'month':
       startDate = new Date(now.getFullYear(), now.getMonth(), 1)
       break
@@ -476,13 +482,19 @@ adminRevenue.get('/top-creators', async (c) => {
  */
 adminRevenue.get('/refunds', async (c) => {
   const query = z.object({
-    period: z.enum(['month', 'year', 'all']).default('month')
+    period: z.enum(['today', 'week', 'month', 'year', 'all']).default('month')
   }).parse(c.req.query())
 
   const now = new Date()
   let startDate: Date | undefined
 
   switch (query.period) {
+    case 'today':
+      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+      break
+    case 'week':
+      startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+      break
     case 'month':
       startDate = new Date(now.getFullYear(), now.getMonth(), 1)
       break

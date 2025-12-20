@@ -30,6 +30,7 @@ import {
 } from '../services/sms.js'
 import { decrypt, decryptAccountNumber } from '../utils/encryption.js'
 import { acquireLock, releaseLock } from '../services/lock.js'
+import { logReminderSent, logReminderFailed } from '../services/systemLog.js'
 
 // ============================================
 // HELPERS
@@ -503,6 +504,16 @@ export async function processDueReminders(): Promise<ReminderResult> {
           },
         })
         result.sent++
+
+        // Log successful reminder
+        logReminderSent({
+          reminderId: reminder.id,
+          type: reminder.type,
+          channel: reminder.channel,
+          userId: reminder.userId,
+          entityType: reminder.entityType,
+          entityId: reminder.entityId,
+        })
       } else {
         // Mark as canceled if entity no longer needs reminder
         await db.reminder.update({
@@ -514,6 +525,14 @@ export async function processDueReminders(): Promise<ReminderResult> {
       result.failed++
       result.errors.push({
         reminderId: reminder.id,
+        error: error.message || 'Unknown error',
+      })
+
+      // Log failed reminder
+      logReminderFailed({
+        reminderId: reminder.id,
+        type: reminder.type,
+        userId: reminder.userId,
         error: error.message || 'Unknown error',
       })
 

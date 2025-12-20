@@ -75,11 +75,16 @@ export async function handleCheckoutCompleted(event: Stripe.Event) {
 
   // Fee metadata from validated schema
   const feeModel = validatedMeta.feeModel || null
-  const feeMode = validatedMeta.feeMode || 'pass_to_subscriber'
+  const feeMode = validatedMeta.feeMode || 'split' // Default to split for new subscriptions
   const netAmount = parseMetadataAmount(validatedMeta.netAmount)
   const serviceFee = parseMetadataAmount(validatedMeta.serviceFee)
   const feeEffectiveRate = validatedMeta.feeEffectiveRate ? parseFloat(validatedMeta.feeEffectiveRate) : null
   const feeWasCapped = validatedMeta.feeWasCapped === 'true'
+
+  // Split fee fields (v2 model)
+  const subscriberFeeCents = parseMetadataAmount(validatedMeta.subscriberFeeCents)
+  const creatorFeeCents = parseMetadataAmount(validatedMeta.creatorFeeCents)
+  const baseAmountCents = parseMetadataAmount(validatedMeta.baseAmountCents)
 
   // Platform debit recovery (for service providers with lapsed platform subscription)
   const platformDebitRecovered = parseMetadataAmount(validatedMeta.platformDebitRecovered)
@@ -166,12 +171,22 @@ export async function handleCheckoutCompleted(event: Stripe.Event) {
   let netCents: number
   let grossCents: number | null = null
   let basePrice: number  // Creator's set price - this is what fees are calculated on for renewals
+  let subFeeCents: number | null = null
+  let creatorFee: number | null = null
 
   // Check if new fee model is in use (netAmount and serviceFee are set via validated metadata)
   const hasNewFeeModel = feeModel && netAmount > 0
 
-  if (feeModel === 'flat' && hasNewFeeModel) {
-    // New flat fee model with feeMode (absorb or pass_to_subscriber)
+  if (feeModel === 'split_v1' && hasNewFeeModel) {
+    // New split fee model (4%/4%)
+    grossCents = session.amount_total || 0  // Total subscriber paid
+    feeCents = serviceFee                    // Total platform fee (8%)
+    netCents = netAmount                     // What creator receives
+    subFeeCents = subscriberFeeCents || null
+    creatorFee = creatorFeeCents || null
+    basePrice = baseAmountCents || netCents  // Creator's set price
+  } else if (feeModel === 'flat' && hasNewFeeModel) {
+    // Legacy flat fee model with feeMode (absorb or pass_to_subscriber)
     grossCents = session.amount_total || 0  // Total subscriber paid
     feeCents = serviceFee
     netCents = netAmount  // What creator receives (depends on feeMode)
@@ -278,6 +293,8 @@ export async function handleCheckoutCompleted(event: Stripe.Event) {
             currency: session.currency?.toUpperCase() || 'USD',
             feeCents,
             netCents,
+            subscriberFeeCents: subFeeCents,   // Split fee: subscriber's portion
+            creatorFeeCents: creatorFee,       // Split fee: creator's portion
             feeModel: feeModel || null,
             feeEffectiveRate: feeEffectiveRate,
             feeWasCapped: feeWasCapped,
@@ -437,11 +454,15 @@ export async function handleAsyncPaymentSucceeded(event: Stripe.Event) {
 
   // Fee metadata from validated schema
   const feeModel = validatedMeta.feeModel || null
-  const feeMode = validatedMeta.feeMode || 'pass_to_subscriber'
+  const feeMode = validatedMeta.feeMode || 'split' // Default to split for new subscriptions
   const netAmount = parseMetadataAmount(validatedMeta.netAmount)
   const serviceFee = parseMetadataAmount(validatedMeta.serviceFee)
   const feeEffectiveRate = validatedMeta.feeEffectiveRate ? parseFloat(validatedMeta.feeEffectiveRate) : null
   const feeWasCapped = validatedMeta.feeWasCapped === 'true'
+
+  // Split fee fields (v2 model)
+  const subscriberFeeCents = parseMetadataAmount(validatedMeta.subscriberFeeCents)
+  const creatorFeeCents = parseMetadataAmount(validatedMeta.creatorFeeCents)
 
   console.log(`[async_payment_succeeded] Processing session ${session.id} for creator ${sanitizeForLog(creatorId)}`)
 
@@ -513,9 +534,19 @@ export async function handleAsyncPaymentSucceeded(event: Stripe.Event) {
   let feeCents: number
   let netCents: number
   let grossCents: number | null = null
+  let subFeeCents: number | null = null
+  let creatorFee: number | null = null
 
   const hasNewFeeModel = feeModel && netAmount > 0
-  if (hasNewFeeModel) {
+  if (feeModel === 'split_v1' && hasNewFeeModel) {
+    // New split fee model (4%/4%)
+    grossCents = session.amount_total || 0
+    feeCents = serviceFee
+    netCents = netAmount
+    subFeeCents = subscriberFeeCents || null
+    creatorFee = creatorFeeCents || null
+  } else if (hasNewFeeModel) {
+    // Legacy fee models
     grossCents = session.amount_total || 0
     feeCents = serviceFee
     netCents = netAmount
@@ -582,6 +613,8 @@ export async function handleAsyncPaymentSucceeded(event: Stripe.Event) {
       currency: session.currency?.toUpperCase() || 'USD',
       feeCents,
       netCents,
+      subscriberFeeCents: subFeeCents,   // Split fee: subscriber's portion
+      creatorFeeCents: creatorFee,       // Split fee: creator's portion
       feeModel: feeModel || null,
       feeEffectiveRate,
       feeWasCapped,

@@ -455,3 +455,146 @@
     border-radius: 8px;
     margin-bottom: 12px;
 }
+
+/* === SUCCESS / ALREADY SUBSCRIBED STATE === */
+.template-boundary .sub-success-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: var(--space-xl) var(--space-lg);
+    gap: var(--space-sm);
+    max-width: 360px;
+    margin: 0 auto;
+}
+
+.template-boundary .sub-success-icon {
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.15) 0%, rgba(34, 197, 94, 0.05) 100%);
+    color: var(--status-success);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: var(--space-md);
+}
+
+.template-boundary .sub-success-icon.sub-already-subscribed {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(239, 68, 68, 0.05) 100%);
+    color: #ef4444;
+}
+
+.template-boundary .sub-success-title {
+    font-size: 26px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0 0 var(--space-xs);
+    letter-spacing: -0.5px;
+}
+
+.template-boundary .sub-success-message {
+    font-size: 15px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    margin: 0 0 var(--space-lg);
+    max-width: 300px;
+}
+
+.template-boundary .sub-success-avatar {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    overflow: hidden;
+    margin-bottom: var(--space-md);
+    border: 3px solid white;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.template-boundary .sub-success-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.template-boundary .sub-success-details {
+    width: 100%;
+    background: var(--neutral-50);
+    border-radius: var(--radius-lg);
+    padding: var(--space-md);
+    margin: var(--space-md) 0;
+}
+
+.template-boundary .sub-success-detail-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--space-sm) 0;
+    border-bottom: 1px solid var(--neutral-100);
+}
+
+.template-boundary .sub-success-detail-row:last-child {
+    border-bottom: none;
+}
+
+.template-boundary .sub-success-label {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.template-boundary .sub-success-value {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+}
+
+.template-boundary .sub-success-note {
+    font-size: 13px;
+    color: var(--text-tertiary);
+    margin: var(--space-md) 0;
+}
+
+.template-boundary .sub-success-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-md);
+    margin-top: var(--space-lg);
+    width: 100%;
+}
+
+.template-boundary .sub-success-subtext {
+    font-size: 14px;
+    color: var(--text-secondary);
+    text-align: center;
+}
+
+.template-boundary .sub-success-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-sm);
+    padding: var(--space-md) var(--space-xl);
+    border-radius: var(--radius-lg);
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: none;
+    width: 100%;
+    max-width: 280px;
+}
+
+.template-boundary .sub-success-btn.primary {
+    background: var(--text-primary);
+    color: white;
+}
+
+.template-boundary .sub-success-btn.primary:active {
+    transform: scale(0.98);
+    opacity: 0.9;
+}

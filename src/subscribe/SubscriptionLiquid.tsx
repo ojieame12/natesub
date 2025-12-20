@@ -83,7 +83,6 @@ export default function SubscriptionLiquid({ profile, canceled, isOwner }: Subsc
         currency,
         paymentProvider,
         paymentsReady,
-        feeMode,
         crossBorder,
     } = profile
 
@@ -757,8 +756,8 @@ export default function SubscriptionLiquid({ profile, canceled, isOwner }: Subsc
 
                     {/* Payment View */}
                     {currentView === 'payment' && (() => {
-                        // Calculate fee preview for display (respects creator's feeMode)
-                        const feePreview = calculateFeePreview(currentAmount, currency, purpose, feeMode)
+                        // Calculate fee preview using split model (4% subscriber + 4% creator)
+                        const feePreview = calculateFeePreview(currentAmount, currency, purpose)
 
                         return (
                             <div className={getViewClass('sub-view-payment')}>
@@ -1051,7 +1050,7 @@ export default function SubscriptionLiquid({ profile, canceled, isOwner }: Subsc
                     <p>Your personal information will be handled in accordance with our Privacy Policy. We do not sell your data to third parties.</p>
 
                     <h4>6. Contact</h4>
-                    <p>For questions about your subscription, please contact <a href="mailto:support@natepay.com">support@natepay.com</a></p>
+                    <p>For questions about your subscription, please contact <a href="mailto:support@natepay.co">support@natepay.co</a></p>
                 </div>
             </div>
         </div>

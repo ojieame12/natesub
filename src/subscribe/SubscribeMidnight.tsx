@@ -3,7 +3,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Banknote, Briefcase, Pencil, Check, ChevronsRight, ArrowLeft, AlertCircle } from 'lucide-react'
 import { useToast } from '../components'
-import { useCreateCheckout, useRecordPageView, useUpdatePageView, useUpdateSettings } from '../api/hooks'
+import { useCreateCheckout, useRecordPageView, useUpdatePageView } from '../api/hooks'
 import * as api from '../api/client'
 import type { Profile } from '../api/client'
 import { calculateFeePreview, displayAmountToCents, formatCurrency } from '../utils/currency'
@@ -163,11 +163,9 @@ export default function SubscribeMidnight({ profile, isOwner }: SubscribeMidnigh
     const { mutateAsync: createCheckout } = useCreateCheckout()
     const { mutateAsync: recordPageView } = useRecordPageView()
     const { mutateAsync: updatePageView } = useUpdatePageView()
-    const { mutateAsync: updateSettings, isPending: isSettingsLoading } = useUpdateSettings()
 
     // State
     const [mount, setMount] = useState(false)
-    const [feeMode, setFeeMode] = useState<'absorb' | 'pass_to_subscriber'>(profile.feeMode || 'pass_to_subscriber')
     const [subscriberEmail, setSubscriberEmail] = useState('')
     const [emailFocused, setEmailFocused] = useState(false)
     const [status, setStatus] = useState<'idle' | 'processing' | 'verifying' | 'success'>(
@@ -187,11 +185,10 @@ export default function SubscribeMidnight({ profile, isOwner }: SubscribeMidnigh
     const isReadyToPay = paymentsReady && currentAmount > 0
     const isValidEmail = subscriberEmail.trim().length > 3 && subscriberEmail.includes('@')
 
-    // Fee Calculations
-    const feePreview = calculateFeePreview(currentAmount, currency, profile.purpose, feeMode)
-    const subscriberPaysFee = feeMode === 'pass_to_subscriber'
-    const feeToDisplay = subscriberPaysFee ? feePreview.serviceFee : 0
-    const total = currentAmount + feeToDisplay
+    // Fee Calculations - Split model: subscriber pays 4% fee
+    const feePreview = calculateFeePreview(currentAmount, currency, profile.purpose)
+    const subscriberFee = feePreview.serviceFee // serviceFee = subscriber's 4% portion
+    const total = feePreview.subscriberPays
 
     useEffect(() => {
         // Small delay to ensure initial state is painted before animating
@@ -269,19 +266,6 @@ export default function SubscribeMidnight({ profile, isOwner }: SubscribeMidnigh
     }, [profile.id, profile.username, recordPageView, isSuccessReturn, searchParams, toast, isOwner])
 
     // Handlers
-    const handleFeeToggle = async () => {
-        if (!isOwner) return
-        const newMode = feeMode === 'absorb' ? 'pass_to_subscriber' : 'absorb'
-        setFeeMode(newMode)
-        try {
-            await updateSettings({ feeMode: newMode })
-            toast.success('Fee preference updated')
-        } catch {
-            setFeeMode(feeMode)
-            toast.error('Failed to update')
-        }
-    }
-
     const handleShare = async () => {
         const url = `${window.location.origin}/${profile.username}`
         if (navigator.share) {
@@ -470,15 +454,14 @@ export default function SubscribeMidnight({ profile, isOwner }: SubscribeMidnigh
                         <span style={{ color: '#f0f0f0' }}>{formatCurrency(currentAmount, currency)}/mo</span>
                     </div>
 
-                    {(subscriberPaysFee || isOwner) && (
+                    {subscriberFee > 0 && (
                         <div style={{
                             display: 'flex', justifyContent: 'space-between', marginBottom: 8,
-                            opacity: subscriberPaysFee ? 0.7 : 0.4,
-                            textDecoration: !subscriberPaysFee ? 'line-through' : 'none',
+                            opacity: 0.7,
                             color: '#888'
                         }}>
-                            <span>Service Fee {!subscriberPaysFee && '(Absorbed)'}</span>
-                            <span>+{formatCurrency(feePreview.serviceFee, currency)}</span>
+                            <span>Service Fee (4%)</span>
+                            <span>+{formatCurrency(subscriberFee, currency)}</span>
                         </div>
                     )}
 
@@ -487,20 +470,12 @@ export default function SubscribeMidnight({ profile, isOwner }: SubscribeMidnigh
                         <div style={{ fontWeight: 'bold', fontSize: 24, letterSpacing: -1, color: '#f0f0f0' }}>{formatCurrency(total, currency)}</div>
                     </div>
 
-                    {/* OWNER CONTROLS */}
+                    {/* Split fee info for owners */}
                     {isOwner && (
                         <div style={{ marginTop: 15, padding: 10, background: '#1f1f24', borderRadius: 8, fontSize: 11, border: '1px solid #2a2a30' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <span style={{ color: '#888' }}>Fee Mode:</span>
-                                <button
-                                    onClick={handleFeeToggle} disabled={isSettingsLoading}
-                                    style={{
-                                        border: '1px solid #3a3a40', background: '#2a2a30', padding: '4px 8px', borderRadius: 4,
-                                        boxShadow: '0 1px 3px rgba(0,0,0,0.2)', cursor: 'pointer', fontWeight: 'bold', color: '#f0f0f0'
-                                    }}
-                                >
-                                    {feeMode === 'absorb' ? 'I Absorb' : 'User Pays'}
-                                </button>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#888' }}>
+                                <span>Fee Split</span>
+                                <span>4% subscriber + 4% you</span>
                             </div>
                         </div>
                     )}
