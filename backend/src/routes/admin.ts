@@ -1474,6 +1474,7 @@ admin.get('/activity', async (c) => {
       case 'admin_payout_triggered': return `Triggered manual payout`
       case 'admin_payouts_disabled': return `Disabled payouts: ${payload?.reason || ''}`
       case 'admin_payouts_enabled': return `Enabled payouts`
+      case 'admin_block_subscriber': return `Blocked subscriber: ${payload?.reason || ''}`
       case 'admin_unblock_subscriber': return `Unblocked subscriber: ${payload?.unblockReason || ''}`
       default: return type.replace(/_/g, ' ').replace(/^admin /, '')
     }
@@ -1934,6 +1935,55 @@ admin.get('/blocked-subscribers', async (c) => {
     total,
     page: query.page,
     totalPages: Math.ceil(total / query.limit)
+  })
+})
+
+/**
+ * POST /admin/subscribers/:id/block
+ * Manually block a subscriber (prevents them from subscribing to any creator)
+ */
+admin.post('/subscribers/:id/block', adminSensitiveRateLimit, async (c) => {
+  const { id } = c.req.param()
+  const body = await c.req.json().catch(() => ({}))
+  const reason = body.reason || 'Blocked by admin'
+
+  const user = await db.user.findUnique({
+    where: { id },
+    select: { id: true, email: true, blockedReason: true }
+  })
+
+  if (!user) return c.json({ error: 'User not found' }, 404)
+  if (user.blockedReason) return c.json({ error: 'User is already blocked', blockedReason: user.blockedReason }, 400)
+
+  // Block the subscriber
+  await db.user.update({
+    where: { id },
+    data: { blockedReason: reason }
+  })
+
+  // Cancel all their active subscriptions
+  const cancelledSubs = await db.subscription.updateMany({
+    where: { subscriberId: id, status: 'active' },
+    data: { status: 'canceled', canceledAt: new Date() }
+  })
+
+  // Log the action
+  await db.activity.create({
+    data: {
+      userId: id,
+      type: 'admin_block_subscriber',
+      payload: {
+        reason,
+        blockedAt: new Date().toISOString(),
+        cancelledSubscriptions: cancelledSubs.count
+      }
+    }
+  })
+
+  return c.json({
+    success: true,
+    message: 'Subscriber blocked',
+    cancelledSubscriptions: cancelledSubs.count
   })
 })
 

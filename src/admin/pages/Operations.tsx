@@ -143,6 +143,44 @@ export default function Operations() {
     },
   })
 
+  // Block subscriber mutation
+  const [blockModal, setBlockModal] = useState<{ email: string } | null>(null)
+  const [blockSearchEmail, setBlockSearchEmail] = useState('')
+  const [blockSearchResult, setBlockSearchResult] = useState<{ id: string; email: string } | null>(null)
+  const [blockSearchError, setBlockSearchError] = useState('')
+
+  const searchUserMutation = useMutation({
+    mutationFn: (email: string) =>
+      adminFetch<{ users: Array<{ id: string; email: string }> }>(`/admin/users?search=${encodeURIComponent(email)}&limit=1`),
+    onSuccess: (data) => {
+      if (data.users && data.users.length > 0) {
+        setBlockSearchResult(data.users[0])
+        setBlockSearchError('')
+      } else {
+        setBlockSearchResult(null)
+        setBlockSearchError('No user found with that email')
+      }
+    },
+    onError: () => {
+      setBlockSearchResult(null)
+      setBlockSearchError('Search failed')
+    },
+  })
+
+  const blockSubscriberMutation = useMutation({
+    mutationFn: ({ userId, reason }: { userId: string; reason: string }) =>
+      adminFetch(`/admin/subscribers/${userId}/block`, {
+        method: 'POST',
+        body: JSON.stringify({ reason }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'blocked-subscribers'] })
+      setBlockModal(null)
+      setBlockSearchEmail('')
+      setBlockSearchResult(null)
+    },
+  })
+
   const totalFailed = webhookStats?.failed
     ? Object.values(webhookStats.failed).reduce((a, b) => a + b, 0)
     : 0
@@ -328,8 +366,54 @@ export default function Operations() {
       {/* Blocked Users Tab */}
       {activeTab === 'blocked' && (
         <div>
-          <p style={{ marginBottom: '16px', color: 'var(--text-secondary)' }}>
-            Subscribers blocked due to multiple disputes/chargebacks.
+          {/* Block Subscriber Form */}
+          <div className="admin-card" style={{ marginBottom: '24px' }}>
+            <h3 style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>Block a Subscriber</h3>
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end' }}>
+              <div style={{ flex: 1 }}>
+                <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                  Subscriber Email
+                </label>
+                <input
+                  type="email"
+                  className="admin-search-input"
+                  placeholder="Enter subscriber email..."
+                  value={blockSearchEmail}
+                  onChange={(e) => setBlockSearchEmail(e.target.value)}
+                  style={{ width: '100%', maxWidth: 'none' }}
+                />
+              </div>
+              <button
+                className="admin-btn admin-btn-secondary"
+                onClick={() => searchUserMutation.mutate(blockSearchEmail)}
+                disabled={!blockSearchEmail || searchUserMutation.isPending}
+              >
+                {searchUserMutation.isPending ? 'Searching...' : 'Search'}
+              </button>
+            </div>
+
+            {blockSearchError && (
+              <p style={{ color: 'var(--error)', marginTop: '8px', fontSize: '13px' }}>{blockSearchError}</p>
+            )}
+
+            {blockSearchResult && (
+              <div style={{ marginTop: '12px', padding: '12px', background: 'var(--bg-tertiary)', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '14px' }}>
+                  Found: <strong>{blockSearchResult.email}</strong>
+                </span>
+                <button
+                  className="admin-btn admin-btn-danger admin-btn-small"
+                  onClick={() => setBlockModal({ email: blockSearchResult.email })}
+                >
+                  Block This User
+                </button>
+              </div>
+            )}
+          </div>
+
+          <h3 style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>Currently Blocked</h3>
+          <p style={{ marginBottom: '16px', color: 'var(--text-secondary)', fontSize: '13px' }}>
+            Subscribers blocked due to disputes or admin action.
           </p>
 
           {blockedData?.blockedSubscribers && blockedData.blockedSubscribers.length > 0 ? (
@@ -383,6 +467,22 @@ export default function Operations() {
           loading={retryMutation.isPending}
           onConfirm={() => retryMutation.mutate(retryModal.id)}
           onCancel={() => setRetryModal(null)}
+        />
+      )}
+
+      {/* Block Subscriber Modal */}
+      {blockModal && blockSearchResult && (
+        <ActionModal
+          title="Block Subscriber"
+          message={`Block ${blockModal.email}? This will:\n• Prevent them from subscribing to any creator\n• Cancel all their active subscriptions`}
+          confirmLabel="Block Subscriber"
+          confirmVariant="danger"
+          inputLabel="Reason for blocking"
+          inputPlaceholder="e.g., Fraudulent activity, repeated disputes..."
+          inputRequired
+          loading={blockSubscriberMutation.isPending}
+          onConfirm={(reason) => blockSubscriberMutation.mutate({ userId: blockSearchResult.id, reason: reason || 'Blocked by admin' })}
+          onCancel={() => setBlockModal(null)}
         />
       )}
     </div>
