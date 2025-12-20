@@ -3,11 +3,12 @@
  */
 
 import { useState } from 'react'
-import { useAdminPayments, useAdminRefund, useExportPayments, downloadCSV } from '../api'
+import { useAdminPayments, useAdminRefund, useExportPayments, downloadCSV, type AdminPayment } from '../api'
 import { formatCurrency, formatDateTime } from '../utils/format'
 import FilterBar from '../components/FilterBar'
 import Pagination from '../components/Pagination'
 import ActionModal from '../components/ActionModal'
+import DetailsSidebar from '../components/DetailsSidebar'
 
 function getStatusBadge(status: string): string {
   switch (status) {
@@ -33,6 +34,7 @@ export default function Payments() {
     amount: number
     currency: string
   } | null>(null)
+  const [selectedPayment, setSelectedPayment] = useState<AdminPayment | null>(null)
 
   // Debounce search
   const handleSearchChange = (value: string) => {
@@ -85,6 +87,32 @@ export default function Payments() {
     setDebouncedSearch('')
     setStatus('all')
     setPage(1)
+  }
+
+  const getPaymentDetailFields = (payment: AdminPayment) => {
+    const stripeUrl = payment.stripePaymentIntentId
+      ? `https://dashboard.stripe.com/payments/${payment.stripePaymentIntentId}`
+      : undefined
+    const paystackUrl = payment.paystackTransactionRef
+      ? `https://dashboard.paystack.com/#/transactions/${payment.paystackTransactionRef}`
+      : undefined
+
+    return [
+      { label: 'Payment ID', value: payment.id, copyable: true },
+      { label: 'Status', value: payment.status, badge: getStatusBadge(payment.status) },
+      { label: 'Gross Amount', value: formatCurrency(payment.grossCents, payment.currency) },
+      { label: 'Platform Fee', value: formatCurrency(payment.feeCents, payment.currency) },
+      { label: 'Net to Creator', value: formatCurrency(payment.netCents, payment.currency) },
+      { label: 'Currency', value: payment.currency.toUpperCase() },
+      { label: 'Provider', value: payment.provider },
+      { label: 'Type', value: payment.type },
+      { label: 'Creator Email', value: payment.creator.email, copyable: true },
+      { label: 'Creator Username', value: payment.creator.username, link: payment.creator.username ? `/${payment.creator.username}` : undefined },
+      { label: 'Subscriber Email', value: payment.subscriber.email, copyable: true },
+      { label: 'Date', value: formatDateTime(payment.occurredAt || payment.createdAt) },
+      ...(payment.stripePaymentIntentId ? [{ label: 'Stripe Payment Intent', value: payment.stripePaymentIntentId, copyable: true, link: stripeUrl }] : []),
+      ...(payment.paystackTransactionRef ? [{ label: 'Paystack Reference', value: payment.paystackTransactionRef, copyable: true, link: paystackUrl }] : []),
+    ]
   }
 
   // Error state
@@ -172,11 +200,14 @@ export default function Payments() {
               <tr><td colSpan={10} style={{ textAlign: 'center', padding: '32px' }}>Loading...</td></tr>
             ) : data?.payments?.length ? (
               data.payments.map((payment) => (
-                <tr key={payment.id}>
+                <tr key={payment.id} className="clickable" onClick={() => setSelectedPayment(payment)}>
                   <td>
                     <span
                       style={{ fontFamily: 'monospace', fontSize: '12px', color: 'var(--accent-primary)', cursor: 'pointer' }}
-                      onClick={() => navigator.clipboard.writeText(payment.id)}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        navigator.clipboard.writeText(payment.id)
+                      }}
                       title="Click to copy full ID"
                     >
                       {payment.id.slice(0, 8)}...
@@ -220,12 +251,15 @@ export default function Payments() {
                     {payment.status === 'succeeded' && (
                       <button
                         className="admin-btn admin-btn-danger admin-btn-small"
-                        onClick={() => setRefundModal({
-                          paymentId: payment.id,
-                          creatorEmail: payment.creator.email,
-                          amount: payment.grossCents,
-                          currency: payment.currency,
-                        })}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setRefundModal({
+                            paymentId: payment.id,
+                            creatorEmail: payment.creator.email,
+                            amount: payment.grossCents,
+                            currency: payment.currency,
+                          })
+                        }}
                       >
                         Refund
                       </button>
@@ -273,6 +307,33 @@ export default function Payments() {
           loading={refundMutation.isPending}
           onConfirm={handleRefund}
           onCancel={() => setRefundModal(null)}
+        />
+      )}
+
+      {/* Payment Details Sidebar */}
+      {selectedPayment && (
+        <DetailsSidebar
+          title="Payment Details"
+          onClose={() => setSelectedPayment(null)}
+          fields={getPaymentDetailFields(selectedPayment)}
+          actions={
+            selectedPayment.status === 'succeeded' ? (
+              <button
+                className="admin-btn admin-btn-danger"
+                onClick={() => {
+                  setRefundModal({
+                    paymentId: selectedPayment.id,
+                    creatorEmail: selectedPayment.creator.email,
+                    amount: selectedPayment.grossCents,
+                    currency: selectedPayment.currency,
+                  })
+                  setSelectedPayment(null)
+                }}
+              >
+                Issue Refund
+              </button>
+            ) : undefined
+          }
         />
       )}
     </div>

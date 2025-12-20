@@ -14,7 +14,7 @@ type SortOrder = 'asc' | 'desc'
 
 export default function Users() {
   const [search, setSearch] = useState('')
-  const [status, setStatus] = useState('all')
+  const [status, setStatus] = useState('active')
   const [page, setPage] = useState(1)
   const [sortField, setSortField] = useState<SortField>('created')
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc')

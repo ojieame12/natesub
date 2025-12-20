@@ -1142,3 +1142,82 @@ export function useAdminMRRTrend(months: number = 12) {
     staleTime: 5 * 60 * 1000,
   })
 }
+
+// ============================================
+// ADMIN MANAGEMENT
+// ============================================
+
+export interface AdminUser {
+  id: string
+  email: string
+  role: 'admin' | 'super_admin'
+  displayName: string | null
+  username: string | null
+  createdAt: string
+  lastLoginAt: string | null
+  adminGrantedAt: string | null
+  adminGrantedByEmail: string | null
+}
+
+export interface AdminsListResponse {
+  admins: AdminUser[]
+  total: number
+  superAdminCount: number
+  adminCount: number
+}
+
+export function useAdminsList() {
+  return useQuery({
+    queryKey: ['admin', 'admins'],
+    queryFn: () => adminFetch<AdminsListResponse>('/admin/admins'),
+    staleTime: 60 * 1000,
+  })
+}
+
+export function usePromoteToAdmin() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (params: { userId: string; role: 'admin' | 'super_admin'; reason?: string }) =>
+      adminFetch<{ success: boolean; message: string }>(`/admin/admins/users/${params.userId}/promote`, {
+        method: 'POST',
+        body: JSON.stringify({ role: params.role, reason: params.reason }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'admins'] })
+      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] })
+    },
+  })
+}
+
+export function useDemoteAdmin() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (params: { userId: string; reason: string }) =>
+      adminFetch<{ success: boolean; message: string }>(`/admin/admins/users/${params.userId}/demote`, {
+        method: 'POST',
+        body: JSON.stringify({ reason: params.reason }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'admins'] })
+      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] })
+    },
+  })
+}
+
+export interface AdminAuditLog {
+  id: string
+  message: string
+  metadata: Record<string, unknown> | null
+  createdAt: string
+}
+
+export function useAdminAuditLog(limit: number = 50) {
+  return useQuery({
+    queryKey: ['admin', 'admins', 'audit', limit],
+    queryFn: () => adminFetch<{
+      audit: AdminAuditLog[]
+      pagination: { total: number; limit: number; offset: number; hasMore: boolean }
+    }>(`/admin/admins/audit?limit=${limit}`),
+    staleTime: 60 * 1000,
+  })
+}

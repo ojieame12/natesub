@@ -25,6 +25,7 @@ import {
   Menu,
   X,
   Home,
+  Shield,
   type LucideIcon,
 } from 'lucide-react'
 import './admin.css'
@@ -46,6 +47,7 @@ const Logs = lazy(() => import('./pages/Logs'))
 const Invoices = lazy(() => import('./pages/Invoices'))
 const Operations = lazy(() => import('./pages/Operations'))
 const Support = lazy(() => import('./pages/Support'))
+const Admins = lazy(() => import('./pages/Admins'))
 
 // Navigation items with Lucide icons
 const NAV_ITEMS: { path: string; label: string; Icon: LucideIcon }[] = [
@@ -61,6 +63,7 @@ const NAV_ITEMS: { path: string; label: string; Icon: LucideIcon }[] = [
   { path: '/admin/logs', label: 'System Logs', Icon: Terminal },
   { path: '/admin/invoices', label: 'Invoices', Icon: FileText },
   { path: '/admin/ops', label: 'Operations', Icon: Settings },
+  { path: '/admin/admins', label: 'Admin Users', Icon: Shield },
   { path: '/admin/support', label: 'Support', Icon: HelpCircle },
 ]
 
@@ -96,7 +99,7 @@ export default function AdminLayout() {
       {/* Sidebar */}
       <aside className={`admin-sidebar ${sidebarOpen ? 'open' : ''}`}>
         <div className="admin-sidebar-header">
-          <span className="admin-logo">NatePay Admin</span>
+          <img src="/logo.svg" alt="NatePay" className="admin-logo" />
           <Pressable
             className="admin-sidebar-close"
             onClick={() => setSidebarOpen(false)}
@@ -161,6 +164,7 @@ export default function AdminLayout() {
                 <Route path="logs" element={<Logs />} />
                 <Route path="invoices" element={<Invoices />} />
                 <Route path="ops" element={<Operations />} />
+                <Route path="admins" element={<Admins />} />
                 <Route path="support" element={<Support />} />
                 <Route path="*" element={<Navigate to="/admin" replace />} />
               </Routes>

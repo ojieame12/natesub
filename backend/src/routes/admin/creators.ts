@@ -32,7 +32,7 @@ creators.get('/', async (c) => {
     offset: z.coerce.number().min(0).default(0),
     search: z.string().optional(),
     country: z.string().optional(),
-    payoutStatus: z.enum(['pending', 'connected', 'verified']).optional(),
+    payoutStatus: z.enum(['pending', 'active', 'restricted', 'disabled']).optional(),
     hasDisputes: z.enum(['true', 'false']).optional(),
     sortBy: z.enum(['revenue', 'subscribers', 'created', 'disputes']).default('revenue'),
     sortOrder: z.enum(['asc', 'desc']).default('desc'),
@@ -86,7 +86,7 @@ creators.get('/', async (c) => {
       },
       _count: {
         select: {
-          subscriptionsAsCreator: true,
+          subscriptions: true,
         },
       },
     },
@@ -123,11 +123,11 @@ creators.get('/', async (c) => {
       canceledAt: null,
     },
     _count: true,
-    _sum: { amountCents: true },
+    _sum: { amount: true },
   })
   const activeSubsMap = new Map(activeSubsByCreator.map(s => [s.creatorId, {
     count: s._count,
-    mrr: s._sum?.amountCents || 0,
+    mrr: s._sum?.amount || 0,
   }]))
 
   // Disputes per creator
@@ -163,7 +163,7 @@ creators.get('/', async (c) => {
       isPublic: creator.profile?.isPublic ?? true,
       createdAt: creator.createdAt,
       metrics: {
-        totalSubscriptions: creator._count.subscriptionsAsCreator,
+        totalSubscriptions: creator._count.subscriptions,
         activeSubscriptions: activeSubs.count,
         mrr: activeSubs.mrr,
         totalRevenue: revenue.gross,
@@ -270,7 +270,7 @@ creators.get('/:id', async (c) => {
     by: ['status'],
     where: { creatorId: id },
     _count: true,
-    _sum: { amountCents: true },
+    _sum: { amount: true },
   })
 
   // Get payment stats
@@ -300,10 +300,8 @@ creators.get('/:id', async (c) => {
     take: 10,
   })
 
-  // Get blocked subscribers
-  const blockedSubscribers = await db.blockedSubscriber.count({
-    where: { creatorId: id },
-  })
+  // Note: blockedSubscriber model doesn't exist yet
+  const blockedSubscribers = 0
 
   // Recent activity (last 30 days)
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
@@ -333,7 +331,7 @@ creators.get('/:id', async (c) => {
   const compliance = {
     hasProfile: !!creator.profile,
     hasPaymentSetup: !!(creator.profile.stripeAccountId || creator.profile.paystackSubaccountCode),
-    payoutVerified: creator.profile.payoutStatus === 'verified',
+    payoutVerified: creator.profile.payoutStatus === 'active',
     hasActiveSubscriptions: subscriptionStats.some(s => s.status === 'active' && s._count > 0),
     hasDisputes: disputes.length > 0,
     disputeRate: (() => {
@@ -359,7 +357,7 @@ creators.get('/:id', async (c) => {
       byStatus: subscriptionStats.map(s => ({
         status: s.status,
         count: s._count,
-        totalAmount: s._sum?.amountCents || 0,
+        totalAmount: s._sum?.amount || 0,
       })),
       total: subscriptionStats.reduce((sum, s) => sum + s._count, 0),
     },

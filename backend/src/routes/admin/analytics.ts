@@ -38,10 +38,8 @@ analytics.get('/churn', async (c) => {
     select: {
       id: true,
       canceledAt: true,
-      cancelReason: true,
-      cancelSource: true,
       createdAt: true,
-      amountCents: true,
+      amount: true,
       currency: true,
     },
   })
@@ -51,13 +49,13 @@ analytics.get('/churn', async (c) => {
   let totalMrrLost = 0
 
   for (const sub of cancelledSubs) {
-    const reason = sub.cancelReason || sub.cancelSource || 'unknown'
+    const reason = 'user_cancelled' // Simplified - no cancel reason stored
     if (!byReason[reason]) {
       byReason[reason] = { count: 0, mrrLost: 0 }
     }
     byReason[reason].count++
-    byReason[reason].mrrLost += sub.amountCents
-    totalMrrLost += sub.amountCents
+    byReason[reason].mrrLost += sub.amount
+    totalMrrLost += sub.amount
   }
 
   // Get active subscriptions at start of period for churn rate calculation
@@ -86,8 +84,8 @@ analytics.get('/churn', async (c) => {
     SELECT
       DATE("canceledAt") as date,
       COUNT(*)::bigint as count,
-      SUM("amountCents")::bigint as mrr_lost
-    FROM "Subscription"
+      SUM("amount")::bigint as mrr_lost
+    FROM "subscriptions"
     WHERE "canceledAt" >= ${periodStart}
       AND "canceledAt" <= ${periodEnd}
     GROUP BY DATE("canceledAt")
@@ -259,7 +257,7 @@ analytics.get('/at-risk', async (c) => {
       id: true,
       subscriberId: true,
       creatorId: true,
-      amountCents: true,
+      amount: true,
       currency: true,
       currentPeriodEnd: true,
       createdAt: true,
@@ -343,10 +341,9 @@ analytics.get('/at-risk', async (c) => {
       id: true,
       subscriberId: true,
       creatorId: true,
-      amountCents: true,
+      amount: true,
       currency: true,
       currentPeriodEnd: true,
-      cancelReason: true,
       creator: {
         select: {
           profile: {
@@ -399,12 +396,12 @@ analytics.get('/at-risk', async (c) => {
   return c.json({
     pastDue: {
       count: pastDue.length,
-      totalMrrAtRisk: pastDue.reduce((sum, s) => sum + s.amountCents, 0),
+      totalMrrAtRisk: pastDue.reduce((sum, s) => sum + s.amount, 0),
       subscriptions: pastDue.map(s => ({
         id: s.id,
         subscriberEmail: s.subscriber?.email,
         creatorName: s.creator?.profile?.displayName || s.creator?.profile?.username,
-        amount: s.amountCents,
+        amount: s.amount,
         currency: s.currency,
         daysPastDue: Math.floor((now.getTime() - (s.currentPeriodEnd?.getTime() || now.getTime())) / (1000 * 60 * 60 * 24)),
       })),
@@ -428,15 +425,14 @@ analytics.get('/at-risk', async (c) => {
     },
     expiringSoon: {
       count: expiringSoon.length,
-      totalMrrExpiring: expiringSoon.reduce((sum, s) => sum + s.amountCents, 0),
+      totalMrrExpiring: expiringSoon.reduce((sum, s) => sum + s.amount, 0),
       subscriptions: expiringSoon.map(s => ({
         id: s.id,
         subscriberEmail: s.subscriber?.email,
         creatorName: s.creator?.profile?.displayName || s.creator?.profile?.username,
-        amount: s.amountCents,
+        amount: s.amount,
         currency: s.currency,
         expiresIn: Math.floor(((s.currentPeriodEnd?.getTime() || now.getTime()) - now.getTime()) / (1000 * 60 * 60 * 24)),
-        cancelReason: s.cancelReason,
       })),
     },
     highChurnCreators: highChurnCreators.map(c => {
@@ -482,7 +478,7 @@ analytics.get('/cohort/:month', async (c) => {
       createdAt: true,
       canceledAt: true,
       status: true,
-      amountCents: true,
+      amount: true,
     },
   })
 
@@ -520,7 +516,7 @@ analytics.get('/cohort/:month', async (c) => {
       const isRetained = !sub.canceledAt || sub.canceledAt >= checkDate
       if (isRetained) {
         retained++
-        revenue += sub.amountCents
+        revenue += sub.amount
       }
     }
 
@@ -606,7 +602,7 @@ analytics.get('/mrr', async (c) => {
         ],
         status: { in: ['active', 'past_due'] },
       },
-      _sum: { amountCents: true },
+      _sum: { amount: true },
     })
 
     // New subscriptions in month
@@ -626,7 +622,7 @@ analytics.get('/mrr', async (c) => {
     monthlyData.push({
       month: monthLabel,
       activeSubscriptions: active,
-      mrr: mrrResult._sum?.amountCents || 0,
+      mrr: mrrResult._sum?.amount || 0,
       newSubscriptions: newSubs,
       churned,
       netGrowth: newSubs - churned,

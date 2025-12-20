@@ -59,23 +59,16 @@ bulk.post('/cancel-subscriptions/preview', async (c) => {
     select: {
       id: true,
       status: true,
-      amountCents: true,
+      amount: true,
       currency: true,
       createdAt: true,
-      creator: {
-        select: {
-          email: true,
-          profile: { select: { displayName: true, username: true } },
-        },
-      },
-      subscriber: {
-        select: { email: true },
-      },
+      creatorId: true,
+      subscriberId: true,
     },
     take: 1000, // Safety limit
   })
 
-  const totalMrr = subscriptions.reduce((sum, s) => sum + s.amountCents, 0)
+  const totalMrr = subscriptions.reduce((sum, s) => sum + s.amount, 0)
 
   return c.json({
     preview: true,
@@ -85,10 +78,10 @@ bulk.post('/cancel-subscriptions/preview', async (c) => {
     subscriptions: subscriptions.slice(0, 100).map(s => ({
       id: s.id,
       status: s.status,
-      amount: s.amountCents,
+      amount: s.amount,
       currency: s.currency,
-      creatorName: s.creator?.profile?.displayName || s.creator?.profile?.username,
-      subscriberEmail: s.subscriber?.email,
+      creatorId: s.creatorId,
+      subscriberId: s.subscriberId,
       createdAt: s.createdAt,
     })),
     note: subscriptions.length > 100 ? `Showing first 100 of ${subscriptions.length} subscriptions` : undefined,
@@ -150,8 +143,6 @@ bulk.post('/cancel-subscriptions', adminSensitiveRateLimit, requireFreshSession,
     where,
     data: {
       canceledAt: now,
-      cancelReason: body.reason,
-      cancelSource: 'admin_bulk',
       status: 'canceled',
     },
   })
@@ -200,8 +191,8 @@ bulk.post('/block-users/preview', async (c) => {
       },
       _count: {
         select: {
-          subscriptionsAsCreator: true,
-          subscriptionsAsSubscriber: true,
+          subscriptions: true,
+          subscribedTo: true,
         },
       },
     },
@@ -223,8 +214,8 @@ bulk.post('/block-users/preview', async (c) => {
       email: u.email,
       role: u.role,
       name: u.profile?.displayName || u.profile?.username,
-      subscriptionsAsCreator: u._count.subscriptionsAsCreator,
-      subscriptionsAsSubscriber: u._count.subscriptionsAsSubscriber,
+      subscriptionsAsCreator: u._count.subscriptions,
+      subscriptionsAsSubscriber: u._count.subscribedTo,
       createdAt: u.createdAt,
     })),
   })
@@ -281,8 +272,6 @@ bulk.post('/block-users', adminSensitiveRateLimit, requireFreshSession, async (c
       },
       data: {
         canceledAt: now,
-        cancelReason: 'Creator account blocked',
-        cancelSource: 'admin_bulk',
         status: 'canceled',
       },
     })
@@ -295,8 +284,6 @@ bulk.post('/block-users', adminSensitiveRateLimit, requireFreshSession, async (c
       },
       data: {
         canceledAt: now,
-        cancelReason: 'Subscriber account blocked',
-        cancelSource: 'admin_bulk',
         status: 'canceled',
       },
     })
