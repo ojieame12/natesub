@@ -46,7 +46,9 @@ const envSchema = z.object({
   // Stripe
   STRIPE_SECRET_KEY: z.string().startsWith('sk_'),
   STRIPE_WEBHOOK_SECRET: z.string().startsWith('whsec_'),
-  STRIPE_WEBHOOK_SECRET_CONNECT: z.string().startsWith('whsec_').optional(), // For connected accounts webhook
+  STRIPE_WEBHOOK_SECRET_CONNECT: z.string().startsWith('whsec_').optional()
+    .or(z.literal(''))  // Allow empty string (treated as unset)
+    .transform(v => v || undefined), // Convert empty string to undefined
   STRIPE_ONBOARDING_RETURN_URL: z.preprocess(normalizeUrlEnv, z.string().url()),
   STRIPE_ONBOARDING_REFRESH_URL: z.preprocess(normalizeUrlEnv, z.string().url()),
 
