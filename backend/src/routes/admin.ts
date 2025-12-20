@@ -31,6 +31,31 @@ const admin = new Hono()
 // Lock for reconciliation to prevent concurrent runs
 let reconciliationRunning = false
 
+/**
+ * Log admin action for audit trail
+ * Works with both API key and user session auth
+ */
+async function logAdminAction(c: any, action: string, payload: Record<string, any> = {}) {
+  const userId = c.get('userId') as string | undefined
+  // If no userId, it was API key auth
+  const authMethod = userId ? 'session' : 'api-key'
+
+  await db.activity.create({
+    data: {
+      // Use a system user ID for API key actions, or the actual admin userId
+      userId: userId || 'system-api-key',
+      type: `admin_${action}`,
+      payload: {
+        ...payload,
+        authMethod,
+        adminUserId: userId || null,
+        timestamp: new Date().toISOString(),
+        ip: c.req.header('x-forwarded-for') || c.req.header('x-real-ip') || 'unknown',
+      },
+    },
+  })
+}
+
 // Get session token from cookie or Authorization header
 function getSessionToken(c: any): string | undefined {
   const cookieToken = getCookie(c, 'session')
@@ -47,7 +72,8 @@ admin.use('*', async (c, next) => {
 
   // /admin/me is used to CHECK if user is admin - handle it specially
   // This endpoint doesn't require auth - it returns { isAdmin: false } for non-admins
-  if (path === '/admin/me' || path === '/me' || path.endsWith('/me')) {
+  // SECURITY: Exact match only to prevent bypass via routes ending in /me
+  if (path === '/admin/me' || path === '/me') {
     await next()
     return
   }
@@ -58,6 +84,7 @@ admin.use('*', async (c, next) => {
   const expectedKey = process.env.ADMIN_API_KEY
 
   if (apiKey && expectedKey && apiKey === expectedKey) {
+    // API key auth - no userId set, logAdminAction will detect this
     await next()
     return
   }
@@ -96,12 +123,12 @@ admin.get('/me', async (c) => {
     // Get session token and validate
     const sessionToken = getSessionToken(c)
     if (!sessionToken) {
-      return c.json({ isAdmin: false, email: null })
+      return c.json({ isAdmin: false })
     }
 
     const session = await validateSession(sessionToken)
     if (!session) {
-      return c.json({ isAdmin: false, email: null })
+      return c.json({ isAdmin: false })
     }
 
     // Check if user email is in admin whitelist
@@ -111,13 +138,15 @@ admin.get('/me', async (c) => {
     })
 
     if (user && isAdminEmail(user.email)) {
+      // Only return email for actual admins
       return c.json({ isAdmin: true, email: user.email })
     }
 
-    return c.json({ isAdmin: false, email: user?.email || null })
+    // SECURITY: Don't leak email for non-admins
+    return c.json({ isAdmin: false })
   } catch (err) {
     console.error('[admin/me] Error:', err)
-    return c.json({ isAdmin: false, email: null })
+    return c.json({ isAdmin: false })
   }
 })
 
@@ -219,7 +248,7 @@ admin.get('/webhooks/all', async (c) => {
  * Manually sync a Stripe invoice to local database
  * Use this to backfill missing payments
  */
-admin.post('/sync/stripe-invoice', async (c) => {
+admin.post('/sync/stripe-invoice', adminSensitiveRateLimit, async (c) => {
   const body = z.object({
     invoiceId: z.string().startsWith('in_'),
   }).parse(await c.req.json())
@@ -255,6 +284,13 @@ admin.post('/sync/stripe-invoice', async (c) => {
     }
 
     await handleInvoicePaid(fakeEvent as any)
+
+    // Log the admin action
+    await logAdminAction(c, 'sync_stripe_invoice', {
+      invoiceId: body.invoiceId,
+      amount: invoice.amount_paid,
+      currency: invoice.currency,
+    })
 
     return c.json({ success: true, message: `Synced invoice ${body.invoiceId}` })
   } catch (err: any) {
@@ -323,13 +359,16 @@ admin.get('/sync/stripe-missing', async (c) => {
  * POST /admin/webhooks/:id/retry
  * Manually retry a specific webhook
  */
-admin.post('/webhooks/:id/retry', async (c) => {
+admin.post('/webhooks/:id/retry', adminSensitiveRateLimit, async (c) => {
   const { id } = c.req.param()
   const result = await dlq.retryWebhook(id)
 
   if (!result.success) {
     return c.json({ error: result.error }, 400)
   }
+
+  // Log the admin action
+  await logAdminAction(c, 'webhook_retry', { webhookId: id })
 
   return c.json({ success: true, message: 'Webhook queued for retry' })
 })
@@ -791,7 +830,7 @@ admin.get('/users/:id', async (c) => {
   })
 })
 
-admin.post('/users/:id/block', async (c) => {
+admin.post('/users/:id/block', adminSensitiveRateLimit, async (c) => {
   const { id } = c.req.param()
   const body = await c.req.json().catch(() => ({}))
   const reason = body.reason || 'Blocked by admin'
@@ -804,7 +843,7 @@ admin.post('/users/:id/block', async (c) => {
   return c.json({ success: true })
 })
 
-admin.post('/users/:id/unblock', async (c) => {
+admin.post('/users/:id/unblock', adminSensitiveRateLimit, async (c) => {
   const { id } = c.req.param()
 
   await db.user.update({ where: { id }, data: { deletedAt: null } })
@@ -1702,7 +1741,8 @@ admin.get('/emails', async (c) => {
 
 admin.get('/invoices', async (c) => {
   const query = z.object({
-    status: z.enum(['sent', 'paid', 'expired', 'all']).default('all'),
+    // Note: Requests use status=accepted when paid. We expose "paid" as an admin-friendly alias.
+    status: z.enum(['draft', 'sent', 'pending_payment', 'paid', 'declined', 'expired', 'all']).default('all'),
     page: z.coerce.number().default(1),
     limit: z.coerce.number().default(50)
   }).parse(c.req.query())
@@ -1710,7 +1750,7 @@ admin.get('/invoices', async (c) => {
   const skip = (query.page - 1) * query.limit
   const where: any = { dueDate: { not: null } } // Only invoices (requests with due dates)
 
-  if (query.status !== 'all') where.status = query.status
+  if (query.status !== 'all') where.status = query.status === 'paid' ? 'accepted' : query.status
 
   const [requests, total] = await Promise.all([
     db.request.findMany({
@@ -1739,7 +1779,7 @@ admin.get('/invoices', async (c) => {
       recipientPhone: r.recipientPhone,
       amountCents: r.amountCents,
       currency: r.currency,
-      status: r.status,
+      status: r.status === 'accepted' ? 'paid' : r.status,
       dueDate: r.dueDate,
       sentAt: r.sentAt,
       respondedAt: r.respondedAt,
@@ -1991,7 +2031,7 @@ admin.post('/subscribers/:id/block', adminSensitiveRateLimit, async (c) => {
  * POST /admin/blocked-subscribers/:id/unblock
  * Unblock a subscriber (use with caution)
  */
-admin.post('/blocked-subscribers/:id/unblock', async (c) => {
+admin.post('/blocked-subscribers/:id/unblock', adminSensitiveRateLimit, async (c) => {
   const { id } = c.req.param()
   const body = await c.req.json().catch(() => ({}))
   const reason = body.reason || 'Unblocked by admin'
@@ -2391,7 +2431,7 @@ admin.get('/stripe/customers/:customerId', async (c) => {
  * POST /admin/subscriptions/:id/pause
  * Pause a subscription (stop billing but keep active)
  */
-admin.post('/subscriptions/:id/pause', async (c) => {
+admin.post('/subscriptions/:id/pause', adminSensitiveRateLimit, async (c) => {
   const { id } = c.req.param()
 
   const subscription = await db.subscription.findUnique({
@@ -2432,7 +2472,7 @@ admin.post('/subscriptions/:id/pause', async (c) => {
  * POST /admin/subscriptions/:id/resume
  * Resume a paused subscription
  */
-admin.post('/subscriptions/:id/resume', async (c) => {
+admin.post('/subscriptions/:id/resume', adminSensitiveRateLimit, async (c) => {
   const { id } = c.req.param()
 
   const subscription = await db.subscription.findUnique({
@@ -2530,7 +2570,7 @@ admin.post('/stripe/accounts/:accountId/payout', adminSensitiveRateLimit, async 
  * POST /admin/stripe/accounts/:accountId/disable-payouts
  * Disable payouts for a connected account (fraud prevention)
  */
-admin.post('/stripe/accounts/:accountId/disable-payouts', async (c) => {
+admin.post('/stripe/accounts/:accountId/disable-payouts', adminSensitiveRateLimit, async (c) => {
   const { accountId } = c.req.param()
   const body = z.object({
     reason: z.string()
@@ -2574,7 +2614,7 @@ admin.post('/stripe/accounts/:accountId/disable-payouts', async (c) => {
  * POST /admin/stripe/accounts/:accountId/enable-payouts
  * Re-enable payouts for a connected account
  */
-admin.post('/stripe/accounts/:accountId/enable-payouts', async (c) => {
+admin.post('/stripe/accounts/:accountId/enable-payouts', adminSensitiveRateLimit, async (c) => {
   const { accountId } = c.req.param()
 
   try {
@@ -2735,7 +2775,7 @@ admin.get('/support/tickets/:id', async (c) => {
  * PATCH /admin/support/tickets/:id
  * Update ticket status, priority, assignment, or notes
  */
-admin.patch('/support/tickets/:id', async (c) => {
+admin.patch('/support/tickets/:id', adminSensitiveRateLimit, async (c) => {
   const { id } = c.req.param()
   const body = z.object({
     status: z.enum(['open', 'in_progress', 'resolved', 'closed']).optional(),
@@ -2766,7 +2806,7 @@ admin.patch('/support/tickets/:id', async (c) => {
  * POST /admin/support/tickets/:id/reply
  * Add an admin reply to a ticket
  */
-admin.post('/support/tickets/:id/reply', async (c) => {
+admin.post('/support/tickets/:id/reply', adminSensitiveRateLimit, async (c) => {
   const { id } = c.req.param()
   const body = z.object({
     message: z.string().min(1).max(5000)
@@ -2816,7 +2856,7 @@ admin.post('/support/tickets/:id/reply', async (c) => {
  * POST /admin/support/tickets/:id/resolve
  * Resolve a ticket with a resolution note
  */
-admin.post('/support/tickets/:id/resolve', async (c) => {
+admin.post('/support/tickets/:id/resolve', adminSensitiveRateLimit, async (c) => {
   const { id } = c.req.param()
   const body = z.object({
     resolution: z.string().min(1).max(1000),
@@ -2892,7 +2932,7 @@ admin.get('/paystack/banks/:country', async (c) => {
  * POST /admin/paystack/resolve-account
  * Resolve/validate a bank account (NG/ZA only - Kenya doesn't support this)
  */
-admin.post('/paystack/resolve-account', async (c) => {
+admin.post('/paystack/resolve-account', adminSensitiveRateLimit, async (c) => {
   const body = z.object({
     country: z.enum(['NG', 'KE', 'ZA']),
     bankCode: z.string().min(1),
@@ -2924,7 +2964,7 @@ admin.post('/paystack/resolve-account', async (c) => {
  * Create a fully-functional creator account (Paystack countries only)
  * Admin enters all details, creator receives ready-to-use payment link
  */
-admin.post('/users/create-creator', async (c) => {
+admin.post('/users/create-creator', adminSensitiveRateLimit, async (c) => {
   const body = z.object({
     email: z.string().email(),
     displayName: z.string().min(2).max(50),
@@ -3022,21 +3062,13 @@ admin.post('/users/create-creator', async (c) => {
       console.error('[admin] Failed to send creator account email:', err)
     })
 
-    // Log the admin action
-    const adminUserId = c.get('userId') as string | undefined
-    if (adminUserId) {
-      await db.activity.create({
-        data: {
-          userId: result.user.id,
-          type: 'admin_create_creator',
-          payload: {
-            createdBy: adminUserId,
-            username,
-            country: body.country,
-          },
-        },
-      })
-    }
+    // Log the admin action (works with both API key and session auth)
+    await logAdminAction(c, 'create_creator', {
+      createdUserId: result.user.id,
+      email: body.email.toLowerCase(),
+      username,
+      country: body.country,
+    })
 
     return c.json({
       success: true,

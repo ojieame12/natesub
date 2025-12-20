@@ -3,6 +3,7 @@ import { cors } from 'hono/cors'
 import { logger } from 'hono/logger'
 import { secureHeaders } from 'hono/secure-headers'
 import { HTTPException } from 'hono/http-exception'
+import { ZodError } from 'zod'
 import { env } from './config/env.js'
 import { requestIdMiddleware } from './middleware/requestId.js'
 import { db } from './db/client.js'
@@ -270,6 +271,10 @@ app.onError((err, c) => {
   // Handle HTTPException (from middleware like admin auth)
   if (err instanceof HTTPException) {
     return c.json({ error: err.message, message: err.message }, err.status)
+  }
+  // Handle Zod validation errors (bad query/body params)
+  if (err instanceof ZodError) {
+    return c.json({ error: 'Invalid request', issues: err.issues }, 400)
   }
   console.error('Unhandled error:', err)
   return c.json({ error: 'Internal server error' }, 500)

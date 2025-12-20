@@ -19,6 +19,55 @@ import { isAdminEmail } from '../config/admin.js'
 
 const adminRevenue = new Hono()
 
+type PaymentStats = {
+  totalVolumeCents: number
+  platformFeeCents: number
+  creatorPayoutsCents: number
+  paymentCount: number
+}
+
+async function aggregatePaymentStats(where: any): Promise<PaymentStats> {
+  const [agg, legacyVolume] = await Promise.all([
+    db.payment.aggregate({
+      where,
+      _sum: { grossCents: true, feeCents: true, netCents: true },
+      _count: true,
+    }),
+    db.payment.aggregate({
+      where: { ...where, grossCents: null },
+      _sum: { amountCents: true },
+      _count: true,
+    }),
+  ])
+
+  return {
+    totalVolumeCents: (agg._sum.grossCents || 0) + (legacyVolume._sum.amountCents || 0),
+    platformFeeCents: agg._sum.feeCents || 0,
+    creatorPayoutsCents: agg._sum.netCents || 0,
+    paymentCount: agg._count,
+  }
+}
+
+async function aggregateGrossOnly(where: any): Promise<{ totalCents: number; count: number }> {
+  const [agg, legacyVolume] = await Promise.all([
+    db.payment.aggregate({
+      where,
+      _sum: { grossCents: true },
+      _count: true,
+    }),
+    db.payment.aggregate({
+      where: { ...where, grossCents: null },
+      _sum: { amountCents: true },
+      _count: true,
+    }),
+  ])
+
+  return {
+    totalCents: (agg._sum.grossCents || 0) + (legacyVolume._sum.amountCents || 0),
+    count: agg._count,
+  }
+}
+
 // Get session token from cookie or Authorization header
 function getSessionToken(c: any): string | undefined {
   const cookieToken = getCookie(c, 'session')
@@ -74,37 +123,17 @@ adminRevenue.get('/overview', async (c) => {
   // Note: Use lt: startOfMonth for correct boundary (not lte: endOfLastMonth which misses most of last day)
 
   const [
-    // All-time totals
     allTimeStats,
-    // This month
     thisMonthStats,
-    // Last month (for comparison)
     lastMonthStats,
-    // Today
     todayStats,
     // Payment counts
     paymentCounts
   ] = await Promise.all([
-    db.payment.aggregate({
-      where: { status: 'succeeded', type: { in: ['recurring', 'one_time'] } },
-      _sum: { grossCents: true, amountCents: true, feeCents: true, netCents: true },
-      _count: true
-    }),
-    db.payment.aggregate({
-      where: { status: 'succeeded', type: { in: ['recurring', 'one_time'] }, createdAt: { gte: startOfMonth } },
-      _sum: { grossCents: true, amountCents: true, feeCents: true, netCents: true },
-      _count: true
-    }),
-    db.payment.aggregate({
-      where: { status: 'succeeded', type: { in: ['recurring', 'one_time'] }, createdAt: { gte: startOfLastMonth, lt: startOfMonth } },
-      _sum: { grossCents: true, amountCents: true, feeCents: true, netCents: true },
-      _count: true
-    }),
-    db.payment.aggregate({
-      where: { status: 'succeeded', type: { in: ['recurring', 'one_time'] }, createdAt: { gte: startOfDay } },
-      _sum: { grossCents: true, amountCents: true, feeCents: true, netCents: true },
-      _count: true
-    }),
+    aggregatePaymentStats({ status: 'succeeded', type: { in: ['recurring', 'one_time'] } }),
+    aggregatePaymentStats({ status: 'succeeded', type: { in: ['recurring', 'one_time'] }, createdAt: { gte: startOfMonth } }),
+    aggregatePaymentStats({ status: 'succeeded', type: { in: ['recurring', 'one_time'] }, createdAt: { gte: startOfLastMonth, lt: startOfMonth } }),
+    aggregatePaymentStats({ status: 'succeeded', type: { in: ['recurring', 'one_time'] }, createdAt: { gte: startOfDay } }),
     db.payment.groupBy({
       by: ['status'],
       where: { type: { in: ['recurring', 'one_time'] } },
@@ -114,32 +143,11 @@ adminRevenue.get('/overview', async (c) => {
 
   const statusCounts = Object.fromEntries(paymentCounts.map(p => [p.status, p._count]))
 
-  // Use grossCents if available, fallback to amountCents for older records
   return c.json({
-    allTime: {
-      totalVolumeCents: allTimeStats._sum.grossCents || allTimeStats._sum.amountCents || 0,
-      platformFeeCents: allTimeStats._sum.feeCents || 0,
-      creatorPayoutsCents: allTimeStats._sum.netCents || 0,
-      paymentCount: allTimeStats._count
-    },
-    thisMonth: {
-      totalVolumeCents: thisMonthStats._sum.grossCents || thisMonthStats._sum.amountCents || 0,
-      platformFeeCents: thisMonthStats._sum.feeCents || 0,
-      creatorPayoutsCents: thisMonthStats._sum.netCents || 0,
-      paymentCount: thisMonthStats._count
-    },
-    lastMonth: {
-      totalVolumeCents: lastMonthStats._sum.grossCents || lastMonthStats._sum.amountCents || 0,
-      platformFeeCents: lastMonthStats._sum.feeCents || 0,
-      creatorPayoutsCents: lastMonthStats._sum.netCents || 0,
-      paymentCount: lastMonthStats._count
-    },
-    today: {
-      totalVolumeCents: todayStats._sum.grossCents || todayStats._sum.amountCents || 0,
-      platformFeeCents: todayStats._sum.feeCents || 0,
-      creatorPayoutsCents: todayStats._sum.netCents || 0,
-      paymentCount: todayStats._count
-    },
+    allTime: allTimeStats,
+    thisMonth: thisMonthStats,
+    lastMonth: lastMonthStats,
+    today: todayStats,
     paymentsByStatus: statusCounts
   })
 })
@@ -183,32 +191,14 @@ adminRevenue.get('/by-provider', async (c) => {
 
   // Get Stripe payments (have stripePaymentIntentId)
   const [stripeStats, paystackStats] = await Promise.all([
-    db.payment.aggregate({
-      where: { ...where, stripePaymentIntentId: { not: null } },
-      _sum: { grossCents: true, feeCents: true, netCents: true },
-      _count: true
-    }),
-    db.payment.aggregate({
-      where: { ...where, paystackTransactionRef: { not: null } },
-      _sum: { grossCents: true, feeCents: true, netCents: true },
-      _count: true
-    })
+    aggregatePaymentStats({ ...where, stripePaymentIntentId: { not: null } }),
+    aggregatePaymentStats({ ...where, paystackTransactionRef: { not: null } })
   ])
 
   return c.json({
     period: query.period,
-    stripe: {
-      totalVolumeCents: stripeStats._sum.grossCents || 0,
-      platformFeeCents: stripeStats._sum.feeCents || 0,
-      creatorPayoutsCents: stripeStats._sum.netCents || 0,
-      paymentCount: stripeStats._count
-    },
-    paystack: {
-      totalVolumeCents: paystackStats._sum.grossCents || 0,
-      platformFeeCents: paystackStats._sum.feeCents || 0,
-      creatorPayoutsCents: paystackStats._sum.netCents || 0,
-      paymentCount: paystackStats._count
-    }
+    stripe: stripeStats,
+    paystack: paystackStats
   })
 })
 
@@ -249,18 +239,28 @@ adminRevenue.get('/by-currency', async (c) => {
   const where: any = { status: 'succeeded', type: { in: ['recurring', 'one_time'] } }
   if (startDate) where.createdAt = { gte: startDate }
 
-  const byCurrency = await db.payment.groupBy({
-    by: ['currency'],
-    where,
-    _sum: { grossCents: true, feeCents: true, netCents: true },
-    _count: true
-  })
+  const [byCurrency, legacyByCurrency] = await Promise.all([
+    db.payment.groupBy({
+      by: ['currency'],
+      where,
+      _sum: { grossCents: true, feeCents: true, netCents: true },
+      _count: true
+    }),
+    db.payment.groupBy({
+      by: ['currency'],
+      where: { ...where, grossCents: null },
+      _sum: { amountCents: true },
+      _count: true
+    })
+  ])
+
+  const legacyMap = new Map(legacyByCurrency.map(c => [c.currency, c._sum.amountCents || 0]))
 
   return c.json({
     period: query.period,
     currencies: byCurrency.map(c => ({
       currency: c.currency,
-      totalVolumeCents: c._sum.grossCents || 0,
+      totalVolumeCents: (c._sum.grossCents || 0) + (legacyMap.get(c.currency) || 0),
       platformFeeCents: c._sum.feeCents || 0,
       creatorPayoutsCents: c._sum.netCents || 0,
       paymentCount: c._count
@@ -294,6 +294,7 @@ adminRevenue.get('/daily', async (c) => {
     },
     select: {
       grossCents: true,
+      amountCents: true,
       feeCents: true,
       netCents: true,
       createdAt: true
@@ -306,7 +307,7 @@ adminRevenue.get('/daily', async (c) => {
   for (const p of payments) {
     const day = p.createdAt.toISOString().split('T')[0]
     const existing = dailyMap.get(day) || { volume: 0, fees: 0, payouts: 0, count: 0 }
-    existing.volume += p.grossCents || 0
+    existing.volume += p.grossCents ?? p.amountCents
     existing.fees += p.feeCents || 0
     existing.payouts += p.netCents || 0
     existing.count += 1
@@ -360,6 +361,7 @@ adminRevenue.get('/monthly', async (c) => {
     },
     select: {
       grossCents: true,
+      amountCents: true,
       feeCents: true,
       netCents: true,
       createdAt: true
@@ -372,7 +374,7 @@ adminRevenue.get('/monthly', async (c) => {
   for (const p of payments) {
     const month = p.createdAt.toISOString().slice(0, 7) // YYYY-MM
     const existing = monthlyMap.get(month) || { volume: 0, fees: 0, payouts: 0, count: 0 }
-    existing.volume += p.grossCents || 0
+    existing.volume += p.grossCents ?? p.amountCents
     existing.fees += p.feeCents || 0
     existing.payouts += p.netCents || 0
     existing.count += 1
@@ -431,17 +433,36 @@ adminRevenue.get('/top-creators', async (c) => {
   const where: any = { status: 'succeeded', type: { in: ['recurring', 'one_time'] } }
   if (startDate) where.createdAt = { gte: startDate }
 
-  const topCreators = await db.payment.groupBy({
-    by: ['creatorId'],
-    where,
-    _sum: { grossCents: true, feeCents: true, netCents: true },
-    _count: true,
-    orderBy: { _sum: { grossCents: 'desc' } },
-    take: query.limit
-  })
+  const [topCreators, legacyTopCreators] = await Promise.all([
+    db.payment.groupBy({
+      by: ['creatorId'],
+      where,
+      _sum: { grossCents: true, feeCents: true, netCents: true },
+      _count: true,
+    }),
+    db.payment.groupBy({
+      by: ['creatorId'],
+      where: { ...where, grossCents: null },
+      _sum: { amountCents: true },
+      _count: true,
+    }),
+  ])
+
+  const legacyMap = new Map(legacyTopCreators.map(c => [c.creatorId, c._sum.amountCents || 0]))
+
+  const combined = topCreators.map(tc => ({
+    creatorId: tc.creatorId,
+    totalVolumeCents: (tc._sum.grossCents || 0) + (legacyMap.get(tc.creatorId) || 0),
+    platformFeeCents: tc._sum.feeCents || 0,
+    creatorEarningsCents: tc._sum.netCents || 0,
+    paymentCount: tc._count,
+  }))
+
+  combined.sort((a, b) => b.totalVolumeCents - a.totalVolumeCents)
+  const top = combined.slice(0, query.limit)
 
   // Get creator details
-  const creatorIds = topCreators.map(c => c.creatorId)
+  const creatorIds = top.map(c => c.creatorId)
   const creators = await db.user.findMany({
     where: { id: { in: creatorIds } },
     select: {
@@ -455,7 +476,7 @@ adminRevenue.get('/top-creators', async (c) => {
 
   return c.json({
     period: query.period,
-    creators: topCreators.map(tc => {
+    creators: top.map(tc => {
       const creator = creatorMap.get(tc.creatorId)
       return {
         creatorId: tc.creatorId,
@@ -463,10 +484,10 @@ adminRevenue.get('/top-creators', async (c) => {
         username: creator?.profile?.username,
         displayName: creator?.profile?.displayName,
         country: creator?.profile?.country,
-        totalVolumeCents: tc._sum.grossCents || 0,
-        platformFeeCents: tc._sum.feeCents || 0,
-        creatorEarningsCents: tc._sum.netCents || 0,
-        paymentCount: tc._count
+        totalVolumeCents: tc.totalVolumeCents,
+        platformFeeCents: tc.platformFeeCents,
+        creatorEarningsCents: tc.creatorEarningsCents,
+        paymentCount: tc.paymentCount
       }
     })
   })
@@ -509,37 +530,25 @@ adminRevenue.get('/refunds', async (c) => {
   const where: any = {}
   if (startDate) where.createdAt = { gte: startDate }
 
-  const [refunded, disputed, chargedBack] = await Promise.all([
-    db.payment.aggregate({
-      where: { ...where, status: 'refunded' },
-      _sum: { grossCents: true },
-      _count: true
-    }),
-    db.payment.aggregate({
-      where: { ...where, status: 'disputed' },
-      _sum: { grossCents: true },
-      _count: true
-    }),
-    db.payment.aggregate({
-      where: { ...where, status: 'charged_back' },
-      _sum: { grossCents: true },
-      _count: true
-    })
+  const [refunded, disputed, disputeLost] = await Promise.all([
+    aggregateGrossOnly({ ...where, status: 'refunded' }),
+    aggregateGrossOnly({ ...where, status: 'disputed' }),
+    aggregateGrossOnly({ ...where, status: 'dispute_lost' })
   ])
 
   return c.json({
     period: query.period,
     refunds: {
-      totalCents: refunded._sum.grossCents || 0,
-      count: refunded._count
+      totalCents: refunded.totalCents,
+      count: refunded.count
     },
     disputes: {
-      totalCents: disputed._sum.grossCents || 0,
-      count: disputed._count
+      totalCents: disputed.totalCents,
+      count: disputed.count
     },
     chargebacks: {
-      totalCents: chargedBack._sum.grossCents || 0,
-      count: chargedBack._count
+      totalCents: disputeLost.totalCents,
+      count: disputeLost.count
     }
   })
 })
