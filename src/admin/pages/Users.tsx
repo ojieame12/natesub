@@ -3,16 +3,21 @@
  */
 
 import { useState } from 'react'
-import { useAdminUsers, useAdminUserBlock, useAdminUserUnblock, useAdminUserDelete } from '../api'
+import { useAdminUsers, useAdminUserBlock, useAdminUserUnblock, useAdminUserDelete, useExportUsers, downloadCSV } from '../api'
 import { formatCurrency, formatDate } from '../utils/format'
 import FilterBar from '../components/FilterBar'
 import Pagination from '../components/Pagination'
 import ActionModal from '../components/ActionModal'
 
+type SortField = 'email' | 'revenue' | 'subscribers' | 'created'
+type SortOrder = 'asc' | 'desc'
+
 export default function Users() {
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('all')
   const [page, setPage] = useState(1)
+  const [sortField, setSortField] = useState<SortField>('created')
+  const [sortOrder, setSortOrder] = useState<SortOrder>('desc')
   const limit = 50
 
   const [blockModal, setBlockModal] = useState<{ userId: string; email: string } | null>(null)
@@ -20,7 +25,7 @@ export default function Users() {
   const [deleteModal, setDeleteModal] = useState<{ userId: string; email: string } | null>(null)
   const [deleteConfirmText, setDeleteConfirmText] = useState('')
 
-  const { data, isLoading, refetch } = useAdminUsers({
+  const { data, isLoading, error, refetch } = useAdminUsers({
     search: search || undefined,
     status: status !== 'all' ? status : undefined,
     page,
@@ -30,6 +35,51 @@ export default function Users() {
   const blockMutation = useAdminUserBlock()
   const unblockMutation = useAdminUserUnblock()
   const deleteMutation = useAdminUserDelete()
+  const exportMutation = useExportUsers()
+
+  const handleExport = async () => {
+    try {
+      const result = await exportMutation.mutateAsync({
+        role: 'all',
+        includeDeleted: status === 'deleted',
+        limit: 10000,
+      })
+      downloadCSV(result.csv, result.filename)
+    } catch (err) {
+      console.error('Export failed:', err)
+    }
+  }
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortField(field)
+      setSortOrder('desc')
+    }
+  }
+
+  const getSortIcon = (field: SortField) => {
+    if (sortField !== field) return ' ↕'
+    return sortOrder === 'asc' ? ' ↑' : ' ↓'
+  }
+
+  // Client-side sorting (backend doesn't support sorting yet)
+  const sortedUsers = data?.users?.slice().sort((a, b) => {
+    const modifier = sortOrder === 'asc' ? 1 : -1
+    switch (sortField) {
+      case 'email':
+        return a.email.localeCompare(b.email) * modifier
+      case 'revenue':
+        return (a.revenueTotal - b.revenueTotal) * modifier
+      case 'subscribers':
+        return (a.subscriberCount - b.subscriberCount) * modifier
+      case 'created':
+        return (new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()) * modifier
+      default:
+        return 0
+    }
+  })
 
   const handleBlock = async (reason?: string) => {
     if (!blockModal) return
@@ -71,9 +121,42 @@ export default function Users() {
     setPage(1)
   }
 
+  // Error state
+  if (error) {
+    return (
+      <div>
+        <h1 className="admin-page-title">Users</h1>
+        <div className="admin-alert admin-alert-error" style={{ marginBottom: 16 }}>
+          Failed to load users: {error.message}
+        </div>
+        <button className="admin-btn admin-btn-primary" onClick={() => refetch()}>
+          Retry
+        </button>
+      </div>
+    )
+  }
+
   return (
     <div>
-      <h1 className="admin-page-title">Users</h1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <h1 className="admin-page-title" style={{ margin: 0 }}>Users</h1>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            className="admin-btn admin-btn-secondary"
+            onClick={() => refetch()}
+            disabled={isLoading}
+          >
+            {isLoading ? 'Refreshing...' : 'Refresh'}
+          </button>
+          <button
+            className="admin-btn admin-btn-secondary"
+            onClick={handleExport}
+            disabled={exportMutation.isPending}
+          >
+            {exportMutation.isPending ? 'Exporting...' : 'Export CSV'}
+          </button>
+        </div>
+      </div>
 
       <FilterBar
         searchValue={search}
@@ -99,25 +182,51 @@ export default function Users() {
         <table className="admin-table">
           <thead>
             <tr>
-              <th>Email</th>
+              <th onClick={() => handleSort('email')} style={{ cursor: 'pointer' }}>
+                Email{getSortIcon('email')}
+              </th>
               <th>Username</th>
               <th>Country</th>
               <th>Provider</th>
               <th>Status</th>
-              <th>Revenue</th>
-              <th>Subscribers</th>
-              <th>Created</th>
+              <th onClick={() => handleSort('revenue')} style={{ cursor: 'pointer' }}>
+                Revenue{getSortIcon('revenue')}
+              </th>
+              <th onClick={() => handleSort('subscribers')} style={{ cursor: 'pointer' }}>
+                Subscribers{getSortIcon('subscribers')}
+              </th>
+              <th onClick={() => handleSort('created')} style={{ cursor: 'pointer' }}>
+                Created{getSortIcon('created')}
+              </th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {isLoading ? (
               <tr><td colSpan={9} style={{ textAlign: 'center', padding: '32px' }}>Loading...</td></tr>
-            ) : data?.users?.length ? (
-              data.users.map((user) => (
+            ) : sortedUsers?.length ? (
+              sortedUsers.map((user) => (
                 <tr key={user.id}>
-                  <td>{user.email}</td>
-                  <td>{user.profile?.username || '-'}</td>
+                  <td>
+                    <a
+                      href={`mailto:${user.email}`}
+                      style={{ color: 'var(--text-primary)', textDecoration: 'none' }}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {user.email}
+                    </a>
+                  </td>
+                  <td>
+                    {user.profile?.username ? (
+                      <span
+                        style={{ color: 'var(--accent-primary)', cursor: 'pointer' }}
+                        onClick={() => window.open(`/${user.profile?.username}`, '_blank')}
+                        title="View public page"
+                      >
+                        {user.profile.username}
+                      </span>
+                    ) : '-'}
+                  </td>
                   <td>{user.profile?.country || '-'}</td>
                   <td>{user.profile?.paymentProvider || '-'}</td>
                   <td>
@@ -172,6 +281,12 @@ export default function Users() {
           </tbody>
         </table>
 
+        {data && data.total > 0 && (
+          <div style={{ padding: '8px 12px', fontSize: 12, color: 'var(--text-muted)' }}>
+            Showing {sortedUsers?.length || 0} of {data.total} users
+          </div>
+        )}
+
         {data && data.totalPages > 1 && (
           <Pagination
             page={page}
@@ -179,6 +294,7 @@ export default function Users() {
             total={data.total}
             limit={limit}
             onPageChange={setPage}
+            loading={isLoading}
           />
         )}
       </div>

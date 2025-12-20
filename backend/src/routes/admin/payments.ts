@@ -36,6 +36,19 @@ payments.get('/', async (c) => {
 
   if (query.status !== 'all') where.status = query.status
 
+  // Search by email, username, or payment ID
+  if (query.search) {
+    const searchTerm = query.search.trim()
+    where.OR = [
+      { id: { contains: searchTerm, mode: 'insensitive' } },
+      { stripePaymentIntentId: { contains: searchTerm, mode: 'insensitive' } },
+      { paystackTransactionRef: { contains: searchTerm, mode: 'insensitive' } },
+      { subscription: { creator: { email: { contains: searchTerm, mode: 'insensitive' } } } },
+      { subscription: { creator: { profile: { username: { contains: searchTerm, mode: 'insensitive' } } } } },
+      { subscription: { subscriber: { email: { contains: searchTerm, mode: 'insensitive' } } } },
+    ]
+  }
+
   const [dbPayments, total] = await Promise.all([
     db.payment.findMany({
       where,

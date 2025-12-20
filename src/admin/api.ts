@@ -385,8 +385,9 @@ export function useAdminUserDelete() {
 // PAYMENTS
 // ============================================
 
-export function useAdminPayments(params: { status?: string; page?: number; limit?: number } = {}) {
+export function useAdminPayments(params: { search?: string; status?: string; page?: number; limit?: number } = {}) {
   const searchParams = new URLSearchParams()
+  if (params.search) searchParams.set('search', params.search)
   if (params.status) searchParams.set('status', params.status)
   if (params.page) searchParams.set('page', params.page.toString())
   if (params.limit) searchParams.set('limit', params.limit.toString())
@@ -942,5 +943,202 @@ export function useCreateCreator() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'users'] })
     },
+  })
+}
+
+// ============================================
+// DATA EXPORT
+// ============================================
+
+export interface ExportResult {
+  filename: string
+  rowCount: number
+  csv: string
+}
+
+export function useExportPayments() {
+  return useMutation({
+    mutationFn: (params: {
+      startDate?: string
+      endDate?: string
+      status?: string
+      creatorId?: string
+      limit?: number
+    }) =>
+      adminFetch<ExportResult>('/admin/export/payments', {
+        method: 'POST',
+        body: JSON.stringify(params),
+      }),
+  })
+}
+
+export function useExportSubscriptions() {
+  return useMutation({
+    mutationFn: (params: {
+      status?: string
+      creatorId?: string
+      startDate?: string
+      endDate?: string
+      limit?: number
+    }) =>
+      adminFetch<ExportResult>('/admin/export/subscriptions', {
+        method: 'POST',
+        body: JSON.stringify(params),
+      }),
+  })
+}
+
+export function useExportCreators() {
+  return useMutation({
+    mutationFn: (params: {
+      country?: string
+      payoutStatus?: string
+      paymentProvider?: string
+      limit?: number
+    }) =>
+      adminFetch<ExportResult>('/admin/export/creators', {
+        method: 'POST',
+        body: JSON.stringify(params),
+      }),
+  })
+}
+
+export function useExportUsers() {
+  return useMutation({
+    mutationFn: (params: {
+      role?: string
+      includeDeleted?: boolean
+      limit?: number
+    }) =>
+      adminFetch<ExportResult>('/admin/export/users', {
+        method: 'POST',
+        body: JSON.stringify(params),
+      }),
+  })
+}
+
+// Helper to download CSV
+export function downloadCSV(csv: string, filename: string) {
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const link = document.createElement('a')
+  link.href = URL.createObjectURL(blob)
+  link.download = filename
+  link.click()
+  URL.revokeObjectURL(link.href)
+}
+
+// ============================================
+// BULK OPERATIONS
+// ============================================
+
+export interface BulkCancelPreview {
+  preview: true
+  filters: Record<string, unknown>
+  count: number
+  totalMrrImpact: number
+  subscriptions: Array<{
+    id: string
+    status: string
+    amount: number
+    currency: string
+    creatorName: string
+    subscriberEmail: string
+    createdAt: string
+  }>
+  note?: string
+}
+
+export function useBulkCancelPreview() {
+  return useMutation({
+    mutationFn: (params: {
+      creatorId?: string
+      status?: string
+      createdBefore?: string
+      createdAfter?: string
+      reason: string
+    }) =>
+      adminFetch<BulkCancelPreview>('/admin/bulk/cancel-subscriptions/preview', {
+        method: 'POST',
+        body: JSON.stringify(params),
+      }),
+  })
+}
+
+export function useBulkCancelSubscriptions() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (params: {
+      creatorId?: string
+      status?: string
+      createdBefore?: string
+      createdAfter?: string
+      reason: string
+      confirmCount: number
+    }) =>
+      adminFetch<{ success: boolean; cancelled: number; reason: string; timestamp: string }>('/admin/bulk/cancel-subscriptions', {
+        method: 'POST',
+        body: JSON.stringify(params),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'subscriptions'] })
+    },
+  })
+}
+
+// ============================================
+// ANALYTICS
+// ============================================
+
+export interface ChurnAnalysis {
+  period: { start: string; end: string; days: number }
+  summary: {
+    cancelled: number
+    mrrLost: number
+    churnRate: number
+    activeAtPeriodStart: number
+  }
+  byReason: Array<{
+    reason: string
+    count: number
+    mrrLost: number
+    percentage: number
+  }>
+  trend: Array<{
+    date: string
+    count: number
+    mrrLost: number
+  }>
+}
+
+export interface MRRTrend {
+  current: {
+    mrr: number
+    mrrFormatted: string
+    activeSubscriptions: number
+    monthOverMonthGrowth: number
+  }
+  trend: Array<{
+    month: string
+    activeSubscriptions: number
+    mrr: number
+    newSubscriptions: number
+    churned: number
+    netGrowth: number
+  }>
+}
+
+export function useAdminChurnAnalysis(days: number = 30) {
+  return useQuery({
+    queryKey: ['admin', 'analytics', 'churn', days],
+    queryFn: () => adminFetch<ChurnAnalysis>(`/admin/analytics/churn?days=${days}`),
+    staleTime: 5 * 60 * 1000,
+  })
+}
+
+export function useAdminMRRTrend(months: number = 12) {
+  return useQuery({
+    queryKey: ['admin', 'analytics', 'mrr', months],
+    queryFn: () => adminFetch<MRRTrend>(`/admin/analytics/mrr?months=${months}`),
+    staleTime: 5 * 60 * 1000,
   })
 }

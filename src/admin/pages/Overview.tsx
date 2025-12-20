@@ -1,9 +1,9 @@
 /**
- * Overview - Admin dashboard home with KPIs
+ * Overview - Admin dashboard home with KPIs and quick actions
  */
 
 import { useAdminDashboard, useAdminRevenueOverview, useAdminActivity } from '../api'
-import { formatCurrency, formatNumber, formatDateTime } from '../utils/format'
+import { formatCurrency, formatNumber } from '../utils/format'
 import StatCard from '../components/StatCard'
 
 function timeAgo(date: string): string {
@@ -15,19 +15,53 @@ function timeAgo(date: string): string {
 }
 
 export default function Overview() {
-  const { data: dashboard, isLoading: dashboardLoading } = useAdminDashboard()
-  const { data: revenue, isLoading: revenueLoading } = useAdminRevenueOverview()
-  const { data: activityData, isLoading: activityLoading } = useAdminActivity({ limit: 10 })
+  const { data: dashboard, isLoading: dashboardLoading, error: dashboardError, refetch: refetchDashboard } = useAdminDashboard()
+  const { data: revenue, isLoading: revenueLoading, error: revenueError, refetch: refetchRevenue } = useAdminRevenueOverview()
+  const { data: activityData, isLoading: activityLoading, refetch: refetchActivity } = useAdminActivity({ limit: 10 })
 
   const loading = dashboardLoading || revenueLoading
+  const hasError = dashboardError || revenueError
   const freshness = revenue?.freshness
+
+  const handleRefresh = () => {
+    refetchDashboard()
+    refetchRevenue()
+    refetchActivity()
+  }
+
+  // Error state
+  if (hasError) {
+    return (
+      <div>
+        <h1 className="admin-page-title">Overview</h1>
+        <div className="admin-alert admin-alert-error" style={{ marginBottom: 16 }}>
+          Failed to load dashboard data: {(dashboardError || revenueError)?.message}
+        </div>
+        <button className="admin-btn admin-btn-primary" onClick={handleRefresh}>
+          Retry
+        </button>
+      </div>
+    )
+  }
 
   return (
     <div>
-      <h1 className="admin-page-title">Overview</h1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+        <h1 className="admin-page-title" style={{ margin: 0 }}>Overview</h1>
+        <button
+          className="admin-btn admin-btn-secondary"
+          onClick={handleRefresh}
+          disabled={loading}
+        >
+          {loading ? 'Refreshing...' : 'Refresh'}
+        </button>
+      </div>
+
       {freshness && (
-        <p className="admin-page-subtitle">
-          Data freshness ({freshness.businessTimezone || 'UTC'}): last payment {formatDateTime(freshness.lastPaymentAt)} · last webhook processed {formatDateTime(freshness.lastWebhookProcessedAt)}
+        <p className="admin-page-subtitle" style={{ marginTop: 8 }}>
+          Last payment: {freshness.lastPaymentAt ? timeAgo(freshness.lastPaymentAt) : 'never'} ·
+          Last webhook: {freshness.lastWebhookProcessedAt ? timeAgo(freshness.lastWebhookProcessedAt) : 'never'}
+          {freshness.lastWebhookProvider && ` (${freshness.lastWebhookProvider})`}
         </p>
       )}
 
@@ -43,13 +77,13 @@ export default function Overview() {
         <StatCard
           label="Volume Processed (MTD)"
           value={revenue ? formatCurrency(revenue.thisMonth.totalVolumeCents) : '---'}
-          subtext="Total payment volume"
+          subtext="Total subscriber payments"
           loading={loading}
         />
         <StatCard
           label="Total Users"
           value={dashboard ? formatNumber(dashboard.users.total) : '---'}
-          subtext={dashboard ? `+${dashboard.users.newToday} today` : undefined}
+          subtext={dashboard ? `+${dashboard.users.newToday} today, +${dashboard.users.newThisMonth} this month` : undefined}
           loading={loading}
         />
         <StatCard
@@ -58,13 +92,13 @@ export default function Overview() {
           loading={loading}
         />
         <StatCard
-          label="Errors (24h)"
+          label="Failed Payments (24h)"
           value={dashboard ? formatNumber(dashboard.flags.failedPaymentsToday) : '---'}
           variant={dashboard && dashboard.flags.failedPaymentsToday > 5 ? 'error' : 'default'}
           loading={loading}
         />
         <StatCard
-          label="Disputes"
+          label="Active Disputes"
           value={dashboard ? formatNumber(dashboard.flags.disputedPayments) : '---'}
           variant={dashboard && dashboard.flags.disputedPayments > 0 ? 'warning' : 'default'}
           loading={loading}
@@ -76,7 +110,7 @@ export default function Overview() {
         <h2 className="admin-section-title">Revenue Summary</h2>
         <div className="admin-stats-grid">
           <StatCard
-            label="All Time Revenue"
+            label="All Time Platform Revenue"
             value={revenue ? formatCurrency(revenue.allTime.platformFeeCents) : '---'}
             subtext={revenue ? `${formatNumber(revenue.allTime.paymentCount)} total payments` : undefined}
             loading={loading}
@@ -100,16 +134,21 @@ export default function Overview() {
       <div className="admin-section">
         <h2 className="admin-section-title">Quick Actions</h2>
         <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-          <a href="/admin/users" className="admin-btn admin-btn-secondary">View All Users</a>
+          <a href="/admin/users" className="admin-btn admin-btn-secondary">Manage Users</a>
           <a href="/admin/payments" className="admin-btn admin-btn-secondary">View Payments</a>
+          <a href="/admin/subscriptions" className="admin-btn admin-btn-secondary">Subscriptions</a>
           <a href="/admin/revenue" className="admin-btn admin-btn-secondary">Revenue Details</a>
-          <a href="/admin/logs" className="admin-btn admin-btn-secondary">System Logs</a>
+          <a href="/admin/stripe" className="admin-btn admin-btn-secondary">Stripe Connect</a>
+          <a href="/admin/operations" className="admin-btn admin-btn-secondary">Operations</a>
         </div>
       </div>
 
       {/* Recent Activity */}
       <div className="admin-section">
-        <h2 className="admin-section-title">Recent Admin Activity</h2>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <h2 className="admin-section-title" style={{ margin: 0 }}>Recent Admin Activity</h2>
+          <a href="/admin/logs" style={{ fontSize: 13, color: 'var(--accent-primary)' }}>View all logs →</a>
+        </div>
         {activityLoading ? (
           <div className="admin-activity-list">
             <div className="admin-empty">Loading...</div>
@@ -120,7 +159,9 @@ export default function Overview() {
               <div key={activity.id} className="admin-activity-item">
                 <div className="admin-activity-message">{activity.message}</div>
                 <div className="admin-activity-time">
-                  {activity.adminEmail} - {timeAgo(activity.createdAt)}
+                  {activity.adminEmail && <span style={{ fontWeight: 500 }}>{activity.adminEmail}</span>}
+                  {activity.adminEmail && ' · '}
+                  {timeAgo(activity.createdAt)}
                 </div>
               </div>
             ))}
@@ -128,7 +169,7 @@ export default function Overview() {
         ) : (
           <div className="admin-activity-list">
             <div className="admin-empty">
-              <div className="admin-empty-text">No admin activity yet</div>
+              <div className="admin-empty-text">No admin activity recorded yet</div>
             </div>
           </div>
         )}

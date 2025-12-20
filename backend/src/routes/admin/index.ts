@@ -35,6 +35,8 @@ import tax from './tax.js'
 import analytics from './analytics.js'
 import creators from './creators.js'
 import refundsRoutes from './refunds.js'
+import bulk from './bulk.js'
+import exportRoutes from './export.js'
 
 const admin = new Hono()
 
@@ -131,5 +133,16 @@ admin.route('/creators', creators)
 // These define: /, /eligible/:paymentId, /:paymentId/process, /stats, /policy
 // Requires admin role (process requires fresh session)
 admin.route('/refunds', refundsRoutes)
+
+// Mount bulk operations at /bulk
+// These define: /cancel-subscriptions/preview, /cancel-subscriptions,
+//               /block-users/preview, /block-users, /unblock-users
+// Requires super_admin role and fresh session
+admin.route('/bulk', bulk)
+
+// Mount data export at /export
+// These define: /payments, /subscriptions, /creators, /users, /disputes
+// Requires admin role
+admin.route('/export', exportRoutes)
 
 export default admin

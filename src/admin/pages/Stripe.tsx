@@ -44,6 +44,106 @@ function getPayoutStatusBadge(enabled: boolean): string {
   return enabled ? 'success' : 'error'
 }
 
+// Map Stripe requirement codes to human-readable explanations
+function explainRequirement(req: string): { title: string; description: string; action: string } {
+  const reqMap: Record<string, { title: string; description: string; action: string }> = {
+    'individual.id_number': {
+      title: 'ID Number Required',
+      description: 'National ID or SSN is needed for tax reporting',
+      action: 'Creator must enter their ID in Stripe onboarding',
+    },
+    'individual.verification.document': {
+      title: 'ID Document Upload',
+      description: 'A photo of government ID is needed to verify identity',
+      action: 'Creator must upload passport, driver license, or national ID',
+    },
+    'individual.verification.additional_document': {
+      title: 'Additional Document',
+      description: 'Secondary document required (e.g., utility bill for address)',
+      action: 'Creator must upload proof of address',
+    },
+    'individual.address.city': {
+      title: 'City Missing',
+      description: 'City is required in the address',
+      action: 'Creator must update their address',
+    },
+    'individual.address.line1': {
+      title: 'Street Address Missing',
+      description: 'Street address line 1 is required',
+      action: 'Creator must update their address',
+    },
+    'individual.address.postal_code': {
+      title: 'Postal Code Missing',
+      description: 'Postal/ZIP code is required',
+      action: 'Creator must update their address',
+    },
+    'individual.dob.day': {
+      title: 'Birth Date Missing',
+      description: 'Complete date of birth is required',
+      action: 'Creator must provide full date of birth',
+    },
+    'individual.dob.month': {
+      title: 'Birth Month Missing',
+      description: 'Complete date of birth is required',
+      action: 'Creator must provide full date of birth',
+    },
+    'individual.dob.year': {
+      title: 'Birth Year Missing',
+      description: 'Complete date of birth is required',
+      action: 'Creator must provide full date of birth',
+    },
+    'individual.phone': {
+      title: 'Phone Number Missing',
+      description: 'Phone number is required for verification',
+      action: 'Creator must add a phone number',
+    },
+    'individual.email': {
+      title: 'Email Missing',
+      description: 'Email address is required',
+      action: 'Creator must add an email address',
+    },
+    'external_account': {
+      title: 'Bank Account Missing',
+      description: 'No bank account is linked for payouts',
+      action: 'Creator must add a bank account in Stripe',
+    },
+    'tos_acceptance': {
+      title: 'Terms of Service',
+      description: 'Stripe Terms of Service must be accepted',
+      action: 'Creator must complete Stripe onboarding',
+    },
+    'business_profile.url': {
+      title: 'Website/Profile URL',
+      description: 'A business profile URL is required',
+      action: 'Usually auto-filled - contact support if stuck',
+    },
+    'business_profile.mcc': {
+      title: 'Business Category',
+      description: 'Business category code is missing',
+      action: 'Usually auto-filled - contact support if stuck',
+    },
+  }
+
+  const info = reqMap[req]
+  if (info) return info
+
+  // Handle patterns like 'individual.verification.document.front'
+  if (req.includes('verification.document')) {
+    return {
+      title: 'Document Upload Required',
+      description: 'ID document verification needed',
+      action: 'Creator must upload ID in Stripe dashboard',
+    }
+  }
+
+  // Default for unknown requirements
+  return {
+    title: req.replace(/_/g, ' ').replace(/\./g, ' → '),
+    description: 'Additional information required by Stripe',
+    action: 'Creator should check their Stripe dashboard',
+  }
+}
+
 type TabType = 'accounts' | 'transfers' | 'events' | 'balance'
 
 export default function Stripe() {
@@ -644,15 +744,31 @@ export default function Stripe() {
 
                   {accountDetail.stripe?.requirements?.currently_due?.length > 0 && (
                     <div className="admin-detail-section">
-                      <h3>Requirements</h3>
-                      <p style={{ color: 'var(--color-error)', marginBottom: '8px' }}>
-                        Currently Due:
-                      </p>
-                      <ul style={{ marginLeft: '20px' }}>
-                        {accountDetail.stripe!.requirements.currently_due.map((req: string) => (
-                          <li key={req} style={{ fontFamily: 'monospace', fontSize: '12px' }}>{req}</li>
-                        ))}
-                      </ul>
+                      <h3 style={{ color: 'var(--error)' }}>Requirements (Action Needed)</h3>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '12px' }}>
+                        {accountDetail.stripe!.requirements.currently_due.map((req: string) => {
+                          const { title, description, action } = explainRequirement(req)
+                          return (
+                            <div key={req} style={{
+                              background: 'rgba(239, 68, 68, 0.05)',
+                              border: '1px solid rgba(239, 68, 68, 0.2)',
+                              borderRadius: '8px',
+                              padding: '12px',
+                            }}>
+                              <div style={{ fontWeight: 600, fontSize: '13px', marginBottom: '4px' }}>{title}</div>
+                              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>{description}</div>
+                              <div style={{ fontSize: '12px', color: 'var(--accent-primary)' }}>→ {action}</div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                      <button
+                        className="admin-btn admin-btn-secondary"
+                        style={{ marginTop: '12px', width: '100%' }}
+                        onClick={() => window.open(`https://dashboard.stripe.com/connect/accounts/${accountDetail.stripe!.id}`, '_blank')}
+                      >
+                        Open in Stripe Dashboard →
+                      </button>
                     </div>
                   )}
                 </div>

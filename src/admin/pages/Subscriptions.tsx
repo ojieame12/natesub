@@ -54,7 +54,7 @@ export default function Subscriptions() {
     }, 300)
   }
 
-  const { data, isLoading, refetch } = useAdminSubscriptions({
+  const { data, isLoading, error, refetch } = useAdminSubscriptions({
     search: debouncedSearch || undefined,
     status: status !== 'all' ? status : undefined,
     page,
@@ -126,9 +126,33 @@ export default function Subscriptions() {
   // Find most recent successful payment for refund
   const lastSuccessfulPayment = detail?.payments?.find(p => p.status === 'succeeded')
 
+  // Error state
+  if (error) {
+    return (
+      <div>
+        <h1 className="admin-page-title">Subscriptions</h1>
+        <div className="admin-alert admin-alert-error" style={{ marginBottom: 16 }}>
+          Failed to load subscriptions: {error.message}
+        </div>
+        <button className="admin-btn admin-btn-primary" onClick={() => refetch()}>
+          Retry
+        </button>
+      </div>
+    )
+  }
+
   return (
     <div>
-      <h1 className="admin-page-title">Subscriptions</h1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <h1 className="admin-page-title" style={{ margin: 0 }}>Subscriptions</h1>
+        <button
+          className="admin-btn admin-btn-secondary"
+          onClick={() => refetch()}
+          disabled={isLoading}
+        >
+          {isLoading ? 'Refreshing...' : 'Refresh'}
+        </button>
+      </div>
 
       <FilterBar
         searchValue={search}
@@ -235,6 +259,7 @@ export default function Subscriptions() {
             total={data.total}
             limit={limit}
             onPageChange={setPage}
+            loading={isLoading}
           />
         )}
       </div>
