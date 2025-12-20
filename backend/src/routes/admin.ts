@@ -1120,11 +1120,6 @@ admin.post('/payments/:id/refund', adminSensitiveRateLimit, async (c) => {
     amount: z.number().optional()
   }).parse(await c.req.json().catch(() => ({})))
 
-  // Get admin info for audit trail
-  const session = c.get('session')
-  const adminId = session?.userId
-  const adminEmail = session?.user?.email
-
   const payment = await db.payment.findUnique({
     where: { id },
     include: { subscription: { include: { creator: { select: { profile: { select: { paymentProvider: true } } } } } } }
@@ -1139,7 +1134,7 @@ admin.post('/payments/:id/refund', adminSensitiveRateLimit, async (c) => {
     if (body.amount <= 0) {
       return c.json({ error: 'Refund amount must be positive' }, 400)
     }
-    if (body.amount > payment.grossCents) {
+    if (payment.grossCents && body.amount > payment.grossCents) {
       return c.json({ error: 'Refund amount exceeds payment amount' }, 400)
     }
   }
@@ -1175,9 +1170,7 @@ admin.post('/payments/:id/refund', adminSensitiveRateLimit, async (c) => {
             paymentId: id,
             refundId: refund.id,
             amountCents: refund.amount,
-            reason: body.reason,
-            adminId,
-            adminEmail
+            reason: body.reason
           }
         }
       })
@@ -1206,9 +1199,7 @@ admin.post('/payments/:id/refund', adminSensitiveRateLimit, async (c) => {
           payload: {
             paymentId: id,
             refundData: result.data,
-            reason: body.reason,
-            adminId,
-            adminEmail
+            reason: body.reason
           }
         }
       })
