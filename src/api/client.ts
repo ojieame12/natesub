@@ -68,6 +68,7 @@ export interface Profile {
   bio: string | null
   avatarUrl: string | null
   voiceIntroUrl: string | null
+  phone?: string | null  // SMS notifications (E.164 format)
   country: string
   countryCode: string
   currency: string

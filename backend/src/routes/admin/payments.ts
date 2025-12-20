@@ -41,7 +41,7 @@ payments.get('/', async (c) => {
       where,
       skip,
       take: query.limit,
-      orderBy: { createdAt: 'desc' },
+      orderBy: { occurredAt: 'desc' },
       include: {
         subscription: {
           include: {
@@ -76,7 +76,8 @@ payments.get('/', async (c) => {
       provider: p.stripePaymentIntentId ? 'stripe' : p.paystackTransactionRef ? 'paystack' : 'unknown',
       stripePaymentIntentId: p.stripePaymentIntentId,
       paystackTransactionRef: p.paystackTransactionRef,
-      createdAt: p.createdAt
+      occurredAt: p.occurredAt,
+      createdAt: p.createdAt,
     })),
     total,
     page: query.page,

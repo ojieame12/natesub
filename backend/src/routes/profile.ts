@@ -104,6 +104,7 @@ profile.put(
       bio: data.bio || null,
       avatarUrl: data.avatarUrl || null,
       voiceIntroUrl: data.voiceIntroUrl || null,
+      phone: data.phone || null, // SMS notifications (E.164 format)
       country: data.country,
       countryCode: data.countryCode.toUpperCase(),
       currency,
@@ -203,6 +204,7 @@ profile.patch(
     if (data.bio !== undefined) updateData.bio = data.bio || null
     if (data.avatarUrl !== undefined) updateData.avatarUrl = data.avatarUrl || null
     if (data.voiceIntroUrl !== undefined) updateData.voiceIntroUrl = data.voiceIntroUrl || null
+    if (data.phone !== undefined) updateData.phone = data.phone || null
     if (data.country !== undefined) updateData.country = data.country
     if (data.countryCode !== undefined) updateData.countryCode = data.countryCode.toUpperCase()
     if (data.currency !== undefined) updateData.currency = data.currency.toUpperCase()

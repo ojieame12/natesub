@@ -95,9 +95,9 @@ adminRevenue.get('/overview', async (c) => {
     lastProcessedWebhook,
   ] = await Promise.all([
     aggregatePaymentStats({ status: 'succeeded', type: { in: ['recurring', 'one_time'] } }),
-    aggregatePaymentStats({ status: 'succeeded', type: { in: ['recurring', 'one_time'] }, createdAt: { gte: startOfMonth } }),
-    aggregatePaymentStats({ status: 'succeeded', type: { in: ['recurring', 'one_time'] }, createdAt: { gte: startOfLastMonth, lte: endOfLastMonth } }),
-    aggregatePaymentStats({ status: 'succeeded', type: { in: ['recurring', 'one_time'] }, createdAt: { gte: startOfDay } }),
+    aggregatePaymentStats({ status: 'succeeded', type: { in: ['recurring', 'one_time'] }, occurredAt: { gte: startOfMonth } }),
+    aggregatePaymentStats({ status: 'succeeded', type: { in: ['recurring', 'one_time'] }, occurredAt: { gte: startOfLastMonth, lte: endOfLastMonth } }),
+    aggregatePaymentStats({ status: 'succeeded', type: { in: ['recurring', 'one_time'] }, occurredAt: { gte: startOfDay } }),
     db.payment.groupBy({
       by: ['status'],
       where: { type: { in: ['recurring', 'one_time'] } },
@@ -105,8 +105,8 @@ adminRevenue.get('/overview', async (c) => {
     }),
     db.payment.findFirst({
       where: { status: 'succeeded', type: { in: ['recurring', 'one_time'] } },
-      orderBy: { createdAt: 'desc' },
-      select: { createdAt: true },
+      orderBy: { occurredAt: 'desc' },
+      select: { occurredAt: true },
     }),
     db.webhookEvent.findFirst({
       where: { status: 'processed', processedAt: { not: null } },
@@ -125,7 +125,7 @@ adminRevenue.get('/overview', async (c) => {
     paymentsByStatus: statusCounts,
     freshness: {
       businessTimezone: BUSINESS_TIMEZONE,
-      lastPaymentAt: lastPayment?.createdAt ? lastPayment.createdAt.toISOString() : null,
+      lastPaymentAt: lastPayment?.occurredAt ? lastPayment.occurredAt.toISOString() : null,
       lastWebhookProcessedAt: lastProcessedWebhook?.processedAt ? lastProcessedWebhook.processedAt.toISOString() : null,
       lastWebhookProvider: lastProcessedWebhook?.provider || null,
       lastWebhookType: lastProcessedWebhook?.eventType || null,
@@ -150,7 +150,7 @@ adminRevenue.get('/by-provider', async (c) => {
   const { start: startDate } = parsePeriod(query.period)
 
   const where: any = { status: 'succeeded', type: { in: ['recurring', 'one_time'] } }
-  if (startDate) where.createdAt = { gte: startDate }
+  if (startDate) where.occurredAt = { gte: startDate }
 
   // Get Stripe payments (have stripePaymentIntentId)
   const [stripeStats, paystackStats] = await Promise.all([
@@ -182,7 +182,7 @@ adminRevenue.get('/by-currency', async (c) => {
   const { start: startDate } = parsePeriod(query.period)
 
   const where: any = { status: 'succeeded', type: { in: ['recurring', 'one_time'] } }
-  if (startDate) where.createdAt = { gte: startDate }
+  if (startDate) where.occurredAt = { gte: startDate }
 
   const [byCurrency, legacyByCurrency] = await Promise.all([
     db.payment.groupBy({
@@ -234,14 +234,14 @@ adminRevenue.get('/daily', async (c) => {
     where: {
       status: 'succeeded',
       type: { in: ['recurring', 'one_time'] },
-      createdAt: { gte: startDate }
+      occurredAt: { gte: startDate }
     },
     select: {
       grossCents: true,
       amountCents: true,
       feeCents: true,
       netCents: true,
-      createdAt: true
+      occurredAt: true
     }
   })
 
@@ -249,7 +249,7 @@ adminRevenue.get('/daily', async (c) => {
   const dailyMap = new Map<string, { volume: number; fees: number; payouts: number; count: number }>()
 
   for (const p of payments) {
-    const day = p.createdAt.toISOString().split('T')[0]
+    const day = p.occurredAt.toISOString().split('T')[0]
     const existing = dailyMap.get(day) || { volume: 0, fees: 0, payouts: 0, count: 0 }
     existing.volume += p.grossCents ?? p.amountCents
     existing.fees += p.feeCents || 0
@@ -299,14 +299,14 @@ adminRevenue.get('/monthly', async (c) => {
     where: {
       status: 'succeeded',
       type: { in: ['recurring', 'one_time'] },
-      createdAt: { gte: startDate }
+      occurredAt: { gte: startDate }
     },
     select: {
       grossCents: true,
       amountCents: true,
       feeCents: true,
       netCents: true,
-      createdAt: true
+      occurredAt: true
     }
   })
 
@@ -314,7 +314,7 @@ adminRevenue.get('/monthly', async (c) => {
   const monthlyMap = new Map<string, { volume: number; fees: number; payouts: number; count: number }>()
 
   for (const p of payments) {
-    const month = p.createdAt.toISOString().slice(0, 7) // YYYY-MM
+    const month = p.occurredAt.toISOString().slice(0, 7) // YYYY-MM
     const existing = monthlyMap.get(month) || { volume: 0, fees: 0, payouts: 0, count: 0 }
     existing.volume += p.grossCents ?? p.amountCents
     existing.fees += p.feeCents || 0
@@ -355,7 +355,7 @@ adminRevenue.get('/top-creators', async (c) => {
   const { start: startDate } = parsePeriod(query.period)
 
   const where: any = { status: 'succeeded', type: { in: ['recurring', 'one_time'] } }
-  if (startDate) where.createdAt = { gte: startDate }
+  if (startDate) where.occurredAt = { gte: startDate }
 
   const [topCreators, legacyTopCreators] = await Promise.all([
     db.payment.groupBy({
@@ -434,7 +434,7 @@ adminRevenue.get('/refunds', async (c) => {
   const { start: startDate } = parsePeriod(query.period)
 
   const where: any = {}
-  if (startDate) where.createdAt = { gte: startDate }
+  if (startDate) where.occurredAt = { gte: startDate }
 
   const [refunded, disputed, disputeLost] = await Promise.all([
     aggregateGrossOnly({ ...where, status: 'refunded' }),

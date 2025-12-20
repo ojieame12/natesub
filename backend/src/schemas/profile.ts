@@ -39,12 +39,22 @@ const httpsUrl = z.string().refine(
 
 export const templateSchema = z.enum(['boundary', 'midnight', 'liquid', 'minimal', 'editorial'])
 
+// E.164 phone number validation (e.g., +2348012345678)
+const e164Phone = z.string().refine(
+  (val) => {
+    if (!val) return true
+    return /^\+[1-9]\d{6,14}$/.test(val)
+  },
+  { message: 'Phone must be in E.164 format (e.g., +2348012345678)' }
+)
+
 export const profileSchema = z.object({
   username: z.string().min(3).max(20).regex(/^[a-z0-9_]+$/),
   displayName: z.string().min(2).max(50),
   bio: z.string().max(500).optional().nullable(),
   avatarUrl: httpsUrl.optional().nullable(),
   voiceIntroUrl: httpsUrl.optional().nullable(),
+  phone: e164Phone.optional().nullable(), // SMS notifications
   country: z.string(),
   countryCode: z.string().length(2),
   currency: z.string().length(3).default('USD'),

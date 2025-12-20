@@ -402,6 +402,12 @@ function createMockModel(store: Map<string, any>) {
         updatedAt: new Date(),
         ...data, // data.createdAt overwrites default if provided
       }
+      // Payment.occurredAt exists in the real schema with a default of now().
+      // Ensure the in-memory mock behaves the same so time-based analytics can
+      // safely rely on occurredAt.
+      if (store === dbStorage.payments && item.occurredAt === undefined) {
+        item.occurredAt = item.createdAt
+      }
       store.set(id, item)
       return resolveIncludes(item, include)
     }),
@@ -436,6 +442,9 @@ function createMockModel(store: Map<string, any>) {
       }
       const id = generateId()
       const item = { id, ...create, createdAt: new Date(), updatedAt: new Date() }
+      if (store === dbStorage.payments && item.occurredAt === undefined) {
+        item.occurredAt = item.createdAt
+      }
       store.set(id, item)
       return resolveIncludes(item, include)
     }),

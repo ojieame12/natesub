@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, ChevronRight, Mail, Bell, Download, Trash2, LogOut, CreditCard, Loader2, MapPin, X, Check } from 'lucide-react'
+import { ArrowLeft, ChevronRight, Mail, Bell, Download, Trash2, LogOut, CreditCard, Loader2, MapPin, X, Check, Smartphone } from 'lucide-react'
 import { Pressable, useToast, Toggle } from './components'
 import { useCurrentUser, useLogout, useDeleteAccount, useSettings, useUpdateSettings, useBillingStatus, useUpdateProfile } from './api/hooks'
 import { useOnboardingStore } from './onboarding/store'
@@ -118,6 +118,93 @@ function BillingAddressSection({ user }: { user: any }) {
       <div className="settings-info">
         <span className="settings-row-title">Billing Address</span>
         <span className="settings-row-value truncate">{displayAddress}</span>
+      </div>
+      <ChevronRight size={18} className="settings-chevron" />
+    </Pressable>
+  )
+}
+
+function PhoneNumberSection({ user }: { user: any }) {
+  const [isEditing, setIsEditing] = useState(false)
+  const [phone, setPhone] = useState(user?.profile?.phone || '')
+
+  const { mutateAsync: updateProfile, isPending } = useUpdateProfile()
+  const toast = useToast()
+
+  // Sync with user prop changes
+  useEffect(() => {
+    if (!isEditing && user?.profile) {
+      const timer = window.setTimeout(() => {
+        setPhone(user.profile.phone || '')
+      }, 0)
+      return () => window.clearTimeout(timer)
+    }
+  }, [user, isEditing])
+
+  // Format phone for display (hide middle digits)
+  const formatPhone = (p: string) => {
+    if (!p || p.length < 8) return p
+    return p.slice(0, 6) + '****' + p.slice(-2)
+  }
+
+  // Validate E.164 format
+  const isValidE164 = (p: string) => {
+    if (!p) return true // Empty is valid (optional)
+    return /^\+[1-9]\d{6,14}$/.test(p)
+  }
+
+  const handleSave = async () => {
+    if (phone && !isValidE164(phone)) {
+      toast.error('Phone must be in E.164 format (e.g., +2348012345678)')
+      return
+    }
+
+    try {
+      await updateProfile({ phone: phone || null })
+      toast.success('Phone number updated')
+      setIsEditing(false)
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update phone')
+    }
+  }
+
+  const displayPhone = user?.profile?.phone ? formatPhone(user.profile.phone) : 'Not set'
+
+  if (isEditing) {
+    return (
+      <div className="settings-row column">
+        <div className="settings-row-header">
+          <div className="settings-info">
+            <span className="settings-row-title">Phone Number</span>
+            <span className="settings-row-hint">For SMS notifications (E.164 format)</span>
+          </div>
+          <div className="row-actions">
+            <Pressable onClick={() => setIsEditing(false)} disabled={isPending}>
+              <X size={18} className="settings-icon-subtle" />
+            </Pressable>
+            <Pressable onClick={handleSave} disabled={isPending}>
+              {isPending ? <Loader2 size={18} className="spin" /> : <Check size={18} className="settings-icon-primary" />}
+            </Pressable>
+          </div>
+        </div>
+
+        <input
+          className="settings-input"
+          placeholder="+2348012345678"
+          value={phone}
+          onChange={e => setPhone(e.target.value)}
+          type="tel"
+        />
+      </div>
+    )
+  }
+
+  return (
+    <Pressable className="settings-row" onClick={() => setIsEditing(true)}>
+      <Smartphone size={20} className="settings-icon" />
+      <div className="settings-info">
+        <span className="settings-row-title">Phone Number</span>
+        <span className="settings-row-value">{displayPhone}</span>
       </div>
       <ChevronRight size={18} className="settings-chevron" />
     </Pressable>
@@ -249,6 +336,8 @@ export default function Settings() {
                 <span className="settings-row-value">{user?.email || 'Not set'}</span>
               </div>
             </div>
+
+            <PhoneNumberSection user={user} />
 
             <BillingAddressSection user={user} />
           </div>

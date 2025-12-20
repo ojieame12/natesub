@@ -14,6 +14,8 @@ import { stripe } from '../../services/stripe.js'
 import { getStuckTransfers, getTransferStats } from '../../jobs/transfers.js'
 import { getMissingTransactions, reconcilePaystackTransactions } from '../../jobs/reconciliation.js'
 import { checkEmailHealth, sendTestEmail } from '../../services/email.js'
+import { isSmsEnabled, sendVerificationSms } from '../../services/sms.js'
+import { env } from '../../config/env.js'
 import { handleInvoicePaid } from '../webhooks/stripe/invoice.js'
 import { todayStart, thisMonthStart, lastNDays } from '../../utils/timezone.js'
 import { adminSensitiveRateLimit } from '../../middleware/rateLimit.js'
@@ -141,6 +143,77 @@ system.post('/email/test', async (c) => {
   }, result.success ? 200 : 500)
 })
 
+// ============================================
+// SMS HEALTH & TESTING
+// ============================================
+
+/**
+ * GET /admin/sms/health
+ * SMS service health check
+ */
+system.get('/sms/health', async (c) => {
+  const enabled = isSmsEnabled()
+  const configured = !!(env.BIRD_ACCESS_KEY && env.BIRD_WORKSPACE_ID && env.BIRD_CHANNEL_ID)
+
+  return c.json({
+    enabled: env.ENABLE_SMS,
+    configured,
+    ready: enabled,
+    config: {
+      hasAccessKey: !!env.BIRD_ACCESS_KEY,
+      hasWorkspaceId: !!env.BIRD_WORKSPACE_ID,
+      hasChannelId: !!env.BIRD_CHANNEL_ID,
+      senderId: env.BIRD_SENDER_ID || 'NatePay',
+    },
+    timestamp: new Date().toISOString(),
+  })
+})
+
+/**
+ * POST /admin/sms/test
+ * Send a test SMS
+ */
+system.post('/sms/test', async (c) => {
+  const body = await c.req.json().catch(() => ({}))
+  const to = body.to
+
+  if (!to || typeof to !== 'string') {
+    return c.json({ error: 'Phone number required in "to" field (E.164 format, e.g., +2348012345678)' }, 400)
+  }
+
+  // Basic E.164 validation
+  if (!to.startsWith('+') || to.length < 10) {
+    return c.json({ error: 'Phone must be in E.164 format (e.g., +2348012345678)' }, 400)
+  }
+
+  if (!isSmsEnabled()) {
+    return c.json({
+      error: 'SMS is not enabled. Set ENABLE_SMS=true and configure BIRD_ACCESS_KEY, BIRD_WORKSPACE_ID, BIRD_CHANNEL_ID',
+      enabled: env.ENABLE_SMS,
+      configured: !!(env.BIRD_ACCESS_KEY && env.BIRD_WORKSPACE_ID && env.BIRD_CHANNEL_ID),
+    }, 400)
+  }
+
+  try {
+    // Send a test verification code
+    const testCode = '123456'
+    await sendVerificationSms(to, testCode)
+
+    await logAdminAction(c, 'sms_test_sent', { to: to.slice(0, 6) + '****' })
+
+    return c.json({
+      success: true,
+      message: `Test SMS sent to ${to.slice(0, 6)}****`,
+    })
+  } catch (error: any) {
+    console.error('[admin/sms/test] Error:', error)
+    return c.json({
+      success: false,
+      error: error.message || 'Failed to send SMS',
+    }, 500)
+  }
+})
+
 /**
  * GET /admin/metrics
  * Basic platform metrics
@@ -196,11 +269,11 @@ system.get('/dashboard', async (c) => {
       _sum: { feeCents: true }
     }),
     db.payment.aggregate({
-      where: { status: 'succeeded', type: 'recurring', createdAt: { gte: startOfMonth } },
+      where: { status: 'succeeded', type: 'recurring', occurredAt: { gte: startOfMonth } },
       _sum: { feeCents: true }
     }),
     db.payment.count({ where: { status: 'disputed' } }),
-    db.payment.count({ where: { status: 'failed', createdAt: { gte: startOfDay } } })
+    db.payment.count({ where: { status: 'failed', occurredAt: { gte: startOfDay } } })
   ])
 
   return c.json({

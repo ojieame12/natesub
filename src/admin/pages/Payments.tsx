@@ -138,7 +138,7 @@ export default function Payments() {
                   </td>
                   <td>{payment.type}</td>
                   <td>{payment.provider}</td>
-                  <td>{formatDate(payment.createdAt)}</td>
+                  <td>{formatDate(payment.occurredAt || payment.createdAt)}</td>
                   <td>
                     {payment.status === 'succeeded' && (
                       <button

@@ -18,7 +18,12 @@ test.describe('Admin smoke', () => {
     })
 
     // Auth bootstrap (backend)
-    await page.route('**://localhost:3001/auth/me', async (route) => {
+    const authMePatterns = [
+      '**://localhost:3001/auth/me',
+      '**://127.0.0.1:3001/auth/me',
+    ]
+    for (const pattern of authMePatterns) {
+      await page.route(pattern, async (route) => {
       await route.fulfill(
         json({
           id: 'user_admin_1',
@@ -35,10 +40,16 @@ test.describe('Admin smoke', () => {
           },
         })
       )
-    })
+      })
+    }
 
     // Admin API stubs (UI smoke only; avoids hitting real Stripe/Paystack)
-    await page.route('**://localhost:3001/admin/**', async (route) => {
+    const adminApiPatterns = [
+      '**://localhost:3001/admin/**',
+      '**://127.0.0.1:3001/admin/**',
+    ]
+    for (const pattern of adminApiPatterns) {
+      await page.route(pattern, async (route) => {
       const url = new URL(route.request().url())
       const path = url.pathname
 
@@ -435,11 +446,18 @@ test.describe('Admin smoke', () => {
       // Default fallback: return 200 with empty payload to avoid unhandled 404s
       return route.fulfill(json({}))
     })
+    }
   })
 
   test('navigates all admin pages without runtime errors', async ({ page }) => {
     const pageErrors: string[] = []
+    const consoleErrors: string[] = []
     page.on('pageerror', (err) => pageErrors.push(err.message))
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') {
+        consoleErrors.push(msg.text())
+      }
+    })
 
     const routes: Array<{ path: string; title: string }> = [
       { path: '/admin', title: 'Overview' },
@@ -463,5 +481,6 @@ test.describe('Admin smoke', () => {
     }
 
     expect(pageErrors).toEqual([])
+    expect(consoleErrors).toEqual([])
   })
 })

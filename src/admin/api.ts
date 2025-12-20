@@ -154,6 +154,7 @@ export interface AdminPayment {
   provider: string
   stripePaymentIntentId?: string
   paystackTransactionRef?: string
+  occurredAt?: string
   createdAt: string
 }
 

@@ -95,7 +95,7 @@ describe('admin revenue', () => {
 
     await db.payment.update({
       where: { id: paymentPaystack.id },
-      data: { createdAt: twoDaysAgo },
+      data: { occurredAt: twoDaysAgo },
     })
 
     const lastMonth = new Date(now)
@@ -119,7 +119,7 @@ describe('admin revenue', () => {
 
     await db.payment.update({
       where: { id: paymentLastMonth.id },
-      data: { createdAt: lastMonth },
+      data: { occurredAt: lastMonth },
     })
 
     const refundedPayment = await db.payment.create({
