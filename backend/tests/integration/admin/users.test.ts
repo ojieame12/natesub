@@ -13,6 +13,8 @@ import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import app from '../../../src/app.js'
 import { db } from '../../../src/db/client.js'
 import { resetDatabase, disconnectDatabase } from '../../helpers/db.js'
+// @ts-ignore - test mock export
+import { __reset as resetRedis } from '../../../src/db/redis.js'
 
 // Mock Stripe
 const mockStripeSubscriptionsCancel = vi.fn()
@@ -37,6 +39,7 @@ describe('admin users', () => {
   beforeEach(async () => {
     await resetDatabase()
     vi.clearAllMocks()
+    resetRedis() // Reset rate limit counters between tests
     mockStripeSubscriptionsCancel.mockResolvedValue({ id: 'sub_canceled' })
   })
 

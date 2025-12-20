@@ -5,11 +5,12 @@
  * Accessible via:
  * 1. ADMIN_API_KEY header (for Retool/external tools)
  * 2. Valid user session with email in admin whitelist (for frontend dashboard)
+ *
+ * Authentication is handled by centralized middleware in ../middleware/adminAuth.ts
  */
 
 import { Hono } from 'hono'
 import { HTTPException } from 'hono/http-exception'
-import { getCookie } from 'hono/cookie'
 import { z } from 'zod'
 import dlq from '../services/dlq.js'
 import { db } from '../db/client.js'
@@ -19,94 +20,33 @@ import { checkEmailHealth, sendTestEmail, sendSupportTicketReplyEmail, sendCreat
 import { stripe } from '../services/stripe.js'
 import { handleInvoicePaid } from './webhooks/stripe/invoice.js'
 import { env } from '../config/env.js'
-import { validateSession } from '../services/auth.js'
-import { ADMIN_EMAILS, isAdminEmail } from '../config/admin.js'
+import { isAdminEmail } from '../config/admin.js'
 import { listBanks, resolveAccount, createSubaccount, isPaystackSupported, type PaystackCountry } from '../services/paystack.js'
 import { RESERVED_USERNAMES } from '../utils/constants.js'
 import { displayAmountToCents } from '../utils/currency.js'
 import { adminSensitiveRateLimit } from '../middleware/rateLimit.js'
+import { adminAuth, adminAuthOptional, logAdminAction, getSessionToken } from '../middleware/adminAuth.js'
+import { validateSession } from '../services/auth.js'
 
 const admin = new Hono()
 
 // Lock for reconciliation to prevent concurrent runs
 let reconciliationRunning = false
 
-/**
- * Log admin action for audit trail
- * Works with both API key and user session auth
- */
-async function logAdminAction(c: any, action: string, payload: Record<string, any> = {}) {
-  const userId = c.get('userId') as string | undefined
-  // If no userId, it was API key auth
-  const authMethod = userId ? 'session' : 'api-key'
+// ============================================
+// MIDDLEWARE
+// ============================================
 
-  await db.activity.create({
-    data: {
-      // Use a system user ID for API key actions, or the actual admin userId
-      userId: userId || 'system-api-key',
-      type: `admin_${action}`,
-      payload: {
-        ...payload,
-        authMethod,
-        adminUserId: userId || null,
-        timestamp: new Date().toISOString(),
-        ip: c.req.header('x-forwarded-for') || c.req.header('x-real-ip') || 'unknown',
-      },
-    },
-  })
-}
-
-// Get session token from cookie or Authorization header
-function getSessionToken(c: any): string | undefined {
-  const cookieToken = getCookie(c, 'session')
-  if (cookieToken) return cookieToken
-  const authHeader = c.req.header('Authorization')
-  if (authHeader?.startsWith('Bearer ')) return authHeader.slice(7)
-  return undefined
-}
-
-// Admin auth middleware - requires ADMIN_API_KEY OR valid admin user session
-// Skip auth for /me endpoint (used to check admin status)
+// Apply admin auth to all routes except /me (which uses optional auth)
 admin.use('*', async (c, next) => {
   const path = c.req.path
-
-  // /admin/me is used to CHECK if user is admin - handle it specially
-  // This endpoint doesn't require auth - it returns { isAdmin: false } for non-admins
-  // SECURITY: Exact match only to prevent bypass via routes ending in /me
+  // /admin/me uses optional auth - handled separately in the route
   if (path === '/admin/me' || path === '/me') {
     await next()
     return
   }
-
-  // All other admin routes require authentication
-  // Option 1: API key auth (for Retool/external tools)
-  const apiKey = c.req.header('x-admin-api-key')
-  const expectedKey = process.env.ADMIN_API_KEY
-
-  if (apiKey && expectedKey && apiKey === expectedKey) {
-    // API key auth - no userId set, logAdminAction will detect this
-    await next()
-    return
-  }
-
-  // Option 2: User session auth (for frontend dashboard)
-  const sessionToken = getSessionToken(c)
-  if (sessionToken) {
-    const session = await validateSession(sessionToken)
-    if (session) {
-      const user = await db.user.findUnique({
-        where: { id: session.userId },
-        select: { email: true },
-      })
-      if (user && isAdminEmail(user.email)) {
-        c.set('userId', session.userId)
-        await next()
-        return
-      }
-    }
-  }
-
-  throw new HTTPException(401, { message: 'Admin access required' })
+  // All other routes require full admin auth
+  return adminAuth(c, next)
 })
 
 // ============================================
@@ -1220,7 +1160,7 @@ admin.get('/payments', async (c) => {
   }).parse(c.req.query())
 
   const skip = (query.page - 1) * query.limit
-  const where: any = {}
+  const where: any = { type: { in: ['recurring', 'one_time'] } }
 
   if (query.status !== 'all') where.status = query.status
 
@@ -1254,7 +1194,7 @@ admin.get('/payments', async (c) => {
         id: p.subscriberId,
         email: p.subscription?.subscriber?.email || '',
       },
-      grossCents: p.grossCents,
+      grossCents: p.grossCents ?? p.amountCents,
       amountCents: p.amountCents,
       feeCents: p.feeCents,
       netCents: p.netCents,
@@ -1311,12 +1251,14 @@ admin.post('/payments/:id/refund', adminSensitiveRateLimit, async (c) => {
   if (payment.status === 'refunded') return c.json({ error: 'Already refunded' }, 400)
   if (payment.status !== 'succeeded') return c.json({ error: 'Can only refund succeeded payments' }, 400)
 
+  const maxRefundCents = payment.grossCents ?? payment.amountCents
+
   // Validate refund amount
   if (body.amount !== undefined) {
     if (body.amount <= 0) {
       return c.json({ error: 'Refund amount must be positive' }, 400)
     }
-    if (payment.grossCents && body.amount > payment.grossCents) {
+    if (body.amount > maxRefundCents) {
       return c.json({ error: 'Refund amount exceeds payment amount' }, 400)
     }
   }
