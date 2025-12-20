@@ -1,0 +1,437 @@
+/**
+ * Analytics Page Styles
+ * Glass morphism design matching the app's visual language
+ */
+
+.analytics-page {
+  min-height: 100vh;
+  background: var(--bg-primary);
+}
+
+.analytics-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.analytics-back {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  color: var(--text-primary);
+  transition: background 0.15s;
+}
+
+.analytics-back:active {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.analytics-title {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.analytics-content {
+  padding: 16px;
+  padding-bottom: 32px;
+}
+
+/* Stats Grid */
+.analytics-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.analytics-stat-card {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 20px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow:
+    0 4px 24px rgba(0, 0, 0, 0.04),
+    0 1px 2px rgba(0, 0, 0, 0.02),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+.analytics-stat-card.highlight {
+  background: linear-gradient(135deg, rgba(10, 132, 255, 0.15), rgba(52, 199, 89, 0.15));
+  border-color: rgba(10, 132, 255, 0.3);
+}
+
+.analytics-stat-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: rgba(10, 132, 255, 0.1);
+  color: #0a84ff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.analytics-stat-card.highlight .analytics-stat-icon {
+  background: rgba(52, 199, 89, 0.15);
+  color: #34c759;
+}
+
+.analytics-stat-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.analytics-stat-label {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.analytics-stat-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.1;
+}
+
+.analytics-stat-sub {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+/* Sections */
+.analytics-section {
+  margin-bottom: 24px;
+}
+
+.analytics-section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  color: var(--text-primary);
+}
+
+.analytics-section-header h2 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.analytics-card {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 20px;
+  padding: 20px;
+  box-shadow:
+    0 4px 24px rgba(0, 0, 0, 0.04),
+    0 1px 2px rgba(0, 0, 0, 0.02),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+/* Chart */
+.analytics-chart {
+  height: 120px;
+  display: flex;
+  flex-direction: column;
+}
+
+.analytics-chart-bars {
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  padding-bottom: 8px;
+}
+
+.analytics-chart-bar-container {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+}
+
+.analytics-chart-bar {
+  width: 100%;
+  min-height: 4px;
+  background: linear-gradient(180deg, #0a84ff, #007aff);
+  border-radius: 4px 4px 0 0;
+  transition: height 0.3s ease;
+}
+
+.analytics-chart-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+/* Conversion Funnel */
+.analytics-funnel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.analytics-funnel-step {
+  position: relative;
+}
+
+.analytics-funnel-bar-container {
+  height: 8px;
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.analytics-funnel-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #0a84ff, #34c759);
+  border-radius: 4px;
+  transition: width 0.5s ease;
+}
+
+.analytics-funnel-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.analytics-funnel-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  flex: 1;
+}
+
+.analytics-funnel-value {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.analytics-funnel-rate {
+  font-size: 12px;
+  color: #34c759;
+  background: rgba(52, 199, 89, 0.1);
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.analytics-funnel-arrow {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%) rotate(90deg);
+  color: var(--text-tertiary);
+  opacity: 0.5;
+  display: none;
+}
+
+/* Devices */
+.analytics-devices {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.analytics-device-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.analytics-device-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100px;
+  color: var(--text-secondary);
+}
+
+.analytics-device-name {
+  font-size: 13px;
+}
+
+.analytics-device-bar-container {
+  flex: 1;
+  height: 8px;
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.analytics-device-bar {
+  height: 100%;
+  background: #0a84ff;
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.analytics-device-percent {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  width: 40px;
+  text-align: right;
+}
+
+/* Referrers */
+.analytics-referrers {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.analytics-referrer-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.analytics-referrer-row:last-child {
+  border-bottom: none;
+}
+
+.analytics-referrer-rank {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.05);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.analytics-referrer-source {
+  flex: 1;
+  font-size: 14px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.analytics-referrer-count {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.analytics-referrer-percent {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  width: 36px;
+  text-align: right;
+}
+
+/* Empty State */
+.analytics-empty {
+  text-align: center;
+  padding: 24px;
+  color: var(--text-tertiary);
+}
+
+.analytics-empty p {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.analytics-empty span {
+  font-size: 12px;
+  display: block;
+  margin-top: 4px;
+}
+
+/* Footer */
+.analytics-footer {
+  display: flex;
+  justify-content: center;
+  padding: 16px;
+}
+
+.analytics-footer-stat {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--text-tertiary);
+}
+
+/* Error State */
+.analytics-error {
+  text-align: center;
+  padding: 48px 24px;
+}
+
+.analytics-error p {
+  font-size: 16px;
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+}
+
+.analytics-retry-btn {
+  padding: 12px 24px;
+  background: var(--accent-primary);
+  color: white;
+  border-radius: 12px;
+  font-weight: 500;
+}
+
+/* Dark Mode */
+@media (prefers-color-scheme: dark) {
+  .analytics-header {
+    background: rgba(30, 30, 30, 0.72);
+    border-bottom-color: rgba(255, 255, 255, 0.08);
+  }
+
+  .analytics-stat-card,
+  .analytics-card {
+    background: rgba(40, 40, 40, 0.7);
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+
+  .analytics-stat-card.highlight {
+    background: linear-gradient(135deg, rgba(10, 132, 255, 0.2), rgba(52, 199, 89, 0.2));
+  }
+
+  .analytics-funnel-bar-container,
+  .analytics-device-bar-container {
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  .analytics-referrer-row {
+    border-bottom-color: rgba(255, 255, 255, 0.08);
+  }
+
+  .analytics-referrer-rank {
+    background: rgba(255, 255, 255, 0.1);
+  }
+}

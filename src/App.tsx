@@ -53,6 +53,7 @@ const Terms = lazy(() => import('./legal/Terms'))
 const Privacy = lazy(() => import('./legal/Privacy'))
 const Unsubscribe = lazy(() => import('./Unsubscribe'))
 const MySubscriptions = lazy(() => import('./MySubscriptions'))
+const Analytics = lazy(() => import('./Analytics'))
 const NotFound = lazy(() => import('./NotFound'))
 
 // Screenshot / marketing mocks (opt-in)
@@ -443,6 +444,11 @@ function AppShell() {
           <Route path="/subscribers" element={
             <RequireAuth>
               <AppLayout><Subscribers /></AppLayout>
+            </RequireAuth>
+          } />
+          <Route path="/analytics" element={
+            <RequireAuth>
+              <Analytics />
             </RequireAuth>
           } />
           <Route path="/profile" element={

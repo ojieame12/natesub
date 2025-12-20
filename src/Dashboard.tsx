@@ -24,6 +24,7 @@ import {
   Activity,
   FileText,
   Heart,
+  BarChart3,
 } from 'lucide-react'
 import { Pressable, useToast, Skeleton, SkeletonList, ErrorState, AnimatedNumber } from './components'
 import { useViewTransition } from './hooks'
@@ -35,6 +36,7 @@ import './Dashboard.css'
 const getMenuItems = (isService: boolean) => [
   { id: 'subscribers', title: isService ? 'Clients' : 'Subscribers', icon: UserPlus, path: '/subscribers' },
   { id: 'my-subs', title: 'Following', icon: Heart, path: '/my-subscriptions' },
+  { id: 'analytics', title: 'Analytics', icon: BarChart3, path: '/analytics' },
   { id: 'new-request', title: isService ? 'New Invoice' : 'New Request', icon: DollarSign, path: '/new-request' },
   { id: 'sent-requests', title: isService ? 'Sent Invoices' : 'Sent Requests', icon: Clock, path: '/requests' },
   // Payroll for service, Updates for personal
