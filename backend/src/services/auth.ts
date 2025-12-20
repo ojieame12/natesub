@@ -306,6 +306,20 @@ export async function validateSession(sessionToken: string): Promise<{ userId: s
     return null
   }
 
+  // Check if user is blocked/deleted (separate query for reliability)
+  const user = await db.user.findUnique({
+    where: { id: session.userId },
+    select: { deletedAt: true },
+  })
+
+  // Block access for deleted/blocked users (deletedAt is set when blocked)
+  // Also handle case where user no longer exists
+  if (!user || user.deletedAt) {
+    // Clean up session for blocked/deleted user
+    await db.session.delete({ where: { id: session.id } })
+    return null
+  }
+
   return { userId: session.userId }
 }
 
@@ -326,6 +340,18 @@ export async function validateSessionWithDetails(sessionToken: string): Promise<
   }
 
   if (session.expiresAt < new Date()) {
+    await db.session.delete({ where: { id: session.id } })
+    return null
+  }
+
+  // Check if user is blocked/deleted (separate query for reliability)
+  const user = await db.user.findUnique({
+    where: { id: session.userId },
+    select: { deletedAt: true },
+  })
+
+  // Block access for deleted/blocked users
+  if (!user || user.deletedAt) {
     await db.session.delete({ where: { id: session.id } })
     return null
   }

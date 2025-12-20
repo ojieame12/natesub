@@ -20,10 +20,25 @@ import { adminSensitiveRateLimit } from '../../middleware/rateLimit.js'
 import { getSessionToken, isAdminRole, requireRole, logAdminAction } from '../../middleware/adminAuth.js'
 import { validateSession } from '../../services/auth.js'
 
+import { redis } from '../../db/redis.js'
+
 const system = new Hono()
 
-// Lock for reconciliation to prevent concurrent runs
-let reconciliationRunning = false
+// Redis key for distributed reconciliation lock
+const RECONCILIATION_LOCK_KEY = 'admin:reconciliation:lock'
+const RECONCILIATION_LOCK_TTL = 300 // 5 minutes max lock duration
+
+// Acquire distributed lock for reconciliation
+async function acquireReconciliationLock(): Promise<boolean> {
+  // SET NX with expiry - atomic operation
+  const result = await redis.set(RECONCILIATION_LOCK_KEY, Date.now().toString(), 'EX', RECONCILIATION_LOCK_TTL, 'NX')
+  return result === 'OK'
+}
+
+// Release distributed lock
+async function releaseReconciliationLock(): Promise<void> {
+  await redis.del(RECONCILIATION_LOCK_KEY)
+}
 
 // ============================================
 // ADMIN STATUS CHECK
@@ -259,7 +274,7 @@ system.get('/webhooks/dead-letter', async (c) => {
  */
 system.get('/webhooks/all', async (c) => {
   const query = z.object({
-    limit: z.coerce.number().default(50),
+    limit: z.coerce.number().min(1).max(200).default(50),
     provider: z.enum(['stripe', 'paystack', 'all']).default('all'),
     status: z.enum(['received', 'processing', 'processed', 'failed', 'skipped', 'dead_letter', 'all']).default('all'),
   }).parse(c.req.query())
@@ -369,7 +384,7 @@ system.post('/sync/stripe-invoice', adminSensitiveRateLimit, async (c) => {
  */
 system.get('/sync/stripe-missing', async (c) => {
   const query = z.object({
-    limit: z.coerce.number().default(20),
+    limit: z.coerce.number().min(1).max(200).default(20),
   }).parse(c.req.query())
 
   try {
@@ -520,11 +535,11 @@ system.get('/reconciliation/missing', async (c) => {
  * Requires: super_admin
  */
 system.post('/reconciliation/run', adminSensitiveRateLimit, requireRole('super_admin'), async (c) => {
-  if (reconciliationRunning) {
+  const acquired = await acquireReconciliationLock()
+  if (!acquired) {
     return c.json({ error: 'Reconciliation already in progress' }, 409)
   }
 
-  reconciliationRunning = true
   try {
     const body = await c.req.json().catch(() => ({}))
     const periodHours = body.periodHours || 48
@@ -541,7 +556,7 @@ system.post('/reconciliation/run', adminSensitiveRateLimit, requireRole('super_a
       ...result,
     })
   } finally {
-    reconciliationRunning = false
+    await releaseReconciliationLock()
   }
 })
 
@@ -551,11 +566,11 @@ system.post('/reconciliation/run', adminSensitiveRateLimit, requireRole('super_a
  * Requires: super_admin
  */
 system.post('/reconciliation/stripe', adminSensitiveRateLimit, requireRole('super_admin'), async (c) => {
-  if (reconciliationRunning) {
+  const acquired = await acquireReconciliationLock()
+  if (!acquired) {
     return c.json({ error: 'Reconciliation already in progress' }, 409)
   }
 
-  reconciliationRunning = true
   const limit = parseInt(c.req.query('limit') || '100')
   console.log(`[reconciliation] Starting Stripe sync (limit: ${limit})`)
 
@@ -582,7 +597,7 @@ system.post('/reconciliation/stripe', adminSensitiveRateLimit, requireRole('supe
     console.error('[reconciliation] Stripe sync failed:', err)
     return c.json({ error: 'Reconciliation failed' }, 500)
   } finally {
-    reconciliationRunning = false
+    await releaseReconciliationLock()
   }
 })
 
@@ -597,7 +612,7 @@ system.post('/reconciliation/stripe', adminSensitiveRateLimit, requireRole('supe
 system.get('/activity', async (c) => {
   const query = z.object({
     page: z.coerce.number().default(1),
-    limit: z.coerce.number().default(100),
+    limit: z.coerce.number().min(1).max(200).default(100),
     type: z.string().optional()
   }).parse(c.req.query())
 
@@ -632,15 +647,19 @@ system.get('/activity', async (c) => {
   }
 
   return c.json({
-    activities: activities.map(a => ({
-      id: a.id,
-      type: a.type,
-      message: getActivityMessage(a.type, a.payload),
-      adminEmail: a.user.email,
-      targetUserId: a.userId,
-      metadata: a.payload,
-      createdAt: a.createdAt
-    })),
+    activities: activities.map(a => {
+      const payload = a.payload as Record<string, any> | null
+      return {
+        id: a.id,
+        type: a.type,
+        message: getActivityMessage(a.type, payload),
+        adminEmail: payload?.adminEmail || 'System', // Use admin email from payload, not target user
+        targetUserId: a.userId,
+        targetUserEmail: a.user.email,
+        metadata: payload,
+        createdAt: a.createdAt
+      }
+    }),
     total: totalCount,
     page: query.page,
     totalPages: Math.ceil(totalCount / query.limit)
@@ -661,7 +680,7 @@ system.get('/logs', async (c) => {
     level: z.enum(['info', 'warning', 'error']).optional(),
     userId: z.string().optional(),
     page: z.coerce.number().default(1),
-    limit: z.coerce.number().default(100)
+    limit: z.coerce.number().min(1).max(200).default(100)
   }).parse(c.req.query())
 
   const skip = (query.page - 1) * query.limit
@@ -745,7 +764,7 @@ system.get('/reminders', async (c) => {
     status: z.enum(['scheduled', 'sent', 'failed', 'canceled', 'all']).default('all'),
     type: z.string().optional(),
     page: z.coerce.number().default(1),
-    limit: z.coerce.number().default(50)
+    limit: z.coerce.number().min(1).max(200).default(50)
   }).parse(c.req.query())
 
   const skip = (query.page - 1) * query.limit
@@ -821,7 +840,7 @@ system.get('/emails', async (c) => {
     status: z.enum(['sent', 'failed', 'all']).default('all'),
     template: z.string().optional(),
     page: z.coerce.number().default(1),
-    limit: z.coerce.number().default(100)
+    limit: z.coerce.number().min(1).max(200).default(100)
   }).parse(c.req.query())
 
   const skip = (query.page - 1) * query.limit
@@ -878,7 +897,7 @@ system.get('/invoices', async (c) => {
   const query = z.object({
     status: z.enum(['draft', 'sent', 'pending_payment', 'paid', 'declined', 'expired', 'all']).default('all'),
     page: z.coerce.number().default(1),
-    limit: z.coerce.number().default(50)
+    limit: z.coerce.number().min(1).max(200).default(50)
   }).parse(c.req.query())
 
   const skip = (query.page - 1) * query.limit

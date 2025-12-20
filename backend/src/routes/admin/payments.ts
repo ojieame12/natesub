@@ -28,7 +28,7 @@ payments.get('/', async (c) => {
     search: z.string().optional(),
     status: z.enum(['all', 'succeeded', 'failed', 'refunded', 'disputed']).default('all'),
     page: z.coerce.number().default(1),
-    limit: z.coerce.number().default(50)
+    limit: z.coerce.number().min(1).max(200).default(50)
   }).parse(c.req.query())
 
   const skip = (query.page - 1) * query.limit
@@ -155,7 +155,9 @@ payments.post('/:id/refund', adminSensitiveRateLimit, requireRole('super_admin')
     return c.json({ error: 'Refund already processed for this payment' }, 400)
   }
 
-  const idempotencyKey = `refund_${id}_${body.amount || 'full'}_${Date.now()}`
+  // Idempotency key without timestamp - same payment+amount always produces same key
+  // This prevents double-refunds if Stripe succeeds but our DB update fails
+  const idempotencyKey = `refund_${id}_${body.amount || 'full'}`
 
   try {
     if (payment.stripePaymentIntentId) {

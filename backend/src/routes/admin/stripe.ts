@@ -25,7 +25,7 @@ const stripeRoutes = new Hono()
 stripeRoutes.get('/accounts', async (c) => {
   const query = z.object({
     page: z.coerce.number().default(1),
-    limit: z.coerce.number().default(50),
+    limit: z.coerce.number().min(1).max(200).default(50),
     status: z.enum(['all', 'active', 'pending', 'restricted', 'disabled']).default('all')
   }).parse(c.req.query())
 
@@ -186,7 +186,7 @@ stripeRoutes.get('/accounts/:accountId', async (c) => {
  */
 stripeRoutes.get('/transfers', async (c) => {
   const query = z.object({
-    limit: z.coerce.number().default(50),
+    limit: z.coerce.number().min(1).max(200).default(50),
     startingAfter: z.string().optional()
   }).parse(c.req.query())
 
@@ -259,7 +259,7 @@ stripeRoutes.get('/balance', async (c) => {
  */
 stripeRoutes.get('/events', async (c) => {
   const query = z.object({
-    limit: z.coerce.number().default(50),
+    limit: z.coerce.number().min(1).max(200).default(50),
     type: z.string().optional(),
     startingAfter: z.string().optional()
   }).parse(c.req.query())

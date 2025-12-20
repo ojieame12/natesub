@@ -10,7 +10,7 @@ import { z } from 'zod'
 import { db } from '../../db/client.js'
 import { stripe } from '../../services/stripe.js'
 import { adminSensitiveRateLimit } from '../../middleware/rateLimit.js'
-import { requireRole } from '../../middleware/adminAuth.js'
+import { requireRole, requireFreshSession } from '../../middleware/adminAuth.js'
 
 const subscriptions = new Hono()
 
@@ -26,7 +26,7 @@ subscriptions.get('/', async (c) => {
   const query = z.object({
     status: z.enum(['all', 'active', 'canceled', 'past_due']).default('all'),
     page: z.coerce.number().default(1),
-    limit: z.coerce.number().default(50)
+    limit: z.coerce.number().min(1).max(200).default(50)
   }).parse(c.req.query())
 
   const skip = (query.page - 1) * query.limit
@@ -81,7 +81,7 @@ subscriptions.get('/', async (c) => {
  * Cancel a subscription
  * Requires: super_admin
  */
-subscriptions.post('/:id/cancel', adminSensitiveRateLimit, requireRole('super_admin'), async (c) => {
+subscriptions.post('/:id/cancel', adminSensitiveRateLimit, requireRole('super_admin'), requireFreshSession, async (c) => {
   const { id } = c.req.param()
   const body = await c.req.json().catch(() => ({}))
   const immediate = body.immediate ?? false
@@ -109,7 +109,7 @@ subscriptions.post('/:id/cancel', adminSensitiveRateLimit, requireRole('super_ad
  * POST /admin/subscriptions/:id/pause
  * Pause a subscription (stop billing but keep active)
  */
-subscriptions.post('/:id/pause', adminSensitiveRateLimit, async (c) => {
+subscriptions.post('/:id/pause', adminSensitiveRateLimit, requireRole('super_admin'), requireFreshSession, async (c) => {
   const { id } = c.req.param()
 
   const subscription = await db.subscription.findUnique({
@@ -154,7 +154,7 @@ subscriptions.post('/:id/pause', adminSensitiveRateLimit, async (c) => {
  * POST /admin/subscriptions/:id/resume
  * Resume a paused subscription
  */
-subscriptions.post('/:id/resume', adminSensitiveRateLimit, async (c) => {
+subscriptions.post('/:id/resume', adminSensitiveRateLimit, requireRole('super_admin'), requireFreshSession, async (c) => {
   const { id } = c.req.param()
 
   const subscription = await db.subscription.findUnique({
@@ -168,8 +168,8 @@ subscriptions.post('/:id/resume', adminSensitiveRateLimit, async (c) => {
   try {
     if (subscription.stripeSubscriptionId) {
       await stripe.subscriptions.update(subscription.stripeSubscriptionId, {
-        pause_collection: '' as any // Empty string clears the pause
-      })
+        pause_collection: null // null clears the pause per Stripe docs
+      } as any)
     }
 
     await db.subscription.update({

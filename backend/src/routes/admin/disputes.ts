@@ -80,7 +80,7 @@ disputes.get('/', async (c) => {
   const query = z.object({
     status: z.enum(['all', 'disputed', 'dispute_won', 'dispute_lost']).default('all'),
     page: z.coerce.number().default(1),
-    limit: z.coerce.number().default(50)
+    limit: z.coerce.number().min(1).max(200).default(50)
   }).parse(c.req.query())
 
   const skip = (query.page - 1) * query.limit
@@ -154,7 +154,7 @@ export const blockedSubscribers = new Hono()
 blockedSubscribers.get('/', async (c) => {
   const query = z.object({
     page: z.coerce.number().default(1),
-    limit: z.coerce.number().default(50)
+    limit: z.coerce.number().min(1).max(200).default(50)
   }).parse(c.req.query())
 
   const skip = (query.page - 1) * query.limit

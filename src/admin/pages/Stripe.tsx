@@ -19,13 +19,23 @@ import FilterBar from '../components/FilterBar'
 import Pagination from '../components/Pagination'
 import ActionModal from '../components/ActionModal'
 
-function formatCurrency(cents: number, currency = 'USD'): string {
-  return new Intl.NumberFormat('en-US', {
+function formatMoneyMinorUnits(amountMinor: number, currency = 'USD'): string {
+  const formatter = new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: currency.toUpperCase(),
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(cents / 100)
+  })
+  const digits = formatter.resolvedOptions().maximumFractionDigits
+  return formatter.format(amountMinor / Math.pow(10, digits))
+}
+
+function formatBalanceSummary(balances: Array<{ amount: number; currency: string }> | undefined): string {
+  if (!balances?.length) return '—'
+  if (balances.length === 1) return formatMoneyMinorUnits(balances[0].amount, balances[0].currency)
+  return balances
+    .slice()
+    .sort((a, b) => a.currency.localeCompare(b.currency))
+    .map((b) => `${b.currency.toUpperCase()} ${formatMoneyMinorUnits(b.amount, b.currency)}`)
+    .join(' · ')
 }
 
 function formatDate(date: string): string {
@@ -128,10 +138,21 @@ export default function Stripe() {
     setPage(1)
   }
 
-  // Calculate totals for balance display
-  const totalAvailable = balanceData?.available?.reduce((sum, b) => sum + b.amount, 0) || 0
-  const totalPending = balanceData?.pending?.reduce((sum, b) => sum + b.amount, 0) || 0
-  const totalReserved = balanceData?.connectReserved?.reduce((sum, b) => sum + b.amount, 0) || 0
+  const balanceRows = (() => {
+    if (!balanceData) return []
+    const rows = new Map<string, { currency: string; available: number; pending: number }>()
+
+    for (const b of balanceData.available || []) {
+      rows.set(b.currency, { currency: b.currency, available: b.amount, pending: 0 })
+    }
+    for (const b of balanceData.pending || []) {
+      const existing = rows.get(b.currency) || { currency: b.currency, available: 0, pending: 0 }
+      existing.pending = b.amount
+      rows.set(b.currency, existing)
+    }
+
+    return Array.from(rows.values()).sort((a, b) => a.currency.localeCompare(b.currency))
+  })()
 
   return (
     <div>
@@ -171,17 +192,17 @@ export default function Stripe() {
           <div className="admin-stats-grid">
             <StatCard
               label="Available Balance"
-              value={formatCurrency(totalAvailable, 'USD')}
+              value={formatBalanceSummary(balanceData?.available)}
               loading={balanceLoading}
             />
             <StatCard
               label="Pending Balance"
-              value={formatCurrency(totalPending, 'USD')}
+              value={formatBalanceSummary(balanceData?.pending)}
               loading={balanceLoading}
             />
             <StatCard
               label="Connect Reserved"
-              value={formatCurrency(totalReserved, 'USD')}
+              value={formatBalanceSummary(balanceData?.connectReserved)}
               loading={balanceLoading}
             />
           </div>
@@ -198,11 +219,11 @@ export default function Stripe() {
                   </tr>
                 </thead>
                 <tbody>
-                  {balanceData.available.map((b, i) => (
-                    <tr key={b.currency}>
-                      <td style={{ textTransform: 'uppercase' }}>{b.currency}</td>
-                      <td>{formatCurrency(b.amount, b.currency)}</td>
-                      <td>{formatCurrency(balanceData.pending[i]?.amount || 0, b.currency)}</td>
+                  {balanceRows.map((row) => (
+                    <tr key={row.currency}>
+                      <td style={{ textTransform: 'uppercase' }}>{row.currency}</td>
+                      <td>{formatMoneyMinorUnits(row.available, row.currency)}</td>
+                      <td>{formatMoneyMinorUnits(row.pending, row.currency)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -365,7 +386,7 @@ export default function Stripe() {
                         <span style={{ color: 'var(--text-tertiary)' }}>Unknown</span>
                       )}
                     </td>
-                    <td>{formatCurrency(transfer.amount, transfer.currency)}</td>
+                    <td>{formatMoneyMinorUnits(transfer.amount, transfer.currency)}</td>
                     <td style={{ textTransform: 'uppercase' }}>{transfer.currency}</td>
                     <td>
                       <span className={`admin-badge ${transfer.reversed ? 'error' : 'success'}`}>
@@ -411,7 +432,7 @@ export default function Stripe() {
                     </td>
                     <td>
                       {event.data.amount !== undefined
-                        ? formatCurrency(event.data.amount, event.data.currency || 'usd')
+                        ? formatMoneyMinorUnits(event.data.amount, event.data.currency || 'usd')
                         : '-'}
                     </td>
                     <td>
@@ -576,14 +597,14 @@ export default function Stripe() {
                       <dt>Available</dt>
                       <dd>
                         {accountDetail.balance.available.map(b => (
-                          <div key={b.currency}>{formatCurrency(b.amount, b.currency)}</div>
+                          <div key={b.currency}>{formatMoneyMinorUnits(b.amount, b.currency)}</div>
                         ))}
                         {accountDetail.balance.available.length === 0 && '-'}
                       </dd>
                       <dt>Pending</dt>
                       <dd>
                         {accountDetail.balance.pending.map(b => (
-                          <div key={b.currency}>{formatCurrency(b.amount, b.currency)}</div>
+                          <div key={b.currency}>{formatMoneyMinorUnits(b.amount, b.currency)}</div>
                         ))}
                         {accountDetail.balance.pending.length === 0 && '-'}
                       </dd>
@@ -604,7 +625,7 @@ export default function Stripe() {
                         <tbody>
                           {accountDetail.recentPayouts.map(p => (
                             <tr key={p.id}>
-                              <td>{formatCurrency(p.amount, p.currency)}</td>
+                              <td>{formatMoneyMinorUnits(p.amount, p.currency)}</td>
                               <td>
                                 <span className={`admin-badge ${p.status === 'paid' ? 'success' : p.status === 'failed' ? 'error' : 'warning'}`}>
                                   {p.status}

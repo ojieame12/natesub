@@ -38,7 +38,7 @@ users.get('/', async (c) => {
   const query = z.object({
     search: z.string().optional(),
     page: z.coerce.number().default(1),
-    limit: z.coerce.number().default(50),
+    limit: z.coerce.number().min(1).max(200).default(50),
     status: z.enum(['all', 'active', 'blocked', 'deleted']).default('all')
   }).parse(c.req.query())
 

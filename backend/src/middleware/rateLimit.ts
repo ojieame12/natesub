@@ -306,5 +306,10 @@ export const adminSensitiveRateLimit = rateLimit({
   windowMs: 60 * 1000,  // 1 minute
   maxRequests: 10,
   keyPrefix: 'admin_sensitive_ratelimit',
+  keyGenerator: (c) => {
+    // Use adminUserId (set by adminAuth) instead of userId
+    const adminUserId = c.get('adminUserId') as string | undefined
+    return `admin_sensitive_ratelimit:${adminUserId || getClientIdentifier(c)}`
+  },
   message: 'Too many admin operations. Please slow down.',
 })
