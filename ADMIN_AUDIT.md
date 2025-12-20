@@ -113,21 +113,25 @@ Mitigations applied:
 ## 5) Performance / Optimization Opportunities
 
 ### Stripe admin pages
-`GET /admin/stripe/accounts` currently calls `stripe.accounts.retrieve()` for every account on the page.
-Risks:
-- Slow page loads with many accounts.
-- Stripe rate limits causing intermittent failures.
+`GET /admin/stripe/accounts` is a common performance hotspot because naive implementations do **one Stripe API call per row**.
 
-Improvements:
-- Concurrency-limit Stripe calls (p-limit).
-- Cache results (short TTL) for the list page.
-- Persist “last-known” Stripe status in DB via webhook/account.updated and render that in admin list; fetch live only on detail.
+Mitigations applied:
+- Backend now uses `getAccountStatus()` (Redis cached) and **concurrency-limits** status fetches for list rendering:
+  - `backend/src/routes/admin/stripe.ts`
+  - `backend/src/services/stripe.ts`
+- Frontend Stripe page now only fetches data for the **active tab** (prevents pulling accounts/transfers/events/balance at once):
+  - `src/admin/pages/Stripe.tsx`
+  - `src/admin/api.ts`
 
 ### Revenue analytics
 For large datasets, groupBy/aggregate endpoints can get expensive.
 Improvements:
-- Add partial indexes for `occurredAt` windows (already have `payments_creatorId_occurredAt_idx`).
-- Consider pre-aggregated daily tables for charts (only if query load becomes a problem).
+- Added admin-focused payment indexes to support `occurredAt` window queries:
+  - `backend/prisma/migrations/20251220180000_add_payment_admin_indexes/migration.sql`
+  - `backend/prisma/schema.prisma`
+- `GET /admin/revenue/daily` and `/admin/revenue/monthly` now use **database aggregation** in production (instead of fetching all rows and aggregating in JS):
+  - `backend/src/routes/admin-revenue.ts`
+- If you still hit scaling limits later: consider pre-aggregated daily tables/materialized views, or incremental rollups in the webhook worker.
 
 ## 6) Testing Coverage for Admin (Golden Suite Additions)
 
@@ -139,4 +143,3 @@ Existing:
 Recommended next tests:
 - Add API-contract tests for `/admin/stripe/balance` and `/admin/revenue/*` response shapes (schema drift prevention).
 - Add UI tests that simulate API failure modes (e.g., 500/invalid JSON) to verify error states.
-

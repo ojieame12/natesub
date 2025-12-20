@@ -14,38 +14,20 @@ import {
   useAdminStripePayout,
 } from '../api'
 import type { StripeAccount } from '../api'
+import { formatCurrency, formatDate } from '../utils/format'
 import StatCard from '../components/StatCard'
 import FilterBar from '../components/FilterBar'
 import Pagination from '../components/Pagination'
 import ActionModal from '../components/ActionModal'
 
-function formatMoneyMinorUnits(amountMinor: number, currency = 'USD'): string {
-  const formatter = new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: currency.toUpperCase(),
-  })
-  const digits = formatter.resolvedOptions().maximumFractionDigits ?? 2
-  return formatter.format(amountMinor / Math.pow(10, digits))
-}
-
 function formatBalanceSummary(balances: Array<{ amount: number; currency: string }> | undefined): string {
   if (!balances?.length) return '—'
-  if (balances.length === 1) return formatMoneyMinorUnits(balances[0].amount, balances[0].currency)
+  if (balances.length === 1) return formatCurrency(balances[0].amount, balances[0].currency)
   return balances
     .slice()
     .sort((a, b) => a.currency.localeCompare(b.currency))
-    .map((b) => `${b.currency.toUpperCase()} ${formatMoneyMinorUnits(b.amount, b.currency)}`)
+    .map((b) => `${b.currency.toUpperCase()} ${formatCurrency(b.amount, b.currency)}`)
     .join(' · ')
-}
-
-function formatDate(date: string): string {
-  return new Date(date).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
 }
 
 function getStatusBadge(status: string): string {
@@ -83,11 +65,11 @@ export default function Stripe() {
     status: status !== 'all' ? status : undefined,
     page,
     limit,
-  })
+  }, { enabled: activeTab === 'accounts' })
 
-  const { data: balanceData, isLoading: balanceLoading } = useAdminStripeBalance()
-  const { data: transfersData, isLoading: transfersLoading } = useAdminStripeTransfers({ limit: 50 })
-  const { data: eventsData, isLoading: eventsLoading } = useAdminStripeEvents({ limit: 50 })
+  const { data: balanceData, isLoading: balanceLoading } = useAdminStripeBalance({ enabled: activeTab === 'balance' })
+  const { data: transfersData, isLoading: transfersLoading } = useAdminStripeTransfers({ limit: 50 }, { enabled: activeTab === 'transfers' })
+  const { data: eventsData, isLoading: eventsLoading } = useAdminStripeEvents({ limit: 50 }, { enabled: activeTab === 'events' })
   const { data: accountDetail, isLoading: detailLoading } = useAdminStripeAccountDetail(selectedAccountId || '')
 
   // Mutations
@@ -222,8 +204,8 @@ export default function Stripe() {
                   {balanceRows.map((row) => (
                     <tr key={row.currency}>
                       <td style={{ textTransform: 'uppercase' }}>{row.currency}</td>
-                      <td>{formatMoneyMinorUnits(row.available, row.currency)}</td>
-                      <td>{formatMoneyMinorUnits(row.pending, row.currency)}</td>
+                      <td>{formatCurrency(row.available, row.currency)}</td>
+                      <td>{formatCurrency(row.pending, row.currency)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -386,7 +368,7 @@ export default function Stripe() {
                         <span style={{ color: 'var(--text-tertiary)' }}>Unknown</span>
                       )}
                     </td>
-                    <td>{formatMoneyMinorUnits(transfer.amount, transfer.currency)}</td>
+                    <td>{formatCurrency(transfer.amount, transfer.currency)}</td>
                     <td style={{ textTransform: 'uppercase' }}>{transfer.currency}</td>
                     <td>
                       <span className={`admin-badge ${transfer.reversed ? 'error' : 'success'}`}>
@@ -432,7 +414,7 @@ export default function Stripe() {
                     </td>
                     <td>
                       {event.data.amount !== undefined
-                        ? formatMoneyMinorUnits(event.data.amount, event.data.currency || 'usd')
+                        ? formatCurrency(event.data.amount, event.data.currency || 'usd')
                         : '-'}
                     </td>
                     <td>
@@ -618,14 +600,14 @@ export default function Stripe() {
                       <dt>Available</dt>
                       <dd>
                         {accountDetail.balance.available.map(b => (
-                          <div key={b.currency}>{formatMoneyMinorUnits(b.amount, b.currency)}</div>
+                          <div key={b.currency}>{formatCurrency(b.amount, b.currency)}</div>
                         ))}
                         {accountDetail.balance.available.length === 0 && '-'}
                       </dd>
                       <dt>Pending</dt>
                       <dd>
                         {accountDetail.balance.pending.map(b => (
-                          <div key={b.currency}>{formatMoneyMinorUnits(b.amount, b.currency)}</div>
+                          <div key={b.currency}>{formatCurrency(b.amount, b.currency)}</div>
                         ))}
                         {accountDetail.balance.pending.length === 0 && '-'}
                       </dd>
@@ -646,7 +628,7 @@ export default function Stripe() {
                         <tbody>
                           {accountDetail.recentPayouts.map(p => (
                             <tr key={p.id}>
-                              <td>{formatMoneyMinorUnits(p.amount, p.currency)}</td>
+                              <td>{formatCurrency(p.amount, p.currency)}</td>
                               <td>
                                 <span className={`admin-badge ${p.status === 'paid' ? 'success' : p.status === 'failed' ? 'error' : 'warning'}`}>
                                   {p.status}

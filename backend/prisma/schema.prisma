@@ -136,6 +136,12 @@ model User {
   lastLoginAt DateTime?
   deletedAt   DateTime? // Soft delete timestamp
 
+  // Admin role management
+  adminGrantedBy   String?   // User ID of admin who promoted this user
+  adminGrantedAt   DateTime? // When admin role was granted
+  adminRevokedBy   String?   // User ID of admin who demoted this user
+  adminRevokedAt   DateTime? // When admin role was revoked
+
   // Dispute tracking (for subscribers who file chargebacks)
   disputeCount  Int     @default(0)  // Number of chargebacks filed as subscriber
   blockedReason String?              // If set, blocked from subscribing
@@ -154,6 +160,7 @@ model User {
   activities       Activity[]
   sessions         Session[]
   payrollPeriods   PayrollPeriod[]
+  adminApiKeys     AdminApiKey[]
 
   @@index([role])
   @@map("users")
@@ -385,6 +392,9 @@ model Payment {
   @@index([type, status, createdAt])           // transfers.ts monitoring
   @@index([subscriptionId, status, createdAt]) // billing.ts retries
   @@index([creatorId, occurredAt])             // payroll.ts reporting
+  // Admin dashboard query optimizations
+  @@index([status, type, occurredAt])          // revenue aggregations (overview, daily, monthly)
+  @@index([creatorId, status, occurredAt])     // per-creator revenue in user list
   @@map("payments")
 }
 
@@ -886,6 +896,36 @@ model SupportMessage {
 
   @@index([ticketId, createdAt])
   @@map("support_messages")
+}
+
+// ============================================
+// ADMIN API KEYS
+// ============================================
+
+model AdminApiKey {
+  id          String    @id @default(cuid())
+  name        String    // "Retool Production", "Analytics Dashboard"
+  keyHash     String    @unique // SHA-256 hash of actual key
+  keyPrefix   String    // First 8 chars for identification "sk_adm_Ab..."
+  scope       String    @default("full") // full, readonly
+
+  // Who created/owns this key
+  createdById String
+  createdBy   User      @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  // Lifecycle
+  lastUsedAt  DateTime?
+  lastUsedIp  String?   // Last IP that used this key
+  expiresAt   DateTime?
+  revokedAt   DateTime?
+  revokedById String?   // Who revoked it
+
+  createdAt   DateTime  @default(now())
+
+  @@index([keyHash])
+  @@index([createdById])
+  @@index([scope])
+  @@map("admin_api_keys")
 }
 
 // ============================================

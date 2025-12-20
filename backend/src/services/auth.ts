@@ -5,7 +5,7 @@ import { db } from '../db/client.js'
 import { redis } from '../db/redis.js'
 import { env } from '../config/env.js'
 import { sendOtpEmail } from './email.js'
-import type { OnboardingBranch } from '@prisma/client'
+import type { OnboardingBranch, UserRole } from '@prisma/client'
 
 const OTP_EXPIRES_MS = (parseInt(env.MAGIC_LINK_EXPIRES_MINUTES, 10) || 30) * 60 * 1000
 const OTP_GRACE_PERIOD_MS = 30 * 1000 // 30 seconds grace period for clock skew
@@ -327,6 +327,8 @@ export async function validateSession(sessionToken: string): Promise<{ userId: s
 export async function validateSessionWithDetails(sessionToken: string): Promise<{
   userId: string
   createdAt: Date
+  email: string
+  role: UserRole
 } | null> {
   const tokenHash = hashToken(sessionToken)
 
@@ -344,19 +346,24 @@ export async function validateSessionWithDetails(sessionToken: string): Promise<
     return null
   }
 
-  // Check if user is blocked/deleted (separate query for reliability)
+  // Check if user is blocked/deleted
+  // NOTE: We intentionally keep this as a separate query for test-mock compatibility.
   const user = await db.user.findUnique({
     where: { id: session.userId },
-    select: { deletedAt: true },
+    select: { deletedAt: true, email: true, role: true },
   })
 
-  // Block access for deleted/blocked users
   if (!user || user.deletedAt) {
     await db.session.delete({ where: { id: session.id } })
     return null
   }
 
-  return { userId: session.userId, createdAt: session.createdAt }
+  return {
+    userId: session.userId,
+    createdAt: session.createdAt,
+    email: user.email,
+    role: user.role,
+  }
 }
 
 // Logout (delete session)

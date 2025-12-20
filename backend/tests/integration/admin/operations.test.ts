@@ -13,6 +13,7 @@ import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import app from '../../../src/app.js'
 import { db } from '../../../src/db/client.js'
 import { resetDatabase, disconnectDatabase } from '../../helpers/db.js'
+import { hashToken } from '../../../src/services/auth.js'
 
 const mockCheckEmailHealth = vi.fn()
 const mockSendTestEmail = vi.fn()
@@ -445,6 +446,20 @@ describe('admin operations', () => {
   })
 
   it('returns reconciliation results', async () => {
+    // autoFix flow requires session auth + confirmation token
+    const admin = await db.user.create({
+      data: { email: 'superadmin@test.com', role: 'super_admin' },
+    })
+    const rawToken = 'superadmin-session-token'
+    await db.session.create({
+      data: {
+        userId: admin.id,
+        token: hashToken(rawToken),
+        expiresAt: new Date(Date.now() + 86400000),
+      },
+    })
+    const sessionHeaders = { Cookie: `session=${rawToken}` }
+
     mockGetMissingTransactions.mockResolvedValueOnce({
       count: 1,
       windowStart: '2024-01-01T00:00:00.000Z',
@@ -474,6 +489,37 @@ describe('admin operations', () => {
     expect(missingBody.count).toBe(1)
     expect(missingBody.warning).not.toBeNull()
 
+    // Preview generates a confirmation token used for autoFix
+    mockGetMissingTransactions.mockResolvedValueOnce({
+      count: 1,
+      windowStart: '2024-01-01T00:00:00.000Z',
+      windowEnd: '2024-01-02T00:00:00.000Z',
+      transactions: [
+        {
+          reference: 'ref_missing_1',
+          amount: 1000,
+          currency: 'NGN',
+          paidAt: '2024-01-01T00:00:00.000Z',
+          customerEmail: 'missing@test.com',
+          metadata: null,
+        },
+      ],
+    })
+
+    const previewRes = await app.fetch(
+      new Request('http://localhost/admin/reconciliation/preview', {
+        method: 'POST',
+        headers: {
+          ...sessionHeaders,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ periodHours: 12 }),
+      })
+    )
+    expect(previewRes.status).toBe(200)
+    const previewBody = await previewRes.json()
+    expect(previewBody.confirmationToken).toBeTruthy()
+
     mockReconcilePaystackTransactions.mockResolvedValueOnce({
       missingInDb: [],
       statusMismatches: [],
@@ -485,10 +531,10 @@ describe('admin operations', () => {
       new Request('http://localhost/admin/reconciliation/run', {
         method: 'POST',
         headers: {
-          ...adminHeaders,
+          ...sessionHeaders,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ periodHours: 12, autoFix: true }),
+        body: JSON.stringify({ periodHours: 12, autoFix: true, confirmationToken: previewBody.confirmationToken }),
       })
     )
 

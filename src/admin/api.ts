@@ -417,8 +417,9 @@ export function useAdminRefund() {
 // SUBSCRIPTIONS
 // ============================================
 
-export function useAdminSubscriptions(params: { status?: string; page?: number; limit?: number } = {}) {
+export function useAdminSubscriptions(params: { search?: string; status?: string; page?: number; limit?: number } = {}) {
   const searchParams = new URLSearchParams()
+  if (params.search) searchParams.set('search', params.search)
   if (params.status) searchParams.set('status', params.status)
   if (params.page) searchParams.set('page', params.page.toString())
   if (params.limit) searchParams.set('limit', params.limit.toString())
@@ -427,6 +428,64 @@ export function useAdminSubscriptions(params: { status?: string; page?: number; 
   return useQuery({
     queryKey: ['admin', 'subscriptions', params],
     queryFn: () => adminFetch<{ subscriptions: AdminSubscription[]; total: number; page: number; totalPages: number }>(`/admin/subscriptions${query ? `?${query}` : ''}`),
+    staleTime: 30 * 1000,
+  })
+}
+
+export interface SubscriptionDetail {
+  subscription: {
+    id: string
+    status: string
+    amount: number
+    currency: string
+    interval: string
+    ltvCents: number
+    currentPeriodEnd: string | null
+    cancelAtPeriodEnd: boolean
+    createdAt: string
+    canceledAt: string | null
+    stripeSubscriptionId: string | null
+    paystackAuthorizationCode: boolean
+  }
+  creator: {
+    id: string
+    email: string
+    username: string | null
+    displayName: string | null
+  }
+  subscriber: {
+    id: string
+    email: string
+    joinedAt: string
+    totalSpentCents: number
+    totalPayments: number
+  }
+  payments: Array<{
+    id: string
+    grossCents: number
+    feeCents: number
+    netCents: number
+    currency: string
+    status: string
+    type: string
+    provider: string
+    occurredAt: string
+  }>
+  otherSubscriptions: Array<{
+    id: string
+    creatorUsername: string | null
+    creatorDisplayName: string | null
+    amount: number
+    currency: string
+    status: string
+  }>
+}
+
+export function useAdminSubscriptionDetail(subscriptionId: string) {
+  return useQuery({
+    queryKey: ['admin', 'subscriptions', subscriptionId],
+    queryFn: () => adminFetch<SubscriptionDetail>(`/admin/subscriptions/${subscriptionId}`),
+    enabled: !!subscriptionId,
     staleTime: 30 * 1000,
   })
 }
@@ -674,7 +733,12 @@ export interface StripeEvent {
   }
 }
 
-export function useAdminStripeAccounts(params: { status?: string; page?: number; limit?: number } = {}) {
+type AdminQueryOptions = { enabled?: boolean }
+
+export function useAdminStripeAccounts(
+  params: { status?: string; page?: number; limit?: number } = {},
+  options: AdminQueryOptions = {},
+) {
   const searchParams = new URLSearchParams()
   if (params.status) searchParams.set('status', params.status)
   if (params.page) searchParams.set('page', params.page.toString())
@@ -684,6 +748,7 @@ export function useAdminStripeAccounts(params: { status?: string; page?: number;
   return useQuery({
     queryKey: ['admin', 'stripe', 'accounts', params],
     queryFn: () => adminFetch<{ accounts: StripeAccount[]; total: number; page: number; totalPages: number }>(`/admin/stripe/accounts${query ? `?${query}` : ''}`),
+    enabled: options.enabled ?? true,
     staleTime: 60 * 1000,
   })
 }
@@ -697,7 +762,10 @@ export function useAdminStripeAccountDetail(accountId: string) {
   })
 }
 
-export function useAdminStripeTransfers(params: { limit?: number; startingAfter?: string } = {}) {
+export function useAdminStripeTransfers(
+  params: { limit?: number; startingAfter?: string } = {},
+  options: AdminQueryOptions = {},
+) {
   const searchParams = new URLSearchParams()
   if (params.limit) searchParams.set('limit', params.limit.toString())
   if (params.startingAfter) searchParams.set('startingAfter', params.startingAfter)
@@ -706,19 +774,24 @@ export function useAdminStripeTransfers(params: { limit?: number; startingAfter?
   return useQuery({
     queryKey: ['admin', 'stripe', 'transfers', params],
     queryFn: () => adminFetch<{ transfers: StripeTransfer[]; hasMore: boolean; nextCursor: string | null }>(`/admin/stripe/transfers${query ? `?${query}` : ''}`),
+    enabled: options.enabled ?? true,
     staleTime: 60 * 1000,
   })
 }
 
-export function useAdminStripeBalance() {
+export function useAdminStripeBalance(options: AdminQueryOptions = {}) {
   return useQuery({
     queryKey: ['admin', 'stripe', 'balance'],
     queryFn: () => adminFetch<StripeBalance>('/admin/stripe/balance'),
+    enabled: options.enabled ?? true,
     staleTime: 60 * 1000,
   })
 }
 
-export function useAdminStripeEvents(params: { type?: string; limit?: number; startingAfter?: string } = {}) {
+export function useAdminStripeEvents(
+  params: { type?: string; limit?: number; startingAfter?: string } = {},
+  options: AdminQueryOptions = {},
+) {
   const searchParams = new URLSearchParams()
   if (params.type) searchParams.set('type', params.type)
   if (params.limit) searchParams.set('limit', params.limit.toString())
@@ -728,6 +801,7 @@ export function useAdminStripeEvents(params: { type?: string; limit?: number; st
   return useQuery({
     queryKey: ['admin', 'stripe', 'events', params],
     queryFn: () => adminFetch<{ events: StripeEvent[]; hasMore: boolean; nextCursor: string | null }>(`/admin/stripe/events${query ? `?${query}` : ''}`),
+    enabled: options.enabled ?? true,
     staleTime: 30 * 1000,
   })
 }

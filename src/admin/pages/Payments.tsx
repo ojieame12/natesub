@@ -4,28 +4,10 @@
 
 import { useState } from 'react'
 import { useAdminPayments, useAdminRefund } from '../api'
+import { formatCurrency, formatDateTime } from '../utils/format'
 import FilterBar from '../components/FilterBar'
 import Pagination from '../components/Pagination'
 import ActionModal from '../components/ActionModal'
-
-function formatCurrency(cents: number, currency = 'USD'): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency,
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(cents / 100)
-}
-
-function formatDate(date: string): string {
-  return new Date(date).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
 
 function getStatusBadge(status: string): string {
   switch (status) {
@@ -138,7 +120,7 @@ export default function Payments() {
                   </td>
                   <td>{payment.type}</td>
                   <td>{payment.provider}</td>
-                  <td>{formatDate(payment.occurredAt || payment.createdAt)}</td>
+                  <td>{formatDateTime(payment.occurredAt || payment.createdAt)}</td>
                   <td>
                     {payment.status === 'succeeded' && (
                       <button

@@ -4,26 +4,10 @@
 
 import { useState } from 'react'
 import { useAdminUsers, useAdminUserBlock, useAdminUserUnblock, useAdminUserDelete } from '../api'
+import { formatCurrency, formatDate } from '../utils/format'
 import FilterBar from '../components/FilterBar'
 import Pagination from '../components/Pagination'
 import ActionModal from '../components/ActionModal'
-
-function formatCurrency(cents: number): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(cents / 100)
-}
-
-function formatDate(date: string): string {
-  return new Date(date).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  })
-}
 
 export default function Users() {
   const [search, setSearch] = useState('')
@@ -144,7 +128,7 @@ export default function Users() {
                       {user.status}
                     </span>
                   </td>
-                  <td>{formatCurrency(user.revenueTotal)}</td>
+                  <td>{formatCurrency(user.revenueTotal, user.profile?.currency || 'USD')}</td>
                   <td>{user.subscriberCount}</td>
                   <td>{formatDate(user.createdAt)}</td>
                   <td>

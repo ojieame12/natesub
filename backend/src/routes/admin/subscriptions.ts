@@ -24,13 +24,23 @@ const subscriptions = new Hono()
  */
 subscriptions.get('/', async (c) => {
   const query = z.object({
-    status: z.enum(['all', 'active', 'canceled', 'past_due']).default('all'),
+    search: z.string().optional(),
+    status: z.enum(['all', 'active', 'canceled', 'past_due', 'paused']).default('all'),
     page: z.coerce.number().default(1),
     limit: z.coerce.number().min(1).max(200).default(50)
   }).parse(c.req.query())
 
   const skip = (query.page - 1) * query.limit
   const where: any = query.status !== 'all' ? { status: query.status } : {}
+
+  // Search by subscriber email, creator email, or creator username
+  if (query.search) {
+    where.OR = [
+      { subscriber: { email: { contains: query.search, mode: 'insensitive' } } },
+      { creator: { email: { contains: query.search, mode: 'insensitive' } } },
+      { creator: { profile: { username: { contains: query.search, mode: 'insensitive' } } } }
+    ]
+  }
 
   const [dbSubscriptions, total] = await Promise.all([
     db.subscription.findMany({
@@ -69,6 +79,137 @@ subscriptions.get('/', async (c) => {
     total,
     page: query.page,
     totalPages: Math.ceil(total / query.limit)
+  })
+})
+
+// ============================================
+// SUBSCRIPTION DETAIL
+// ============================================
+
+/**
+ * GET /admin/subscriptions/:id
+ * Get full subscription detail with subscriber info and payment history
+ */
+subscriptions.get('/:id', async (c) => {
+  const { id } = c.req.param()
+
+  const subscription = await db.subscription.findUnique({
+    where: { id },
+    include: {
+      creator: {
+        select: {
+          id: true,
+          email: true,
+          profile: { select: { username: true, displayName: true } }
+        }
+      },
+      subscriber: {
+        select: {
+          id: true,
+          email: true,
+          createdAt: true
+        }
+      }
+    }
+  })
+
+  if (!subscription) return c.json({ error: 'Subscription not found' }, 404)
+
+  // Get payment history for this subscription
+  const payments = await db.payment.findMany({
+    where: { subscriptionId: id },
+    orderBy: { occurredAt: 'desc' },
+    take: 20,
+    select: {
+      id: true,
+      grossCents: true,
+      amountCents: true,
+      feeCents: true,
+      netCents: true,
+      currency: true,
+      status: true,
+      type: true,
+      stripePaymentIntentId: true,
+      paystackTransactionRef: true,
+      occurredAt: true
+    }
+  })
+
+  // Get subscriber's other active subscriptions
+  const otherSubscriptions = await db.subscription.findMany({
+    where: {
+      subscriberId: subscription.subscriberId,
+      id: { not: id },
+      status: { in: ['active', 'paused', 'past_due'] }
+    },
+    include: {
+      creator: {
+        select: {
+          email: true,
+          profile: { select: { username: true, displayName: true } }
+        }
+      }
+    },
+    take: 10
+  })
+
+  // Calculate subscriber totals
+  const subscriberStats = await db.payment.aggregate({
+    where: {
+      subscriberId: subscription.subscriberId,
+      status: 'succeeded'
+    },
+    _sum: { grossCents: true },
+    _count: true
+  })
+
+  return c.json({
+    subscription: {
+      id: subscription.id,
+      status: subscription.status,
+      amount: subscription.amount,
+      currency: subscription.currency,
+      interval: subscription.interval,
+      ltvCents: subscription.ltvCents,
+      currentPeriodEnd: subscription.currentPeriodEnd,
+      cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
+      createdAt: subscription.createdAt,
+      canceledAt: subscription.canceledAt,
+      stripeSubscriptionId: subscription.stripeSubscriptionId,
+      paystackAuthorizationCode: subscription.paystackAuthorizationCode ? true : false
+    },
+    creator: {
+      id: subscription.creator.id,
+      email: subscription.creator.email,
+      username: subscription.creator.profile?.username,
+      displayName: subscription.creator.profile?.displayName
+    },
+    subscriber: {
+      id: subscription.subscriber.id,
+      email: subscription.subscriber.email,
+      joinedAt: subscription.subscriber.createdAt,
+      totalSpentCents: subscriberStats._sum.grossCents || 0,
+      totalPayments: subscriberStats._count
+    },
+    payments: payments.map(p => ({
+      id: p.id,
+      grossCents: p.grossCents ?? p.amountCents,
+      feeCents: p.feeCents,
+      netCents: p.netCents,
+      currency: p.currency,
+      status: p.status,
+      type: p.type,
+      provider: p.stripePaymentIntentId ? 'stripe' : p.paystackTransactionRef ? 'paystack' : 'unknown',
+      occurredAt: p.occurredAt
+    })),
+    otherSubscriptions: otherSubscriptions.map(s => ({
+      id: s.id,
+      creatorUsername: s.creator.profile?.username,
+      creatorDisplayName: s.creator.profile?.displayName,
+      amount: s.amount,
+      currency: s.currency,
+      status: s.status
+    }))
   })
 })
 

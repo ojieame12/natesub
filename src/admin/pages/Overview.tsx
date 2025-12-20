@@ -3,21 +3,8 @@
  */
 
 import { useAdminDashboard, useAdminRevenueOverview, useAdminActivity } from '../api'
+import { formatCurrency, formatNumber, formatDateTime } from '../utils/format'
 import StatCard from '../components/StatCard'
-
-function formatCurrency(cents: number, currency = 'USD'): string {
-  const amount = cents / 100
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency,
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount)
-}
-
-function formatNumber(num: number): string {
-  return new Intl.NumberFormat('en-US').format(num)
-}
 
 function timeAgo(date: string): string {
   const seconds = Math.floor((Date.now() - new Date(date).getTime()) / 1000)
@@ -25,17 +12,6 @@ function timeAgo(date: string): string {
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`
   if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`
   return `${Math.floor(seconds / 86400)}d ago`
-}
-
-function formatDateTime(date: string | null): string {
-  if (!date) return '—'
-  return new Date(date).toLocaleString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
 }
 
 export default function Overview() {

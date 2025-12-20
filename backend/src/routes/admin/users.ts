@@ -9,13 +9,14 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import { db } from '../../db/client.js'
 import { stripe } from '../../services/stripe.js'
-import { createSubaccount, type PaystackCountry } from '../../services/paystack.js'
+import { createSubaccount, deactivateAuthorizationsBatch, type PaystackCountry } from '../../services/paystack.js'
 import { sendCreatorAccountCreatedEmail } from '../../services/email.js'
 import { RESERVED_USERNAMES } from '../../utils/constants.js'
 import { displayAmountToCents } from '../../utils/currency.js'
 import { env } from '../../config/env.js'
 import { adminSensitiveRateLimit } from '../../middleware/rateLimit.js'
 import { requireRole, requireFreshSession, logAdminAction } from '../../middleware/adminAuth.js'
+import { cached, CACHE_TTL } from '../../utils/cache.js'
 
 const users = new Hono()
 
@@ -84,12 +85,15 @@ users.get('/', async (c) => {
   ])
 
   const userIds = dbUsers.map(u => u.id)
+
+  // Batch fetch revenue for users on this page
+  // Uses database index on (creatorId, status, occurredAt)
   const revenues = await db.payment.groupBy({
     by: ['creatorId'],
     where: { creatorId: { in: userIds }, status: 'succeeded' },
     _sum: { netCents: true }
   })
-  const revenueMap = new Map(revenues.map(r => [r.creatorId, r._sum.netCents || 0]))
+  const revenueMapObj = new Map(revenues.map(r => [r.creatorId, r._sum.netCents || 0]))
 
   const getUserStatus = (user: { deletedAt: Date | null; profile: any }) => {
     if (!user.deletedAt) return 'active'
@@ -112,7 +116,7 @@ users.get('/', async (c) => {
       status: getUserStatus(u),
       subscriberCount: u._count.subscriptions,
       subscribedToCount: u._count.subscribedTo,
-      revenueTotal: revenueMap.get(u.id) || 0,
+      revenueTotal: revenueMapObj.get(u.id) || 0,
       createdAt: u.createdAt,
       lastLoginAt: u.lastLoginAt
     })),
@@ -321,6 +325,26 @@ users.delete('/:id', adminSensitiveRateLimit, requireRole('super_admin'), requir
   }
 
   // 4. Neutralize PAYSTACK subscriptions (creator)
+  // First, fetch all authorization codes that will be cleared
+  const paystackCreatorSubsToCancel = await db.subscription.findMany({
+    where: {
+      creatorId: id,
+      paystackAuthorizationCode: { not: null },
+      status: { in: ['active', 'past_due', 'pending'] },
+    },
+    select: { paystackAuthorizationCode: true },
+  })
+  const creatorAuthCodes = paystackCreatorSubsToCancel
+    .map(s => s.paystackAuthorizationCode)
+    .filter((code): code is string => code !== null)
+
+  // Revoke authorizations with Paystack BEFORE clearing from DB
+  if (creatorAuthCodes.length > 0) {
+    const revokeResult = await deactivateAuthorizationsBatch(creatorAuthCodes)
+    console.log(`[admin] Revoked ${revokeResult.success}/${creatorAuthCodes.length} Paystack creator authorizations for user ${id}`)
+  }
+
+  // Now update the subscriptions
   const paystackCreatorSubs = await db.subscription.updateMany({
     where: {
       creatorId: id,
@@ -337,6 +361,26 @@ users.delete('/:id', adminSensitiveRateLimit, requireRole('super_admin'), requir
   canceledCounts.paystackCreator = paystackCreatorSubs.count
 
   // 5. Neutralize PAYSTACK subscriptions (subscriber)
+  // First, fetch all authorization codes that will be cleared
+  const paystackSubscriberSubsToCancel = await db.subscription.findMany({
+    where: {
+      subscriberId: id,
+      paystackAuthorizationCode: { not: null },
+      status: { in: ['active', 'past_due', 'pending'] },
+    },
+    select: { paystackAuthorizationCode: true },
+  })
+  const subscriberAuthCodes = paystackSubscriberSubsToCancel
+    .map(s => s.paystackAuthorizationCode)
+    .filter((code): code is string => code !== null)
+
+  // Revoke authorizations with Paystack BEFORE clearing from DB
+  if (subscriberAuthCodes.length > 0) {
+    const revokeResult = await deactivateAuthorizationsBatch(subscriberAuthCodes)
+    console.log(`[admin] Revoked ${revokeResult.success}/${subscriberAuthCodes.length} Paystack subscriber authorizations for user ${id}`)
+  }
+
+  // Now update the subscriptions
   const paystackSubscriberSubs = await db.subscription.updateMany({
     where: {
       subscriberId: id,

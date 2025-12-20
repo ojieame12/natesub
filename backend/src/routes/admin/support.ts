@@ -10,6 +10,7 @@ import { db } from '../../db/client.js'
 import { sendSupportTicketReplyEmail } from '../../services/email.js'
 import { lastNDays } from '../../utils/timezone.js'
 import { adminSensitiveRateLimit } from '../../middleware/rateLimit.js'
+import { sanitizeName, sanitizeMessage } from '../../utils/sanitize.js'
 
 const support = new Hono()
 
@@ -190,7 +191,8 @@ support.post('/tickets/:id/reply', adminSensitiveRateLimit, async (c) => {
       where: { id: userId },
       select: { email: true }
     })
-    if (user) senderName = user.email
+    // Sanitize email used as sender name to prevent injection
+    if (user) senderName = sanitizeName(user.email)
   }
 
   const message = await db.supportMessage.create({
@@ -198,7 +200,7 @@ support.post('/tickets/:id/reply', adminSensitiveRateLimit, async (c) => {
       ticketId: id,
       isAdmin: true,
       senderName,
-      message: body.message
+      message: sanitizeMessage(body.message)
     }
   })
 
@@ -237,7 +239,7 @@ support.post('/tickets/:id/resolve', adminSensitiveRateLimit, async (c) => {
         ticketId: id,
         isAdmin: true,
         senderName: 'NatePay Support',
-        message: body.replyMessage
+        message: sanitizeMessage(body.replyMessage)
       }
     })
   }

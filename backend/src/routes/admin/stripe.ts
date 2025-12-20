@@ -8,11 +8,34 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { db } from '../../db/client.js'
-import { stripe } from '../../services/stripe.js'
+import { stripe, getAccountStatus } from '../../services/stripe.js'
 import { adminSensitiveRateLimit } from '../../middleware/rateLimit.js'
 import { requireRole, requireFreshSession } from '../../middleware/adminAuth.js'
 
 const stripeRoutes = new Hono()
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  mapper: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = new Array(items.length)
+  let nextIndex = 0
+  const workerCount = Math.max(1, Math.min(concurrency, items.length))
+
+  await Promise.all(
+    Array.from({ length: workerCount }, async () => {
+      while (true) {
+        const currentIndex = nextIndex
+        nextIndex += 1
+        if (currentIndex >= items.length) return
+        results[currentIndex] = await mapper(items[currentIndex], currentIndex)
+      }
+    }),
+  )
+
+  return results
+}
 
 // ============================================
 // STRIPE CONNECT ACCOUNTS
@@ -44,10 +67,15 @@ stripeRoutes.get('/accounts', async (c) => {
     }
   })
 
-  const accountsWithStripeData = await Promise.all(
-    profiles.map(async (p) => {
+  // NOTE: This endpoint is used by the admin UI list view and can be very slow
+  // if we call Stripe sequentially. We concurrency-limit and use cached account
+  // status (5m TTL) to keep the list responsive.
+  const accountsWithStripeData = await mapWithConcurrency(
+    profiles,
+    6,
+    async (p) => {
       try {
-        const account = await stripe.accounts.retrieve(p.stripeAccountId!)
+        const status = await getAccountStatus(p.stripeAccountId!, { skipBankDetails: true })
         return {
           userId: p.userId,
           email: p.user.email,
@@ -59,21 +87,21 @@ stripeRoutes.get('/accounts', async (c) => {
           createdAt: p.createdAt,
           stripeAccountId: p.stripeAccountId,
           stripeStatus: {
-            chargesEnabled: account.charges_enabled,
-            payoutsEnabled: account.payouts_enabled,
-            detailsSubmitted: account.details_submitted,
-            type: account.type,
-            country: account.country,
-            defaultCurrency: account.default_currency,
-            capabilities: account.capabilities,
+            chargesEnabled: status.chargesEnabled,
+            payoutsEnabled: status.payoutsEnabled,
+            detailsSubmitted: status.detailsSubmitted,
+            type: status.type,
+            country: status.country,
+            defaultCurrency: status.defaultCurrency,
+            capabilities: status.capabilities,
             requirements: {
-              currentlyDue: account.requirements?.currently_due || [],
-              eventuallyDue: account.requirements?.eventually_due || [],
-              pastDue: account.requirements?.past_due || [],
-              pendingVerification: account.requirements?.pending_verification || [],
-              disabledReason: account.requirements?.disabled_reason
-            }
-          }
+              currentlyDue: status.requirements.currentlyDue,
+              eventuallyDue: status.requirements.eventuallyDue,
+              pastDue: status.requirements.pastDue,
+              pendingVerification: status.requirements.pendingVerification,
+              disabledReason: status.requirements.disabledReason,
+            },
+          },
         }
       } catch (err: any) {
         return {
@@ -87,10 +115,10 @@ stripeRoutes.get('/accounts', async (c) => {
           createdAt: p.createdAt,
           stripeAccountId: p.stripeAccountId,
           stripeStatus: null,
-          stripeError: err.message
+          stripeError: err.message,
         }
       }
-    })
+    },
   )
 
   const total = await db.profile.count({

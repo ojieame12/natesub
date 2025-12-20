@@ -12,35 +12,11 @@ import {
   useAdminTopCreators,
   useAdminRefundsStats,
 } from '../api'
+import { formatCurrency, formatNumber, formatDateTime } from '../utils/format'
 import StatCard from '../components/StatCard'
 import { AdminLineChart, AdminBarChart, AdminPieChart } from '../components/AdminChart'
 
 type Period = 'today' | 'week' | 'month' | 'year' | 'all'
-
-function formatCurrency(cents: number, currency = 'USD'): string {
-  const amount = cents / 100
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency,
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount)
-}
-
-function formatNumber(num: number): string {
-  return new Intl.NumberFormat('en-US').format(num)
-}
-
-function formatDateTime(date: string | null): string {
-  if (!date) return '—'
-  return new Date(date).toLocaleString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
 
 function formatCompactCurrency(cents: number): string {
   const amount = cents / 100

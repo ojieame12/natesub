@@ -3,8 +3,8 @@
  *
  * Centralized admin auth that supports:
  * 1. API key auth (for Retool/external tools) - via x-admin-api-key header
- *    - ADMIN_API_KEY: Full access (super_admin) - can perform all actions
- *    - ADMIN_API_KEY_READONLY: Read-only access - GET requests only
+ *    - Database-backed keys (preferred): Stored as SHA-256 hashes with scope/expiration
+ *    - Legacy env var keys (fallback): ADMIN_API_KEY and ADMIN_API_KEY_READONLY
  * 2. Session auth (for frontend dashboard) - via cookie or Bearer token
  *
  * Role-based access control:
@@ -18,6 +18,7 @@
 import { Context, Next } from 'hono'
 import { HTTPException } from 'hono/http-exception'
 import { getCookie } from 'hono/cookie'
+import { createHash } from 'crypto'
 import { db } from '../db/client.js'
 import { validateSession, validateSessionWithDetails } from '../services/auth.js'
 import type { UserRole } from '@prisma/client'
@@ -37,11 +38,84 @@ declare module 'hono' {
     adminUserId?: string
     adminEmail?: string
     adminRole?: UserRole
-    adminAuthMethod?: 'api-key' | 'session'
+    adminAuthMethod?: 'api-key' | 'api-key-legacy' | 'session'
     adminApiKeyScope?: ApiKeyScope
+    adminApiKeyId?: string      // Database key ID
+    adminApiKeyPrefix?: string  // Key prefix for logging
     adminSessionCreatedAt?: Date
     adminSessionFresh?: boolean
   }
+}
+
+/**
+ * Hash an API key using SHA-256 (must match api-keys.ts)
+ */
+function hashApiKey(key: string): string {
+  return createHash('sha256').update(key).digest('hex')
+}
+
+/**
+ * Validate API key against database
+ * Returns key details if valid, null otherwise
+ */
+async function validateDatabaseApiKey(plainKey: string): Promise<{
+  id: string
+  name: string
+  keyPrefix: string
+  scope: string
+  createdById: string
+} | null> {
+  const keyHash = hashApiKey(plainKey)
+
+  const model = (db as any).adminApiKey
+  if (!model?.findUnique) return null
+
+  const apiKey = await model.findUnique({
+    where: { keyHash },
+    select: {
+      id: true,
+      name: true,
+      keyPrefix: true,
+      scope: true,
+      createdById: true,
+      expiresAt: true,
+      revokedAt: true,
+    }
+  })
+
+  if (!apiKey) return null
+
+  // Check if revoked
+  if (apiKey.revokedAt) return null
+
+  // Check if expired
+  if (apiKey.expiresAt && new Date(apiKey.expiresAt) < new Date()) return null
+
+  return {
+    id: apiKey.id,
+    name: apiKey.name,
+    keyPrefix: apiKey.keyPrefix,
+    scope: apiKey.scope,
+    createdById: apiKey.createdById,
+  }
+}
+
+/**
+ * Update API key usage tracking (non-blocking)
+ */
+function updateApiKeyUsage(keyId: string, ip: string): void {
+  const model = (db as any).adminApiKey
+  if (!model?.update) return
+
+  model.update({
+    where: { id: keyId },
+    data: {
+      lastUsedAt: new Date(),
+      lastUsedIp: ip,
+    }
+  }).catch((err: unknown) => {
+    console.error('Failed to update API key usage:', err)
+  })
 }
 
 /**
@@ -82,14 +156,18 @@ export function getSessionToken(c: Context): string | undefined {
 async function logAdminAccess(
   c: Context,
   success: boolean,
-  details?: { userId?: string; email?: string; role?: string; authMethod?: string; scope?: string; reason?: string }
+  details?: { userId?: string; email?: string; role?: string; authMethod?: string; scope?: string; reason?: string; keyPrefix?: string; keyId?: string }
 ): Promise<void> {
   try {
+    // Get keyPrefix from context if not in details (for database keys)
+    const keyPrefix = details?.keyPrefix || c.get('adminApiKeyPrefix')
+    const keyId = details?.keyId || c.get('adminApiKeyId')
+
     await db.systemLog.create({
       data: {
         type: success ? 'admin_access' : 'admin_access_denied',
         message: success
-          ? `Admin access granted via ${details?.authMethod || 'unknown'}${details?.scope ? ` (${details.scope})` : ''}`
+          ? `Admin access granted via ${details?.authMethod || 'unknown'}${details?.scope ? ` (${details.scope})` : ''}${keyPrefix ? ` [${keyPrefix}...]` : ''}`
           : details?.reason || 'Admin access denied',
         metadata: {
           path: c.req.path,
@@ -102,6 +180,8 @@ async function logAdminAccess(
           authMethod: details?.authMethod,
           scope: details?.scope,
           reason: details?.reason,
+          keyPrefix,
+          keyId,
         },
       },
     })
@@ -147,44 +227,89 @@ export async function logAdminAction(
  * Use this for all protected admin routes
  */
 export async function adminAuth(c: Context, next: Next): Promise<void> {
+  const clientIp = c.req.header('x-forwarded-for') || c.req.header('x-real-ip') || 'unknown'
+
   // Option 1: API key auth (for Retool/external tools)
   const apiKey = c.req.header('x-admin-api-key')
-  const fullAccessKey = process.env.ADMIN_API_KEY
-  const readOnlyKey = process.env.ADMIN_API_KEY_READONLY
 
-  // Check full access key first (grants super_admin)
-  if (apiKey && fullAccessKey && apiKey === fullAccessKey) {
-    c.set('adminAuthMethod', 'api-key')
-    c.set('adminRole', 'super_admin')
-    c.set('adminApiKeyScope', 'full')
-    await logAdminAccess(c, true, { authMethod: 'api-key', role: 'super_admin', scope: 'full' })
-    await next()
-    return
-  }
+  if (apiKey) {
+    // Try database-backed keys first (preferred)
+    const dbKey = await validateDatabaseApiKey(apiKey)
 
-  // Check read-only key (grants admin role, blocks non-GET requests)
-  if (apiKey && readOnlyKey && apiKey === readOnlyKey) {
-    const method = c.req.method.toUpperCase()
+    if (dbKey) {
+      const method = c.req.method.toUpperCase()
 
-    // Read-only key only allows GET requests
-    if (method !== 'GET') {
-      await logAdminAccess(c, false, {
+      // Check scope permissions
+      if (dbKey.scope === 'readonly' && method !== 'GET') {
+        await logAdminAccess(c, false, {
+          authMethod: 'api-key',
+          role: 'admin',
+          scope: 'readonly',
+          reason: `Read-only API key cannot perform ${method} requests`
+        })
+        throw new HTTPException(403, {
+          message: 'Read-only API key cannot perform this action. Use full access key for write operations.'
+        })
+      }
+
+      // Set context for database key
+      c.set('adminAuthMethod', 'api-key')
+      c.set('adminRole', dbKey.scope === 'full' ? 'super_admin' : 'admin')
+      c.set('adminApiKeyScope', dbKey.scope === 'full' ? 'full' : 'read-only')
+      c.set('adminApiKeyId', dbKey.id)
+      c.set('adminApiKeyPrefix', dbKey.keyPrefix)
+
+      // Update usage tracking (non-blocking)
+      updateApiKeyUsage(dbKey.id, clientIp)
+
+      // Log access with key prefix for audit
+      logAdminAccess(c, true, {
         authMethod: 'api-key',
-        role: 'admin',
-        scope: 'read-only',
-        reason: `Read-only API key cannot perform ${method} requests`
-      })
-      throw new HTTPException(403, {
-        message: 'Read-only API key cannot perform this action. Use full access key for write operations.'
-      })
+        role: dbKey.scope === 'full' ? 'super_admin' : 'admin',
+        scope: dbKey.scope,
+      }).catch(() => { })
+
+      await next()
+      return
     }
 
-    c.set('adminAuthMethod', 'api-key')
-    c.set('adminRole', 'admin') // admin role, not super_admin
-    c.set('adminApiKeyScope', 'read-only')
-    await logAdminAccess(c, true, { authMethod: 'api-key', role: 'admin', scope: 'read-only' })
-    await next()
-    return
+    // Fallback: Legacy env var keys (for backwards compatibility)
+    const fullAccessKey = process.env.ADMIN_API_KEY
+    const readOnlyKey = process.env.ADMIN_API_KEY_READONLY
+
+    // Check full access key (grants super_admin)
+    if (fullAccessKey && apiKey === fullAccessKey) {
+      c.set('adminAuthMethod', 'api-key-legacy')
+      c.set('adminRole', 'super_admin')
+      c.set('adminApiKeyScope', 'full')
+      logAdminAccess(c, true, { authMethod: 'api-key-legacy', role: 'super_admin', scope: 'full' }).catch(() => { })
+      await next()
+      return
+    }
+
+    // Check read-only key (grants admin role, blocks non-GET requests)
+    if (readOnlyKey && apiKey === readOnlyKey) {
+      const method = c.req.method.toUpperCase()
+
+      if (method !== 'GET') {
+        await logAdminAccess(c, false, {
+          authMethod: 'api-key-legacy',
+          role: 'admin',
+          scope: 'read-only',
+          reason: `Read-only API key cannot perform ${method} requests`
+        })
+        throw new HTTPException(403, {
+          message: 'Read-only API key cannot perform this action. Use full access key for write operations.'
+        })
+      }
+
+      c.set('adminAuthMethod', 'api-key-legacy')
+      c.set('adminRole', 'admin')
+      c.set('adminApiKeyScope', 'read-only')
+      logAdminAccess(c, true, { authMethod: 'api-key-legacy', role: 'admin', scope: 'read-only' }).catch(() => { })
+      await next()
+      return
+    }
   }
 
   // Option 2: User session auth (for frontend dashboard)
@@ -192,28 +317,24 @@ export async function adminAuth(c: Context, next: Next): Promise<void> {
   if (sessionToken) {
     const session = await validateSessionWithDetails(sessionToken)
     if (session) {
-      const user = await db.user.findUnique({
-        where: { id: session.userId },
-        select: { id: true, email: true, role: true },
-      })
-
-      if (user && isAdminRole(user.role)) {
+      if (isAdminRole(session.role)) {
         // Calculate session freshness (created within the window)
         const sessionAge = Date.now() - session.createdAt.getTime()
         const isFresh = sessionAge < FRESH_SESSION_WINDOW_MS
 
-        c.set('adminUserId', user.id)
-        c.set('adminEmail', user.email)
-        c.set('adminRole', user.role)
+        c.set('adminUserId', session.userId)
+        c.set('adminEmail', session.email)
+        c.set('adminRole', session.role)
         c.set('adminAuthMethod', 'session')
         c.set('adminSessionCreatedAt', session.createdAt)
         c.set('adminSessionFresh', isFresh)
-        await logAdminAccess(c, true, {
-          userId: user.id,
-          email: user.email,
-          role: user.role,
+        // Don't block the request on logging.
+        logAdminAccess(c, true, {
+          userId: session.userId,
+          email: session.email,
+          role: session.role,
           authMethod: 'session',
-        })
+        }).catch(() => { })
         await next()
         return
       }
@@ -230,27 +351,45 @@ export async function adminAuth(c: Context, next: Next): Promise<void> {
  * Use this for routes like /admin/me that need to work for both admins and non-admins
  */
 export async function adminAuthOptional(c: Context, next: Next): Promise<void> {
+  const clientIp = c.req.header('x-forwarded-for') || c.req.header('x-real-ip') || 'unknown'
+
   // Try API keys first
   const apiKey = c.req.header('x-admin-api-key')
-  const fullAccessKey = process.env.ADMIN_API_KEY
-  const readOnlyKey = process.env.ADMIN_API_KEY_READONLY
 
-  // Full access key
-  if (apiKey && fullAccessKey && apiKey === fullAccessKey) {
-    c.set('adminAuthMethod', 'api-key')
-    c.set('adminRole', 'super_admin')
-    c.set('adminApiKeyScope', 'full')
-    await next()
-    return
-  }
+  if (apiKey) {
+    // Try database-backed keys first
+    const dbKey = await validateDatabaseApiKey(apiKey)
 
-  // Read-only key (no method restriction for optional auth - route decides)
-  if (apiKey && readOnlyKey && apiKey === readOnlyKey) {
-    c.set('adminAuthMethod', 'api-key')
-    c.set('adminRole', 'admin')
-    c.set('adminApiKeyScope', 'read-only')
-    await next()
-    return
+    if (dbKey) {
+      c.set('adminAuthMethod', 'api-key')
+      c.set('adminRole', dbKey.scope === 'full' ? 'super_admin' : 'admin')
+      c.set('adminApiKeyScope', dbKey.scope === 'full' ? 'full' : 'read-only')
+      c.set('adminApiKeyId', dbKey.id)
+      c.set('adminApiKeyPrefix', dbKey.keyPrefix)
+      updateApiKeyUsage(dbKey.id, clientIp)
+      await next()
+      return
+    }
+
+    // Fallback: Legacy env var keys
+    const fullAccessKey = process.env.ADMIN_API_KEY
+    const readOnlyKey = process.env.ADMIN_API_KEY_READONLY
+
+    if (fullAccessKey && apiKey === fullAccessKey) {
+      c.set('adminAuthMethod', 'api-key-legacy')
+      c.set('adminRole', 'super_admin')
+      c.set('adminApiKeyScope', 'full')
+      await next()
+      return
+    }
+
+    if (readOnlyKey && apiKey === readOnlyKey) {
+      c.set('adminAuthMethod', 'api-key-legacy')
+      c.set('adminRole', 'admin')
+      c.set('adminApiKeyScope', 'read-only')
+      await next()
+      return
+    }
   }
 
   // Try session
@@ -327,7 +466,7 @@ export function requireFreshSession(c: Context, next: Next): Promise<void> | voi
 
   // API key with full access bypasses fresh session requirement
   // (API keys are used in trusted automated contexts like Retool)
-  if (authMethod === 'api-key' && apiKeyScope === 'full') {
+  if ((authMethod === 'api-key' || authMethod === 'api-key-legacy') && apiKeyScope === 'full') {
     return next()
   }
 

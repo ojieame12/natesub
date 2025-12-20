@@ -28,6 +28,13 @@ import system from './system.js'
 import support from './support.js'
 import disputes, { blockedSubscribers, subscribers } from './disputes.js'
 import adminRevenue from '../admin-revenue.js'
+import apiKeys from './api-keys.js'
+import admins from './admins.js'
+import financials from './financials.js'
+import tax from './tax.js'
+import analytics from './analytics.js'
+import creators from './creators.js'
+import refundsRoutes from './refunds.js'
 
 const admin = new Hono()
 
@@ -89,5 +96,40 @@ admin.route('/support', support)
 // Mount revenue routes at /revenue (from existing admin-revenue.ts)
 // These define: /overview, /by-provider, /by-currency, /daily, /monthly, /top-creators, /refunds
 admin.route('/revenue', adminRevenue)
+
+// Mount API key management routes at /api-keys
+// These define: /, /:id, /:id/usage (CRUD + usage audit)
+// Requires super_admin role
+admin.route('/api-keys', apiKeys)
+
+// Mount admin user management routes at /admins
+// These define: /, /users/:id/promote, /users/:id/demote, /audit
+// Requires super_admin role
+admin.route('/admins', admins)
+
+// Mount financial tools at /financials
+// These define: /reconciliation, /fee-audit, /balance-sheet, /daily/:date
+// Requires super_admin role
+admin.route('/financials', financials)
+
+// Mount tax reporting at /tax
+// These define: /summary/:year, /creator-earnings/:year, /export-1099
+// Requires super_admin role
+admin.route('/tax', tax)
+
+// Mount analytics at /analytics
+// These define: /churn, /ltv, /at-risk, /cohort/:month, /mrr
+// Requires admin role
+admin.route('/analytics', analytics)
+
+// Mount creator management at /creators
+// These define: /, /:id, /:id/restrict, /:id/unrestrict, /stats/overview
+// Requires admin role (restrict/unrestrict require fresh session)
+admin.route('/creators', creators)
+
+// Mount refund management at /refunds
+// These define: /, /eligible/:paymentId, /:paymentId/process, /stats, /policy
+// Requires admin role (process requires fresh session)
+admin.route('/refunds', refundsRoutes)
 
 export default admin

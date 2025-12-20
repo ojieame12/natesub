@@ -250,6 +250,9 @@ export async function getAccountStatus(stripeAccountId: string, options: { skipB
 
   const result = {
     type: account.type, // 'standard', 'express', etc.
+    country: account.country || null,
+    defaultCurrency: account.default_currency || null,
+    capabilities: account.capabilities || {},
     detailsSubmitted: account.details_submitted,
     chargesEnabled: account.charges_enabled,
     payoutsEnabled: account.payouts_enabled,
@@ -258,6 +261,7 @@ export async function getAccountStatus(stripeAccountId: string, options: { skipB
     requirements: {
       currentlyDue,
       eventuallyDue,
+      pastDue: account.requirements?.past_due || [],
       pendingVerification,
       disabledReason: account.requirements?.disabled_reason || null,
       currentDeadline: account.requirements?.current_deadline
