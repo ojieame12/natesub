@@ -3,6 +3,8 @@
  *
  * Centralized admin auth that supports:
  * 1. API key auth (for Retool/external tools) - via x-admin-api-key header
+ *    - ADMIN_API_KEY: Full access (super_admin) - can perform all actions
+ *    - ADMIN_API_KEY_READONLY: Read-only access - GET requests only
  * 2. Session auth (for frontend dashboard) - via cookie or Bearer token
  *
  * Role-based access control:
@@ -17,7 +19,7 @@ import { Context, Next } from 'hono'
 import { HTTPException } from 'hono/http-exception'
 import { getCookie } from 'hono/cookie'
 import { db } from '../db/client.js'
-import { validateSession } from '../services/auth.js'
+import { validateSession, validateSessionWithDetails } from '../services/auth.js'
 import type { UserRole } from '@prisma/client'
 
 // Roles that have admin access (can access admin dashboard)
@@ -25,6 +27,9 @@ const ADMIN_ROLES: UserRole[] = ['admin', 'super_admin']
 
 // API key scopes
 export type ApiKeyScope = 'full' | 'read-only'
+
+// Session freshness window for sensitive operations (15 minutes)
+const FRESH_SESSION_WINDOW_MS = 15 * 60 * 1000
 
 // Extend Hono context with admin info
 declare module 'hono' {
@@ -34,6 +39,8 @@ declare module 'hono' {
     adminRole?: UserRole
     adminAuthMethod?: 'api-key' | 'session'
     adminApiKeyScope?: ApiKeyScope
+    adminSessionCreatedAt?: Date
+    adminSessionFresh?: boolean
   }
 }
 
@@ -183,7 +190,7 @@ export async function adminAuth(c: Context, next: Next): Promise<void> {
   // Option 2: User session auth (for frontend dashboard)
   const sessionToken = getSessionToken(c)
   if (sessionToken) {
-    const session = await validateSession(sessionToken)
+    const session = await validateSessionWithDetails(sessionToken)
     if (session) {
       const user = await db.user.findUnique({
         where: { id: session.userId },
@@ -191,10 +198,16 @@ export async function adminAuth(c: Context, next: Next): Promise<void> {
       })
 
       if (user && isAdminRole(user.role)) {
+        // Calculate session freshness (created within the window)
+        const sessionAge = Date.now() - session.createdAt.getTime()
+        const isFresh = sessionAge < FRESH_SESSION_WINDOW_MS
+
         c.set('adminUserId', user.id)
         c.set('adminEmail', user.email)
         c.set('adminRole', user.role)
         c.set('adminAuthMethod', 'session')
+        c.set('adminSessionCreatedAt', session.createdAt)
+        c.set('adminSessionFresh', isFresh)
         await logAdminAccess(c, true, {
           userId: user.id,
           email: user.email,
@@ -217,13 +230,25 @@ export async function adminAuth(c: Context, next: Next): Promise<void> {
  * Use this for routes like /admin/me that need to work for both admins and non-admins
  */
 export async function adminAuthOptional(c: Context, next: Next): Promise<void> {
-  // Try API key first
+  // Try API keys first
   const apiKey = c.req.header('x-admin-api-key')
-  const expectedKey = process.env.ADMIN_API_KEY
+  const fullAccessKey = process.env.ADMIN_API_KEY
+  const readOnlyKey = process.env.ADMIN_API_KEY_READONLY
 
-  if (apiKey && expectedKey && apiKey === expectedKey) {
+  // Full access key
+  if (apiKey && fullAccessKey && apiKey === fullAccessKey) {
     c.set('adminAuthMethod', 'api-key')
     c.set('adminRole', 'super_admin')
+    c.set('adminApiKeyScope', 'full')
+    await next()
+    return
+  }
+
+  // Read-only key (no method restriction for optional auth - route decides)
+  if (apiKey && readOnlyKey && apiKey === readOnlyKey) {
+    c.set('adminAuthMethod', 'api-key')
+    c.set('adminRole', 'admin')
+    c.set('adminApiKeyScope', 'read-only')
     await next()
     return
   }
@@ -279,4 +304,48 @@ export function requireRole(requiredRole: UserRole) {
 
     await next()
   }
+}
+
+/**
+ * Require a fresh session (authenticated within last 15 minutes) for sensitive operations
+ *
+ * This adds an extra layer of protection for destructive/financial actions like:
+ * - Processing refunds
+ * - Initiating payouts
+ * - Deleting users
+ * - Blocking subscribers
+ *
+ * API key auth (with full access key) bypasses this check since API keys
+ * are typically used in automated/trusted contexts.
+ *
+ * Example:
+ *   admin.post('/payouts', requireFreshSession, async (c) => { ... })
+ */
+export function requireFreshSession(c: Context, next: Next): Promise<void> | void {
+  const authMethod = c.get('adminAuthMethod')
+  const apiKeyScope = c.get('adminApiKeyScope')
+
+  // API key with full access bypasses fresh session requirement
+  // (API keys are used in trusted automated contexts like Retool)
+  if (authMethod === 'api-key' && apiKeyScope === 'full') {
+    return next()
+  }
+
+  // For session auth, require fresh session
+  if (authMethod === 'session') {
+    const isFresh = c.get('adminSessionFresh')
+
+    if (!isFresh) {
+      throw new HTTPException(403, {
+        message: 'This action requires recent authentication. Please log out and log back in to continue.',
+      })
+    }
+
+    return next()
+  }
+
+  // Unknown auth method - deny
+  throw new HTTPException(403, {
+    message: 'This action requires session authentication',
+  })
 }

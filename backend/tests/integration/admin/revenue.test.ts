@@ -320,4 +320,33 @@ describe('admin revenue', () => {
     expect(body.chargebacks.totalCents).toBe(0)
     expect(body.chargebacks.count).toBe(0)
   })
+
+  it('treats dispute_lost as chargebacks', async () => {
+    const { creator1 } = await seedRevenueData()
+
+    await db.payment.create({
+      data: {
+        creatorId: creator1.id,
+        amountCents: 2500,
+        grossCents: 2500,
+        feeCents: 0,
+        netCents: 0,
+        currency: 'USD',
+        status: 'dispute_lost',
+        type: 'recurring',
+      },
+    })
+
+    const res = await app.fetch(
+      new Request('http://localhost/admin/revenue/refunds?period=month', {
+        method: 'GET',
+        headers: adminHeaders,
+      })
+    )
+
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.chargebacks.totalCents).toBe(2500)
+    expect(body.chargebacks.count).toBe(1)
+  })
 })

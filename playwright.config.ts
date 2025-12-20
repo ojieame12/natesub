@@ -75,6 +75,7 @@ export default defineConfig({
       env: {
         PAYMENTS_MODE: 'stub',
         NODE_ENV: 'test',
+        HOST: '127.0.0.1',
       },
     },
     {

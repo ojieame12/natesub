@@ -49,11 +49,13 @@ function formatDate(date: string): string {
   })
 }
 
-type TabType = 'health' | 'webhooks' | 'disputes' | 'blocked'
+type TabType = 'health' | 'webhooks' | 'reconciliation' | 'disputes' | 'blocked'
 
 export default function Operations() {
   const [activeTab, setActiveTab] = useState<TabType>('health')
   const [retryModal, setRetryModal] = useState<{ id: string; provider: string } | null>(null)
+  const [reconciliationMessage, setReconciliationMessage] = useState<string | null>(null)
+  const [reconciliationError, setReconciliationError] = useState<string | null>(null)
   const queryClient = useQueryClient()
 
   // Health check
@@ -121,6 +123,46 @@ export default function Operations() {
     staleTime: 60 * 1000,
   })
 
+  // Reconciliation: Paystack missing transactions
+  const { data: paystackMissing, isLoading: paystackMissingLoading, refetch: refetchPaystackMissing } = useQuery({
+    queryKey: ['admin', 'reconciliation', 'paystack-missing', 48],
+    queryFn: () => adminFetch<{
+      periodHours: number
+      count: number
+      windowStart: string
+      windowEnd: string
+      transactions: Array<{
+        reference: string
+        amount: number
+        currency: string
+        paidAt: string
+        customerEmail: string
+      }>
+      warning: string | null
+    }>('/admin/reconciliation/missing?hours=48'),
+    enabled: activeTab === 'reconciliation',
+    staleTime: 60 * 1000,
+  })
+
+  // Reconciliation: Stripe missing invoices
+  const { data: stripeMissing, isLoading: stripeMissingLoading, refetch: refetchStripeMissing } = useQuery({
+    queryKey: ['admin', 'reconciliation', 'stripe-missing', 20],
+    queryFn: () => adminFetch<{
+      missing: Array<{
+        invoiceId: string
+        amount: number
+        currency: string
+        customerEmail: string | null
+        created: string
+        subscriptionId: string | null
+      }>
+      total: number
+      checked: number
+    }>('/admin/sync/stripe-missing?limit=20'),
+    enabled: activeTab === 'reconciliation',
+    staleTime: 60 * 1000,
+  })
+
   // Retry webhook mutation
   const retryMutation = useMutation({
     mutationFn: (webhookId: string) =>
@@ -128,6 +170,69 @@ export default function Operations() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'webhooks'] })
       setRetryModal(null)
+    },
+  })
+
+  // Paystack reconciliation runner (requires super_admin)
+  const runPaystackReconciliationMutation = useMutation({
+    mutationFn: () =>
+      adminFetch<{
+        success: boolean
+        missingInDb?: unknown[]
+        statusMismatches?: unknown[]
+      }>('/admin/reconciliation/run', {
+        method: 'POST',
+        body: JSON.stringify({ periodHours: 48, autoFix: false }),
+      }),
+    onSuccess: (data) => {
+      const missing = Array.isArray(data.missingInDb) ? data.missingInDb.length : 0
+      const mismatches = Array.isArray(data.statusMismatches) ? data.statusMismatches.length : 0
+      setReconciliationMessage(`Paystack reconciliation completed: ${missing} missing, ${mismatches} mismatches.`)
+      setReconciliationError(null)
+      queryClient.invalidateQueries({ queryKey: ['admin', 'reconciliation'] })
+    },
+    onError: (err: any) => {
+      setReconciliationError(err?.message || 'Reconciliation failed')
+      setReconciliationMessage(null)
+    },
+  })
+
+  // Stripe replay runner (requires super_admin)
+  const runStripeReplayMutation = useMutation({
+    mutationFn: () =>
+      adminFetch<{ success: boolean; scanned: number; processed: number; message?: string }>(
+        '/admin/reconciliation/stripe?limit=100',
+        { method: 'POST' }
+      ),
+    onSuccess: (data) => {
+      setReconciliationMessage(data.message || `Stripe replay completed: processed ${data.processed}/${data.scanned}.`)
+      setReconciliationError(null)
+      queryClient.invalidateQueries({ queryKey: ['admin', 'reconciliation'] })
+    },
+    onError: (err: any) => {
+      setReconciliationError(err?.message || 'Stripe replay failed')
+      setReconciliationMessage(null)
+    },
+  })
+
+  // Manual Stripe invoice sync (calls normal webhook handler)
+  const syncStripeInvoiceMutation = useMutation({
+    mutationFn: (invoiceId: string) =>
+      adminFetch<{ success: boolean; message?: string }>(
+        '/admin/sync/stripe-invoice',
+        {
+          method: 'POST',
+          body: JSON.stringify({ invoiceId }),
+        }
+      ),
+    onSuccess: (data) => {
+      setReconciliationMessage(data.message || 'Invoice synced')
+      setReconciliationError(null)
+      queryClient.invalidateQueries({ queryKey: ['admin', 'reconciliation'] })
+    },
+    onError: (err: any) => {
+      setReconciliationError(err?.message || 'Sync failed')
+      setReconciliationMessage(null)
     },
   })
 
@@ -181,8 +286,13 @@ export default function Operations() {
     },
   })
 
-  const totalFailed = webhookStats?.failed
-    ? Object.values(webhookStats.failed).reduce((a, b) => a + b, 0)
+  const failedCounts = webhookStats?.failed
+  const totalFailed = failedCounts
+    ? (typeof failedCounts.total === 'number'
+      ? failedCounts.total
+      : Object.entries(failedCounts)
+        .filter(([provider]) => provider !== 'total')
+        .reduce((sum, [, count]) => sum + count, 0))
     : 0
 
   return (
@@ -202,6 +312,12 @@ export default function Operations() {
           onClick={() => setActiveTab('webhooks')}
         >
           Webhooks
+        </button>
+        <button
+          className={`admin-tab ${activeTab === 'reconciliation' ? 'active' : ''}`}
+          onClick={() => setActiveTab('reconciliation')}
+        >
+          Reconciliation
         </button>
         <button
           className={`admin-tab ${activeTab === 'disputes' ? 'active' : ''}`}
@@ -261,7 +377,9 @@ export default function Operations() {
       {activeTab === 'webhooks' && (
         <div>
           <div className="admin-stats-grid">
-            {webhookStats?.failed && Object.entries(webhookStats.failed).map(([provider, count]) => (
+            {failedCounts && Object.entries(failedCounts)
+              .filter(([provider]) => provider !== 'total')
+              .map(([provider, count]) => (
               <StatCard
                 key={provider}
                 label={`${provider} Failed`}
@@ -321,6 +439,162 @@ export default function Operations() {
               <p>No failed webhooks</p>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Reconciliation Tab */}
+      {activeTab === 'reconciliation' && (
+        <div>
+          {(reconciliationError || reconciliationMessage) && (
+            <div style={{ marginBottom: 16 }}>
+              {reconciliationError && (
+                <p style={{ color: 'var(--error)', margin: 0 }}>{reconciliationError}</p>
+              )}
+              {reconciliationMessage && (
+                <p style={{ color: 'var(--text-secondary)', margin: 0 }}>{reconciliationMessage}</p>
+              )}
+            </div>
+          )}
+
+          <div className="admin-stats-grid">
+            <StatCard
+              label="Paystack Missing (48h)"
+              value={paystackMissing?.count?.toString() || '0'}
+              variant={(paystackMissing?.count || 0) > 0 ? 'warning' : 'success'}
+              loading={paystackMissingLoading}
+            />
+            <StatCard
+              label="Stripe Missing Invoices"
+              value={stripeMissing?.total?.toString() || '0'}
+              variant={(stripeMissing?.total || 0) > 0 ? 'warning' : 'success'}
+              loading={stripeMissingLoading}
+            />
+          </div>
+
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 16 }}>
+            <button
+              className="admin-btn admin-btn-secondary"
+              onClick={() => {
+                setReconciliationError(null)
+                setReconciliationMessage(null)
+                refetchPaystackMissing()
+                refetchStripeMissing()
+              }}
+            >
+              Refresh
+            </button>
+            <button
+              className="admin-btn admin-btn-primary"
+              onClick={() => runPaystackReconciliationMutation.mutate()}
+              disabled={runPaystackReconciliationMutation.isPending}
+              title="Calls provider APIs to detect missing or mismatched transactions"
+            >
+              {runPaystackReconciliationMutation.isPending ? 'Running Paystack...' : 'Run Paystack Reconciliation'}
+            </button>
+            <button
+              className="admin-btn admin-btn-primary"
+              onClick={() => runStripeReplayMutation.mutate()}
+              disabled={runStripeReplayMutation.isPending}
+              title="Replays recent Stripe invoice.paid events through the normal webhook handler"
+            >
+              {runStripeReplayMutation.isPending ? 'Replaying Stripe...' : 'Replay Stripe invoice.paid (last 100)'}
+            </button>
+          </div>
+
+          {/* Paystack Missing Transactions */}
+          <div className="admin-section" style={{ marginTop: 24 }}>
+            <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>Paystack Transactions Missing From DB</h3>
+            {paystackMissing?.warning && (
+              <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginTop: 0 }}>
+                {paystackMissing.warning}
+              </p>
+            )}
+            {paystackMissingLoading ? (
+              <div className="admin-empty"><p>Loading…</p></div>
+            ) : paystackMissing?.transactions?.length ? (
+              <div className="admin-table-container">
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Reference</th>
+                      <th>Amount</th>
+                      <th>Email</th>
+                      <th>Paid At</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paystackMissing.transactions.slice(0, 25).map((t) => (
+                      <tr key={t.reference}>
+                        <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{t.reference}</td>
+                        <td style={{ textTransform: 'uppercase' }}>
+                          {t.currency} {(t.amount / 100).toFixed(2)}
+                        </td>
+                        <td>{t.customerEmail}</td>
+                        <td>{formatDate(t.paidAt)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {paystackMissing.transactions.length > 25 && (
+                  <p style={{ marginTop: 8, color: 'var(--text-secondary)', fontSize: 12 }}>
+                    Showing first 25 of {paystackMissing.transactions.length}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="admin-empty"><p>No missing Paystack transactions detected.</p></div>
+            )}
+          </div>
+
+          {/* Stripe Missing Invoices */}
+          <div className="admin-section" style={{ marginTop: 24 }}>
+            <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>Stripe Invoices Missing From DB</h3>
+            {stripeMissingLoading ? (
+              <div className="admin-empty"><p>Loading…</p></div>
+            ) : stripeMissing?.missing?.length ? (
+              <div className="admin-table-container">
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Invoice</th>
+                      <th>Amount</th>
+                      <th>Customer</th>
+                      <th>Created</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {stripeMissing.missing.slice(0, 25).map((inv) => (
+                      <tr key={inv.invoiceId}>
+                        <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{inv.invoiceId}</td>
+                        <td style={{ textTransform: 'uppercase' }}>
+                          {inv.currency} {(inv.amount / 100).toFixed(2)}
+                        </td>
+                        <td>{inv.customerEmail || '-'}</td>
+                        <td>{formatDate(inv.created)}</td>
+                        <td>
+                          <button
+                            className="admin-btn admin-btn-primary admin-btn-small"
+                            onClick={() => syncStripeInvoiceMutation.mutate(inv.invoiceId)}
+                            disabled={syncStripeInvoiceMutation.isPending}
+                          >
+                            Sync
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {stripeMissing.missing.length > 25 && (
+                  <p style={{ marginTop: 8, color: 'var(--text-secondary)', fontSize: 12 }}>
+                    Showing first 25 of {stripeMissing.missing.length}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="admin-empty"><p>No missing Stripe invoices detected.</p></div>
+            )}
+          </div>
         </div>
       )}
 

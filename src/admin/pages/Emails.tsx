@@ -101,7 +101,7 @@ export default function Emails() {
                   </td>
                   <td>{email.template}</td>
                   <td style={{ fontFamily: 'monospace', fontSize: '11px' }}>
-                    {email.messageId ? `${email.messageId.slice(0, 16)}...` : '-'}
+                    {typeof email.messageId === 'string' ? `${email.messageId.slice(0, 16)}...` : '-'}
                   </td>
                   <td>{formatDate(email.createdAt)}</td>
                 </tr>

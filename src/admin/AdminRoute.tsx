@@ -15,7 +15,7 @@ import { getAuthToken } from '../api/client'
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
 
 // Check admin status via backend (single source of truth)
-async function checkAdminStatus(): Promise<{ isAdmin: boolean; email: string | null }> {
+async function checkAdminStatus(): Promise<{ isAdmin: boolean; email?: string | null; role?: string }> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   }
@@ -31,7 +31,17 @@ async function checkAdminStatus(): Promise<{ isAdmin: boolean; email: string | n
   })
 
   if (!response.ok) {
-    return { isAdmin: false, email: null }
+    // Auth failures should route to "Access Denied"; server/network failures should show "Connection Error".
+    if (response.status === 401 || response.status === 403) {
+      return { isAdmin: false, email: null }
+    }
+
+    const body = await response.json().catch(() => null) as any
+    const message =
+      body?.error ||
+      body?.message ||
+      `Admin verification failed (${response.status})`
+    throw new Error(message)
   }
 
   return response.json()

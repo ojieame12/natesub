@@ -28,8 +28,7 @@ import jobs from './routes/jobs.js'
 import payroll from './routes/payroll.js'
 import billing from './routes/billing.js'
 import analytics from './routes/analytics.js'
-import admin from './routes/admin.js'
-import adminRevenue from './routes/admin-revenue.js'
+import admin from './routes/admin/index.js'
 import support from './routes/support.js'
 
 const app = new Hono()
@@ -260,7 +259,6 @@ app.route('/payroll', payroll)
 app.route('/billing', billing)
 app.route('/analytics', analytics)
 app.route('/admin', admin)
-app.route('/admin/revenue', adminRevenue)
 app.route('/support', support)
 
 // 404 handler

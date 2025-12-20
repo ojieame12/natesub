@@ -309,6 +309,30 @@ export async function validateSession(sessionToken: string): Promise<{ userId: s
   return { userId: session.userId }
 }
 
+// Validate session token and return full session details (for admin auth)
+export async function validateSessionWithDetails(sessionToken: string): Promise<{
+  userId: string
+  createdAt: Date
+} | null> {
+  const tokenHash = hashToken(sessionToken)
+
+  const session = await db.session.findUnique({
+    where: { token: tokenHash },
+    select: { id: true, userId: true, expiresAt: true, createdAt: true },
+  })
+
+  if (!session) {
+    return null
+  }
+
+  if (session.expiresAt < new Date()) {
+    await db.session.delete({ where: { id: session.id } })
+    return null
+  }
+
+  return { userId: session.userId, createdAt: session.createdAt }
+}
+
 // Logout (delete session)
 export async function logout(sessionToken: string): Promise<void> {
   const tokenHash = hashToken(sessionToken)

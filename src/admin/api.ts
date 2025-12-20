@@ -59,6 +59,13 @@ export interface RevenueOverview {
   lastMonth: { totalVolumeCents: number; platformFeeCents: number; creatorPayoutsCents: number; paymentCount: number }
   today: { totalVolumeCents: number; platformFeeCents: number; creatorPayoutsCents: number; paymentCount: number }
   paymentsByStatus: Record<string, number>
+  freshness?: {
+    businessTimezone?: string
+    lastPaymentAt: string | null
+    lastWebhookProcessedAt: string | null
+    lastWebhookProvider: string | null
+    lastWebhookType: string | null
+  }
 }
 
 export interface RevenueByProvider {

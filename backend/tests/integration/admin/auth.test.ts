@@ -371,4 +371,232 @@ describe('admin auth', () => {
       expect(res.status).not.toBe(401)
     })
   })
+
+  describe('scoped API keys', () => {
+    it('allows full access key to perform GET requests', async () => {
+      const res = await app.fetch(
+        new Request('http://localhost/admin/dashboard', {
+          method: 'GET',
+          headers: {
+            'x-admin-api-key': 'test-admin-key-12345', // Full access key
+          },
+        })
+      )
+
+      expect(res.status).toBe(200)
+    })
+
+    it('allows full access key to perform POST requests', async () => {
+      const user = await db.user.create({
+        data: { email: 'testuser@test.com' },
+      })
+
+      const res = await app.fetch(
+        new Request(`http://localhost/admin/users/${user.id}/block`, {
+          method: 'POST',
+          headers: {
+            'x-admin-api-key': 'test-admin-key-12345', // Full access key
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ reason: 'Test block' }),
+        })
+      )
+
+      // Should succeed (200) or at least not be blocked by auth (not 401/403)
+      expect(res.status).toBe(200)
+    })
+
+    it('allows read-only key to perform GET requests', async () => {
+      const res = await app.fetch(
+        new Request('http://localhost/admin/dashboard', {
+          method: 'GET',
+          headers: {
+            'x-admin-api-key': 'test-readonly-key-67890', // Read-only key
+          },
+        })
+      )
+
+      expect(res.status).toBe(200)
+    })
+
+    it('blocks read-only key from POST requests', async () => {
+      const user = await db.user.create({
+        data: { email: 'testuser2@test.com' },
+      })
+
+      const res = await app.fetch(
+        new Request(`http://localhost/admin/users/${user.id}/block`, {
+          method: 'POST',
+          headers: {
+            'x-admin-api-key': 'test-readonly-key-67890', // Read-only key
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ reason: 'Test block' }),
+        })
+      )
+
+      expect(res.status).toBe(403)
+      const body = await res.json()
+      expect(body.message).toContain('Read-only API key')
+    })
+
+    it('blocks read-only key from DELETE requests', async () => {
+      const user = await db.user.create({
+        data: { email: 'testuser3@test.com' },
+      })
+
+      const res = await app.fetch(
+        new Request(`http://localhost/admin/users/${user.id}`, {
+          method: 'DELETE',
+          headers: {
+            'x-admin-api-key': 'test-readonly-key-67890', // Read-only key
+          },
+        })
+      )
+
+      expect(res.status).toBe(403)
+      const body = await res.json()
+      expect(body.message).toContain('Read-only API key')
+    })
+
+    it('rejects invalid API key even if read-only format', async () => {
+      const res = await app.fetch(
+        new Request('http://localhost/admin/dashboard', {
+          method: 'GET',
+          headers: {
+            'x-admin-api-key': 'wrong-key',
+          },
+        })
+      )
+
+      expect(res.status).toBe(401)
+    })
+  })
+
+  describe('fresh session requirement', () => {
+    it('allows full access API key to bypass fresh session check', async () => {
+      const user = await db.user.create({
+        data: { email: 'testuser4@test.com' },
+      })
+
+      // Full access API key should bypass fresh session requirement
+      const res = await app.fetch(
+        new Request(`http://localhost/admin/users/${user.id}/block`, {
+          method: 'POST',
+          headers: {
+            'x-admin-api-key': 'test-admin-key-12345',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ reason: 'Test' }),
+        })
+      )
+
+      // Should succeed (200) - API key bypasses fresh session
+      expect(res.status).toBe(200)
+    })
+
+    it('blocks stale session from sensitive operations', async () => {
+      const user = await db.user.create({
+        data: { email: 'admin-stale@test.com', role: 'super_admin' },
+      })
+
+      // Create a session that's older than 15 minutes
+      const rawToken = 'stale-session-token'
+      const staleDate = new Date(Date.now() - 20 * 60 * 1000) // 20 minutes ago
+
+      await db.session.create({
+        data: {
+          userId: user.id,
+          token: hashToken(rawToken),
+          expiresAt: new Date(Date.now() + 86400000), // Valid but stale
+          createdAt: staleDate,
+        },
+      })
+
+      const targetUser = await db.user.create({
+        data: { email: 'target@test.com' },
+      })
+
+      const res = await app.fetch(
+        new Request(`http://localhost/admin/users/${targetUser.id}/block`, {
+          method: 'POST',
+          headers: {
+            Cookie: `session=${rawToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ reason: 'Test' }),
+        })
+      )
+
+      expect(res.status).toBe(403)
+      const body = await res.json()
+      expect(body.message).toContain('recent authentication')
+    })
+
+    it('allows fresh session to perform sensitive operations', async () => {
+      const user = await db.user.create({
+        data: { email: 'admin-fresh@test.com', role: 'super_admin' },
+      })
+
+      // Create a fresh session (just created)
+      const rawToken = 'fresh-session-token'
+
+      await db.session.create({
+        data: {
+          userId: user.id,
+          token: hashToken(rawToken),
+          expiresAt: new Date(Date.now() + 86400000),
+          createdAt: new Date(), // Fresh - just created
+        },
+      })
+
+      const targetUser = await db.user.create({
+        data: { email: 'target2@test.com' },
+      })
+
+      const res = await app.fetch(
+        new Request(`http://localhost/admin/users/${targetUser.id}/block`, {
+          method: 'POST',
+          headers: {
+            Cookie: `session=${rawToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ reason: 'Test' }),
+        })
+      )
+
+      expect(res.status).toBe(200)
+    })
+
+    it('allows stale session to access non-sensitive endpoints', async () => {
+      const user = await db.user.create({
+        data: { email: 'admin-stale2@test.com', role: 'super_admin' },
+      })
+
+      // Create a stale session
+      const rawToken = 'stale-session-token-2'
+      const staleDate = new Date(Date.now() - 20 * 60 * 1000) // 20 minutes ago
+
+      await db.session.create({
+        data: {
+          userId: user.id,
+          token: hashToken(rawToken),
+          expiresAt: new Date(Date.now() + 86400000),
+          createdAt: staleDate,
+        },
+      })
+
+      // Stale session should still be able to view dashboard (non-sensitive)
+      const res = await app.fetch(
+        new Request('http://localhost/admin/dashboard', {
+          method: 'GET',
+          headers: {
+            Cookie: `session=${rawToken}`,
+          },
+        })
+      )
+
+      expect(res.status).toBe(200)
+    })
+  })
 })

@@ -132,7 +132,8 @@ export function rateLimit(options: Partial<RateLimitOptions> = {}) {
       }
 
       // Check if this is a security-critical endpoint that should fail closed
-      const criticalPrefixes = ['auth_verify', 'auth_magic', 'payment', 'checkout']
+      // Admin sensitive routes (payouts, refunds, deletes) must fail closed to prevent abuse
+      const criticalPrefixes = ['auth_verify', 'auth_magic', 'payment', 'checkout', 'admin_sensitive']
       const isCritical = criticalPrefixes.some(p => config.keyPrefix.startsWith(p))
 
       if (isCritical) {

@@ -27,16 +27,33 @@ function timeAgo(date: string): string {
   return `${Math.floor(seconds / 86400)}d ago`
 }
 
+function formatDateTime(date: string | null): string {
+  if (!date) return '—'
+  return new Date(date).toLocaleString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
 export default function Overview() {
   const { data: dashboard, isLoading: dashboardLoading } = useAdminDashboard()
   const { data: revenue, isLoading: revenueLoading } = useAdminRevenueOverview()
   const { data: activityData, isLoading: activityLoading } = useAdminActivity({ limit: 10 })
 
   const loading = dashboardLoading || revenueLoading
+  const freshness = revenue?.freshness
 
   return (
     <div>
       <h1 className="admin-page-title">Overview</h1>
+      {freshness && (
+        <p className="admin-page-subtitle">
+          Data freshness ({freshness.businessTimezone || 'UTC'}): last payment {formatDateTime(freshness.lastPaymentAt)} · last webhook processed {formatDateTime(freshness.lastWebhookProcessedAt)}
+        </p>
+      )}
 
       {/* KPI Cards */}
       <div className="admin-stats-grid">

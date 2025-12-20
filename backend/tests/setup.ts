@@ -70,6 +70,7 @@ const defaults: Record<string, string> = {
   JOBS_API_KEY: 'test_jobs_api_key_12345678',
   ENCRYPTION_KEY: 'test_encryption_key_at_least_32_chars_long',
   ADMIN_API_KEY: 'test-admin-key-12345',
+  ADMIN_API_KEY_READONLY: 'test-readonly-key-67890',
 }
 
 for (const [key, value] of Object.entries(defaults)) {
@@ -394,7 +395,13 @@ function createMockModel(store: Map<string, any>) {
     }),
     create: vi.fn(async ({ data, include }: any) => {
       const id = data.id || generateId()
-      const item = { id, ...data, createdAt: new Date(), updatedAt: new Date() }
+      // Preserve createdAt/updatedAt if provided in data, otherwise use current time
+      const item = {
+        id,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        ...data, // data.createdAt overwrites default if provided
+      }
       store.set(id, item)
       return resolveIncludes(item, include)
     }),

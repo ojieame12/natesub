@@ -31,6 +31,17 @@ function formatNumber(num: number): string {
   return new Intl.NumberFormat('en-US').format(num)
 }
 
+function formatDateTime(date: string | null): string {
+  if (!date) return '—'
+  return new Date(date).toLocaleString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
 function formatCompactCurrency(cents: number): string {
   const amount = cents / 100
   if (amount >= 1000000) return `$${(amount / 1000000).toFixed(1)}M`
@@ -67,9 +78,16 @@ export default function Revenue() {
     { name: 'Paystack', value: byProvider.paystack.platformFeeCents },
   ].filter(d => d.value > 0) : []
 
+  const freshness = overview?.freshness
+
   return (
     <div>
       <h1 className="admin-page-title">Revenue Analytics</h1>
+      {freshness && (
+        <p className="admin-page-subtitle">
+          Data freshness ({freshness.businessTimezone || 'UTC'}): last payment {formatDateTime(freshness.lastPaymentAt)} · last webhook processed {formatDateTime(freshness.lastWebhookProcessedAt)}
+        </p>
+      )}
 
       {/* Period Selector */}
       <div className="admin-period-selector">

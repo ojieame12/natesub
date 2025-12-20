@@ -2,7 +2,7 @@
  * Logs - System logs viewer
  */
 
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { useAdminLogs, useAdminLogsStats } from '../api'
 import StatCard from '../components/StatCard'
 import FilterBar from '../components/FilterBar'
@@ -147,9 +147,8 @@ export default function Logs() {
               <tr><td colSpan={5} style={{ textAlign: 'center', padding: '32px' }}>Loading...</td></tr>
             ) : data?.logs?.length ? (
               data.logs.map((log) => (
-                <>
+                <Fragment key={log.id}>
                   <tr
-                    key={log.id}
                     onClick={() => setExpandedLog(expandedLog === log.id ? null : log.id)}
                     style={{ cursor: log.errorMessage ? 'pointer' : 'default' }}
                   >
@@ -168,7 +167,7 @@ export default function Logs() {
                     <td>{formatDate(log.createdAt)}</td>
                   </tr>
                   {expandedLog === log.id && log.errorMessage && (
-                    <tr key={`${log.id}-expanded`}>
+                    <tr>
                       <td colSpan={5} style={{ background: 'var(--bg-primary)', padding: '16px' }}>
                         <div style={{ fontSize: '12px', fontFamily: 'monospace' }}>
                           <strong>Error:</strong> {log.errorMessage}
@@ -184,7 +183,7 @@ export default function Logs() {
                       </td>
                     </tr>
                   )}
-                </>
+                </Fragment>
               ))
             ) : (
               <tr><td colSpan={5} style={{ textAlign: 'center', padding: '32px' }}>No logs found</td></tr>

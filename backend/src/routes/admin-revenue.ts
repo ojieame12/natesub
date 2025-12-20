@@ -90,7 +90,9 @@ adminRevenue.get('/overview', async (c) => {
     lastMonthStats,
     todayStats,
     // Payment counts
-    paymentCounts
+    paymentCounts,
+    lastPayment,
+    lastProcessedWebhook,
   ] = await Promise.all([
     aggregatePaymentStats({ status: 'succeeded', type: { in: ['recurring', 'one_time'] } }),
     aggregatePaymentStats({ status: 'succeeded', type: { in: ['recurring', 'one_time'] }, createdAt: { gte: startOfMonth } }),
@@ -100,7 +102,17 @@ adminRevenue.get('/overview', async (c) => {
       by: ['status'],
       where: { type: { in: ['recurring', 'one_time'] } },
       _count: true
-    })
+    }),
+    db.payment.findFirst({
+      where: { status: 'succeeded', type: { in: ['recurring', 'one_time'] } },
+      orderBy: { createdAt: 'desc' },
+      select: { createdAt: true },
+    }),
+    db.webhookEvent.findFirst({
+      where: { status: 'processed', processedAt: { not: null } },
+      orderBy: { processedAt: 'desc' },
+      select: { processedAt: true, provider: true, eventType: true },
+    }),
   ])
 
   const statusCounts = Object.fromEntries(paymentCounts.map(p => [p.status, p._count]))
@@ -110,7 +122,14 @@ adminRevenue.get('/overview', async (c) => {
     thisMonth: thisMonthStats,
     lastMonth: lastMonthStats,
     today: todayStats,
-    paymentsByStatus: statusCounts
+    paymentsByStatus: statusCounts,
+    freshness: {
+      businessTimezone: BUSINESS_TIMEZONE,
+      lastPaymentAt: lastPayment?.createdAt ? lastPayment.createdAt.toISOString() : null,
+      lastWebhookProcessedAt: lastProcessedWebhook?.processedAt ? lastProcessedWebhook.processedAt.toISOString() : null,
+      lastWebhookProvider: lastProcessedWebhook?.provider || null,
+      lastWebhookType: lastProcessedWebhook?.eventType || null,
+    },
   })
 })
 
