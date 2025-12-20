@@ -104,7 +104,7 @@ export function AdminLineChart({
           />
           <Tooltip
             contentStyle={tooltipStyle}
-            formatter={(value) => [formatValue ? formatValue(Number(value)) : value, 'Value']}
+            formatter={(value: number | string) => [formatValue ? formatValue(Number(value)) : value, 'Value']}
           />
           <Line
             type="monotone"
@@ -175,7 +175,7 @@ export function AdminBarChart({
           />
           <Tooltip
             contentStyle={tooltipStyle}
-            formatter={(value) => [formatValue ? formatValue(Number(value)) : value, 'Value']}
+            formatter={(value: number | string) => [formatValue ? formatValue(Number(value)) : value, 'Value']}
           />
           <Bar dataKey={dataKey} fill={color} radius={[4, 4, 0, 0]} />
         </BarChart>
@@ -228,7 +228,7 @@ export function AdminPieChart({
             outerRadius={90}
             paddingAngle={2}
             dataKey="value"
-            label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
+            label={({ name, percent }: { name: string; percent?: number }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
           >
             {data.map((_, index) => (
               <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
