@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { logger } from 'hono/logger'
 import { secureHeaders } from 'hono/secure-headers'
+import { HTTPException } from 'hono/http-exception'
 import { env } from './config/env.js'
 import { requestIdMiddleware } from './middleware/requestId.js'
 import { db } from './db/client.js'
@@ -27,6 +28,8 @@ import payroll from './routes/payroll.js'
 import billing from './routes/billing.js'
 import analytics from './routes/analytics.js'
 import admin from './routes/admin.js'
+import adminRevenue from './routes/admin-revenue.js'
+import support from './routes/support.js'
 
 const app = new Hono()
 
@@ -256,12 +259,18 @@ app.route('/payroll', payroll)
 app.route('/billing', billing)
 app.route('/analytics', analytics)
 app.route('/admin', admin)
+app.route('/admin/revenue', adminRevenue)
+app.route('/support', support)
 
 // 404 handler
 app.notFound((c) => c.json({ error: 'Not found' }, 404))
 
 // Error handler
 app.onError((err, c) => {
+  // Handle HTTPException (from middleware like admin auth)
+  if (err instanceof HTTPException) {
+    return c.json({ error: err.message, message: err.message }, err.status)
+  }
   console.error('Unhandled error:', err)
   return c.json({ error: 'Internal server error' }, 500)
 })

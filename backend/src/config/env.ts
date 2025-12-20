@@ -110,6 +110,12 @@ function loadEnv() {
 
   // Production-only validations
   if (data.NODE_ENV === 'production') {
+    // Testing flags must never run in production.
+    if (data.PAYMENTS_MODE === 'stub') {
+      console.error('❌ FATAL: PAYMENTS_MODE=stub is not allowed in production')
+      process.exit(1)
+    }
+
     // Stripe: Must use live keys in production
     if (!data.STRIPE_SECRET_KEY.startsWith('sk_live_')) {
       console.error('❌ FATAL: STRIPE_SECRET_KEY must be a live key (sk_live_*) in production')

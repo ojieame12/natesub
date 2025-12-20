@@ -486,7 +486,7 @@ admin.get('/users', async (c) => {
     search: z.string().optional(),
     page: z.coerce.number().default(1),
     limit: z.coerce.number().default(50),
-    status: z.enum(['all', 'active', 'blocked']).default('all')
+    status: z.enum(['all', 'active', 'blocked', 'deleted']).default('all')
   }).parse(c.req.query())
 
   const skip = (query.page - 1) * query.limit
@@ -500,8 +500,19 @@ admin.get('/users', async (c) => {
     ]
   }
 
-  if (query.status === 'active') where.deletedAt = null
-  else if (query.status === 'blocked') where.deletedAt = { not: null }
+  // Status filtering:
+  // - active: deletedAt is null
+  // - blocked: deletedAt is set AND profile exists (soft-blocked, can be unblocked)
+  // - deleted: deletedAt is set AND profile is null (fully deleted, GDPR anonymized)
+  if (query.status === 'active') {
+    where.deletedAt = null
+  } else if (query.status === 'blocked') {
+    where.deletedAt = { not: null }
+    where.profile = { isNot: null }
+  } else if (query.status === 'deleted') {
+    where.deletedAt = { not: null }
+    where.profile = null
+  }
 
   const [users, total] = await Promise.all([
     db.user.findMany({
@@ -530,6 +541,14 @@ admin.get('/users', async (c) => {
   })
   const revenueMap = new Map(revenues.map(r => [r.creatorId, r._sum.netCents || 0]))
 
+  // Helper to determine user status
+  const getUserStatus = (user: { deletedAt: Date | null; profile: any }) => {
+    if (!user.deletedAt) return 'active'
+    // If deletedAt is set but profile exists, user is blocked
+    // If deletedAt is set and no profile, user is fully deleted
+    return user.profile ? 'blocked' : 'deleted'
+  }
+
   return c.json({
     users: users.map(u => ({
       id: u.id,
@@ -543,7 +562,7 @@ admin.get('/users', async (c) => {
         payoutStatus: u.profile.payoutStatus,
         paymentProvider: u.profile.paymentProvider,
       } : null,
-      status: u.deletedAt ? 'blocked' : 'active',
+      status: getUserStatus(u),
       subscriberCount: u._count.subscriptions,
       subscribedToCount: u._count.subscribedTo,
       revenueTotal: revenueMap.get(u.id) || 0,
@@ -624,6 +643,7 @@ admin.post('/users/:id/unblock', async (c) => {
  * DELETE /admin/users/:id
  * Full account deletion with cleanup (matches self-delete flow)
  * - Cancels all Stripe subscriptions (platform, creator, subscriber)
+ * - Neutralizes all Paystack subscriptions (marks canceled, clears auth)
  * - Anonymizes email for GDPR
  * - Clears sessions
  * - Deletes profile
@@ -650,10 +670,20 @@ admin.delete('/users/:id', async (c) => {
     return c.json({ error: 'User not found' }, 404)
   }
 
+  // Track canceled subscriptions for response
+  const canceledCounts = {
+    platform: 0,
+    stripeCreator: 0,
+    stripeSubscriber: 0,
+    paystackCreator: 0,
+    paystackSubscriber: 0,
+  }
+
   // 1. Cancel platform subscription if exists (service users)
   if (user.profile?.platformSubscriptionId) {
     try {
       await stripe.subscriptions.cancel(user.profile.platformSubscriptionId)
+      canceledCounts.platform = 1
       console.log(`[admin] Canceled platform subscription ${user.profile.platformSubscriptionId}`)
     } catch (err: any) {
       if (err.code !== 'resource_missing') {
@@ -662,21 +692,27 @@ admin.delete('/users/:id', async (c) => {
     }
   }
 
-  // 2. Cancel all subscriptions where user is the creator
-  const creatorSubs = await db.subscription.findMany({
+  // 2. Cancel all STRIPE subscriptions where user is the creator
+  const stripeCreatorSubs = await db.subscription.findMany({
     where: {
       creatorId: id,
       stripeSubscriptionId: { not: null },
       status: { in: ['active', 'past_due', 'pending'] },
     },
-    select: { stripeSubscriptionId: true },
+    select: { id: true, stripeSubscriptionId: true },
   })
 
-  for (const sub of creatorSubs) {
+  for (const sub of stripeCreatorSubs) {
     if (sub.stripeSubscriptionId) {
       try {
         await stripe.subscriptions.cancel(sub.stripeSubscriptionId)
-        console.log(`[admin] Canceled creator subscription ${sub.stripeSubscriptionId}`)
+        // Update local DB status
+        await db.subscription.update({
+          where: { id: sub.id },
+          data: { status: 'canceled', canceledAt: new Date() },
+        })
+        canceledCounts.stripeCreator++
+        console.log(`[admin] Canceled creator Stripe subscription ${sub.stripeSubscriptionId}`)
       } catch (err: any) {
         if (err.code !== 'resource_missing') {
           console.error(`[admin] Failed to cancel creator subscription:`, err.message)
@@ -685,21 +721,27 @@ admin.delete('/users/:id', async (c) => {
     }
   }
 
-  // 3. Cancel all subscriptions where user is the subscriber
-  const subscriberSubs = await db.subscription.findMany({
+  // 3. Cancel all STRIPE subscriptions where user is the subscriber
+  const stripeSubscriberSubs = await db.subscription.findMany({
     where: {
       subscriberId: id,
       stripeSubscriptionId: { not: null },
       status: { in: ['active', 'past_due', 'pending'] },
     },
-    select: { stripeSubscriptionId: true },
+    select: { id: true, stripeSubscriptionId: true },
   })
 
-  for (const sub of subscriberSubs) {
+  for (const sub of stripeSubscriberSubs) {
     if (sub.stripeSubscriptionId) {
       try {
         await stripe.subscriptions.cancel(sub.stripeSubscriptionId)
-        console.log(`[admin] Canceled subscriber subscription ${sub.stripeSubscriptionId}`)
+        // Update local DB status
+        await db.subscription.update({
+          where: { id: sub.id },
+          data: { status: 'canceled', canceledAt: new Date() },
+        })
+        canceledCounts.stripeSubscriber++
+        console.log(`[admin] Canceled subscriber Stripe subscription ${sub.stripeSubscriptionId}`)
       } catch (err: any) {
         if (err.code !== 'resource_missing') {
           console.error(`[admin] Failed to cancel subscriber subscription:`, err.message)
@@ -708,7 +750,46 @@ admin.delete('/users/:id', async (c) => {
     }
   }
 
-  // 4. Log admin activity before deletion (so we have the real email)
+  // 4. Neutralize all PAYSTACK subscriptions where user is the creator
+  // (Mark as canceled, set cancelAtPeriodEnd, clear authorization to prevent billing job from charging)
+  const paystackCreatorSubs = await db.subscription.updateMany({
+    where: {
+      creatorId: id,
+      paystackAuthorizationCode: { not: null },
+      status: { in: ['active', 'past_due', 'pending'] },
+    },
+    data: {
+      status: 'canceled',
+      cancelAtPeriodEnd: true,
+      canceledAt: new Date(),
+      paystackAuthorizationCode: null, // Clear auth to prevent future charges
+    },
+  })
+  canceledCounts.paystackCreator = paystackCreatorSubs.count
+  if (paystackCreatorSubs.count > 0) {
+    console.log(`[admin] Neutralized ${paystackCreatorSubs.count} Paystack creator subscriptions`)
+  }
+
+  // 5. Neutralize all PAYSTACK subscriptions where user is the subscriber
+  const paystackSubscriberSubs = await db.subscription.updateMany({
+    where: {
+      subscriberId: id,
+      paystackAuthorizationCode: { not: null },
+      status: { in: ['active', 'past_due', 'pending'] },
+    },
+    data: {
+      status: 'canceled',
+      cancelAtPeriodEnd: true,
+      canceledAt: new Date(),
+      paystackAuthorizationCode: null, // Clear auth to prevent future charges
+    },
+  })
+  canceledCounts.paystackSubscriber = paystackSubscriberSubs.count
+  if (paystackSubscriberSubs.count > 0) {
+    console.log(`[admin] Neutralized ${paystackSubscriberSubs.count} Paystack subscriber subscriptions`)
+  }
+
+  // 6. Log admin activity before deletion (so we have the real email)
   await db.activity.create({
     data: {
       userId: id,
@@ -718,16 +799,12 @@ admin.delete('/users/:id', async (c) => {
         deletedBy: adminUserId,
         originalEmail: user.email,
         deletedAt: new Date().toISOString(),
-        canceledSubscriptions: {
-          platform: user.profile?.platformSubscriptionId ? 1 : 0,
-          creator: creatorSubs.length,
-          subscriber: subscriberSubs.length,
-        },
+        canceledSubscriptions: canceledCounts,
       },
     },
   })
 
-  // 5. Soft delete with full cleanup (anonymize, clear sessions, delete profile)
+  // 7. Soft delete with full cleanup (anonymize, clear sessions, delete profile)
   await db.$transaction(async (tx) => {
     // Anonymize email for GDPR compliance
     const anonymizedEmail = `deleted_${id}@deleted.natepay.co`
@@ -756,11 +833,7 @@ admin.delete('/users/:id', async (c) => {
     success: true,
     message: 'User deleted with full cleanup',
     details: {
-      canceledSubscriptions: {
-        platform: user.profile?.platformSubscriptionId ? 1 : 0,
-        creator: creatorSubs.length,
-        subscriber: subscriberSubs.length,
-      },
+      canceledSubscriptions: canceledCounts,
     },
   })
 })

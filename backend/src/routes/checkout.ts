@@ -7,7 +7,7 @@ import { optionalAuth } from '../middleware/auth.js'
 import { checkoutRateLimit, publicRateLimit } from '../middleware/rateLimit.js'
 import { createCheckoutSession, getAccountStatus, stripe } from '../services/stripe.js'
 import { initializePaystackCheckout, generateReference, isPaystackSupported, type PaystackCountry } from '../services/paystack.js'
-import { calculateServiceFee, type FeeCalculation, type FeeMode } from '../services/fees.js'
+import { calculateServiceFee, type FeeCalculation } from '../services/fees.js'
 import { isStripeCrossBorderSupported } from '../utils/constants.js'
 import { env } from '../config/env.js'
 import { maskEmail } from '../utils/pii.js'
@@ -111,6 +111,21 @@ checkout.post(
       return c.json({ error: 'Payments are not active for this account' }, 400)
     }
 
+    // Check if subscriber is blocked due to dispute history
+    const subscriberId = c.get('userId')
+    if (subscriberId) {
+      const subscriber = await db.user.findUnique({
+        where: { id: subscriberId },
+        select: { blockedReason: true },
+      })
+      if (subscriber?.blockedReason) {
+        return c.json({
+          error: 'Account restricted due to payment disputes',
+          code: 'SUBSCRIBER_BLOCKED',
+        }, 403)
+      }
+    }
+
     // Enforce platform subscription for service providers
     // Service users must have active/trialing subscription to accept payments
     if (profile.purpose === 'service') {
@@ -166,18 +181,18 @@ checkout.post(
     const isStripeCrossBorder = hasStripe && isStripeCrossBorderSupported(profile.countryCode)
     const isCrossBorder = !hasPaystack && isStripeCrossBorder
 
-    // Calculate service fee based on creator's fee mode setting
-    // feeMode: 'absorb' = creator absorbs, 'pass_to_subscriber' = subscriber pays
+    // Calculate service fee using split model (4%/4%)
+    // Both subscriber and creator pay 4% each
     const feeCalc = calculateServiceFee(
       amount,
       profile.currency,
       profile.purpose,
-      profile.feeMode as FeeMode,
+      undefined, // feeMode ignored - always split
       isCrossBorder
     )
 
     // STUB MODE: Simulate checkout if configured
-    if (env.PAYMENTS_MODE === 'stub') {
+    if (env.PAYMENTS_MODE === 'stub' && env.NODE_ENV !== 'production') {
       const isPaystack = hasPaystack && profile.paystackSubaccountCode && 
         (inferredProvider === 'paystack' || (!hasStripe && hasPaystack))
       
@@ -271,12 +286,16 @@ checkout.post(
             tierId: tierId || '',
             interval,
             viewId: viewId || '', // Analytics: page view ID for conversion tracking
-            // Fee metadata for webhook processing
-            creatorAmount: feeCalc.netCents, // What creator receives
-            serviceFee: feeCalc.feeCents,
+            // Fee metadata for webhook processing (split model)
+            baseAmount: feeCalc.baseCents,           // Creator's price
+            creatorAmount: feeCalc.netCents,         // What creator receives after their 4%
+            serviceFee: feeCalc.feeCents,            // Total platform fee (8%)
+            subscriberFee: feeCalc.subscriberFeeCents, // Subscriber's portion (4%)
+            creatorFee: feeCalc.creatorFeeCents,     // Creator's portion (4%)
             feeModel: feeCalc.feeModel,
             feeMode: feeCalc.feeMode,
             feeEffectiveRate: feeCalc.effectiveRate,
+            feeWasCapped: feeCalc.feeWasCapped,
           },
         })
 
@@ -351,6 +370,10 @@ checkout.post(
           feeModel: feeCalc.feeModel,
           feeMode: feeCalc.feeMode,
           feeEffectiveRate: feeCalc.effectiveRate,
+          subscriberFeeCents: feeCalc.subscriberFeeCents,
+          creatorFeeCents: feeCalc.creatorFeeCents,
+          baseAmountCents: feeCalc.baseCents,
+          feeWasCapped: feeCalc.feeWasCapped,
         },
       })
 
@@ -382,7 +405,7 @@ checkout.get(
     }
 
     // STUB MODE: Verify fake reference
-    if (env.PAYMENTS_MODE === 'stub' && reference.startsWith('stub_')) {
+    if (env.PAYMENTS_MODE === 'stub' && env.NODE_ENV !== 'production' && reference.startsWith('stub_')) {
       return c.json({
         verified: true,
         status: 'success',
@@ -438,7 +461,7 @@ checkout.get(
     }
 
     // STUB MODE: Verify fake session
-    if (env.PAYMENTS_MODE === 'stub' && sessionId.startsWith('stub_cs_')) {
+    if (env.PAYMENTS_MODE === 'stub' && env.NODE_ENV !== 'production' && sessionId.startsWith('stub_cs_')) {
        // Validate creator ownership if username provided
        if (creatorUsername) {
          // In a real stub implementation, we might encode creatorId in the stub ID,
@@ -520,14 +543,18 @@ checkout.get(
 // Helper to build breakdown response
 function buildBreakdown(feeCalc: FeeCalculation, currency: string) {
   return {
-    creatorAmount: feeCalc.netCents,      // What creator receives
-    serviceFee: feeCalc.feeCents,          // Platform fee
-    totalAmount: feeCalc.grossCents,       // What subscriber pays
+    baseAmount: feeCalc.baseCents,         // Creator's set price
+    creatorAmount: feeCalc.netCents,       // What creator receives (after their 4%)
+    totalAmount: feeCalc.grossCents,       // What subscriber pays (base + their 4%)
+    serviceFee: feeCalc.feeCents,          // Total platform fee (8%)
+    subscriberFee: feeCalc.subscriberFeeCents, // Subscriber's portion (4%)
+    creatorFee: feeCalc.creatorFeeCents,   // Creator's portion (4%)
     effectiveRate: feeCalc.effectiveRate,
     currency,
     feeModel: feeCalc.feeModel,
-    feeMode: feeCalc.feeMode,              // Who pays the fee
+    feeMode: feeCalc.feeMode,
     purposeType: feeCalc.purposeType,
+    feeWasCapped: feeCalc.feeWasCapped,    // True if processor buffer was applied
   }
 }
 
@@ -605,4 +632,3 @@ checkout.post(
 )
 
 export default checkout
-

@@ -16,6 +16,7 @@ import { handlePayoutFailed } from '../routes/webhooks/stripe/payout.js'
 import { handlePaystackChargeSuccess, handlePaystackChargeFailed } from '../routes/webhooks/paystack/charge.js'
 import { handlePaystackTransferSuccess, handlePaystackTransferFailed, handlePaystackTransferRequiresOtp } from '../routes/webhooks/paystack/transfer.js'
 import { handlePaystackRefundProcessed, handlePaystackRefundPending, handlePaystackRefundFailed } from '../routes/webhooks/paystack/refund.js'
+import { handlePaystackDisputeCreated, handlePaystackDisputeResolved } from '../routes/webhooks/paystack/dispute.js'
 
 export interface WebhookJobData {
   provider: 'stripe' | 'paystack'
@@ -198,6 +199,12 @@ async function processPaystackEvent(payload: any, eventId: string) {
       break
     case 'refund.failed':
       await handlePaystackRefundFailed(data, eventId)
+      break
+    case 'charge.dispute.create':
+      await handlePaystackDisputeCreated(data, eventId)
+      break
+    case 'charge.dispute.resolve':
+      await handlePaystackDisputeResolved(data, eventId)
       break
     default:
       console.log(`[worker] Unhandled Paystack event: ${event}`)

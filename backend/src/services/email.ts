@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { Resend, type Attachment, type CreateEmailOptions } from 'resend'
 import { env } from '../config/env.js'
 import { centsToDisplayAmount, isZeroDecimalCurrency } from '../utils/currency.js'
+import { logEmailSent, logEmailFailed } from './systemLog.js'
 
 const resend = new Resend(env.RESEND_API_KEY)
 
@@ -174,6 +175,7 @@ async function sendWithRetry(
 
       if (data?.id) {
         console.log(`[email] Sent successfully (attempt ${attempt + 1}): ${data.id}`)
+        // Note: Actual logging happens in individual send functions with more context
         return { success: true, messageId: data.id, attempts: attempt + 1 }
       }
 
@@ -640,18 +642,20 @@ export async function sendNewSubscriberEmail(
   subscriberName: string,
   tierName: string | null,
   amount: number,
-  currency: string
+  currency: string,
+  userId?: string
 ): Promise<EmailResult> {
   const formattedAmount = formatAmountForEmail(amount, currency)
   const safeSubscriberName = escapeHtml(subscriberName)
   const safeTierName = tierName ? escapeHtml(tierName) : null
 
   const tierText = safeTierName ? ` to ${safeTierName}` : ''
+  const subject = sanitizeEmailSubject(`New subscriber: ${subscriberName}`)
 
-  return sendEmail({
+  const result = await sendEmail({
     from: env.EMAIL_FROM,
     to,
-    subject: sanitizeEmailSubject(`New subscriber: ${subscriberName}`),
+    subject,
     html: baseTemplate({
       preheader: `${subscriberName} just subscribed for ${formattedAmount}/month.`,
       headline: 'You have a new subscriber!',
@@ -665,6 +669,15 @@ export async function sendNewSubscriberEmail(
       ctaColor: '#16a34a',
     }),
   })
+
+  // Log the email
+  if (result.success) {
+    logEmailSent({ to, subject, template: 'new_subscriber', messageId: result.messageId, userId })
+  } else {
+    logEmailFailed({ to, subject, template: 'new_subscriber', error: result.error || 'Unknown', userId })
+  }
+
+  return result
 }
 
 /**
@@ -1054,6 +1067,7 @@ export async function sendUpdateEmail(
     photoUrl?: string | null
     creatorUsername?: string
     deliveryId?: string  // For tracking pixel
+    userId?: string      // For logging
   }
 ): Promise<EmailResult> {
   const safeSenderName = escapeHtml(senderName)
@@ -1061,6 +1075,7 @@ export async function sendUpdateEmail(
   const safeBody = escapeHtml(body)
 
   const headlineText = safeTitle || `New update from ${safeSenderName}`
+  const subject = sanitizeEmailSubject(title || `New update from ${senderName}`)
 
   // Build photo HTML if provided
   const photoHtml = options?.photoUrl ? `
@@ -1081,10 +1096,10 @@ export async function sendUpdateEmail(
     <img src="${env.API_URL || env.APP_URL}/updates/track/${options.deliveryId}" alt="" width="1" height="1" style="display:block;width:1px;height:1px;border:0;" />
   ` : ''
 
-  return sendEmail({
+  const result = await sendEmail({
     from: env.EMAIL_FROM,
     to,
-    subject: sanitizeEmailSubject(title || `New update from ${senderName}`),
+    subject,
     html: baseTemplate({
       preheader: body.substring(0, 100) + (body.length > 100 ? '...' : ''),
       headline: headlineText,
@@ -1098,6 +1113,15 @@ export async function sendUpdateEmail(
       showUnsubscribe: true,  // Updates are marketing emails - must have unsubscribe
     }),
   })
+
+  // Log the email
+  if (result.success) {
+    logEmailSent({ to, subject, template: 'update', messageId: result.messageId, userId: options?.userId })
+  } else {
+    logEmailFailed({ to, subject, template: 'update', error: result.error || 'Unknown', userId: options?.userId })
+  }
+
+  return result
 }
 
 // ============================================
@@ -1448,4 +1472,283 @@ export async function sendPlatformDebitCapReachedNotification(
       ctaColor: '#DC2626',
     }),
   })
+}
+
+// ============================================
+// DISPUTE/CHARGEBACK EMAILS
+// ============================================
+
+/**
+ * Notify creator when a dispute/chargeback is filed against them
+ */
+export async function sendDisputeCreatedEmail(
+  to: string,
+  displayName: string,
+  amount: number,
+  currency: string,
+  reason: string
+): Promise<EmailResult> {
+  const formattedAmount = formatAmountForEmail(amount, currency)
+  const safeName = escapeHtml(displayName)
+  const safeReason = escapeHtml(reason)
+
+  return sendEmail({
+    from: env.EMAIL_FROM,
+    to,
+    subject: sanitizeEmailSubject(`Dispute filed: ${formattedAmount} on hold`),
+    html: baseTemplate({
+      preheader: `A subscriber has disputed a ${formattedAmount} payment. Funds are temporarily on hold.`,
+      headline: 'Payment Dispute Filed',
+      body: `
+          <p style="margin: 0 0 16px 0;">
+            Hey ${safeName}, a subscriber has filed a dispute (chargeback) with their bank for a recent payment.
+          </p>
+
+          ${amountCard('Amount on hold', formattedAmount, '#DC2626')}
+
+          <div style="background: #FEF3C7; border-left: 4px solid #F59E0B; padding: 12px 16px; margin: 16px 0; border-radius: 4px;">
+            <p style="margin: 0; font-size: 14px; color: #92400E;">
+              <strong>Reason cited:</strong> ${safeReason}
+            </p>
+          </div>
+
+          <p style="margin: 0 0 16px 0;">
+            <strong>What happens now:</strong>
+          </p>
+          <ul style="margin: 0 0 16px 0; padding-left: 20px; color: #4a4a4a;">
+            <li style="margin-bottom: 8px;">The disputed amount is temporarily held</li>
+            <li style="margin-bottom: 8px;">The payment processor will review the case</li>
+            <li style="margin-bottom: 8px;">We'll notify you of the outcome</li>
+          </ul>
+
+          <p style="margin: 0; font-size: 14px; color: #666666;">
+            If you have transaction records or communication with this subscriber, keep them handy in case they're needed.
+          </p>
+        `,
+      ctaText: 'View Dashboard',
+      ctaUrl: `${env.APP_URL}/dashboard`,
+      ctaColor: '#DC2626',
+    }),
+  })
+}
+
+/**
+ * Notify creator when a dispute is resolved (won or lost)
+ */
+export async function sendDisputeResolvedEmail(
+  to: string,
+  displayName: string,
+  amount: number,
+  currency: string,
+  won: boolean
+): Promise<EmailResult> {
+  const formattedAmount = formatAmountForEmail(amount, currency)
+  const safeName = escapeHtml(displayName)
+
+  const headline = won ? 'Dispute Won - Funds Restored' : 'Dispute Lost - Funds Deducted'
+  const preheader = won
+    ? `Good news! The ${formattedAmount} dispute was resolved in your favor.`
+    : `The ${formattedAmount} dispute was resolved in the subscriber's favor.`
+
+  const body = won
+    ? `
+        <p style="margin: 0 0 16px 0;">
+          Great news, ${safeName}! The dispute has been resolved in your favor.
+        </p>
+
+        ${amountCard('Funds restored', formattedAmount, '#16A34A')}
+
+        <p style="margin: 0; font-size: 14px; color: #666666;">
+          The held funds have been restored to your account balance and will be included in your next payout.
+        </p>
+      `
+    : `
+        <p style="margin: 0 0 16px 0;">
+          Hey ${safeName}, unfortunately the dispute was resolved in the subscriber's favor.
+        </p>
+
+        ${amountCard('Funds deducted', formattedAmount, '#DC2626')}
+
+        <div style="background: #FEE2E2; border-left: 4px solid #DC2626; padding: 12px 16px; margin: 16px 0; border-radius: 4px;">
+          <p style="margin: 0; font-size: 14px; color: #991B1B;">
+            The subscriber's subscription has been automatically canceled to prevent future disputes.
+          </p>
+        </div>
+
+        <p style="margin: 0; font-size: 14px; color: #666666;">
+          If you believe this was an error, you may contact your payment processor directly. We're here to help if you need assistance.
+        </p>
+      `
+
+  return sendEmail({
+    from: env.EMAIL_FROM,
+    to,
+    subject: sanitizeEmailSubject(won ? `Dispute won: ${formattedAmount} restored` : `Dispute lost: ${formattedAmount} deducted`),
+    html: baseTemplate({
+      preheader,
+      headline,
+      body,
+      ctaText: 'View Dashboard',
+      ctaUrl: `${env.APP_URL}/dashboard`,
+      ctaColor: won ? '#16A34A' : '#DC2626',
+    }),
+  })
+}
+
+// ============================================
+// SUPPORT TICKET EMAILS
+// ============================================
+
+/**
+ * Email sent when user submits a support ticket
+ */
+export async function sendSupportTicketConfirmationEmail(
+  to: string,
+  ticketId: string,
+  subject: string
+): Promise<EmailResult> {
+  const result = await sendEmail({
+    from: env.EMAIL_FROM,
+    to,
+    subject: sanitizeEmailSubject(`We received your request: ${subject}`),
+    html: baseTemplate({
+      preheader: 'Your support request has been submitted',
+      headline: 'We got your message',
+      body: `
+        <p style="color: #374151; font-size: 16px; line-height: 1.6;">
+          Thank you for reaching out. We've received your support request and will get back to you within 1-2 business days.
+        </p>
+        <p style="color: #6B7280; font-size: 14px; margin-top: 16px;">
+          <strong>Subject:</strong> ${escapeHtml(subject)}
+        </p>
+        <p style="color: #6B7280; font-size: 14px;">
+          <strong>Ticket ID:</strong> ${ticketId.slice(0, 8)}
+        </p>
+        <p style="color: #374151; font-size: 16px; line-height: 1.6; margin-top: 16px;">
+          If you need to add more information, simply reply to this email.
+        </p>
+      `,
+    }),
+  })
+
+  if (result.success) {
+    logEmailSent({ to, subject: `We received your request: ${subject}`, template: 'support_ticket_confirmation', messageId: result.messageId })
+  } else {
+    logEmailFailed({ to, subject: `We received your request: ${subject}`, template: 'support_ticket_confirmation', error: result.error || 'Unknown error' })
+  }
+
+  return result
+}
+
+/**
+ * Email sent when admin replies to a support ticket
+ */
+export async function sendSupportTicketReplyEmail(
+  to: string,
+  ticketSubject: string,
+  replyMessage: string
+): Promise<EmailResult> {
+  const result = await sendEmail({
+    from: env.EMAIL_FROM,
+    to,
+    subject: sanitizeEmailSubject(`Re: ${ticketSubject}`),
+    html: baseTemplate({
+      preheader: 'NatePay Support has responded to your request',
+      headline: 'We\'ve responded to your request',
+      body: `
+        <p style="color: #374151; font-size: 16px; line-height: 1.6;">
+          We've responded to your support request regarding "${escapeHtml(ticketSubject)}":
+        </p>
+        <div style="background: #F3F4F6; border-left: 4px solid #FF941A; padding: 16px; margin: 16px 0; border-radius: 0 8px 8px 0;">
+          <p style="color: #374151; font-size: 15px; line-height: 1.6; white-space: pre-wrap; margin: 0;">
+            ${escapeHtml(replyMessage)}
+          </p>
+        </div>
+        <p style="color: #374151; font-size: 16px; line-height: 1.6;">
+          If you have any follow-up questions, simply reply to this email.
+        </p>
+      `,
+    }),
+  })
+
+  if (result.success) {
+    logEmailSent({ to, subject: `Re: ${ticketSubject}`, template: 'support_ticket_reply', messageId: result.messageId })
+  } else {
+    logEmailFailed({ to, subject: `Re: ${ticketSubject}`, template: 'support_ticket_reply', error: result.error || 'Unknown error' })
+  }
+
+  return result
+}
+
+// ============================================
+// ADMIN-CREATED ACCOUNTS
+// ============================================
+
+/**
+ * Email sent when admin creates a creator account on someone's behalf
+ * Includes their payment link and login instructions
+ */
+export async function sendCreatorAccountCreatedEmail(
+  to: string,
+  displayName: string,
+  username: string,
+  paymentLink: string,
+  amount: number,
+  currency: string
+): Promise<EmailResult> {
+  const safeName = escapeHtml(displayName)
+  const formattedAmount = formatAmountForEmail(amount * 100, currency) // amount is in major units, convert to cents for formatting
+  const subject = `Your ${BRAND_NAME} page is ready!`
+
+  const result = await sendEmail({
+    from: env.EMAIL_FROM,
+    to,
+    subject: sanitizeEmailSubject(subject),
+    html: baseTemplate({
+      preheader: `Your payment page is set up and ready to receive ${formattedAmount}/month subscriptions.`,
+      headline: `Welcome, ${safeName}!`,
+      body: `
+        <p style="color: #374151; font-size: 16px; line-height: 1.6;">
+          Great news! Your ${BRAND_NAME} page has been set up and is ready to accept payments.
+        </p>
+
+        <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin: 24px 0;">
+          <tr>
+            <td style="background-color: #F9FAFB; border-radius: 12px; padding: 20px;">
+              <p style="margin: 0 0 12px 0; font-size: 14px; color: #6B7280;">Your payment link:</p>
+              <a href="${escapeHtml(paymentLink)}" style="font-size: 18px; color: #FF941A; font-weight: 600; text-decoration: none; word-break: break-all;">
+                ${escapeHtml(paymentLink)}
+              </a>
+              <p style="margin: 16px 0 0 0; font-size: 14px; color: #6B7280;">
+                Monthly subscription: <strong style="color: #111827;">${formattedAmount}</strong>
+              </p>
+            </td>
+          </tr>
+        </table>
+
+        <p style="color: #374151; font-size: 16px; line-height: 1.6;">
+          Share this link with your clients and they can subscribe with just a few clicks. Payments go directly to your bank account.
+        </p>
+
+        <p style="color: #374151; font-size: 16px; line-height: 1.6; margin-top: 20px;">
+          <strong>To access your dashboard:</strong> Visit ${BRAND_NAME} and sign in with this email address. You'll receive a one-time code to verify your identity.
+        </p>
+
+        <p style="color: #6B7280; font-size: 14px; margin-top: 24px;">
+          From your dashboard, you can customize your page, track your subscribers, and manage your payouts.
+        </p>
+      `,
+      ctaText: 'Go to Dashboard',
+      ctaUrl: `${env.APP_URL}/dashboard`,
+      footerText: 'This account was set up on your behalf by NatePay support.',
+    }),
+  })
+
+  if (result.success) {
+    logEmailSent({ to, subject, template: 'creator_account_created', messageId: result.messageId })
+  } else {
+    logEmailFailed({ to, subject, template: 'creator_account_created', error: result.error || 'Unknown error' })
+  }
+
+  return result
 }

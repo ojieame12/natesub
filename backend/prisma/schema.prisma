@@ -77,6 +77,7 @@ enum PayoutStatus {
   pending
   active
   restricted
+  disabled  // Admin-disabled payouts (fraud prevention)
 }
 
 enum Purpose {
@@ -114,6 +115,7 @@ enum OnboardingBranch {
 enum FeeMode {
   absorb            // Creator absorbs fee, subscriber pays exact price
   pass_to_subscriber // Fee added on top, creator keeps full amount
+  split             // 4%/4% split - subscriber pays 4%, creator pays 4%
 }
 
 // ============================================
@@ -126,6 +128,10 @@ model User {
   createdAt   DateTime  @default(now())
   lastLoginAt DateTime?
   deletedAt   DateTime? // Soft delete timestamp
+
+  // Dispute tracking (for subscribers who file chargebacks)
+  disputeCount  Int     @default(0)  // Number of chargebacks filed as subscriber
+  blockedReason String?              // If set, blocked from subscribing
 
   // Onboarding state (server-side tracking)
   onboardingStep   Int?              // Last completed step (0-11)
@@ -292,8 +298,8 @@ model Subscription {
   ltvCents Int @default(0)
 
   // Fee tracking (locked at subscription creation for consistent renewals)
-  feeModel String? // 'flat' for new, null for legacy
-  feeMode  String? // 'absorb' | 'pass_to_subscriber' - who pays the platform fee
+  feeModel String? // 'split_v1' for new, 'flat' for v1, null for legacy
+  feeMode  String? // 'split' | 'absorb' | 'pass_to_subscriber' - how platform fee is distributed
 
   // Timestamps
   startedAt  DateTime  @default(now())
@@ -331,9 +337,13 @@ model Payment {
   netCents    Int             // What creator receives
   platformDebitRecoveredCents Int @default(0) // Platform debt recovered from this payment
 
+  // Split fee tracking (v2 model: 4%/4% split)
+  subscriberFeeCents Int?    // Fee paid by subscriber (added to price)
+  creatorFeeCents    Int?    // Fee paid by creator (deducted from payout)
+
   // Fee metadata (for auditing)
-  feeModel         String?   // 'progressive_v1', 'legacy_percent', null for old
-  feeEffectiveRate Float?    // 0.0575 for 5.75%
+  feeModel         String?   // 'split_v1', 'progressive_v1', 'legacy_percent', null for old
+  feeEffectiveRate Float?    // 0.04 for 4% (each side's rate in split model)
   feeWasCapped     Boolean @default(false)
 
   // Provider fees (for reconciliation - what Stripe/Paystack charges us)
@@ -354,6 +364,7 @@ model Payment {
   paystackEventId        String? @unique
   paystackTransactionRef String? @unique
   paystackTransferCode   String?  // Transfer code for OTP finalization
+  paystackDisputeId      String? @unique  // Track Paystack disputes/chargebacks
 
   // Timestamps
   occurredAt DateTime @default(now())
@@ -725,4 +736,186 @@ model Reminder {
   @@index([status, scheduledFor])        // For finding due reminders
   @@index([userId])
   @@map("reminders")
+}
+
+// ============================================
+// SYSTEM LOGS (Admin Monitoring)
+// ============================================
+
+enum SystemLogType {
+  email_sent
+  email_failed
+  reminder_sent
+  reminder_failed
+  update_sent
+  invoice_created
+  invoice_sent
+  user_error
+  payment_error
+  webhook_error
+  payout_initiated
+  payout_completed
+  payout_failed
+}
+
+enum SystemLogLevel {
+  info
+  warning
+  error
+}
+
+model SystemLog {
+  id     String @id @default(uuid())
+
+  // Log classification
+  type   SystemLogType
+  level  SystemLogLevel @default(info)
+
+  // Context
+  userId    String?  // Related user (if any)
+  entityType String?  // 'subscription' | 'payment' | 'request' | etc.
+  entityId   String?  // Related entity ID
+
+  // Details
+  message    String   // Human-readable description
+  metadata   Json?    // Additional data (email recipient, error details, etc.)
+
+  // For errors
+  errorCode    String?
+  errorMessage String?
+  stackTrace   String?
+
+  createdAt DateTime @default(now())
+
+  @@index([type, createdAt(sort: Desc)])
+  @@index([level, createdAt(sort: Desc)])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([createdAt])
+  @@map("system_logs")
+}
+
+// ============================================
+// SUPPORT TICKETS
+// ============================================
+
+enum TicketStatus {
+  open
+  in_progress
+  resolved
+  closed
+}
+
+enum TicketPriority {
+  low
+  normal
+  high
+  urgent
+}
+
+enum TicketCategory {
+  general
+  billing
+  technical
+  account
+  payout
+  dispute
+}
+
+model SupportTicket {
+  id     String @id @default(uuid())
+
+  // Who submitted (userId if logged in, otherwise just email)
+  userId String?
+  email  String  // Required for responding
+  name   String? // Optional name
+
+  // Ticket details
+  category TicketCategory
+  subject  String
+  message  String
+
+  // Status tracking
+  status   TicketStatus   @default(open)
+  priority TicketPriority @default(normal)
+
+  // Admin handling
+  assignedTo String?  // Admin email if assigned
+  adminNotes String?  // Internal notes (not visible to user)
+
+  // Resolution
+  resolvedAt   DateTime?
+  resolution   String?    // How it was resolved
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Messages thread
+  messages SupportMessage[]
+
+  @@index([status, createdAt(sort: Desc)])
+  @@index([userId])
+  @@index([email])
+  @@index([priority, status])
+  @@map("support_tickets")
+}
+
+model SupportMessage {
+  id       String @id @default(uuid())
+  ticketId String
+  ticket   SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  // Who sent this message
+  isAdmin    Boolean // true = admin response, false = user message
+  senderName String? // Display name
+  message    String
+
+  createdAt DateTime @default(now())
+
+  @@index([ticketId, createdAt])
+  @@map("support_messages")
+}
+
+// ============================================
+// ADMIN ANALYTICS (Pre-aggregated)
+// ============================================
+
+// Pre-computed daily stats for admin dashboard performance
+model DailyStats {
+  id   String @id @default(uuid())
+  date DateTime @db.Date // The day these stats are for
+
+  // User metrics
+  totalUsers     Int @default(0)
+  newUsers       Int @default(0)
+  activeCreators Int @default(0)  // Creators with payout status = active
+
+  // Subscription metrics
+  activeSubscriptions   Int @default(0)
+  newSubscriptions      Int @default(0)
+  canceledSubscriptions Int @default(0)
+
+  // Payment metrics (in cents)
+  totalVolumeCents    BigInt @default(0)  // Gross payment volume
+  platformFeeCents    BigInt @default(0)  // Platform fees collected
+  creatorPayoutsCents BigInt @default(0)  // Net to creators
+  paymentCount        Int    @default(0)
+  failedPayments      Int    @default(0)
+
+  // Refunds & Disputes
+  refundCount      Int    @default(0)
+  refundAmountCents BigInt @default(0)
+  disputeCount     Int    @default(0)
+
+  // Provider breakdown
+  stripeVolumeCents   BigInt @default(0)
+  paystackVolumeCents BigInt @default(0)
+
+  // Timestamps
+  computedAt DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([date])
+  @@index([date(sort: Desc)])
+  @@map("daily_stats")
 }
