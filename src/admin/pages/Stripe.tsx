@@ -24,7 +24,7 @@ function formatMoneyMinorUnits(amountMinor: number, currency = 'USD'): string {
     style: 'currency',
     currency: currency.toUpperCase(),
   })
-  const digits = formatter.resolvedOptions().maximumFractionDigits
+  const digits = formatter.resolvedOptions().maximumFractionDigits ?? 2
   return formatter.format(amountMinor / Math.pow(10, digits))
 }
 
