@@ -399,7 +399,13 @@ stripeRoutes.post('/accounts/:accountId/payout', adminSensitiveRateLimit, requir
         data: {
           userId: profile.userId,
           type: 'admin_payout_triggered',
-          payload: { payoutId: payout.id, amount: payout.amount, currency: payout.currency }
+          payload: {
+            payoutId: payout.id,
+            amount: payout.amount,
+            currency: payout.currency,
+            adminId: c.get('adminUserId'),
+            adminEmail: c.get('adminEmail')
+          }
         }
       })
     }
@@ -450,7 +456,11 @@ stripeRoutes.post('/accounts/:accountId/disable-payouts', adminSensitiveRateLimi
         data: {
           userId: profile.userId,
           type: 'admin_payouts_disabled',
-          payload: { reason: body.reason }
+          payload: {
+            reason: body.reason,
+            adminId: c.get('adminUserId'),
+            adminEmail: c.get('adminEmail')
+          }
         }
       })
     }
@@ -489,7 +499,10 @@ stripeRoutes.post('/accounts/:accountId/enable-payouts', adminSensitiveRateLimit
         data: {
           userId: profile.userId,
           type: 'admin_payouts_enabled',
-          payload: {}
+          payload: {
+            adminId: c.get('adminUserId'),
+            adminEmail: c.get('adminEmail')
+          }
         }
       })
     }

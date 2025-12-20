@@ -17,8 +17,8 @@ test.describe('Admin smoke', () => {
       localStorage.setItem('nate_has_session', 'true')
     })
 
-    // Auth bootstrap
-    await page.route('**/auth/me', async (route) => {
+    // Auth bootstrap (backend)
+    await page.route('**://localhost:3001/auth/me', async (route) => {
       await route.fulfill(
         json({
           id: 'user_admin_1',
@@ -38,7 +38,7 @@ test.describe('Admin smoke', () => {
     })
 
     // Admin API stubs (UI smoke only; avoids hitting real Stripe/Paystack)
-    await page.route('**/admin/**', async (route) => {
+    await page.route('**://localhost:3001/admin/**', async (route) => {
       const url = new URL(route.request().url())
       const path = url.pathname
 

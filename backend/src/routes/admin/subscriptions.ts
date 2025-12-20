@@ -136,7 +136,11 @@ subscriptions.post('/:id/pause', adminSensitiveRateLimit, async (c) => {
       data: {
         userId: subscription.creatorId,
         type: 'admin_subscription_paused',
-        payload: { subscriptionId: id }
+        payload: {
+          subscriptionId: id,
+          adminId: c.get('adminUserId'),
+          adminEmail: c.get('adminEmail')
+        }
       }
     })
 
@@ -177,7 +181,11 @@ subscriptions.post('/:id/resume', adminSensitiveRateLimit, async (c) => {
       data: {
         userId: subscription.creatorId,
         type: 'admin_subscription_resumed',
-        payload: { subscriptionId: id }
+        payload: {
+          subscriptionId: id,
+          adminId: c.get('adminUserId'),
+          adminEmail: c.get('adminEmail')
+        }
       }
     })
 

@@ -236,7 +236,9 @@ blockedSubscribers.post('/:id/unblock', adminSensitiveRateLimit, requireRole('su
         previousBlockReason: user.blockedReason,
         disputeCount: user.disputeCount,
         unblockReason: reason,
-        unblockedAt: new Date().toISOString()
+        unblockedAt: new Date().toISOString(),
+        adminId: c.get('adminUserId'),
+        adminEmail: c.get('adminEmail')
       }
     }
   })
@@ -292,7 +294,9 @@ subscribers.post('/:id/block', adminSensitiveRateLimit, requireRole('super_admin
       payload: {
         reason,
         blockedAt: new Date().toISOString(),
-        cancelledSubscriptions: cancelledSubs.count
+        cancelledSubscriptions: cancelledSubs.count,
+        adminId: c.get('adminUserId'),
+        adminEmail: c.get('adminEmail')
       }
     }
   })

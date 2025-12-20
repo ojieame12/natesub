@@ -182,7 +182,16 @@ users.post('/:id/block', adminSensitiveRateLimit, requireRole('super_admin'), re
 
   await db.user.update({ where: { id }, data: { deletedAt: new Date() } })
   await db.activity.create({
-    data: { userId: id, type: 'admin_block', payload: { reason, blockedAt: new Date().toISOString() } }
+    data: {
+      userId: id,
+      type: 'admin_block',
+      payload: {
+        reason,
+        blockedAt: new Date().toISOString(),
+        adminId: c.get('adminUserId'),
+        adminEmail: c.get('adminEmail')
+      }
+    }
   })
 
   return c.json({ success: true })
@@ -198,7 +207,15 @@ users.post('/:id/unblock', adminSensitiveRateLimit, requireRole('super_admin'), 
 
   await db.user.update({ where: { id }, data: { deletedAt: null } })
   await db.activity.create({
-    data: { userId: id, type: 'admin_unblock', payload: { unblockedAt: new Date().toISOString() } }
+    data: {
+      userId: id,
+      type: 'admin_unblock',
+      payload: {
+        unblockedAt: new Date().toISOString(),
+        adminId: c.get('adminUserId'),
+        adminEmail: c.get('adminEmail')
+      }
+    }
   })
 
   return c.json({ success: true })
@@ -343,6 +360,8 @@ users.delete('/:id', adminSensitiveRateLimit, requireRole('super_admin'), requir
       payload: {
         reason,
         deletedBy: adminUserId,
+        adminId: c.get('adminUserId'),
+        adminEmail: c.get('adminEmail'),
         originalEmail: user.email,
         deletedAt: new Date().toISOString(),
         canceledSubscriptions: canceledCounts,
@@ -496,6 +515,8 @@ users.post('/test-cleanup/delete', adminSensitiveRateLimit, requireRole('super_a
         deletedCount: deleted,
         errors: errors.length,
         performedAt: new Date().toISOString(),
+        adminId: c.get('adminUserId'),
+        adminEmail: c.get('adminEmail'),
       },
     },
   })

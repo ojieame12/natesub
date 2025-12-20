@@ -37,7 +37,9 @@ export default defineConfig({
     timeout: 10 * 1000, // 10s for assertions
   },
   use: {
-    baseURL: process.env.APP_URL || 'http://localhost:5173',
+    // Always prefer local dev server for E2E unless explicitly overridden.
+    // NOTE: APP_URL is a backend/runtime setting and may point at production.
+    baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5173',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'on-first-retry',
@@ -76,6 +78,8 @@ export default defineConfig({
         PAYMENTS_MODE: 'stub',
         NODE_ENV: 'test',
         HOST: '127.0.0.1',
+        APP_URL: 'http://localhost:5173',
+        API_URL: 'http://localhost:3001',
       },
     },
     {

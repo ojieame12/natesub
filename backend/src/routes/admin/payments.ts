@@ -174,7 +174,9 @@ payments.post('/:id/refund', adminSensitiveRateLimit, requireRole('super_admin')
             paymentId: id,
             refundId: refund.id,
             amountCents: refund.amount,
-            reason: body.reason
+            reason: body.reason,
+            adminId: c.get('adminUserId'),
+            adminEmail: c.get('adminEmail')
           }
         }
       })
@@ -203,7 +205,9 @@ payments.post('/:id/refund', adminSensitiveRateLimit, requireRole('super_admin')
           payload: {
             paymentId: id,
             refundData: result.data,
-            reason: body.reason
+            reason: body.reason,
+            adminId: c.get('adminUserId'),
+            adminEmail: c.get('adminEmail')
           }
         }
       })
