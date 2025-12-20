@@ -3,8 +3,20 @@
  *
  * Protected routes for operational monitoring and management.
  * Accessible via:
- * 1. ADMIN_API_KEY header (for Retool/external tools)
- * 2. Valid user session with email in admin whitelist (for frontend dashboard)
+ * 1. ADMIN_API_KEY header (for Retool/external tools) - grants super_admin access
+ * 2. Valid user session with admin or super_admin role
+ *
+ * Role-Based Access Control:
+ * - admin: Can view dashboard, users, payments, subscriptions, logs
+ * - super_admin: All admin permissions PLUS destructive actions:
+ *   - DELETE /users/:id (delete user)
+ *   - POST /users/:id/block, /unblock (block/unblock user)
+ *   - POST /payments/:id/refund (process refunds)
+ *   - POST /subscriptions/:id/cancel (cancel subscriptions)
+ *   - POST /subscribers/:id/block (block subscriber)
+ *   - POST /reconciliation/* (run reconciliation)
+ *   - POST /stripe/accounts/:id/payout (initiate payouts)
+ *   - POST /users/create-creator (create new creator)
  *
  * Authentication is handled by centralized middleware in ../middleware/adminAuth.ts
  */
@@ -24,7 +36,7 @@ import { listBanks, resolveAccount, createSubaccount, isPaystackSupported, type 
 import { RESERVED_USERNAMES } from '../utils/constants.js'
 import { displayAmountToCents } from '../utils/currency.js'
 import { adminSensitiveRateLimit } from '../middleware/rateLimit.js'
-import { adminAuth, adminAuthOptional, logAdminAction, getSessionToken, isAdminRole } from '../middleware/adminAuth.js'
+import { adminAuth, adminAuthOptional, logAdminAction, getSessionToken, isAdminRole, requireRole } from '../middleware/adminAuth.js'
 import { validateSession } from '../services/auth.js'
 
 const admin = new Hono()
@@ -512,8 +524,9 @@ admin.get('/reconciliation/missing', async (c) => {
 /**
  * POST /admin/reconciliation/run
  * Manually trigger reconciliation
+ * Requires: super_admin
  */
-admin.post('/reconciliation/run', adminSensitiveRateLimit, async (c) => {
+admin.post('/reconciliation/run', adminSensitiveRateLimit, requireRole('super_admin'), async (c) => {
   // Prevent concurrent reconciliation runs
   if (reconciliationRunning) {
     return c.json({ error: 'Reconciliation already in progress' }, 409)
@@ -543,8 +556,9 @@ admin.post('/reconciliation/run', adminSensitiveRateLimit, async (c) => {
 /**
  * POST /admin/reconciliation/stripe
  * Manually trigger Stripe reconciliation (sync missing payments)
+ * Requires: super_admin
  */
-admin.post('/reconciliation/stripe', adminSensitiveRateLimit, async (c) => {
+admin.post('/reconciliation/stripe', adminSensitiveRateLimit, requireRole('super_admin'), async (c) => {
   // Prevent concurrent reconciliation runs
   if (reconciliationRunning) {
     return c.json({ error: 'Reconciliation already in progress' }, 409)
@@ -769,7 +783,7 @@ admin.get('/users/:id', async (c) => {
   })
 })
 
-admin.post('/users/:id/block', adminSensitiveRateLimit, async (c) => {
+admin.post('/users/:id/block', adminSensitiveRateLimit, requireRole('super_admin'), async (c) => {
   const { id } = c.req.param()
   const body = await c.req.json().catch(() => ({}))
   const reason = body.reason || 'Blocked by admin'
@@ -782,7 +796,7 @@ admin.post('/users/:id/block', adminSensitiveRateLimit, async (c) => {
   return c.json({ success: true })
 })
 
-admin.post('/users/:id/unblock', adminSensitiveRateLimit, async (c) => {
+admin.post('/users/:id/unblock', adminSensitiveRateLimit, requireRole('super_admin'), async (c) => {
   const { id } = c.req.param()
 
   await db.user.update({ where: { id }, data: { deletedAt: null } })
@@ -803,10 +817,10 @@ admin.post('/users/:id/unblock', adminSensitiveRateLimit, async (c) => {
  * - Deletes profile
  * - Logs admin activity
  */
-admin.delete('/users/:id', adminSensitiveRateLimit, async (c) => {
+admin.delete('/users/:id', adminSensitiveRateLimit, requireRole('super_admin'), async (c) => {
   const { id } = c.req.param()
   const body = await c.req.json().catch(() => ({}))
-  const adminUserId = c.get('userId') as string | undefined
+  const adminUserId = c.get('adminUserId')
 
   if (body.confirm !== 'DELETE') {
     return c.json({ error: 'Must confirm with { confirm: "DELETE" }' }, 400)
@@ -1054,8 +1068,9 @@ admin.get('/users/test-cleanup/preview', async (c) => {
  * POST /admin/users/test-cleanup/delete
  * Bulk delete test users (soft delete, GDPR compliant)
  * Requires confirmation in body: { confirm: true }
+ * Requires: super_admin
  */
-admin.post('/users/test-cleanup/delete', adminSensitiveRateLimit, async (c) => {
+admin.post('/users/test-cleanup/delete', adminSensitiveRateLimit, requireRole('super_admin'), async (c) => {
   const body = z.object({
     confirm: z.boolean(),
     dryRun: z.boolean().default(false),
@@ -1232,9 +1247,10 @@ admin.get('/payments/:id', async (c) => {
 
 // ============================================
 // REFUNDS (for Retool)
+// Requires: super_admin
 // ============================================
 
-admin.post('/payments/:id/refund', adminSensitiveRateLimit, async (c) => {
+admin.post('/payments/:id/refund', adminSensitiveRateLimit, requireRole('super_admin'), async (c) => {
   const { id } = c.req.param()
   const body = z.object({
     reason: z.string().optional(),
@@ -1394,7 +1410,7 @@ admin.get('/subscriptions', async (c) => {
   })
 })
 
-admin.post('/subscriptions/:id/cancel', adminSensitiveRateLimit, async (c) => {
+admin.post('/subscriptions/:id/cancel', adminSensitiveRateLimit, requireRole('super_admin'), async (c) => {
   const { id } = c.req.param()
   const body = await c.req.json().catch(() => ({}))
   const immediate = body.immediate ?? false
@@ -1922,8 +1938,9 @@ admin.get('/blocked-subscribers', async (c) => {
 /**
  * POST /admin/subscribers/:id/block
  * Manually block a subscriber (prevents them from subscribing to any creator)
+ * Requires: super_admin
  */
-admin.post('/subscribers/:id/block', adminSensitiveRateLimit, async (c) => {
+admin.post('/subscribers/:id/block', adminSensitiveRateLimit, requireRole('super_admin'), async (c) => {
   const { id } = c.req.param()
   const body = await c.req.json().catch(() => ({}))
   const reason = body.reason || 'Blocked by admin'
@@ -1971,8 +1988,9 @@ admin.post('/subscribers/:id/block', adminSensitiveRateLimit, async (c) => {
 /**
  * POST /admin/blocked-subscribers/:id/unblock
  * Unblock a subscriber (use with caution)
+ * Requires: super_admin
  */
-admin.post('/blocked-subscribers/:id/unblock', adminSensitiveRateLimit, async (c) => {
+admin.post('/blocked-subscribers/:id/unblock', adminSensitiveRateLimit, requireRole('super_admin'), async (c) => {
   const { id } = c.req.param()
   const body = await c.req.json().catch(() => ({}))
   const reason = body.reason || 'Unblocked by admin'
@@ -2453,8 +2471,9 @@ admin.post('/subscriptions/:id/resume', adminSensitiveRateLimit, async (c) => {
 /**
  * POST /admin/stripe/accounts/:accountId/payout
  * Trigger immediate payout to a connected account
+ * Requires: super_admin
  */
-admin.post('/stripe/accounts/:accountId/payout', adminSensitiveRateLimit, async (c) => {
+admin.post('/stripe/accounts/:accountId/payout', adminSensitiveRateLimit, requireRole('super_admin'), async (c) => {
   const { accountId } = c.req.param()
   const body = z.object({
     amount: z.number().optional(), // If not specified, payout all available
@@ -2510,8 +2529,9 @@ admin.post('/stripe/accounts/:accountId/payout', adminSensitiveRateLimit, async 
 /**
  * POST /admin/stripe/accounts/:accountId/disable-payouts
  * Disable payouts for a connected account (fraud prevention)
+ * Requires: super_admin
  */
-admin.post('/stripe/accounts/:accountId/disable-payouts', adminSensitiveRateLimit, async (c) => {
+admin.post('/stripe/accounts/:accountId/disable-payouts', adminSensitiveRateLimit, requireRole('super_admin'), async (c) => {
   const { accountId } = c.req.param()
   const body = z.object({
     reason: z.string()
@@ -2554,8 +2574,9 @@ admin.post('/stripe/accounts/:accountId/disable-payouts', adminSensitiveRateLimi
 /**
  * POST /admin/stripe/accounts/:accountId/enable-payouts
  * Re-enable payouts for a connected account
+ * Requires: super_admin
  */
-admin.post('/stripe/accounts/:accountId/enable-payouts', adminSensitiveRateLimit, async (c) => {
+admin.post('/stripe/accounts/:accountId/enable-payouts', adminSensitiveRateLimit, requireRole('super_admin'), async (c) => {
   const { accountId } = c.req.param()
 
   try {
@@ -2904,8 +2925,9 @@ admin.post('/paystack/resolve-account', adminSensitiveRateLimit, async (c) => {
  * POST /admin/users/create-creator
  * Create a fully-functional creator account (Paystack countries only)
  * Admin enters all details, creator receives ready-to-use payment link
+ * Requires: super_admin
  */
-admin.post('/users/create-creator', adminSensitiveRateLimit, async (c) => {
+admin.post('/users/create-creator', adminSensitiveRateLimit, requireRole('super_admin'), async (c) => {
   const body = z.object({
     email: z.string().email(),
     displayName: z.string().min(2).max(50),

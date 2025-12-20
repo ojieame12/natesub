@@ -23,6 +23,9 @@ import type { UserRole } from '@prisma/client'
 // Roles that have admin access (can access admin dashboard)
 const ADMIN_ROLES: UserRole[] = ['admin', 'super_admin']
 
+// API key scopes
+export type ApiKeyScope = 'full' | 'read-only'
+
 // Extend Hono context with admin info
 declare module 'hono' {
   interface ContextVariableMap {
@@ -30,6 +33,7 @@ declare module 'hono' {
     adminEmail?: string
     adminRole?: UserRole
     adminAuthMethod?: 'api-key' | 'session'
+    adminApiKeyScope?: ApiKeyScope
   }
 }
 
@@ -71,15 +75,15 @@ export function getSessionToken(c: Context): string | undefined {
 async function logAdminAccess(
   c: Context,
   success: boolean,
-  details?: { userId?: string; email?: string; role?: string; authMethod?: string }
+  details?: { userId?: string; email?: string; role?: string; authMethod?: string; scope?: string; reason?: string }
 ): Promise<void> {
   try {
     await db.systemLog.create({
       data: {
         type: success ? 'admin_access' : 'admin_access_denied',
         message: success
-          ? `Admin access granted via ${details?.authMethod || 'unknown'}`
-          : 'Admin access denied',
+          ? `Admin access granted via ${details?.authMethod || 'unknown'}${details?.scope ? ` (${details.scope})` : ''}`
+          : details?.reason || 'Admin access denied',
         metadata: {
           path: c.req.path,
           method: c.req.method,
@@ -89,6 +93,8 @@ async function logAdminAccess(
           email: details?.email,
           role: details?.role,
           authMethod: details?.authMethod,
+          scope: details?.scope,
+          reason: details?.reason,
         },
       },
     })
@@ -135,14 +141,41 @@ export async function logAdminAction(
  */
 export async function adminAuth(c: Context, next: Next): Promise<void> {
   // Option 1: API key auth (for Retool/external tools)
-  // API key grants super_admin level access
   const apiKey = c.req.header('x-admin-api-key')
-  const expectedKey = process.env.ADMIN_API_KEY
+  const fullAccessKey = process.env.ADMIN_API_KEY
+  const readOnlyKey = process.env.ADMIN_API_KEY_READONLY
 
-  if (apiKey && expectedKey && apiKey === expectedKey) {
+  // Check full access key first (grants super_admin)
+  if (apiKey && fullAccessKey && apiKey === fullAccessKey) {
     c.set('adminAuthMethod', 'api-key')
     c.set('adminRole', 'super_admin')
-    await logAdminAccess(c, true, { authMethod: 'api-key', role: 'super_admin' })
+    c.set('adminApiKeyScope', 'full')
+    await logAdminAccess(c, true, { authMethod: 'api-key', role: 'super_admin', scope: 'full' })
+    await next()
+    return
+  }
+
+  // Check read-only key (grants admin role, blocks non-GET requests)
+  if (apiKey && readOnlyKey && apiKey === readOnlyKey) {
+    const method = c.req.method.toUpperCase()
+
+    // Read-only key only allows GET requests
+    if (method !== 'GET') {
+      await logAdminAccess(c, false, {
+        authMethod: 'api-key',
+        role: 'admin',
+        scope: 'read-only',
+        reason: `Read-only API key cannot perform ${method} requests`
+      })
+      throw new HTTPException(403, {
+        message: 'Read-only API key cannot perform this action. Use full access key for write operations.'
+      })
+    }
+
+    c.set('adminAuthMethod', 'api-key')
+    c.set('adminRole', 'admin') // admin role, not super_admin
+    c.set('adminApiKeyScope', 'read-only')
+    await logAdminAccess(c, true, { authMethod: 'api-key', role: 'admin', scope: 'read-only' })
     await next()
     return
   }

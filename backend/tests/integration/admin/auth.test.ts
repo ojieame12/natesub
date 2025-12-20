@@ -177,6 +177,84 @@ describe('admin auth', () => {
     })
   })
 
+  describe('admin status endpoint', () => {
+    it('returns isAdmin false without leaking identity', async () => {
+      const res = await app.fetch(
+        new Request('http://localhost/admin/me', {
+          method: 'GET',
+        })
+      )
+
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body).toMatchObject({ isAdmin: false })
+      expect(body).not.toHaveProperty('email')
+      expect(body).not.toHaveProperty('role')
+    })
+
+    it('returns isAdmin false for non-admin session', async () => {
+      const user = await db.user.create({
+        data: { email: 'user@test.com', role: 'user' },
+      })
+
+      const rawToken = 'non-admin-session'
+      await db.session.create({
+        data: {
+          userId: user.id,
+          token: hashToken(rawToken),
+          expiresAt: new Date(Date.now() + 86400000),
+        },
+      })
+
+      const res = await app.fetch(
+        new Request('http://localhost/admin/me', {
+          method: 'GET',
+          headers: {
+            Cookie: `session=${rawToken}`,
+          },
+        })
+      )
+
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body).toMatchObject({ isAdmin: false })
+      expect(body).not.toHaveProperty('email')
+      expect(body).not.toHaveProperty('role')
+    })
+
+    it('returns admin role details for admin session', async () => {
+      const user = await db.user.create({
+        data: { email: 'admin@test.com', role: 'admin' },
+      })
+
+      const rawToken = 'admin-me-token'
+      await db.session.create({
+        data: {
+          userId: user.id,
+          token: hashToken(rawToken),
+          expiresAt: new Date(Date.now() + 86400000),
+        },
+      })
+
+      const res = await app.fetch(
+        new Request('http://localhost/admin/me', {
+          method: 'GET',
+          headers: {
+            Cookie: `session=${rawToken}`,
+          },
+        })
+      )
+
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body).toMatchObject({
+        isAdmin: true,
+        email: 'admin@test.com',
+        role: 'admin',
+      })
+    })
+  })
+
   describe('protects all admin routes', () => {
     const protectedRoutes = [
       { method: 'GET', path: '/admin/dashboard' },
@@ -202,5 +280,95 @@ describe('admin auth', () => {
         expect(res.status).toBe(401)
       })
     }
+  })
+
+  describe('role-based access control', () => {
+    it('allows admin role to access read endpoints', async () => {
+      const user = await db.user.create({
+        data: { email: 'admin-readonly@test.com', role: 'admin' },
+      })
+
+      const rawToken = 'admin-readonly-token'
+      await db.session.create({
+        data: {
+          userId: user.id,
+          token: hashToken(rawToken),
+          expiresAt: new Date(Date.now() + 86400000),
+        },
+      })
+
+      const res = await app.fetch(
+        new Request('http://localhost/admin/dashboard', {
+          method: 'GET',
+          headers: {
+            Cookie: `session=${rawToken}`,
+          },
+        })
+      )
+
+      expect(res.status).toBe(200)
+    })
+
+    it('blocks admin role from super_admin endpoints (403)', async () => {
+      const user = await db.user.create({
+        data: { email: 'admin-limited@test.com', role: 'admin' },
+      })
+
+      const rawToken = 'admin-limited-token'
+      await db.session.create({
+        data: {
+          userId: user.id,
+          token: hashToken(rawToken),
+          expiresAt: new Date(Date.now() + 86400000),
+        },
+      })
+
+      // Try to access a super_admin-only endpoint
+      const res = await app.fetch(
+        new Request('http://localhost/admin/reconciliation/run', {
+          method: 'POST',
+          headers: {
+            Cookie: `session=${rawToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({}),
+        })
+      )
+
+      expect(res.status).toBe(403)
+      const body = await res.json()
+      expect(body.message).toContain('super_admin')
+    })
+
+    it('allows super_admin to access super_admin endpoints', async () => {
+      const user = await db.user.create({
+        data: { email: 'superadmin@test.com', role: 'super_admin' },
+      })
+
+      const rawToken = 'superadmin-token'
+      await db.session.create({
+        data: {
+          userId: user.id,
+          token: hashToken(rawToken),
+          expiresAt: new Date(Date.now() + 86400000),
+        },
+      })
+
+      // Super admin should get past auth (may fail for other reasons like no data, but not 403)
+      const res = await app.fetch(
+        new Request('http://localhost/admin/reconciliation/run', {
+          method: 'POST',
+          headers: {
+            Cookie: `session=${rawToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({}),
+        })
+      )
+
+      // Should not be 403 (forbidden) - it will be 200 or some other status
+      expect(res.status).not.toBe(403)
+      expect(res.status).not.toBe(401)
+    })
   })
 })
