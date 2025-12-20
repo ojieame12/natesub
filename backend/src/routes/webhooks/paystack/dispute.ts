@@ -7,6 +7,7 @@
 
 import { db } from '../../../db/client.js'
 import { sendDisputeCreatedEmail, sendDisputeResolvedEmail } from '../../../services/email.js'
+import { alertDisputeCreated, alertDisputeResolved } from '../../../services/slack.js'
 
 interface PaystackDisputeData {
   id: number | string
@@ -139,6 +140,22 @@ export async function handlePaystackDisputeCreated(data: PaystackDisputeData, ev
     )
   }
 
+  // Send Slack alert (non-blocking)
+  const subscriber = await db.user.findUnique({
+    where: { id: subscription.subscriberId },
+    select: { email: true },
+  })
+
+  alertDisputeCreated({
+    creatorEmail: creator?.email || 'unknown',
+    creatorName: creator?.profile?.displayName || 'Unknown Creator',
+    subscriberEmail: subscriber?.email,
+    amount,
+    currency: currency?.toUpperCase() || 'NGN',
+    reason: reason || 'Unknown',
+    stripeDisputeId: `paystack_${disputeId}`, // Prefix to distinguish
+  }).catch((err) => console.error('[slack] Failed to send dispute alert:', err))
+
   console.log(`[paystack] Dispute recorded: ${disputeId}, amount: ${amount}, creator: ${subscription.creatorId}`)
 }
 
@@ -252,6 +269,16 @@ export async function handlePaystackDisputeResolved(data: PaystackDisputeData, e
       won
     )
   }
+
+  // Send Slack alert for resolution (non-blocking)
+  alertDisputeResolved({
+    creatorEmail: creator?.email || 'unknown',
+    creatorName: creator?.profile?.displayName || 'Unknown Creator',
+    amount,
+    currency: currency?.toUpperCase() || 'NGN',
+    won,
+    stripeDisputeId: `paystack_${disputeId}`,
+  }).catch((err) => console.error('[slack] Failed to send dispute resolution alert:', err))
 
   console.log(`[paystack] Dispute ${disputeId} marked as ${newStatus}`)
 }

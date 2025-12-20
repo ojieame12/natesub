@@ -1,6 +1,9 @@
 import Stripe from 'stripe'
 import { db } from '../../../db/client.js'
 import { stripe } from '../../../services/stripe.js'
+import { cancelSubscription } from '../../../services/stripe.js'
+import { sendDisputeCreatedEmail, sendDisputeResolvedEmail } from '../../../services/email.js'
+import { alertDisputeCreated, alertDisputeResolved } from '../../../services/slack.js'
 
 // Handle dispute/chargeback created
 export async function handleDisputeCreated(event: Stripe.Event) {
@@ -48,6 +51,27 @@ export async function handleDisputeCreated(event: Stripe.Event) {
     })
   }
 
+  // Track dispute count on subscriber (for blocking repeat offenders)
+  if (subscription.subscriberId) {
+    const subscriber = await db.user.findUnique({
+      where: { id: subscription.subscriberId },
+      select: { disputeCount: true },
+    })
+
+    const newDisputeCount = (subscriber?.disputeCount || 0) + 1
+
+    await db.user.update({
+      where: { id: subscription.subscriberId },
+      data: {
+        disputeCount: newDisputeCount,
+        // Block after 2 disputes (industry standard pattern-based blocking)
+        ...(newDisputeCount >= 2 && {
+          blockedReason: 'Multiple chargebacks filed',
+        }),
+      },
+    })
+  }
+
   // Create activity event
   await db.activity.create({
     data: {
@@ -62,6 +86,38 @@ export async function handleDisputeCreated(event: Stripe.Event) {
       },
     },
   })
+
+  // Send email notification to creator
+  const creator = await db.user.findUnique({
+    where: { id: subscription.creatorId },
+    include: { profile: { select: { displayName: true } } },
+  })
+
+  if (creator?.email && creator.profile?.displayName) {
+    await sendDisputeCreatedEmail(
+      creator.email,
+      creator.profile.displayName,
+      dispute.amount,
+      dispute.currency.toUpperCase(),
+      dispute.reason || 'Unknown'
+    )
+  }
+
+  // Send Slack alert (non-blocking)
+  const subscriber = await db.user.findUnique({
+    where: { id: subscription.subscriberId },
+    select: { email: true },
+  })
+
+  alertDisputeCreated({
+    creatorEmail: creator?.email || 'unknown',
+    creatorName: creator?.profile?.displayName || 'Unknown Creator',
+    subscriberEmail: subscriber?.email,
+    amount: dispute.amount,
+    currency: dispute.currency.toUpperCase(),
+    reason: dispute.reason || 'Unknown',
+    stripeDisputeId: dispute.id,
+  }).catch((err) => console.error('[slack] Failed to send dispute alert:', err))
 }
 
 // Handle dispute closed (won or lost)
@@ -77,7 +133,7 @@ export async function handleDisputeClosed(event: Stripe.Event) {
   if (!disputePayment) {
     disputePayment = await db.payment.findFirst({
       where: {
-        status: 'pending',
+        status: 'disputed',
         amountCents: -dispute.amount,
       },
       orderBy: { createdAt: 'desc' },
@@ -99,13 +155,56 @@ export async function handleDisputeClosed(event: Stripe.Event) {
   })
 
   // If won, restore the LTV
-  if (won) {
+  if (won && disputePayment.subscriptionId) {
     await db.subscription.update({
-      where: { id: disputePayment.subscriptionId! },
+      where: { id: disputePayment.subscriptionId },
       data: {
         ltvCents: { increment: dispute.amount },
       },
     })
+  }
+
+  // If lost, auto-cancel the subscription (industry standard)
+  if (!won && disputePayment.subscriptionId) {
+    const subscription = await db.subscription.findUnique({
+      where: { id: disputePayment.subscriptionId },
+    })
+
+    if (subscription && subscription.status !== 'canceled') {
+      // Cancel with Stripe if applicable
+      if (subscription.stripeSubscriptionId) {
+        try {
+          await cancelSubscription(subscription.stripeSubscriptionId, false) // immediate
+        } catch (err) {
+          console.error(`[stripe] Failed to cancel subscription ${subscription.stripeSubscriptionId}:`, err)
+        }
+      }
+
+      // Update local record to canceled
+      await db.subscription.update({
+        where: { id: subscription.id },
+        data: {
+          status: 'canceled',
+          canceledAt: new Date(),
+          cancelAtPeriodEnd: false,
+        },
+      })
+
+      // Log the auto-cancellation
+      await db.activity.create({
+        data: {
+          userId: subscription.creatorId,
+          type: 'subscription_auto_canceled',
+          payload: {
+            subscriptionId: subscription.id,
+            reason: 'dispute_lost',
+            stripeDisputeId: dispute.id,
+          },
+        },
+      })
+
+      console.log(`[stripe] Subscription ${subscription.id} auto-canceled due to dispute loss`)
+    }
   }
 
   // Create activity event
@@ -121,4 +220,30 @@ export async function handleDisputeClosed(event: Stripe.Event) {
       },
     },
   })
+
+  // Send email notification to creator
+  const creator = await db.user.findUnique({
+    where: { id: disputePayment.creatorId },
+    include: { profile: { select: { displayName: true } } },
+  })
+
+  if (creator?.email && creator.profile?.displayName) {
+    await sendDisputeResolvedEmail(
+      creator.email,
+      creator.profile.displayName,
+      dispute.amount,
+      dispute.currency.toUpperCase(),
+      won
+    )
+  }
+
+  // Send Slack alert for resolution (non-blocking)
+  alertDisputeResolved({
+    creatorEmail: creator?.email || 'unknown',
+    creatorName: creator?.profile?.displayName || 'Unknown Creator',
+    amount: dispute.amount,
+    currency: dispute.currency.toUpperCase(),
+    won,
+    stripeDisputeId: dispute.id,
+  }).catch((err) => console.error('[slack] Failed to send dispute resolution alert:', err))
 }
