@@ -35,8 +35,9 @@ import { env } from '../config/env.js'
 import { listBanks, resolveAccount, createSubaccount, isPaystackSupported, type PaystackCountry } from '../services/paystack.js'
 import { RESERVED_USERNAMES } from '../utils/constants.js'
 import { displayAmountToCents } from '../utils/currency.js'
+import { todayStart, thisMonthStart, lastNDays, parsePeriod, BUSINESS_TIMEZONE } from '../utils/timezone.js'
 import { adminSensitiveRateLimit } from '../middleware/rateLimit.js'
-import { adminAuth, adminAuthOptional, logAdminAction, getSessionToken, isAdminRole, requireRole } from '../middleware/adminAuth.js'
+import { adminAuth, adminAuthOptional, logAdminAction, getSessionToken, isAdminRole, requireRole, requireFreshSession } from '../middleware/adminAuth.js'
 import { validateSession } from '../services/auth.js'
 
 const admin = new Hono()
@@ -603,9 +604,9 @@ admin.post('/reconciliation/stripe', adminSensitiveRateLimit, requireRole('super
 // ============================================
 
 admin.get('/dashboard', async (c) => {
-  const now = new Date()
-  const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+  // Use timezone-aware dates for consistent reporting
+  const startOfDay = todayStart()
+  const startOfMonth = thisMonthStart()
 
   const [
     totalUsers,
@@ -783,7 +784,7 @@ admin.get('/users/:id', async (c) => {
   })
 })
 
-admin.post('/users/:id/block', adminSensitiveRateLimit, requireRole('super_admin'), async (c) => {
+admin.post('/users/:id/block', adminSensitiveRateLimit, requireRole('super_admin'), requireFreshSession, async (c) => {
   const { id } = c.req.param()
   const body = await c.req.json().catch(() => ({}))
   const reason = body.reason || 'Blocked by admin'
@@ -796,7 +797,7 @@ admin.post('/users/:id/block', adminSensitiveRateLimit, requireRole('super_admin
   return c.json({ success: true })
 })
 
-admin.post('/users/:id/unblock', adminSensitiveRateLimit, requireRole('super_admin'), async (c) => {
+admin.post('/users/:id/unblock', adminSensitiveRateLimit, requireRole('super_admin'), requireFreshSession, async (c) => {
   const { id } = c.req.param()
 
   await db.user.update({ where: { id }, data: { deletedAt: null } })
@@ -817,7 +818,7 @@ admin.post('/users/:id/unblock', adminSensitiveRateLimit, requireRole('super_adm
  * - Deletes profile
  * - Logs admin activity
  */
-admin.delete('/users/:id', adminSensitiveRateLimit, requireRole('super_admin'), async (c) => {
+admin.delete('/users/:id', adminSensitiveRateLimit, requireRole('super_admin'), requireFreshSession, async (c) => {
   const { id } = c.req.param()
   const body = await c.req.json().catch(() => ({}))
   const adminUserId = c.get('adminUserId')
@@ -1250,7 +1251,7 @@ admin.get('/payments/:id', async (c) => {
 // Requires: super_admin
 // ============================================
 
-admin.post('/payments/:id/refund', adminSensitiveRateLimit, requireRole('super_admin'), async (c) => {
+admin.post('/payments/:id/refund', adminSensitiveRateLimit, requireRole('super_admin'), requireFreshSession, async (c) => {
   const { id } = c.req.param()
   const body = z.object({
     reason: z.string().optional(),
@@ -1543,9 +1544,9 @@ admin.get('/logs', async (c) => {
 })
 
 admin.get('/logs/stats', async (c) => {
-  const now = new Date()
-  const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000)
-  const last7d = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+  // Use timezone-aware date ranges
+  const { start: last24h } = lastNDays(1)
+  const { start: last7d } = lastNDays(7)
 
   const [emailsSent24h, emailsFailed24h, remindersSent24h, errors24h, errorsByType] = await Promise.all([
     db.systemLog.count({ where: { type: 'email_sent', createdAt: { gte: last24h } } }),
@@ -1620,12 +1621,13 @@ admin.get('/reminders', async (c) => {
 })
 
 admin.get('/reminders/stats', async (c) => {
-  const now = new Date()
-  const next24h = new Date(now.getTime() + 24 * 60 * 60 * 1000)
+  // Use timezone-aware dates
+  const startOfDay = todayStart()
+  const next24h = new Date(Date.now() + 24 * 60 * 60 * 1000)
 
   const [scheduled, sentToday, failedToday, upcoming] = await Promise.all([
     db.reminder.count({ where: { status: 'scheduled' } }),
-    db.reminder.count({ where: { status: 'sent', sentAt: { gte: new Date(now.getFullYear(), now.getMonth(), now.getDate()) } } }),
+    db.reminder.count({ where: { status: 'sent', sentAt: { gte: startOfDay } } }),
     db.reminder.count({ where: { status: 'failed' } }),
     db.reminder.count({ where: { status: 'scheduled', scheduledFor: { lte: next24h } } })
   ])
@@ -1757,8 +1759,8 @@ admin.get('/invoices', async (c) => {
  * Dispute statistics overview
  */
 admin.get('/disputes/stats', async (c) => {
-  const now = new Date()
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+  // Use timezone-aware dates
+  const startOfMonth = thisMonthStart()
 
   const [
     // Current open disputes
@@ -1940,7 +1942,7 @@ admin.get('/blocked-subscribers', async (c) => {
  * Manually block a subscriber (prevents them from subscribing to any creator)
  * Requires: super_admin
  */
-admin.post('/subscribers/:id/block', adminSensitiveRateLimit, requireRole('super_admin'), async (c) => {
+admin.post('/subscribers/:id/block', adminSensitiveRateLimit, requireRole('super_admin'), requireFreshSession, async (c) => {
   const { id } = c.req.param()
   const body = await c.req.json().catch(() => ({}))
   const reason = body.reason || 'Blocked by admin'
@@ -1990,7 +1992,7 @@ admin.post('/subscribers/:id/block', adminSensitiveRateLimit, requireRole('super
  * Unblock a subscriber (use with caution)
  * Requires: super_admin
  */
-admin.post('/blocked-subscribers/:id/unblock', adminSensitiveRateLimit, requireRole('super_admin'), async (c) => {
+admin.post('/blocked-subscribers/:id/unblock', adminSensitiveRateLimit, requireRole('super_admin'), requireFreshSession, async (c) => {
   const { id } = c.req.param()
   const body = await c.req.json().catch(() => ({}))
   const reason = body.reason || 'Unblocked by admin'
@@ -2473,7 +2475,7 @@ admin.post('/subscriptions/:id/resume', adminSensitiveRateLimit, async (c) => {
  * Trigger immediate payout to a connected account
  * Requires: super_admin
  */
-admin.post('/stripe/accounts/:accountId/payout', adminSensitiveRateLimit, requireRole('super_admin'), async (c) => {
+admin.post('/stripe/accounts/:accountId/payout', adminSensitiveRateLimit, requireRole('super_admin'), requireFreshSession, async (c) => {
   const { accountId } = c.req.param()
   const body = z.object({
     amount: z.number().optional(), // If not specified, payout all available
@@ -2531,7 +2533,7 @@ admin.post('/stripe/accounts/:accountId/payout', adminSensitiveRateLimit, requir
  * Disable payouts for a connected account (fraud prevention)
  * Requires: super_admin
  */
-admin.post('/stripe/accounts/:accountId/disable-payouts', adminSensitiveRateLimit, requireRole('super_admin'), async (c) => {
+admin.post('/stripe/accounts/:accountId/disable-payouts', adminSensitiveRateLimit, requireRole('super_admin'), requireFreshSession, async (c) => {
   const { accountId } = c.req.param()
   const body = z.object({
     reason: z.string()
@@ -2576,7 +2578,7 @@ admin.post('/stripe/accounts/:accountId/disable-payouts', adminSensitiveRateLimi
  * Re-enable payouts for a connected account
  * Requires: super_admin
  */
-admin.post('/stripe/accounts/:accountId/enable-payouts', adminSensitiveRateLimit, requireRole('super_admin'), async (c) => {
+admin.post('/stripe/accounts/:accountId/enable-payouts', adminSensitiveRateLimit, requireRole('super_admin'), requireFreshSession, async (c) => {
   const { accountId } = c.req.param()
 
   try {
@@ -2622,9 +2624,9 @@ admin.post('/stripe/accounts/:accountId/enable-payouts', adminSensitiveRateLimit
  * Support ticket statistics
  */
 admin.get('/support/tickets/stats', async (c) => {
-  const now = new Date()
-  const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000)
-  const last7d = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+  // Use timezone-aware date ranges
+  const { start: last24h } = lastNDays(1)
+  const { start: last7d } = lastNDays(7)
 
   const [open, inProgress, newLast24h, resolvedLast7d, byCategory, byPriority] = await Promise.all([
     db.supportTicket.count({ where: { status: 'open' } }),

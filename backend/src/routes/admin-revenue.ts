@@ -14,6 +14,7 @@ import { HTTPException } from 'hono/http-exception'
 import { z } from 'zod'
 import { db } from '../db/client.js'
 import { adminAuth } from '../middleware/adminAuth.js'
+import { todayStart, thisMonthStart, previousMonth, lastNDays, lastNMonths, parsePeriod, BUSINESS_TIMEZONE } from '../utils/timezone.js'
 
 const adminRevenue = new Hono()
 
@@ -78,11 +79,10 @@ adminRevenue.use('*', adminAuth)
  * High-level revenue metrics
  */
 adminRevenue.get('/overview', async (c) => {
-  const now = new Date()
-  const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-  const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-  // Note: Use lt: startOfMonth for correct boundary (not lte: endOfLastMonth which misses most of last day)
+  // Use timezone-aware dates for consistent reporting
+  const startOfDay = todayStart()
+  const startOfMonth = thisMonthStart()
+  const { start: startOfLastMonth, end: endOfLastMonth } = previousMonth()
 
   const [
     allTimeStats,
@@ -94,7 +94,7 @@ adminRevenue.get('/overview', async (c) => {
   ] = await Promise.all([
     aggregatePaymentStats({ status: 'succeeded', type: { in: ['recurring', 'one_time'] } }),
     aggregatePaymentStats({ status: 'succeeded', type: { in: ['recurring', 'one_time'] }, createdAt: { gte: startOfMonth } }),
-    aggregatePaymentStats({ status: 'succeeded', type: { in: ['recurring', 'one_time'] }, createdAt: { gte: startOfLastMonth, lt: startOfMonth } }),
+    aggregatePaymentStats({ status: 'succeeded', type: { in: ['recurring', 'one_time'] }, createdAt: { gte: startOfLastMonth, lte: endOfLastMonth } }),
     aggregatePaymentStats({ status: 'succeeded', type: { in: ['recurring', 'one_time'] }, createdAt: { gte: startOfDay } }),
     db.payment.groupBy({
       by: ['status'],
@@ -127,26 +127,8 @@ adminRevenue.get('/by-provider', async (c) => {
     period: z.enum(['today', 'week', 'month', 'year', 'all']).default('month')
   }).parse(c.req.query())
 
-  const now = new Date()
-  let startDate: Date | undefined
-
-  switch (query.period) {
-    case 'today':
-      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-      break
-    case 'week':
-      startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-      break
-    case 'month':
-      startDate = new Date(now.getFullYear(), now.getMonth(), 1)
-      break
-    case 'year':
-      startDate = new Date(now.getFullYear(), 0, 1)
-      break
-    case 'all':
-      startDate = undefined
-      break
-  }
+  // Use timezone-aware date parsing
+  const { start: startDate } = parsePeriod(query.period)
 
   const where: any = { status: 'succeeded', type: { in: ['recurring', 'one_time'] } }
   if (startDate) where.createdAt = { gte: startDate }
@@ -177,26 +159,8 @@ adminRevenue.get('/by-currency', async (c) => {
     period: z.enum(['today', 'week', 'month', 'year', 'all']).default('month')
   }).parse(c.req.query())
 
-  const now = new Date()
-  let startDate: Date | undefined
-
-  switch (query.period) {
-    case 'today':
-      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-      break
-    case 'week':
-      startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-      break
-    case 'month':
-      startDate = new Date(now.getFullYear(), now.getMonth(), 1)
-      break
-    case 'year':
-      startDate = new Date(now.getFullYear(), 0, 1)
-      break
-    case 'all':
-      startDate = undefined
-      break
-  }
+  // Use timezone-aware date parsing
+  const { start: startDate } = parsePeriod(query.period)
 
   const where: any = { status: 'succeeded', type: { in: ['recurring', 'one_time'] } }
   if (startDate) where.createdAt = { gte: startDate }
@@ -243,9 +207,8 @@ adminRevenue.get('/daily', async (c) => {
     days: z.coerce.number().default(30)
   }).parse(c.req.query())
 
-  const startDate = new Date()
-  startDate.setDate(startDate.getDate() - query.days)
-  startDate.setHours(0, 0, 0, 0)
+  // Use timezone-aware date range
+  const { start: startDate, end: endDate } = lastNDays(query.days)
 
   // Get all payments in the period
   const payments = await db.payment.findMany({
@@ -279,7 +242,7 @@ adminRevenue.get('/daily', async (c) => {
   // Fill in missing days with zeros
   const result: Array<{ date: string; volumeCents: number; feesCents: number; payoutsCents: number; count: number }> = []
   const current = new Date(startDate)
-  const today = new Date()
+  const today = endDate
 
   while (current <= today) {
     const day = current.toISOString().split('T')[0]
@@ -310,10 +273,8 @@ adminRevenue.get('/monthly', async (c) => {
     months: z.coerce.number().default(12)
   }).parse(c.req.query())
 
-  const startDate = new Date()
-  startDate.setMonth(startDate.getMonth() - query.months)
-  startDate.setDate(1)
-  startDate.setHours(0, 0, 0, 0)
+  // Use timezone-aware date range
+  const { start: startDate } = lastNMonths(query.months)
 
   const payments = await db.payment.findMany({
     where: {
@@ -371,26 +332,8 @@ adminRevenue.get('/top-creators', async (c) => {
     period: z.enum(['today', 'week', 'month', 'year', 'all']).default('month')
   }).parse(c.req.query())
 
-  const now = new Date()
-  let startDate: Date | undefined
-
-  switch (query.period) {
-    case 'today':
-      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-      break
-    case 'week':
-      startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-      break
-    case 'month':
-      startDate = new Date(now.getFullYear(), now.getMonth(), 1)
-      break
-    case 'year':
-      startDate = new Date(now.getFullYear(), 0, 1)
-      break
-    case 'all':
-      startDate = undefined
-      break
-  }
+  // Use timezone-aware date parsing
+  const { start: startDate } = parsePeriod(query.period)
 
   const where: any = { status: 'succeeded', type: { in: ['recurring', 'one_time'] } }
   if (startDate) where.createdAt = { gte: startDate }
@@ -468,26 +411,8 @@ adminRevenue.get('/refunds', async (c) => {
     period: z.enum(['today', 'week', 'month', 'year', 'all']).default('month')
   }).parse(c.req.query())
 
-  const now = new Date()
-  let startDate: Date | undefined
-
-  switch (query.period) {
-    case 'today':
-      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-      break
-    case 'week':
-      startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-      break
-    case 'month':
-      startDate = new Date(now.getFullYear(), now.getMonth(), 1)
-      break
-    case 'year':
-      startDate = new Date(now.getFullYear(), 0, 1)
-      break
-    case 'all':
-      startDate = undefined
-      break
-  }
+  // Use timezone-aware date parsing
+  const { start: startDate } = parsePeriod(query.period)
 
   const where: any = {}
   if (startDate) where.createdAt = { gte: startDate }
