@@ -452,14 +452,74 @@ export default function Stripe() {
                 <p>Loading...</p>
               ) : accountDetail ? (
                 <div>
+                  {/* Quick Actions */}
+                  <div className="admin-detail-section" style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '20px' }}>
+                    <h3>Quick Actions</h3>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '12px' }}>
+                      {accountDetail.local?.payoutStatus === 'active' ? (
+                        <button
+                          className="admin-btn admin-btn-danger"
+                          onClick={() => {
+                            const account = accountsData?.accounts?.find(a => a.stripeAccountId === selectedAccountId)
+                            if (account) setDisablePayoutsModal(account)
+                          }}
+                        >
+                          Disable Payouts
+                        </button>
+                      ) : (
+                        <button
+                          className="admin-btn admin-btn-primary"
+                          onClick={() => {
+                            const account = accountsData?.accounts?.find(a => a.stripeAccountId === selectedAccountId)
+                            if (account) setEnablePayoutsModal(account)
+                          }}
+                        >
+                          Enable Payouts
+                        </button>
+                      )}
+
+                      {accountDetail.stripe.payoutsEnabled && (
+                        <button
+                          className="admin-btn admin-btn-secondary"
+                          onClick={() => {
+                            const account = accountsData?.accounts?.find(a => a.stripeAccountId === selectedAccountId)
+                            if (account) setTriggerPayoutModal(account)
+                          }}
+                        >
+                          Trigger Immediate Payout
+                        </button>
+                      )}
+
+                      <a
+                        href={`https://dashboard.stripe.com/connect/accounts/${accountDetail.stripe.id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="admin-btn admin-btn-secondary"
+                        style={{ textAlign: 'center', textDecoration: 'none' }}
+                      >
+                        View on Stripe Dashboard
+                      </a>
+
+                      {accountDetail.local && (
+                        <a
+                          href={`/admin/users?search=${encodeURIComponent(accountDetail.local.email)}`}
+                          className="admin-btn admin-btn-secondary"
+                          style={{ textAlign: 'center', textDecoration: 'none' }}
+                        >
+                          View Full User Profile
+                        </a>
+                      )}
+                    </div>
+                  </div>
+
                   {accountDetail.local && (
                     <div className="admin-detail-section">
-                      <h3>Local Data</h3>
+                      <h3>Creator Info</h3>
                       <dl className="admin-detail-list">
                         <dt>Email</dt>
                         <dd>{accountDetail.local.email}</dd>
                         <dt>Username</dt>
-                        <dd>{accountDetail.local.username}</dd>
+                        <dd>@{accountDetail.local.username}</dd>
                         <dt>Display Name</dt>
                         <dd>{accountDetail.local.displayName}</dd>
                         <dt>Country</dt>
