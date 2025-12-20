@@ -756,6 +756,10 @@ enum SystemLogType {
   payout_initiated
   payout_completed
   payout_failed
+  // Admin access logging
+  admin_access
+  admin_access_denied
+  admin_action
 }
 
 enum SystemLogLevel {

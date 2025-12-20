@@ -11,11 +11,9 @@
 
 import { Hono } from 'hono'
 import { HTTPException } from 'hono/http-exception'
-import { getCookie } from 'hono/cookie'
 import { z } from 'zod'
 import { db } from '../db/client.js'
-import { validateSession } from '../services/auth.js'
-import { isAdminEmail } from '../config/admin.js'
+import { adminAuth } from '../middleware/adminAuth.js'
 
 const adminRevenue = new Hono()
 
@@ -68,44 +66,8 @@ async function aggregateGrossOnly(where: any): Promise<{ totalCents: number; cou
   }
 }
 
-// Get session token from cookie or Authorization header
-function getSessionToken(c: any): string | undefined {
-  const cookieToken = getCookie(c, 'session')
-  if (cookieToken) return cookieToken
-  const authHeader = c.req.header('Authorization')
-  if (authHeader?.startsWith('Bearer ')) return authHeader.slice(7)
-  return undefined
-}
-
-// Admin auth middleware - requires ADMIN_API_KEY OR valid admin user session
-adminRevenue.use('*', async (c, next) => {
-  // Option 1: API key auth (for Retool/external tools)
-  const apiKey = c.req.header('x-admin-api-key')
-  const expectedKey = process.env.ADMIN_API_KEY
-
-  if (apiKey && expectedKey && apiKey === expectedKey) {
-    await next()
-    return
-  }
-
-  // Option 2: User session auth (for frontend dashboard)
-  const sessionToken = getSessionToken(c)
-  if (sessionToken) {
-    const session = await validateSession(sessionToken)
-    if (session) {
-      const user = await db.user.findUnique({
-        where: { id: session.userId },
-        select: { email: true },
-      })
-      if (user && isAdminEmail(user.email)) {
-        await next()
-        return
-      }
-    }
-  }
-
-  throw new HTTPException(401, { message: 'Admin access required' })
-})
+// Use centralized admin auth middleware
+adminRevenue.use('*', adminAuth)
 
 // ============================================
 // REVENUE OVERVIEW
