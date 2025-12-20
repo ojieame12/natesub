@@ -90,6 +90,13 @@ export async function handlePaystackTransferSuccess(data: any) {
     scheduledFor: new Date(), // Send immediately
   })
 
+  // Send real-time notification (WhatsApp/SMS preferred for African markets)
+  notifyPayoutCompleted(
+    payout.creatorId,
+    payout.amountCents,
+    payout.currency
+  ).catch(err => console.error('[paystack] Notification failed:', err))
+
   // Create activity for creator (only on first processing)
   await db.activity.create({
     data: {
@@ -158,6 +165,29 @@ export async function handlePaystackTransferFailed(data: any) {
     type: 'payout_failed',
     scheduledFor: new Date(), // Send immediately
   })
+
+  // Send real-time notification (WhatsApp/SMS preferred for African markets)
+  notifyPayoutFailed(
+    payout.creatorId,
+    payout.amountCents,
+    payout.currency
+  ).catch(err => console.error('[paystack] Notification failed:', err))
+
+  // Get creator details for Slack alert
+  const creator = await db.user.findUnique({
+    where: { id: payout.creatorId },
+    select: { email: true },
+  })
+
+  // Alert ops team via Slack
+  alertPayoutFailed({
+    creatorEmail: creator?.email || 'unknown',
+    creatorName: creatorProfile?.displayName || 'Unknown Creator',
+    amount: payout.amountCents,
+    currency: payout.currency,
+    error: reason || 'Transfer failed',
+    paystackTransferCode: reference,
+  }).catch(err => console.error('[slack] Failed to send payout failed alert:', err))
 
   // Create activity for creator notification (only on first processing)
   await db.activity.create({

@@ -274,7 +274,7 @@ export default function CreateCreator() {
 
             <div className="admin-form-group">
               <label htmlFor="accountNumber">Account Number *</label>
-              <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
                 <input
                   id="accountNumber"
                   type="text"
@@ -286,13 +286,14 @@ export default function CreateCreator() {
                   placeholder="0123456789"
                   required
                   maxLength={20}
-                  style={{ flex: 1 }}
+                  style={{ flex: 1, width: 'auto' }}
                 />
                 <button
                   type="button"
                   className="admin-btn admin-btn-secondary"
                   onClick={handleResolveAccount}
                   disabled={!formData.bankCode || formData.accountNumber.length < 10 || resolveMutation.isPending}
+                  style={{ whiteSpace: 'nowrap' }}
                 >
                   {resolveMutation.isPending ? 'Verifying...' : 'Verify'}
                 </button>
@@ -324,10 +325,12 @@ export default function CreateCreator() {
               <div style={{ position: 'relative' }}>
                 <span style={{
                   position: 'absolute',
-                  left: 12,
+                  left: 14,
                   top: '50%',
                   transform: 'translateY(-50%)',
                   color: '#666',
+                  zIndex: 1,
+                  pointerEvents: 'none',
                 }}>
                   {selectedCountry.currencySymbol}
                 </span>
@@ -340,7 +343,7 @@ export default function CreateCreator() {
                   required
                   min="1"
                   step="any"
-                  style={{ paddingLeft: 32 }}
+                  style={{ paddingLeft: 36 }}
                 />
               </div>
             </div>
