@@ -177,6 +177,149 @@ admin.get('/webhooks/dead-letter', async (c) => {
 })
 
 /**
+ * GET /admin/webhooks/all
+ * List ALL webhook events (for debugging)
+ */
+admin.get('/webhooks/all', async (c) => {
+  const query = z.object({
+    limit: z.coerce.number().default(50),
+    provider: z.enum(['stripe', 'paystack', 'all']).default('all'),
+    status: z.enum(['received', 'processing', 'processed', 'failed', 'skipped', 'dead_letter', 'all']).default('all'),
+  }).parse(c.req.query())
+
+  const where: any = {}
+  if (query.provider !== 'all') where.provider = query.provider
+  if (query.status !== 'all') where.status = query.status
+
+  const events = await db.webhookEvent.findMany({
+    where,
+    orderBy: { createdAt: 'desc' },
+    take: query.limit,
+  })
+
+  return c.json({
+    events: events.map(e => ({
+      id: e.id,
+      provider: e.provider,
+      eventId: e.eventId,
+      type: e.eventType,
+      status: e.status,
+      error: e.error,
+      retryCount: e.retryCount,
+      processingTimeMs: e.processingTimeMs,
+      createdAt: e.createdAt,
+      processedAt: e.processedAt,
+    })),
+    total: events.length,
+  })
+})
+
+/**
+ * POST /admin/sync/stripe-invoice
+ * Manually sync a Stripe invoice to local database
+ * Use this to backfill missing payments
+ */
+admin.post('/sync/stripe-invoice', async (c) => {
+  const body = z.object({
+    invoiceId: z.string().startsWith('in_'),
+  }).parse(await c.req.json())
+
+  try {
+    // Fetch invoice from Stripe
+    const invoice = await stripe.invoices.retrieve(body.invoiceId)
+
+    if (invoice.status !== 'paid') {
+      return c.json({ error: `Invoice status is ${invoice.status}, not paid` }, 400)
+    }
+
+    // Check if payment already exists
+    const invoiceAny = invoice as any
+    const existing = await db.payment.findFirst({
+      where: {
+        OR: [
+          { stripePaymentIntentId: invoiceAny.payment_intent as string },
+          { stripeChargeId: invoiceAny.charge as string },
+        ]
+      }
+    })
+
+    if (existing) {
+      return c.json({ error: 'Payment already exists', paymentId: existing.id }, 400)
+    }
+
+    // Create a fake event to process through normal handler
+    const fakeEvent = {
+      id: `manual_sync_${Date.now()}`,
+      type: 'invoice.paid',
+      data: { object: invoice },
+    }
+
+    await handleInvoicePaid(fakeEvent as any)
+
+    return c.json({ success: true, message: `Synced invoice ${body.invoiceId}` })
+  } catch (err: any) {
+    console.error('[admin] Sync invoice failed:', err)
+    return c.json({ error: err.message }, 500)
+  }
+})
+
+/**
+ * GET /admin/sync/stripe-missing
+ * Find Stripe invoices that are missing from local database
+ */
+admin.get('/sync/stripe-missing', async (c) => {
+  const query = z.object({
+    limit: z.coerce.number().default(20),
+  }).parse(c.req.query())
+
+  try {
+    // Get recent paid invoices from Stripe
+    const invoices = await stripe.invoices.list({
+      status: 'paid',
+      limit: query.limit,
+      expand: ['data.subscription'],
+    })
+
+    const missing: any[] = []
+
+    for (const invoice of invoices.data) {
+      const inv = invoice as any
+      // Check if we have a payment for this invoice
+      const payment = await db.payment.findFirst({
+        where: {
+          OR: [
+            { stripePaymentIntentId: inv.payment_intent as string },
+            { stripeChargeId: inv.charge as string },
+          ].filter(Boolean)
+        }
+      })
+
+      if (!payment) {
+        missing.push({
+          invoiceId: invoice.id,
+          amount: invoice.amount_paid,
+          currency: invoice.currency,
+          customerEmail: invoice.customer_email,
+          created: new Date(invoice.created * 1000),
+          subscriptionId: typeof inv.subscription === 'string'
+            ? inv.subscription
+            : inv.subscription?.id,
+        })
+      }
+    }
+
+    return c.json({
+      missing,
+      total: missing.length,
+      checked: invoices.data.length,
+    })
+  } catch (err: any) {
+    console.error('[admin] Check missing invoices failed:', err)
+    return c.json({ error: err.message }, 500)
+  }
+})
+
+/**
  * POST /admin/webhooks/:id/retry
  * Manually retry a specific webhook
  */
