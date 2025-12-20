@@ -131,6 +131,7 @@ export interface AdminUser {
     username: string | null
     displayName: string | null
     country: string | null
+    currency: string | null
     paymentProvider: string | null
     payoutStatus: string | null
   } | null
