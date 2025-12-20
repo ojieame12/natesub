@@ -400,12 +400,12 @@
 .admin-search-input,
 .admin-select {
   padding: 10px 14px;
-  background: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.9) !important;
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(0, 0, 0, 0.08) !important;
   border-radius: 12px;
-  color: var(--text-primary);
+  color: #1C1917;
   font-size: 14px;
   min-width: 150px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
@@ -423,8 +423,8 @@
 }
 
 .admin-select option {
-  background: white;
-  color: var(--text-primary);
+  background: #FFFFFF !important;
+  color: #1C1917 !important;
   padding: 8px;
 }
 
@@ -450,21 +450,7 @@
   color: var(--text-tertiary);
 }
 
-@media (prefers-color-scheme: dark) {
-  .admin-search-input,
-  .admin-select {
-    background: rgba(30, 30, 30, 0.7);
-    border-color: rgba(255, 255, 255, 0.1);
-  }
-
-  .admin-select {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
-  }
-
-  .admin-select option {
-    background: #1e1e1e;
-  }
-}
+/* Admin uses light mode only (consistent with main app) */
 
 /* Buttons */
 .admin-btn {
