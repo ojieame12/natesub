@@ -473,6 +473,23 @@ export default function Stripe() {
                 <p>Loading...</p>
               ) : accountDetail ? (
                 <div>
+                  {/* Stripe Error Banner */}
+                  {accountDetail.stripeError && (
+                    <div className="admin-detail-section" style={{
+                      background: 'var(--color-error-bg, #fef2f2)',
+                      border: '1px solid var(--color-error, #ef4444)',
+                      borderRadius: '8px',
+                      padding: '12px',
+                      marginBottom: '20px'
+                    }}>
+                      <strong style={{ color: 'var(--color-error, #ef4444)' }}>Stripe API Error:</strong>
+                      <p style={{ margin: '4px 0 0 0', fontSize: '14px' }}>{accountDetail.stripeError}</p>
+                      <p style={{ margin: '8px 0 0 0', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                        This Stripe account may have been deleted or there's an API issue.
+                      </p>
+                    </div>
+                  )}
+
                   {/* Quick Actions */}
                   <div className="admin-detail-section" style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '20px' }}>
                     <h3>Quick Actions</h3>
@@ -499,7 +516,7 @@ export default function Stripe() {
                         </button>
                       )}
 
-                      {accountDetail.stripe.payoutsEnabled && (
+                      {accountDetail.stripe?.payoutsEnabled && (
                         <button
                           className="admin-btn admin-btn-secondary"
                           onClick={() => {
@@ -511,15 +528,17 @@ export default function Stripe() {
                         </button>
                       )}
 
-                      <a
-                        href={`https://dashboard.stripe.com/connect/accounts/${accountDetail.stripe.id}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="admin-btn admin-btn-secondary"
-                        style={{ textAlign: 'center', textDecoration: 'none' }}
-                      >
-                        View on Stripe Dashboard
-                      </a>
+                      {accountDetail.stripe && (
+                        <a
+                          href={`https://dashboard.stripe.com/connect/accounts/${accountDetail.stripe.id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="admin-btn admin-btn-secondary"
+                          style={{ textAlign: 'center', textDecoration: 'none' }}
+                        >
+                          View on Stripe Dashboard
+                        </a>
+                      )}
 
                       {accountDetail.local && (
                         <a
@@ -557,39 +576,41 @@ export default function Stripe() {
                     </div>
                   )}
 
-                  <div className="admin-detail-section">
-                    <h3>Stripe Account</h3>
-                    <dl className="admin-detail-list">
-                      <dt>Account ID</dt>
-                      <dd style={{ fontFamily: 'monospace', fontSize: '12px' }}>{accountDetail.stripe.id}</dd>
-                      <dt>Type</dt>
-                      <dd>{accountDetail.stripe.type}</dd>
-                      <dt>Country</dt>
-                      <dd>{accountDetail.stripe.country}</dd>
-                      <dt>Currency</dt>
-                      <dd style={{ textTransform: 'uppercase' }}>{accountDetail.stripe.defaultCurrency}</dd>
-                      <dt>Charges Enabled</dt>
-                      <dd>
-                        <span className={`admin-badge ${accountDetail.stripe.chargesEnabled ? 'success' : 'error'}`}>
-                          {accountDetail.stripe.chargesEnabled ? 'Yes' : 'No'}
-                        </span>
-                      </dd>
-                      <dt>Payouts Enabled</dt>
-                      <dd>
-                        <span className={`admin-badge ${accountDetail.stripe.payoutsEnabled ? 'success' : 'error'}`}>
-                          {accountDetail.stripe.payoutsEnabled ? 'Yes' : 'No'}
-                        </span>
-                      </dd>
-                      <dt>Details Submitted</dt>
-                      <dd>
-                        <span className={`admin-badge ${accountDetail.stripe.detailsSubmitted ? 'success' : 'warning'}`}>
-                          {accountDetail.stripe.detailsSubmitted ? 'Yes' : 'No'}
-                        </span>
-                      </dd>
-                      <dt>Created</dt>
-                      <dd>{accountDetail.stripe.created ? formatDate(accountDetail.stripe.created) : '-'}</dd>
-                    </dl>
-                  </div>
+                  {accountDetail.stripe && (
+                    <div className="admin-detail-section">
+                      <h3>Stripe Account</h3>
+                      <dl className="admin-detail-list">
+                        <dt>Account ID</dt>
+                        <dd style={{ fontFamily: 'monospace', fontSize: '12px' }}>{accountDetail.stripe.id}</dd>
+                        <dt>Type</dt>
+                        <dd>{accountDetail.stripe.type}</dd>
+                        <dt>Country</dt>
+                        <dd>{accountDetail.stripe.country}</dd>
+                        <dt>Currency</dt>
+                        <dd style={{ textTransform: 'uppercase' }}>{accountDetail.stripe.defaultCurrency}</dd>
+                        <dt>Charges Enabled</dt>
+                        <dd>
+                          <span className={`admin-badge ${accountDetail.stripe.chargesEnabled ? 'success' : 'error'}`}>
+                            {accountDetail.stripe.chargesEnabled ? 'Yes' : 'No'}
+                          </span>
+                        </dd>
+                        <dt>Payouts Enabled</dt>
+                        <dd>
+                          <span className={`admin-badge ${accountDetail.stripe.payoutsEnabled ? 'success' : 'error'}`}>
+                            {accountDetail.stripe.payoutsEnabled ? 'Yes' : 'No'}
+                          </span>
+                        </dd>
+                        <dt>Details Submitted</dt>
+                        <dd>
+                          <span className={`admin-badge ${accountDetail.stripe.detailsSubmitted ? 'success' : 'warning'}`}>
+                            {accountDetail.stripe.detailsSubmitted ? 'Yes' : 'No'}
+                          </span>
+                        </dd>
+                        <dt>Created</dt>
+                        <dd>{accountDetail.stripe.created ? formatDate(accountDetail.stripe.created) : '-'}</dd>
+                      </dl>
+                    </div>
+                  )}
 
                   <div className="admin-detail-section">
                     <h3>Balance</h3>
@@ -639,14 +660,14 @@ export default function Stripe() {
                     </div>
                   )}
 
-                  {accountDetail.stripe.requirements?.currently_due?.length > 0 && (
+                  {accountDetail.stripe?.requirements?.currently_due?.length > 0 && (
                     <div className="admin-detail-section">
                       <h3>Requirements</h3>
                       <p style={{ color: 'var(--color-error)', marginBottom: '8px' }}>
                         Currently Due:
                       </p>
                       <ul style={{ marginLeft: '20px' }}>
-                        {accountDetail.stripe.requirements.currently_due.map((req: string) => (
+                        {accountDetail.stripe!.requirements.currently_due.map((req: string) => (
                           <li key={req} style={{ fontFamily: 'monospace', fontSize: '12px' }}>{req}</li>
                         ))}
                       </ul>

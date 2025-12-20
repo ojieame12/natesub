@@ -613,7 +613,8 @@ export interface StripeAccountDetail {
       payoutSchedule: any
       statementDescriptor: string | null
     }
-  }
+  } | null
+  stripeError?: string
   balance: {
     available: Array<{ amount: number; currency: string }>
     pending: Array<{ amount: number; currency: string }>

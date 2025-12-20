@@ -111,31 +111,35 @@ stripeRoutes.get('/accounts', async (c) => {
 /**
  * GET /admin/stripe/accounts/:accountId
  * Get detailed Stripe account info
+ * Returns local profile data even if Stripe API fails
  */
 stripeRoutes.get('/accounts/:accountId', async (c) => {
   const { accountId } = c.req.param()
 
+  // Always fetch local profile first
+  const profile = await db.profile.findFirst({
+    where: { stripeAccountId: accountId },
+    include: { user: { select: { email: true } } }
+  })
+
+  const localData = profile ? {
+    userId: profile.userId,
+    email: profile.user.email,
+    username: profile.username,
+    displayName: profile.displayName,
+    country: profile.country,
+    currency: profile.currency,
+    payoutStatus: profile.payoutStatus
+  } : null
+
+  // Try to fetch Stripe data - graceful failure
   try {
     const account = await stripe.accounts.retrieve(accountId)
-
-    const profile = await db.profile.findFirst({
-      where: { stripeAccountId: accountId },
-      include: { user: { select: { email: true } } }
-    })
-
     const balance = await stripe.balance.retrieve({ stripeAccount: accountId })
     const payouts = await stripe.payouts.list({ limit: 10 }, { stripeAccount: accountId })
 
     return c.json({
-      local: profile ? {
-        userId: profile.userId,
-        email: profile.user.email,
-        username: profile.username,
-        displayName: profile.displayName,
-        country: profile.country,
-        currency: profile.currency,
-        payoutStatus: profile.payoutStatus
-      } : null,
+      local: localData,
       stripe: {
         id: account.id,
         type: account.type,
@@ -172,7 +176,15 @@ stripeRoutes.get('/accounts/:accountId', async (c) => {
       }))
     })
   } catch (err: any) {
-    return c.json({ error: err.message }, 400)
+    // If Stripe API fails, return local data with error info
+    // This allows admin to see creator info even if Stripe account is deleted/invalid
+    return c.json({
+      local: localData,
+      stripe: null,
+      stripeError: err.message,
+      balance: { available: [], pending: [], instantAvailable: [] },
+      recentPayouts: []
+    })
   }
 })
 

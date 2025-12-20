@@ -10,9 +10,12 @@ export default defineConfig(({ mode }) => {
   // This allows Playwright to override the API URL for testing
   const apiUrl = process.env.VITE_API_URL || env.VITE_API_URL
 
+  // Use absolute paths for web (Vercel), relative for mobile (Capacitor)
+  const isMobileBuild = process.env.CAPACITOR_BUILD === 'true'
+
   return {
     plugins: [react()],
-    base: './', // Use relative paths for Capacitor iOS/Android
+    base: isMobileBuild ? './' : '/',
     define: {
       // Ensure the API URL from process.env takes precedence
       'import.meta.env.VITE_API_URL': JSON.stringify(apiUrl),
