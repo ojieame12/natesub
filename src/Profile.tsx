@@ -1,10 +1,28 @@
 import { useNavigate } from 'react-router-dom'
-import { Pen, ExternalLink, ChevronRight, LogOut, Copy } from 'lucide-react'
+import { Pen, ExternalLink, ChevronRight, LogOut, Copy, Shield } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
 import { Pressable, Skeleton, ErrorState, useToast } from './components'
 import { useProfile, useMetrics, useLogout, useCurrentUser } from './api/hooks'
 import { useOnboardingStore } from './onboarding/store'
 import { getShareableLink, getShareableLinkFull, getPublicPageUrl } from './utils/constants'
+import { getAuthToken } from './api/client'
 import './Profile.css'
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
+
+// Check admin status via backend
+async function checkAdminStatus(): Promise<{ isAdmin: boolean }> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  const token = getAuthToken()
+  if (token) headers['Authorization'] = `Bearer ${token}`
+
+  const response = await fetch(`${API_URL}/admin/me`, {
+    credentials: 'include',
+    headers,
+  })
+  if (!response.ok) return { isAdmin: false }
+  return response.json()
+}
 
 const quickLinks = [
   { id: 'edit', title: 'Edit My Page', path: '/edit-page' },
@@ -31,6 +49,15 @@ export default function Profile() {
   const { data: userData } = useCurrentUser()
   const { data: profileData, isLoading: profileLoading, isError: profileError, refetch } = useProfile()
   const { data: metricsData, isLoading: metricsLoading } = useMetrics()
+
+  // Check if user is admin
+  const { data: adminStatus } = useQuery({
+    queryKey: ['admin', 'me'],
+    queryFn: checkAdminStatus,
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+    retry: false,
+  })
+  const isAdmin = adminStatus?.isAdmin ?? false
 
   const profile = profileData?.profile
   const metrics = metricsData?.metrics
@@ -180,6 +207,25 @@ export default function Profile() {
             ))}
           </div>
         </section>
+
+        {/* Admin Link - only visible to admins */}
+        {isAdmin && (
+          <section className="quick-links-section">
+            <h3 className="section-label">Admin</h3>
+            <div className="quick-links-card">
+              <Pressable
+                className="quick-link-row"
+                onClick={() => navigate('/admin')}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Shield size={18} style={{ color: 'var(--accent-primary)' }} />
+                  <span className="quick-link-title">Admin Dashboard</span>
+                </div>
+                <ChevronRight size={18} className="quick-link-chevron" />
+              </Pressable>
+            </div>
+          </section>
+        )}
 
         {/* Logout */}
         <Pressable className="logout-btn" onClick={handleLogout}>

@@ -62,6 +62,10 @@ const MockProfile = lazy(() => import('./experiments/MockProfile'))
 const MockInvoices = lazy(() => import('./experiments/MockInvoices'))
 const MockPayroll = lazy(() => import('./experiments/MockPayroll'))
 
+// Admin dashboard (lazy loaded, isolated from main app)
+const AdminRoute = lazy(() => import('./admin/AdminRoute'))
+const AdminLayout = lazy(() => import('./admin/AdminLayout'))
+
 
 function isPublicCreatorPage(pathname: string): boolean {
   // Creator pages are single-segment vanity URLs like "/username"
@@ -503,7 +507,12 @@ function AppShell() {
             </>
           )}
 
-
+          {/* Admin Dashboard - isolated from main app */}
+          <Route path="/admin/*" element={
+            <AdminRoute>
+              <AdminLayout />
+            </AdminRoute>
+          } />
 
           {/* Vanity URLs - natepay.co/username */}
           {/* This must be LAST before the catch-all */}
