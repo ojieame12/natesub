@@ -322,11 +322,11 @@ export default function Stripe() {
               </tbody>
             </table>
 
-            {accountsData && accountsData.pagination.totalPages > 1 && (
+            {accountsData && accountsData.totalPages > 1 && (
               <Pagination
                 page={page}
-                totalPages={accountsData.pagination.totalPages}
-                total={accountsData.pagination.total}
+                totalPages={accountsData.totalPages}
+                total={accountsData.total}
                 limit={limit}
                 onPageChange={setPage}
               />

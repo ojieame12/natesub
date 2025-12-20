@@ -670,7 +670,7 @@ export function useAdminStripeAccounts(params: { status?: string; page?: number;
 
   return useQuery({
     queryKey: ['admin', 'stripe', 'accounts', params],
-    queryFn: () => adminFetch<{ accounts: StripeAccount[]; pagination: { page: number; limit: number; total: number; totalPages: number } }>(`/admin/stripe/accounts${query ? `?${query}` : ''}`),
+    queryFn: () => adminFetch<{ accounts: StripeAccount[]; total: number; page: number; totalPages: number }>(`/admin/stripe/accounts${query ? `?${query}` : ''}`),
     staleTime: 60 * 1000,
   })
 }
