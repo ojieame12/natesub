@@ -55,14 +55,46 @@ export default function PersonalReviewStep() {
     // Price input as string for free editing
     const [priceInput, setPriceInput] = useState(String(singleAmount || 10))
 
+    // Format number with commas for display
+    const formatWithCommas = (val: string): string => {
+        // Remove existing commas and non-numeric chars except decimal
+        const clean = val.replace(/,/g, '')
+        if (!clean || clean === '.') return clean
+
+        const parts = clean.split('.')
+        // Add commas to integer part
+        parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+        return parts.join('.')
+    }
+
+    // Get raw number from formatted string
+    const parseFormattedNumber = (val: string): string => {
+        return val.replace(/,/g, '')
+    }
+
+    // Dynamic font size based on digit count
+    const getPriceFontSize = (val: string): number => {
+        const digits = parseFormattedNumber(val).replace('.', '').length
+        if (digits <= 3) return 48
+        if (digits <= 4) return 40
+        if (digits <= 5) return 32
+        if (digits <= 6) return 28
+        return 24
+    }
+
     const handlePriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const val = e.target.value
-        if (val === '' || /^\d*\.?\d*$/.test(val)) {
-            setPriceInput(val)
-            const numVal = parseFloat(val) || 0
+        // Get raw value without commas
+        const rawVal = parseFormattedNumber(e.target.value)
+        // Only allow digits and one decimal
+        if (rawVal === '' || /^\d*\.?\d*$/.test(rawVal)) {
+            setPriceInput(rawVal)
+            const numVal = parseFloat(rawVal) || 0
             setPricing('single', tiers, numVal)
         }
     }
+
+    // Formatted display value
+    const displayPrice = formatWithCommas(priceInput)
 
     const handleAvatarClick = () => {
         fileInputRef.current?.click()
@@ -219,14 +251,15 @@ export default function PersonalReviewStep() {
 
                     {/* Pricing Card */}
                     <div className="setup-price-card">
-                        <span className="setup-price-currency">{currencySymbol}</span>
+                        <span className="setup-price-currency" style={{ fontSize: Math.max(16, getPriceFontSize(priceInput) / 2) }}>{currencySymbol}</span>
                         <input
                             type="text"
                             inputMode="decimal"
                             className="setup-price-input"
-                            value={priceInput}
+                            value={displayPrice}
                             onChange={handlePriceChange}
                             placeholder="10"
+                            style={{ fontSize: getPriceFontSize(priceInput) }}
                         />
                         <span className="setup-price-period">/month</span>
                     </div>

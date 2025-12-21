@@ -3012,7 +3012,9 @@ button.btn .spinning {
 }
 
 .setup-price-input {
-    width: 100px;
+    min-width: 60px;
+    max-width: 180px;
+    width: auto;
     font-size: 48px;
     font-weight: 700;
     color: var(--text-primary);
