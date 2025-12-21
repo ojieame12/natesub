@@ -71,7 +71,7 @@ const PAYSTACK_CURRENCIES: Record<string, string> = {
 export default function PaymentMethodStep() {
     const navigate = useNavigate()
     const store = useOnboardingStore()
-    const { countryCode, country, currency, branch, paymentProvider, setPaymentProvider, prevStep, reset, nextStep, currentStep } = store
+    const { countryCode, country, currency, setCurrency, branch, paymentProvider, setPaymentProvider, prevStep, reset, nextStep, currentStep } = store
     const [selectedMethod, setSelectedMethod] = useState<string | null>(paymentProvider)
 
     // Get pricing based on branch (service vs personal)
@@ -88,10 +88,11 @@ export default function PaymentMethodStep() {
     const isPaystackCountry = PAYSTACK_COUNTRY_CODES.includes(countryUpper)
     const isFlutterwaveCountry = FLUTTERWAVE_COUNTRY_CODES.includes(countryUpper)
 
-    // Currency alignment check - only offer Paystack if currency matches country
+    // Currency alignment check for Paystack
     const expectedPaystackCurrency = PAYSTACK_CURRENCIES[countryUpper]
     const isCurrencyAligned = !expectedPaystackCurrency || currency?.toUpperCase() === expectedPaystackCurrency
-    const canUsePaystack = PAYSTACK_ENABLED && isPaystackCountry && isCurrencyAligned
+    // Show Paystack for all Paystack countries - users can choose, currency will adjust
+    const canUsePaystack = PAYSTACK_ENABLED && isPaystackCountry
     // Stripe available for all countries (cross-border payouts supported for NG/GH/KE)
     const canUseStripe = true
 
@@ -135,6 +136,22 @@ export default function PaymentMethodStep() {
             // Save payment provider to store
             setPaymentProvider(selectedMethod as PaymentProvider)
 
+            // Adjust currency based on payment method selection
+            // - Stripe for cross-border countries (NG/GH/KE) → USD
+            // - Paystack → local currency
+            const crossBorderCountries = ['NG', 'GH', 'KE']
+            let finalCurrency = store.currency
+
+            if (selectedMethod === 'stripe' && crossBorderCountries.includes(countryUpper)) {
+                // Cross-border Stripe requires USD
+                finalCurrency = 'USD'
+                setCurrency('USD')
+            } else if (selectedMethod === 'paystack' && expectedPaystackCurrency) {
+                // Paystack uses local currency
+                finalCurrency = expectedPaystackCurrency
+                setCurrency(expectedPaystackCurrency)
+            }
+
             // Build profile data from store
             const profileData = {
                 username: store.username,
@@ -143,7 +160,7 @@ export default function PaymentMethodStep() {
                 avatarUrl: store.avatarUrl,
                 country: store.country,
                 countryCode: store.countryCode,
-                currency: store.currency,
+                currency: finalCurrency,
                 purpose: store.branch === 'service' ? 'service' : (store.purpose || 'support'),
                 pricingModel: store.pricingModel,
                 singleAmount: store.pricingModel === 'single' ? store.singleAmount : null,
@@ -305,14 +322,6 @@ export default function PaymentMethodStep() {
                                     setError(null)
                                 }}
                             />
-                        )}
-
-                        {/* Warning: Currency Mismatch for Paystack */}
-                        {isPaystackCountry && !isCurrencyAligned && (
-                            <div className="paystack-warning">
-                                <AlertCircle size={14} />
-                                <span>Paystack requires {expectedPaystackCurrency}. You selected {currency?.toUpperCase()}.</span>
-                            </div>
                         )}
                     </div>
 

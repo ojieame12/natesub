@@ -41,15 +41,15 @@ describe('PaymentMethodStep', () => {
     vi.mocked(api.profile.update).mockResolvedValue({ profile: {} as any })
     
     // Setup minimal store state required for validation
-    // Note: NG is a cross-border country that uses USD pricing
+    // NG users default to local currency (NGN), payment method choice handles currency
     useOnboardingStore.setState({
       username: 'testuser',
       name: 'Test User',
       country: 'Nigeria',
       countryCode: 'NG',
-      currency: 'USD', // Cross-border countries use USD
+      currency: 'NGN', // Default to local currency
       pricingModel: 'single',
-      singleAmount: 5, // $5.00 (minimum for USD is $1)
+      singleAmount: 5000, // ₦5000 (minimum for NGN is ₦500)
       paymentProvider: null,
     })
   })
@@ -59,9 +59,8 @@ describe('PaymentMethodStep', () => {
 
     expect(screen.getByText('Connect payments')).toBeInTheDocument()
     expect(screen.getByText('Stripe')).toBeInTheDocument()
-    // NG is cross-border (uses USD), so Paystack is NOT available
-    // (Paystack requires local currency alignment)
-    expect(screen.queryByText('Paystack')).not.toBeInTheDocument()
+    // Both Stripe and Paystack available for NG - user can choose
+    expect(screen.getByText('Paystack')).toBeInTheDocument()
   })
 
   it('selects Stripe and initiates connect flow', async () => {
@@ -85,9 +84,11 @@ describe('PaymentMethodStep', () => {
     fireEvent.click(continueBtn)
 
     await waitFor(() => {
+      // Currency should switch to USD for cross-border Stripe
       expect(api.profile.update).toHaveBeenCalledWith(expect.objectContaining({
         paymentProvider: 'stripe',
         username: 'testuser',
+        currency: 'USD', // Auto-switched from NGN to USD for Stripe
       }))
       expect(api.stripe.connect).toHaveBeenCalled()
       expect(window.location.href).toBe(mockConnectRes.onboardingUrl)
@@ -97,20 +98,8 @@ describe('PaymentMethodStep', () => {
     ;(window as any).location = originalLocation
   })
 
-  it('selects Paystack and navigates to bank setup', async () => {
-    // Use South Africa (ZA) which has native Paystack support with ZAR
-    // (NG is cross-border and uses USD, so Paystack is not available there)
-    useOnboardingStore.setState({
-      username: 'testuser',
-      name: 'Test User',
-      country: 'South Africa',
-      countryCode: 'ZA',
-      currency: 'ZAR', // ZA uses local currency
-      pricingModel: 'single',
-      singleAmount: 100, // R100 (minimum for ZAR is ~R10)
-      paymentProvider: null,
-    })
-
+  it('selects Paystack and keeps local currency', async () => {
+    // NG user defaults to NGN, Paystack keeps it
     renderWithProviders(<PaymentMethodStep />)
 
     // Select Paystack
@@ -121,8 +110,10 @@ describe('PaymentMethodStep', () => {
     fireEvent.click(continueBtn)
 
     await waitFor(() => {
+      // Currency stays NGN for Paystack
       expect(api.profile.update).toHaveBeenCalledWith(expect.objectContaining({
         paymentProvider: 'paystack',
+        currency: 'NGN',
       }))
       expect(mockNavigate).toHaveBeenCalledWith('/onboarding/paystack')
     })
