@@ -1,13 +1,24 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Banknote, Briefcase, Pencil, Check, ChevronsRight, ArrowLeft, AlertCircle } from 'lucide-react'
+import { Banknote, Briefcase, Pencil, Check, ChevronsRight, ArrowLeft, AlertCircle, Heart, Users, Star, Wallet } from 'lucide-react'
 import { useToast } from '../components'
 import { useCreateCheckout, useRecordPageView, useUpdatePageView } from '../api/hooks'
 import * as api from '../api/client'
 import type { Profile } from '../api/client'
 import { calculateFeePreview, displayAmountToCents, formatCurrency } from '../utils/currency'
 import { TERMS_URL, PRIVACY_URL } from '../utils/constants'
+
+// Purpose display mapping
+const PURPOSE_CONFIG: Record<string, { label: string; icon: typeof Banknote }> = {
+    support: { label: 'SUPPORT', icon: Heart },
+    tips: { label: 'TIPS', icon: Banknote },
+    service: { label: 'SERVICE', icon: Briefcase },
+    fan_club: { label: 'FAN CLUB', icon: Users },
+    exclusive_content: { label: 'EXCLUSIVE', icon: Star },
+    allowance: { label: 'ALLOWANCE', icon: Wallet },
+    other: { label: 'SUPPORT', icon: Heart },
+}
 
 // --- SLIDE BUTTON ---
 function SlideToPay({ onComplete, disabled }: { onComplete: () => void, disabled?: boolean }) {
@@ -136,9 +147,6 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
     const [status, setStatus] = useState<'idle' | 'processing' | 'verifying' | 'success'>(isSuccessReturn ? 'verifying' : 'idle')
     const [payerCountry, setPayerCountry] = useState<string | null>(null)
     const viewIdRef = useRef<string | null>(null)
-
-    // Data
-    const isService = profile.purpose === 'service'
 
     // Use single amount only (tiers removed from the flow)
     const currentAmount = profile.singleAmount || 0
@@ -398,13 +406,19 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                     <div style={{ fontSize: 22, fontWeight: 'bold', marginTop: 4 }}>{(profile.displayName || profile.username || 'User').toUpperCase()}</div>
 
                     <div style={{ display: 'flex', justifyContent: 'center', marginTop: 8 }}>
-                        <div style={{
-                            background: '#000', color: 'white', padding: '3px 8px', borderRadius: 4,
-                            fontSize: 10, fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 4, letterSpacing: 0.5
-                        }}>
-                            {isService ? <Briefcase size={10} /> : <Banknote size={10} />}
-                            {isService ? 'SERVICE' : 'TIPS'}
-                        </div>
+                        {(() => {
+                            const config = PURPOSE_CONFIG[profile.purpose || 'support'] || PURPOSE_CONFIG.support
+                            const Icon = config.icon
+                            return (
+                                <div style={{
+                                    background: '#000', color: 'white', padding: '3px 8px', borderRadius: 4,
+                                    fontSize: 10, fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 4, letterSpacing: 0.5
+                                }}>
+                                    <Icon size={10} />
+                                    {config.label}
+                                </div>
+                            )
+                        })()}
                     </div>
                 </div>
 
