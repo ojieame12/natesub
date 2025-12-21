@@ -373,12 +373,24 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                 {/* Header */}
                 <div style={{ textAlign: 'center', marginBottom: 30 }}>
                     <div style={{ position: 'relative', width: 72, height: 72, margin: '0 auto 20px' }}>
-                        <div style={{
-                            width: '100%', height: '100%', borderRadius: '50%',
-                            backgroundImage: `url(${profile.avatarUrl})`, backgroundSize: 'cover',
-                            filter: 'grayscale(100%) contrast(110%)', border: '1px solid #e5e5e5',
-                            boxShadow: '0 4px 10px rgba(0,0,0,0.1)'
-                        }} />
+                        {profile.avatarUrl ? (
+                            <div style={{
+                                width: '100%', height: '100%', borderRadius: '50%',
+                                backgroundImage: `url(${profile.avatarUrl})`, backgroundSize: 'cover',
+                                filter: 'grayscale(100%) contrast(110%)', border: '1px solid #e5e5e5',
+                                boxShadow: '0 4px 10px rgba(0,0,0,0.1)'
+                            }} />
+                        ) : (
+                            <div style={{
+                                width: '100%', height: '100%', borderRadius: '50%',
+                                background: 'linear-gradient(135deg, #FFD208 0%, #FF941A 100%)',
+                                border: '1px solid #e5e5e5', boxShadow: '0 4px 10px rgba(0,0,0,0.1)',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                fontSize: 28, fontWeight: 700, color: 'white'
+                            }}>
+                                {(profile.displayName || profile.username || 'U').charAt(0).toUpperCase()}
+                            </div>
+                        )}
                     </div>
 
                     <div style={{ fontSize: 11, fontWeight: 'bold', letterSpacing: 1, textTransform: 'uppercase', color: '#999' }}>PAID TO</div>
@@ -397,37 +409,40 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
 
                 {/* Breakdown */}
                 <div style={{ fontSize: 13, marginBottom: 25 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, alignItems: 'center' }}>
-                        <span>Subscription</span>
-                        <span>{formatCurrency(currentAmount, currency)}/mo</span>
-                    </div>
-
-                    {/* Fee Row - always shown with split model */}
-                    <div style={{
-                        display: 'flex', justifyContent: 'space-between', marginBottom: 8,
-                        opacity: 0.7
-                    }}>
-                        <span>Secure payment</span>
-                        <span>+{formatCurrency(feePreview.serviceFee, currency)}</span>
-                    </div>
-
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 15 }}>
-                        <span style={{ fontWeight: 'bold', fontSize: 14, textTransform: 'uppercase' }}>Total Due</span>
-                        <div style={{ fontWeight: 'bold', fontSize: 24, letterSpacing: -1 }}>{formatCurrency(total, currency)}</div>
-                    </div>
-
-                    {/* OWNER INFO: Show creator's fee portion */}
-                    {isOwner && (
-                        <div style={{ marginTop: 15, padding: 10, background: '#f5f5f5', borderRadius: 8, fontSize: 11 }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <span>Subscription management</span>
-                                <span style={{ fontWeight: 'bold' }}>-{formatCurrency(feePreview.creatorFee, currency)}</span>
+                    {isOwner ? (
+                        /* OWNER VIEW: Clean, simple - just price and what they get */
+                        <>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12, alignItems: 'center' }}>
+                                <span>Subscription price</span>
+                                <span style={{ fontWeight: 600 }}>{formatCurrency(currentAmount, currency)}/mo</span>
                             </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
-                                <span>You receive</span>
-                                <span style={{ fontWeight: 'bold' }}>{formatCurrency(feePreview.creatorReceives, currency)}</span>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 12, borderTop: '1px solid #eee' }}>
+                                <span style={{ fontWeight: 'bold', fontSize: 14 }}>You receive</span>
+                                <div style={{ fontWeight: 'bold', fontSize: 24, letterSpacing: -1 }}>{formatCurrency(feePreview.creatorReceives, currency)}</div>
                             </div>
-                        </div>
+                            <div style={{ fontSize: 11, color: '#888', marginTop: 8, textAlign: 'right' }}>
+                                after 4% platform fee
+                            </div>
+                        </>
+                    ) : (
+                        /* SUBSCRIBER VIEW: Full breakdown */
+                        <>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, alignItems: 'center' }}>
+                                <span>Subscription</span>
+                                <span>{formatCurrency(currentAmount, currency)}/mo</span>
+                            </div>
+                            <div style={{
+                                display: 'flex', justifyContent: 'space-between', marginBottom: 8,
+                                opacity: 0.7
+                            }}>
+                                <span>Secure payment</span>
+                                <span>+{formatCurrency(feePreview.serviceFee, currency)}</span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 15 }}>
+                                <span style={{ fontWeight: 'bold', fontSize: 14, textTransform: 'uppercase' }}>Total Due</span>
+                                <div style={{ fontWeight: 'bold', fontSize: 24, letterSpacing: -1 }}>{formatCurrency(total, currency)}</div>
+                            </div>
+                        </>
                     )}
                 </div>
 
