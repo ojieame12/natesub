@@ -10,6 +10,7 @@ import { db } from '../../db/client.js'
 import { sendSupportTicketReplyEmail } from '../../services/email.js'
 import { lastNDays } from '../../utils/timezone.js'
 import { adminSensitiveRateLimit } from '../../middleware/rateLimit.js'
+import { logAdminAction } from '../../middleware/adminAuth.js'
 import { sanitizeName, sanitizeMessage } from '../../utils/sanitize.js'
 
 const support = new Hono()
@@ -168,6 +169,14 @@ support.patch('/tickets/:id', adminSensitiveRateLimit, async (c) => {
     data: updateData
   })
 
+  // Audit log for ticket update
+  await logAdminAction(c, 'support_ticket_updated', {
+    ticketId: id,
+    changes: body,
+    previousStatus: ticket.status,
+    newStatus: updated.status,
+  })
+
   return c.json({ success: true, ticket: updated })
 })
 
@@ -184,11 +193,12 @@ support.post('/tickets/:id/reply', adminSensitiveRateLimit, async (c) => {
   const ticket = await db.supportTicket.findUnique({ where: { id } })
   if (!ticket) return c.json({ error: 'Ticket not found' }, 404)
 
-  const userId = c.get('userId') as string | undefined
+  // Use adminUserId from admin auth middleware, not userId
+  const adminUserId = c.get('adminUserId') as string | undefined
   let senderName = 'NatePay Support'
-  if (userId) {
+  if (adminUserId) {
     const user = await db.user.findUnique({
-      where: { id: userId },
+      where: { id: adminUserId },
       select: { email: true }
     })
     // Sanitize email used as sender name to prevent injection
@@ -213,6 +223,13 @@ support.post('/tickets/:id/reply', adminSensitiveRateLimit, async (c) => {
 
   sendSupportTicketReplyEmail(ticket.email, ticket.subject, body.message).catch((err) => {
     console.error('[admin] Failed to send support reply email:', err)
+  })
+
+  // Audit log for ticket reply
+  await logAdminAction(c, 'support_ticket_reply', {
+    ticketId: id,
+    messageId: message.id,
+    ticketEmail: ticket.email,
   })
 
   return c.json({ success: true, message })
@@ -251,6 +268,14 @@ support.post('/tickets/:id/resolve', adminSensitiveRateLimit, async (c) => {
       resolution: body.resolution,
       resolvedAt: new Date()
     }
+  })
+
+  // Audit log for ticket resolution
+  await logAdminAction(c, 'support_ticket_resolved', {
+    ticketId: id,
+    ticketEmail: ticket.email,
+    resolution: body.resolution,
+    sentReply: body.sendReply && !!body.replyMessage,
   })
 
   return c.json({ success: true, ticket: updated })

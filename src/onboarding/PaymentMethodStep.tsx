@@ -5,6 +5,7 @@ import { useOnboardingStore, type PaymentProvider } from './store'
 import { Button, Pressable } from './components'
 import { api } from '../api'
 import { getPricing } from '../utils/pricing'
+import { getMinimumAmount, getCurrencySymbol } from '../utils/currency'
 import '../Dashboard.css'
 import './onboarding.css'
 
@@ -98,7 +99,9 @@ export default function PaymentMethodStep() {
         if (!selectedMethod) return
 
         // Local validation before POST
-        const MIN_AMOUNT = 1 // Minimum $1 (Stripe requires $0.50)
+        // Use currency-specific minimum amounts
+        const minAmount = getMinimumAmount(store.currency || 'USD')
+        const currencySymbol = getCurrencySymbol(store.currency || 'USD')
         const validationErrors: string[] = []
         if (!store.username?.trim()) validationErrors.push('Username is required')
         if (!store.name?.trim()) validationErrors.push('Name is required')
@@ -110,13 +113,13 @@ export default function PaymentMethodStep() {
             // For tiers, check that at least one tier exists with valid amount
             if (!store.tiers || store.tiers.length === 0) {
                 validationErrors.push('At least one pricing tier is required')
-            } else if (store.tiers.some(t => !t.amount || t.amount < MIN_AMOUNT)) {
-                validationErrors.push(`All tier amounts must be at least $${MIN_AMOUNT}`)
+            } else if (store.tiers.some(t => !t.amount || t.amount < minAmount)) {
+                validationErrors.push(`All tier amounts must be at least ${currencySymbol}${minAmount.toLocaleString()}`)
             }
         } else {
             // For single pricing, validate singleAmount
-            if (!store.singleAmount || store.singleAmount < MIN_AMOUNT) {
-                validationErrors.push(`Minimum subscription amount is $${MIN_AMOUNT}`)
+            if (!store.singleAmount || store.singleAmount < minAmount) {
+                validationErrors.push(`Minimum subscription amount is ${currencySymbol}${minAmount.toLocaleString()}`)
             }
         }
 

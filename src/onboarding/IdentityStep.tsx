@@ -7,10 +7,11 @@ import '../Dashboard.css'
 import './onboarding.css'
 
 // Cross-border countries: payments collected in USD, payouts in local currency
-const CROSS_BORDER_COUNTRIES = ['NG', 'GH', 'KE', 'ZA']
+// Note: ZA (South Africa) has native Stripe support, so NOT cross-border
+const CROSS_BORDER_COUNTRIES = ['NG', 'GH', 'KE']
 
 // Countries with payment support info
-// Cross-border countries use USD for pricing (payouts convert to local currency)
+// Cross-border countries: creators price in USD, payouts convert to local currency
 const countries = [
     { code: 'US', name: 'United States', flag: '🇺🇸', currency: 'USD' },
     { code: 'GB', name: 'United Kingdom', flag: '🇬🇧', currency: 'GBP' },
@@ -37,11 +38,13 @@ const countries = [
     { code: 'MX', name: 'Mexico', flag: '🇲🇽', currency: 'MXN' },
     { code: 'BR', name: 'Brazil', flag: '🇧🇷', currency: 'BRL' },
     { code: 'IN', name: 'India', flag: '🇮🇳', currency: 'INR' },
-    // Paystack supported countries: default to local currency, but allow USD choice later if needed
-    { code: 'NG', name: 'Nigeria', flag: '🇳🇬', currency: 'NGN', crossBorder: true },
-    { code: 'ZA', name: 'South Africa', flag: '🇿🇦', currency: 'ZAR', crossBorder: true },
-    { code: 'KE', name: 'Kenya', flag: '🇰🇪', currency: 'KES', crossBorder: true },
-    { code: 'GH', name: 'Ghana', flag: '🇬🇭', currency: 'GHS', crossBorder: true },
+    // Cross-border countries: price in USD, payouts convert to local currency
+    // CRITICAL: These MUST use USD to avoid currency mismatch bugs in checkout
+    { code: 'NG', name: 'Nigeria', flag: '🇳🇬', currency: 'USD', crossBorder: true, localCurrency: 'NGN' },
+    { code: 'KE', name: 'Kenya', flag: '🇰🇪', currency: 'USD', crossBorder: true, localCurrency: 'KES' },
+    { code: 'GH', name: 'Ghana', flag: '🇬🇭', currency: 'USD', crossBorder: true, localCurrency: 'GHS' },
+    // South Africa has native Stripe support - uses ZAR, NOT cross-border
+    { code: 'ZA', name: 'South Africa', flag: '🇿🇦', currency: 'ZAR' },
     { code: 'AE', name: 'United Arab Emirates', flag: '🇦🇪', currency: 'AED' },
     { code: 'PH', name: 'Philippines', flag: '🇵🇭', currency: 'PHP' },
     { code: 'MY', name: 'Malaysia', flag: '🇲🇾', currency: 'MYR' },
@@ -129,7 +132,7 @@ export default function IdentityStep() {
                     </Pressable>
                     <span className="country-hint">
                         {selectedCountry && CROSS_BORDER_COUNTRIES.includes(selectedCountry.code)
-                            ? 'Payments collected in USD, payouts in local currency'
+                            ? `You'll set prices in USD. Payouts convert to ${(selectedCountry as any).localCurrency || 'local currency'}.`
                             : 'Used to set up payments in your region'}
                     </span>
                 </div>

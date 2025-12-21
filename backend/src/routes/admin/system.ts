@@ -8,18 +8,19 @@
 
 import { Hono } from 'hono'
 import { z } from 'zod'
+import { Prisma } from '@prisma/client'
 import dlq from '../../services/dlq.js'
 import { db } from '../../db/client.js'
 import { stripe } from '../../services/stripe.js'
 import { getStuckTransfers, getTransferStats } from '../../jobs/transfers.js'
 import { getMissingTransactions, reconcilePaystackTransactions } from '../../jobs/reconciliation.js'
-import { checkEmailHealth, sendTestEmail } from '../../services/email.js'
+import { checkEmailHealth, sendTestEmail, _sendEmail } from '../../services/email.js'
 import { isSmsEnabled, sendVerificationSms } from '../../services/sms.js'
 import { env } from '../../config/env.js'
 import { handleInvoicePaid } from '../webhooks/stripe/invoice.js'
 import { todayStart, thisMonthStart, lastNDays } from '../../utils/timezone.js'
 import { adminSensitiveRateLimit } from '../../middleware/rateLimit.js'
-import { getSessionToken, isAdminRole, requireRole, logAdminAction } from '../../middleware/adminAuth.js'
+import { getSessionToken, isAdminRole, requireRole, logAdminAction, requireFreshSession } from '../../middleware/adminAuth.js'
 import { validateSession } from '../../services/auth.js'
 
 import { redis } from '../../db/redis.js'
@@ -313,12 +314,13 @@ system.get('/dashboard', async (c) => {
     db.user.count({ where: { createdAt: { gte: startOfDay }, deletedAt: null } }),
     db.user.count({ where: { createdAt: { gte: startOfMonth }, deletedAt: null } }),
     db.subscription.count({ where: { status: 'active' } }),
+    // Include both recurring and one-time payments for accurate revenue
     db.payment.aggregate({
-      where: { status: 'succeeded', type: 'recurring' },
+      where: { status: 'succeeded', type: { in: ['recurring', 'one_time'] } },
       _sum: { feeCents: true }
     }),
     db.payment.aggregate({
-      where: { status: 'succeeded', type: 'recurring', occurredAt: { gte: startOfMonth } },
+      where: { status: 'succeeded', type: { in: ['recurring', 'one_time'] }, occurredAt: { gte: startOfMonth } },
       _sum: { feeCents: true }
     }),
     db.payment.count({ where: { status: 'disputed' } }),
@@ -1072,6 +1074,342 @@ system.get('/emails', async (c) => {
     total,
     page: query.page,
     totalPages: Math.ceil(total / query.limit)
+  })
+})
+
+// ============================================
+// DATA MIGRATION & AUDIT
+// ============================================
+
+/**
+ * GET /admin/migration/cross-border-profiles
+ * Find legacy cross-border profiles with incorrect currency (not USD)
+ *
+ * Cross-border countries (NG, GH, KE) MUST use USD for pricing.
+ * This endpoint identifies profiles that were created before this
+ * enforcement was added and may need data migration.
+ */
+system.get('/migration/cross-border-profiles', async (c) => {
+  const crossBorderCountries = ['NG', 'GH', 'KE']
+
+  const profiles = await db.profile.findMany({
+    where: {
+      countryCode: { in: crossBorderCountries },
+      currency: { not: 'USD' },
+    },
+    select: {
+      id: true,
+      userId: true,
+      username: true,
+      displayName: true,
+      countryCode: true,
+      currency: true,
+      singleAmount: true,
+      tiers: true,
+      pricingModel: true,
+      createdAt: true,
+      user: {
+        select: { email: true },
+      },
+    },
+    orderBy: { createdAt: 'desc' },
+  })
+
+  // Count active subscriptions for these profiles
+  const profileUserIds = profiles.map(p => p.userId)
+  const activeSubscriptionCounts = await db.subscription.groupBy({
+    by: ['creatorId'],
+    where: {
+      creatorId: { in: profileUserIds },
+      status: 'active',
+    },
+    _count: true,
+  })
+
+  const subscriptionMap = new Map(
+    activeSubscriptionCounts.map(s => [s.creatorId, s._count])
+  )
+
+  return c.json({
+    count: profiles.length,
+    warning: profiles.length > 0
+      ? 'These profiles are in cross-border countries but not using USD. They may experience pricing bugs if not migrated.'
+      : null,
+    profiles: profiles.map(p => ({
+      id: p.id,
+      userId: p.userId,
+      username: p.username,
+      displayName: p.displayName,
+      email: p.user?.email || 'unknown',
+      countryCode: p.countryCode,
+      currency: p.currency,
+      pricingModel: p.pricingModel,
+      singleAmount: p.singleAmount,
+      hasTiers: Array.isArray(p.tiers) && (p.tiers as any[]).length > 0,
+      activeSubscriptions: subscriptionMap.get(p.userId) || 0,
+      createdAt: p.createdAt,
+    })),
+    migrationRequired: profiles.length > 0,
+    instructions: profiles.length > 0
+      ? 'To fix: Use POST /admin/migration/cross-border-profiles/:id to migrate each profile to USD.'
+      : 'No migration needed.',
+  })
+})
+
+/**
+ * POST /admin/migration/cross-border-profiles/batch
+ * Migrate multiple cross-border profiles to USD pricing
+ *
+ * For bulk migrations with a default price. Use with caution.
+ * IMPORTANT: This route MUST be registered BEFORE the :id route
+ * to avoid Hono treating "batch" as a profile ID.
+ *
+ * Requires: super_admin
+ */
+system.post('/migration/cross-border-profiles/batch', adminSensitiveRateLimit, requireRole('super_admin'), requireFreshSession, async (c) => {
+  const body = z.object({
+    defaultAmountUsd: z.number().int().min(1).max(100), // Default price in USD (whole dollars only)
+    maxProfiles: z.number().int().min(1).max(50).default(10), // Safety limit
+    dryRun: z.boolean().default(true), // Preview only by default
+    notifyCreators: z.boolean().default(true),
+  }).parse(await c.req.json())
+  // Note: All migrated profiles get pricingModel='single' and tiers cleared.
+
+  const crossBorderCountries = ['NG', 'GH', 'KE']
+
+  // Find profiles needing migration
+  const profiles = await db.profile.findMany({
+    where: {
+      countryCode: { in: crossBorderCountries },
+      currency: { not: 'USD' },
+    },
+    take: body.maxProfiles,
+    include: {
+      user: { select: { id: true, email: true } },
+    },
+  })
+
+  if (profiles.length === 0) {
+    return c.json({
+      success: true,
+      message: 'No profiles need migration.',
+      migrated: 0,
+    })
+  }
+
+  if (body.dryRun) {
+    return c.json({
+      dryRun: true,
+      wouldMigrate: profiles.length,
+      profiles: profiles.map(p => ({
+        id: p.id,
+        username: p.username,
+        email: p.user?.email || 'unknown',
+        currentCurrency: p.currency,
+        currentAmount: p.singleAmount,
+        newCurrency: 'USD',
+        newAmountCents: body.defaultAmountUsd * 100,
+      })),
+      message: `Would migrate ${profiles.length} profiles to USD at $${body.defaultAmountUsd}/month. Set dryRun: false to execute.`,
+    })
+  }
+
+  // Execute migration
+  const newAmountCents = body.defaultAmountUsd * 100
+  const results: any[] = []
+
+  for (const profile of profiles) {
+    const previousCurrency = profile.currency
+    const previousAmount = profile.singleAmount
+
+    await db.profile.update({
+      where: { id: profile.id },
+      data: {
+        currency: 'USD',
+        singleAmount: newAmountCents,
+        pricingModel: 'single',  // Force single pricing model
+        tiers: Prisma.JsonNull,  // Always clear tiers
+      },
+    })
+
+    results.push({
+      id: profile.id,
+      username: profile.username,
+      previousCurrency,
+      newCurrency: 'USD',
+    })
+
+    // Log each migration
+    await logAdminAction(c, 'cross_border_profile_migrated_batch', {
+      profileId: profile.id,
+      userId: profile.userId,
+      username: profile.username,
+      previousCurrency,
+      previousAmount,
+      previousPricingModel: profile.pricingModel,
+      newCurrency: 'USD',
+      newAmountCents,
+      newPricingModel: 'single',
+      batchMigration: true,
+    })
+
+    // Send notification email if requested
+    if (body.notifyCreators && profile.user?.email) {
+      const countryName = profile.countryCode === 'NG' ? 'Nigeria' : profile.countryCode === 'GH' ? 'Ghana' : 'Kenya'
+      const creatorName = profile.displayName || profile.username || 'there'
+      _sendEmail({
+        from: env.EMAIL_FROM,
+        to: profile.user.email,
+        subject: 'Important: Your NatePay pricing has been updated',
+        text: `Hi ${creatorName},\n\nYour NatePay account has been updated to use USD pricing, which is required for creators in ${countryName}.\n\nWhat changed:\n- Your subscription price is now $${body.defaultAmountUsd}/month\n- Subscribers will be charged in USD\n- Your payouts will automatically convert to your local currency\n\nIf you'd like to adjust your pricing, you can do so in your NatePay dashboard.\n\nQuestions? Reply to this email and we'll help.\n\n— The NatePay Team`,
+        html: `
+          <p>Hi ${creatorName},</p>
+          <p>Your NatePay account has been updated to use USD pricing, which is required for creators in ${countryName}.</p>
+          <p><strong>What changed:</strong></p>
+          <ul>
+            <li>Your subscription price is now $${body.defaultAmountUsd}/month</li>
+            <li>Subscribers will be charged in USD</li>
+            <li>Your payouts will automatically convert to your local currency</li>
+          </ul>
+          <p>If you'd like to adjust your pricing, you can do so in your NatePay dashboard.</p>
+          <p>Questions? Reply to this email and we'll help.</p>
+          <p>— The NatePay Team</p>
+        `,
+      }).catch((err: Error) => {
+        console.error(`[migration] Failed to send notification email to ${profile.user?.email}:`, err)
+      })
+    }
+  }
+
+  return c.json({
+    success: true,
+    migrated: results.length,
+    results,
+    message: `Migrated ${results.length} profiles to USD at $${body.defaultAmountUsd}/month.`,
+  })
+})
+
+/**
+ * POST /admin/migration/cross-border-profiles/:id
+ * Migrate a single cross-border profile to USD pricing
+ *
+ * This fixes legacy profiles that were created with local currency
+ * (NGN, GHS, KES) before USD enforcement was added.
+ *
+ * Requires: super_admin
+ */
+system.post('/migration/cross-border-profiles/:id', adminSensitiveRateLimit, requireRole('super_admin'), requireFreshSession, async (c) => {
+  const { id } = c.req.param()
+  const body = z.object({
+    newAmountUsd: z.number().int().min(1).max(10000), // New price in USD (whole dollars only)
+    notifyCreator: z.boolean().default(true),          // Send email notification
+  }).parse(await c.req.json())
+  // Note: Tiers are ALWAYS cleared during migration. Keeping tiers with local
+  // currency amounts would create wildly incorrect USD prices (e.g., ₦5000 → $5000).
+  // pricingModel is also set to 'single' to ensure UI consistency.
+
+  const crossBorderCountries = ['NG', 'GH', 'KE']
+
+  // Find the profile
+  const profile = await db.profile.findUnique({
+    where: { id },
+    include: {
+      user: { select: { id: true, email: true } },
+    },
+  })
+
+  if (!profile) {
+    return c.json({ error: 'Profile not found' }, 404)
+  }
+
+  // Validate it's actually a cross-border profile with wrong currency
+  if (!crossBorderCountries.includes(profile.countryCode || '')) {
+    return c.json({
+      error: `Profile is not in a cross-border country (${profile.countryCode}). No migration needed.`,
+    }, 400)
+  }
+
+  if (profile.currency === 'USD') {
+    return c.json({
+      error: 'Profile already uses USD. No migration needed.',
+    }, 400)
+  }
+
+  // Store old values for audit log
+  const previousCurrency = profile.currency
+  const previousAmount = profile.singleAmount
+  const previousTiers = profile.tiers
+
+  // Convert new amount to cents
+  const newAmountCents = body.newAmountUsd * 100
+
+  // Update the profile
+  // Always clear tiers and set pricingModel to 'single' to avoid currency mismatch
+  const updated = await db.profile.update({
+    where: { id },
+    data: {
+      currency: 'USD',
+      singleAmount: newAmountCents,
+      pricingModel: 'single',  // Force single pricing model
+      tiers: Prisma.JsonNull,  // Always clear tiers
+    },
+  })
+
+  // Log the migration action
+  await logAdminAction(c, 'cross_border_profile_migrated', {
+    profileId: id,
+    userId: profile.userId,
+    username: profile.username,
+    previousCurrency,
+    previousAmount,
+    previousTiers: Array.isArray(previousTiers) ? (previousTiers as any[]).length : 0,
+    previousPricingModel: profile.pricingModel,
+    newCurrency: 'USD',
+    newAmountCents,
+    newPricingModel: 'single',
+    tiersCleared: true,
+  })
+
+  // Optionally notify the creator
+  if (body.notifyCreator && profile.user.email) {
+    const countryName = profile.countryCode === 'NG' ? 'Nigeria' : profile.countryCode === 'GH' ? 'Ghana' : 'Kenya'
+    const creatorName = profile.displayName || profile.username || 'there'
+    // Send notification email (non-blocking)
+    _sendEmail({
+      from: env.EMAIL_FROM,
+      to: profile.user.email,
+      subject: 'Important: Your NatePay pricing has been updated',
+      text: `Hi ${creatorName},\n\nYour NatePay account has been updated to use USD pricing, which is required for creators in ${countryName}.\n\nWhat changed:\n- Your subscription price is now $${body.newAmountUsd}/month\n- Subscribers will be charged in USD\n- Your payouts will automatically convert to your local currency\n\nIf you'd like to adjust your pricing, you can do so in your NatePay dashboard.\n\nQuestions? Reply to this email and we'll help.\n\n— The NatePay Team`,
+      html: `
+        <p>Hi ${creatorName},</p>
+        <p>Your NatePay account has been updated to use USD pricing, which is required for creators in ${countryName}.</p>
+        <p><strong>What changed:</strong></p>
+        <ul>
+          <li>Your subscription price is now $${body.newAmountUsd}/month</li>
+          <li>Subscribers will be charged in USD</li>
+          <li>Your payouts will automatically convert to your local currency</li>
+        </ul>
+        <p>If you'd like to adjust your pricing, you can do so in your NatePay dashboard.</p>
+        <p>Questions? Reply to this email and we'll help.</p>
+        <p>— The NatePay Team</p>
+      `,
+    }).catch((err: Error) => {
+      console.error('[migration] Failed to send notification email:', err)
+    })
+  }
+
+  return c.json({
+    success: true,
+    profile: {
+      id: updated.id,
+      username: updated.username,
+      displayName: updated.displayName,
+      currency: updated.currency,
+      singleAmount: updated.singleAmount,
+      previousCurrency,
+      previousAmount,
+    },
+    message: `Profile migrated to USD. New price: $${body.newAmountUsd}/month.`,
   })
 })
 

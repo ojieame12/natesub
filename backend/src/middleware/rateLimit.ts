@@ -313,3 +313,18 @@ export const adminSensitiveRateLimit = rateLimit({
   },
   message: 'Too many admin operations. Please slow down.',
 })
+
+/**
+ * Support ticket rate limiter - IP-based
+ * Prevents ticket spam from unauthenticated users
+ * 5 tickets per hour per IP
+ */
+export const supportTicketRateLimit = rateLimit({
+  windowMs: 60 * 60 * 1000,  // 1 hour
+  maxRequests: 5,
+  keyPrefix: 'support_ticket_ratelimit',
+  keyGenerator: (c) => {
+    return `support_ticket_ratelimit:${getClientIdentifier(c)}`
+  },
+  message: 'Too many support tickets. Please wait before submitting another.',
+})

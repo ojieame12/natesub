@@ -166,7 +166,7 @@ export async function handlePaystackChargeSuccess(data: any, eventId: string) {
   } else {
     // Legacy model: fee deducted from creator's earnings
     const purpose = creatorProfile?.purpose as 'personal' | 'service' | null
-    const legacyFees = calculateLegacyFee(amount, purpose)
+    const legacyFees = calculateLegacyFee(amount, purpose, currency?.toUpperCase() || 'NGN')
     feeCents = legacyFees.feeCents
     netCents = legacyFees.netCents
     basePrice = amount  // Legacy used gross as base

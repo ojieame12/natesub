@@ -219,7 +219,7 @@ export async function processRecurringBilling(): Promise<BillingResult> {
       } else {
         // Legacy model: percentage-based fee deducted from creator
         const creatorPurpose = sub.creator.profile.purpose as 'personal' | 'service' | null
-        const legacyFees = calculateLegacyFee(sub.amount, creatorPurpose)
+        const legacyFees = calculateLegacyFee(sub.amount, creatorPurpose, sub.currency)
         feeCents = legacyFees.feeCents
         netCents = legacyFees.netCents
       }
@@ -553,7 +553,7 @@ export async function processRetries(): Promise<BillingResult> {
         feeEffectiveRate = feeCalc.effectiveRate
       } else {
         const creatorPurpose = sub.creator?.profile?.purpose as 'personal' | 'service' | null
-        const legacyFees = calculateLegacyFee(sub.amount, creatorPurpose)
+        const legacyFees = calculateLegacyFee(sub.amount, creatorPurpose, sub.currency)
         feeCents = legacyFees.feeCents
         netCents = legacyFees.netCents
       }

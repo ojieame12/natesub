@@ -389,7 +389,7 @@ export async function handleInvoicePaid(event: Stripe.Event) {
     } else {
       // Legacy model: fee deducted from creator's earnings
       const purpose = subscription.creator?.profile?.purpose as 'personal' | 'service' | null
-      const legacyFees = calculateLegacyFee(invoice.amount_paid, purpose)
+      const legacyFees = calculateLegacyFee(invoice.amount_paid, purpose, invoice.currency.toUpperCase())
       feeCents = legacyFees.feeCents
       netCents = legacyFees.netCents
     }

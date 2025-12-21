@@ -204,7 +204,7 @@ export async function handleCheckoutCompleted(event: Stripe.Event) {
   } else {
     // Legacy model: fee deducted from creator's earnings (no feeMode)
     const purpose = creatorProfile?.purpose as 'personal' | 'service' | null
-    const legacyFees = calculateLegacyFee(session.amount_total || 0, purpose)
+    const legacyFees = calculateLegacyFee(session.amount_total || 0, purpose, session.currency?.toUpperCase() || 'USD')
     feeCents = legacyFees.feeCents
     netCents = legacyFees.netCents
     basePrice = session.amount_total || 0  // Legacy used gross as base
@@ -552,7 +552,7 @@ export async function handleAsyncPaymentSucceeded(event: Stripe.Event) {
     netCents = netAmount
   } else {
     const purpose = creatorProfile?.purpose as 'personal' | 'service' | null
-    const legacyFees = calculateLegacyFee(session.amount_total || 0, purpose)
+    const legacyFees = calculateLegacyFee(session.amount_total || 0, purpose, session.currency?.toUpperCase() || 'USD')
     feeCents = legacyFees.feeCents
     netCents = legacyFees.netCents
   }

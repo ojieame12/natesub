@@ -157,16 +157,17 @@ describe('Billing Jobs', () => {
       expect(updatedSub.paystackAuthorizationCode).not.toBe('AUTH_test123') // Should be changed (encrypted)
       expect(updatedSub.paystackAuthorizationCode).toContain(':') // Encrypted format (IV:Cipher)
       // Note: Mock doesn't handle Prisma increment - just verify it was attempted
-      expect(updatedSub.ltvCents).toEqual({ increment: 459970 })
+      // Net = 500000 - fee. Fee for NGN = (500000 * 0.08) + 10000 = 50000
+      expect(updatedSub.ltvCents).toEqual({ increment: 450000 })
 
       // Verify payment was created
       const payments = Array.from(dbStorage.payments.values())
       expect(payments.length).toBe(1)
       expect(payments[0].status).toBe('succeeded')
       expect(payments[0].amountCents).toBe(500000)
-      // Fees include platform + processing (8% + 30 cents buffer)
-      expect(payments[0].feeCents).toBe(40030) // Legacy fee: (500000 * 0.08) + 30
-      expect(payments[0].netCents).toBe(459970)
+      // Fees include platform + processing (8% + ₦100 fixed for NGN)
+      expect(payments[0].feeCents).toBe(50000) // Legacy fee: (500000 * 0.08) + 10000
+      expect(payments[0].netCents).toBe(450000)
 
       // Verify activity was logged
       const activities = Array.from(dbStorage.activities.values())

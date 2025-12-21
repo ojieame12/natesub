@@ -12,6 +12,7 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import { db } from '../db/client.js'
 import { optionalAuth, requireAuth } from '../middleware/auth.js'
+import { supportTicketRateLimit } from '../middleware/rateLimit.js'
 import { sendSupportTicketConfirmationEmail } from '../services/email.js'
 import type { TicketCategory, TicketPriority } from '@prisma/client'
 
@@ -34,8 +35,9 @@ const replySchema = z.object({
 /**
  * POST /support/tickets
  * Create a new support ticket (no auth required, but includes userId if logged in)
+ * Rate limited to 5 tickets per hour per IP to prevent spam
  */
-support.post('/tickets', optionalAuth, async (c) => {
+support.post('/tickets', supportTicketRateLimit, optionalAuth, async (c) => {
   const body = await c.req.json()
   const parsed = createTicketSchema.safeParse(body)
 

@@ -153,13 +153,19 @@ export function calculateServiceFee(
   let grossCents = amountCents + subscriberFeeCents
 
   // Estimate processor fees on the gross amount
-  const estimatedProcessorFee = estimateProcessorFee(grossCents, normalizedCurrency)
+  let finalProcessorFee = estimateProcessorFee(grossCents, normalizedCurrency)
   const minMargin = MIN_MARGIN_CENTS[normalizedCurrency] || DEFAULT_MIN_MARGIN
-  const minPlatformFee = estimatedProcessorFee + minMargin
 
   // Apply processor buffer: ensure platform fee covers processor + margin
+  // May need to iterate since increasing gross also increases processor fee
   let feeWasCapped = false
-  if (totalFeeCents < minPlatformFee) {
+  for (let iteration = 0; iteration < 3; iteration++) {
+    const minPlatformFee = finalProcessorFee + minMargin
+
+    if (totalFeeCents >= minPlatformFee) {
+      break // We have sufficient margin
+    }
+
     feeWasCapped = true
     // Increase fees proportionally to meet minimum
     const deficit = minPlatformFee - totalFeeCents
@@ -171,13 +177,16 @@ export function calculateServiceFee(
     creatorFeeCents += creatorExtra
     totalFeeCents = subscriberFeeCents + creatorFeeCents
     grossCents = amountCents + subscriberFeeCents
+
+    // Recalculate processor fee on new gross amount
+    finalProcessorFee = estimateProcessorFee(grossCents, normalizedCurrency)
   }
 
   // Calculate net (what creator receives)
   const netCents = amountCents - creatorFeeCents
 
-  // Calculate actual margin
-  const estimatedMargin = totalFeeCents - estimatedProcessorFee
+  // Calculate actual margin (now using recalculated processor fee)
+  const estimatedMargin = totalFeeCents - finalProcessorFee
 
   // Effective rate is what each party pays (for display)
   const effectiveRate = subscriberFeeCents / amountCents
@@ -195,7 +204,7 @@ export function calculateServiceFee(
     feeMode: 'split',
     purposeType,
     feeWasCapped,
-    estimatedProcessorFee,
+    estimatedProcessorFee: finalProcessorFee,
     estimatedMargin,
   }
 }
@@ -333,16 +342,34 @@ export function getSplitRate(): number {
   return SPLIT_RATE // 4% each
 }
 
+// Fixed fee amounts per currency (for legacy calculations)
+// These represent the minimum fixed fee component in each currency's smallest unit
+const LEGACY_FIXED_FEE: Record<string, number> = {
+  USD: 30,    // 30 cents
+  EUR: 25,    // 25 euro cents
+  GBP: 20,    // 20 pence
+  CAD: 30,    // 30 cents
+  AUD: 30,    // 30 cents
+  NGN: 10000, // ₦100 (100 naira = 10000 kobo)
+  KES: 5000,  // KSh50 (5000 cents)
+  ZAR: 500,   // R5 (500 cents)
+  GHS: 200,   // ₵2 (200 pesewas)
+}
+const DEFAULT_LEGACY_FIXED = 30
+
 /**
  * Legacy fee calculation for backward compatibility
  * Used for existing subscriptions created before split model
  */
 export function calculateLegacyFee(
   amountCents: number,
-  _purpose: 'personal' | 'service' | null
+  _purpose: 'personal' | 'service' | null,
+  currency: string = 'USD'
 ): { feeCents: number; netCents: number } {
-  // Use 8% flat rate with buffer
-  const feeCents = Math.round(amountCents * PLATFORM_FEE_RATE) + 30
+  const normalizedCurrency = currency.toUpperCase()
+  const fixedFee = LEGACY_FIXED_FEE[normalizedCurrency] || DEFAULT_LEGACY_FIXED
+  // Use 8% flat rate with currency-appropriate fixed fee
+  const feeCents = Math.round(amountCents * PLATFORM_FEE_RATE) + fixedFee
   return {
     feeCents,
     netCents: amountCents - feeCents,

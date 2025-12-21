@@ -423,7 +423,7 @@ subscriptions.post('/:id/trigger-renewal', adminSensitiveRateLimit, requireRole(
     feeEffectiveRate = feeCalc.effectiveRate
   } else {
     const creatorPurpose = subscription.creator.profile?.purpose as 'personal' | 'service' | null
-    const legacyFees = calculateLegacyFee(subscription.amount, creatorPurpose)
+    const legacyFees = calculateLegacyFee(subscription.amount, creatorPurpose, subscription.currency)
     feeCents = legacyFees.feeCents
     netCents = legacyFees.netCents
   }

@@ -41,25 +41,27 @@ describe('PaymentMethodStep', () => {
     vi.mocked(api.profile.update).mockResolvedValue({ profile: {} as any })
     
     // Setup minimal store state required for validation
+    // Note: NG is a cross-border country that uses USD pricing
     useOnboardingStore.setState({
       username: 'testuser',
       name: 'Test User',
       country: 'Nigeria',
       countryCode: 'NG',
-      currency: 'NGN',
+      currency: 'USD', // Cross-border countries use USD
       pricingModel: 'single',
-      singleAmount: 500, // $5.00
+      singleAmount: 5, // $5.00 (minimum for USD is $1)
       paymentProvider: null,
     })
   })
 
   it('renders payment options correctly', () => {
     renderWithProviders(<PaymentMethodStep />)
-    
+
     expect(screen.getByText('Connect payments')).toBeInTheDocument()
     expect(screen.getByText('Stripe')).toBeInTheDocument()
-    // Since country is NG, Paystack should be visible
-    expect(screen.getByText('Paystack')).toBeInTheDocument()
+    // NG is cross-border (uses USD), so Paystack is NOT available
+    // (Paystack requires local currency alignment)
+    expect(screen.queryByText('Paystack')).not.toBeInTheDocument()
   })
 
   it('selects Stripe and initiates connect flow', async () => {
@@ -96,6 +98,19 @@ describe('PaymentMethodStep', () => {
   })
 
   it('selects Paystack and navigates to bank setup', async () => {
+    // Use South Africa (ZA) which has native Paystack support with ZAR
+    // (NG is cross-border and uses USD, so Paystack is not available there)
+    useOnboardingStore.setState({
+      username: 'testuser',
+      name: 'Test User',
+      country: 'South Africa',
+      countryCode: 'ZA',
+      currency: 'ZAR', // ZA uses local currency
+      pricingModel: 'single',
+      singleAmount: 100, // R100 (minimum for ZAR is ~R10)
+      paymentProvider: null,
+    })
+
     renderWithProviders(<PaymentMethodStep />)
 
     // Select Paystack

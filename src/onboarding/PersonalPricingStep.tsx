@@ -1,39 +1,32 @@
 import { useState } from 'react'
-import { ChevronLeft, Plus, Trash2, Info } from 'lucide-react'
+import { ChevronLeft, Plus, Trash2 } from 'lucide-react'
 import { useOnboardingStore } from './store'
 import type { SubscriptionTier } from './store'
 import { Button, Pressable } from './components'
 import { useSaveOnboardingProgress } from '../api/hooks'
-import { getCurrencySymbol, getSuggestedAmounts, calculateTieredFeePreview, formatAmountWithSeparators } from '../utils/currency'
+import { getCurrencySymbol, getSuggestedAmounts, calculateFeePreview, formatAmountWithSeparators, getMinimumAmount } from '../utils/currency'
 import './onboarding.css'
 
 // Inline fee preview component to show what creator will receive
+// Uses split model: 4% subscriber + 4% creator = 8% total
 function FeePreviewBox({ amount, currency }: { amount: number; currency: string }) {
-    const feePreview = calculateTieredFeePreview(amount, false, 'standard')
+    const preview = calculateFeePreview(amount, currency)
 
     return (
         <div className="fee-preview-box">
             <div className="fee-preview-row">
                 <span>Subscriber pays</span>
-                <span>{formatAmountWithSeparators(amount, currency)}/mo</span>
+                <span>{formatAmountWithSeparators(preview.subscriberPays, currency)}/mo</span>
             </div>
             <div className="fee-preview-divider" />
             <div className="fee-preview-row fee-deduction">
-                <span>Platform fee ({feePreview.platformFeePercent})</span>
-                <span>-{formatAmountWithSeparators(feePreview.platformFee!, currency)}</span>
-            </div>
-            <div className="fee-preview-row fee-deduction">
-                <span>Processing ({feePreview.processingFeePercent})</span>
-                <span>-{formatAmountWithSeparators(feePreview.processingFee!, currency)}</span>
+                <span>Platform + processing (8%)</span>
+                <span>-{formatAmountWithSeparators(preview.totalFee, currency)}</span>
             </div>
             <div className="fee-preview-divider" />
             <div className="fee-preview-row fee-total">
                 <span>You receive</span>
-                <span>{formatAmountWithSeparators(feePreview.creatorReceives, currency)}/mo</span>
-            </div>
-            <div className="fee-preview-note">
-                <Info size={12} />
-                <span>Lower platform fees on earnings above $500/mo</span>
+                <span>{formatAmountWithSeparators(preview.creatorReceives, currency)}/mo</span>
             </div>
         </div>
     )
@@ -110,15 +103,17 @@ export default function PersonalPricingStep() {
         updateState({ newTiers })
     }
 
-    // Validation - minimum $1 for subscriptions (Stripe requires $0.50 minimum)
-    const MIN_AMOUNT = 1
+    // Currency-aware minimum validation
+    // Uses getMinimumAmount() which returns appropriate minimums per currency
+    // e.g., $1 for USD, ₦500 for NGN, ¥100 for JPY
+    const minAmount = getMinimumAmount(currency)
     const isValid = pricingModel === 'single'
-        ? (singleAmount && singleAmount >= MIN_AMOUNT)
-        : (tiers.length > 0 && tiers.every(t => t.amount >= MIN_AMOUNT))
+        ? (singleAmount && singleAmount >= minAmount)
+        : (tiers.length > 0 && tiers.every(t => t.amount >= minAmount))
 
     const showMinAmountWarning = pricingModel === 'single'
-        ? (singleAmount !== null && singleAmount > 0 && singleAmount < MIN_AMOUNT)
-        : (tiers.some(t => t.amount > 0 && t.amount < MIN_AMOUNT))
+        ? (singleAmount !== null && singleAmount > 0 && singleAmount < minAmount)
+        : (tiers.some(t => t.amount > 0 && t.amount < minAmount))
 
     const handleContinue = async () => {
         // Save pricing milestone to server
@@ -204,7 +199,7 @@ export default function PersonalPricingStep() {
                             </div>
 
                             {/* Fee Preview - show what creator will receive */}
-                            {singleAmount && singleAmount >= MIN_AMOUNT && (
+                            {singleAmount && singleAmount >= minAmount && (
                                 <FeePreviewBox amount={singleAmount} currency={currency} />
                             )}
                         </>
@@ -263,7 +258,7 @@ export default function PersonalPricingStep() {
                             textAlign: 'center',
                             marginTop: 16,
                         }}>
-                            Minimum subscription amount is {currencySymbol}{MIN_AMOUNT}
+                            Minimum subscription amount is {currencySymbol}{minAmount.toLocaleString()}
                         </p>
                     )}
                 </div>

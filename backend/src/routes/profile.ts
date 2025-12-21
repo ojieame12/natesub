@@ -8,8 +8,8 @@ import { requireAuth } from '../middleware/auth.js'
 import { publicStrictRateLimit, publicRateLimit } from '../middleware/rateLimit.js'
 import { sendWelcomeEmail } from '../services/email.js'
 import { cancelOnboardingReminders } from '../jobs/reminders.js'
-import { RESERVED_USERNAMES } from '../utils/constants.js'
-import { displayAmountToCents } from '../utils/currency.js'
+import { RESERVED_USERNAMES, isStripeCrossBorderSupported } from '../utils/constants.js'
+import { displayAmountToCents, validateMinimumAmount } from '../utils/currency.js'
 import {
   getPlatformFeePercent,
   getProcessingFeePercent,
@@ -88,6 +88,38 @@ profile.put(
 
     // Normalize currency for consistent handling
     const currency = data.currency.toUpperCase()
+
+    // CRITICAL: Cross-border creators MUST use USD
+    // Prices are stored and charged in USD; payouts convert to local currency
+    // This prevents currency mismatch bugs where e.g. 5000 NGN gets charged as $5000 USD
+    if (isStripeCrossBorderSupported(data.countryCode) && currency !== 'USD') {
+      return c.json({
+        error: 'Cross-border creators must use USD pricing. Your payouts will automatically convert to your local currency.',
+      }, 400)
+    }
+
+    // Validate minimum amounts for the currency
+    if (data.singleAmount) {
+      const amountCents = displayAmountToCents(data.singleAmount, currency)
+      const validation = validateMinimumAmount(amountCents, currency)
+      if (!validation.valid) {
+        return c.json({
+          error: `Amount is below the minimum for ${currency}. Minimum is ${validation.minimumDisplay}.`,
+        }, 400)
+      }
+    }
+
+    if (data.tiers && data.tiers.length > 0) {
+      for (const tier of data.tiers) {
+        const amountCents = displayAmountToCents(tier.amount, currency)
+        const validation = validateMinimumAmount(amountCents, currency)
+        if (!validation.valid) {
+          return c.json({
+            error: `Tier "${tier.name}" amount is below the minimum for ${currency}. Minimum is ${validation.minimumDisplay}.`,
+          }, 400)
+        }
+      }
+    }
 
     // Convert amounts to cents for storage (handles zero-decimal currencies like JPY, KRW)
     // Use Prisma.JsonNull for null JSON values, or the actual value
@@ -177,6 +209,16 @@ profile.patch(
       return c.json({ error: 'No updates provided' }, 400)
     }
 
+    // CRITICAL: Cross-border creators MUST use USD
+    // Check if the update would result in a cross-border country with non-USD currency
+    const newCountryCode = data.countryCode?.toUpperCase() || existingProfile.countryCode
+    const newCurrency = data.currency?.toUpperCase() || existingProfile.currency
+    if (isStripeCrossBorderSupported(newCountryCode) && newCurrency !== 'USD') {
+      return c.json({
+        error: 'Cross-border creators must use USD pricing. Your payouts will automatically convert to your local currency.',
+      }, 400)
+    }
+
     const updateData: Prisma.ProfileUpdateInput = {}
 
     // Username changes require reserved + uniqueness checks
@@ -226,6 +268,29 @@ profile.patch(
 
     // Amount conversion depends on currency (use updated currency if provided)
     const currency = (data.currency || existingProfile.currency || 'USD').toUpperCase()
+
+    // Validate minimum amounts for the currency
+    if (data.singleAmount !== undefined && data.singleAmount !== null) {
+      const amountCents = displayAmountToCents(data.singleAmount, currency)
+      const validation = validateMinimumAmount(amountCents, currency)
+      if (!validation.valid) {
+        return c.json({
+          error: `Amount is below the minimum for ${currency}. Minimum is ${validation.minimumDisplay}.`,
+        }, 400)
+      }
+    }
+
+    if (data.tiers !== undefined && data.tiers !== null && data.tiers.length > 0) {
+      for (const tier of data.tiers) {
+        const amountCents = displayAmountToCents(tier.amount, currency)
+        const validation = validateMinimumAmount(amountCents, currency)
+        if (!validation.valid) {
+          return c.json({
+            error: `Tier "${tier.name}" amount is below the minimum for ${currency}. Minimum is ${validation.minimumDisplay}.`,
+          }, 400)
+        }
+      }
+    }
 
     if (data.singleAmount !== undefined) {
       updateData.singleAmount = data.singleAmount === null

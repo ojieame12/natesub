@@ -112,7 +112,7 @@ export async function handleChargeRefunded(event: Stripe.Event) {
   } else {
     // Legacy model: fee based on creator's purpose
     const creatorPurpose = subscription.creator?.profile?.purpose as 'personal' | 'service' | null
-    const legacyFees = calculateLegacyFee(refundAmount, creatorPurpose)
+    const legacyFees = calculateLegacyFee(refundAmount, creatorPurpose, charge.currency.toUpperCase())
     feeCents = legacyFees.feeCents
     netCents = legacyFees.netCents
   }
