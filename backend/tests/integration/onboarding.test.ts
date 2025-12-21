@@ -830,4 +830,488 @@ describe('onboarding endpoints', () => {
       expect(user?.onboardingStep).toBe(3)
     })
   })
+
+  // =============================================================================
+  // CROSS-BORDER AND PAYSTACK CURRENCY VALIDATION TESTS
+  // These tests ensure Nigerian/Kenyan/Ghanaian users can set up with Paystack
+  // using local currencies, while Stripe users in cross-border countries use USD
+  // =============================================================================
+  describe('PUT /profile - Cross-border and Paystack currency validation', () => {
+    // -------------------------------------------------------------------------
+    // PAYSTACK SCENARIOS - Should allow local currencies
+    // -------------------------------------------------------------------------
+    it('Nigerian user with Paystack and NGN currency - SHOULD SUCCEED', async () => {
+      await createTestUserWithSession('ng-paystack@test.com')
+
+      const res = await authRequest('/profile', {
+        method: 'PUT',
+        body: JSON.stringify({
+          username: 'ngpaystack',
+          displayName: 'Nigerian Paystack User',
+          country: 'Nigeria',
+          countryCode: 'NG',
+          currency: 'NGN',
+          purpose: 'tips',
+          pricingModel: 'single',
+          singleAmount: 5000, // 5000 NGN
+          paymentProvider: 'paystack',
+        }),
+      })
+
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.profile.currency).toBe('NGN')
+      expect(body.profile.paymentProvider).toBe('paystack')
+      expect(body.profile.countryCode).toBe('NG')
+      // NGN amounts stored as kobo (cents equivalent): 5000 NGN = 500000 kobo
+      expect(body.profile.singleAmount).toBe(500000)
+    })
+
+    it('Kenyan user with Paystack and KES currency - SHOULD SUCCEED', async () => {
+      await createTestUserWithSession('ke-paystack@test.com')
+
+      const res = await authRequest('/profile', {
+        method: 'PUT',
+        body: JSON.stringify({
+          username: 'kepaystack',
+          displayName: 'Kenyan Paystack User',
+          country: 'Kenya',
+          countryCode: 'KE',
+          currency: 'KES',
+          purpose: 'support',
+          pricingModel: 'single',
+          singleAmount: 500, // 500 KES
+          paymentProvider: 'paystack',
+        }),
+      })
+
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.profile.currency).toBe('KES')
+      expect(body.profile.paymentProvider).toBe('paystack')
+      expect(body.profile.countryCode).toBe('KE')
+      // KES amounts stored as cents: 500 KES = 50000 cents
+      expect(body.profile.singleAmount).toBe(50000)
+    })
+
+    it('South African user with Paystack and ZAR currency - SHOULD SUCCEED', async () => {
+      await createTestUserWithSession('za-paystack@test.com')
+
+      const res = await authRequest('/profile', {
+        method: 'PUT',
+        body: JSON.stringify({
+          username: 'zapaystack',
+          displayName: 'South African Paystack User',
+          country: 'South Africa',
+          countryCode: 'ZA',
+          currency: 'ZAR',
+          purpose: 'tips',
+          pricingModel: 'single',
+          singleAmount: 100, // 100 ZAR
+          paymentProvider: 'paystack',
+        }),
+      })
+
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.profile.currency).toBe('ZAR')
+      expect(body.profile.paymentProvider).toBe('paystack')
+    })
+
+    // -------------------------------------------------------------------------
+    // STRIPE CROSS-BORDER SCENARIOS - Must use USD
+    // -------------------------------------------------------------------------
+    it('Nigerian user with Stripe and USD currency - SHOULD SUCCEED', async () => {
+      await createTestUserWithSession('ng-stripe-usd@test.com')
+
+      const res = await authRequest('/profile', {
+        method: 'PUT',
+        body: JSON.stringify({
+          username: 'ngstripeusd',
+          displayName: 'Nigerian Stripe USD User',
+          country: 'Nigeria',
+          countryCode: 'NG',
+          currency: 'USD',
+          purpose: 'tips',
+          pricingModel: 'single',
+          singleAmount: 10, // $10 USD
+          paymentProvider: 'stripe',
+        }),
+      })
+
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.profile.currency).toBe('USD')
+      expect(body.profile.paymentProvider).toBe('stripe')
+      expect(body.profile.singleAmount).toBe(1000) // $10 = 1000 cents
+    })
+
+    it('Nigerian user with Stripe and NGN currency - SHOULD FAIL', async () => {
+      await createTestUserWithSession('ng-stripe-ngn@test.com')
+
+      const res = await authRequest('/profile', {
+        method: 'PUT',
+        body: JSON.stringify({
+          username: 'ngstripengn',
+          displayName: 'Nigerian Stripe NGN User',
+          country: 'Nigeria',
+          countryCode: 'NG',
+          currency: 'NGN', // Wrong - Stripe cross-border requires USD
+          purpose: 'tips',
+          pricingModel: 'single',
+          singleAmount: 5000,
+          paymentProvider: 'stripe',
+        }),
+      })
+
+      expect(res.status).toBe(400)
+      const body = await res.json()
+      expect(body.error).toContain('cross-border')
+      expect(body.error).toContain('USD')
+    })
+
+    it('Kenyan user with Stripe and KES currency - SHOULD FAIL', async () => {
+      await createTestUserWithSession('ke-stripe-kes@test.com')
+
+      const res = await authRequest('/profile', {
+        method: 'PUT',
+        body: JSON.stringify({
+          username: 'kestripeks',
+          displayName: 'Kenyan Stripe KES User',
+          country: 'Kenya',
+          countryCode: 'KE',
+          currency: 'KES', // Wrong - Stripe cross-border requires USD
+          purpose: 'tips',
+          pricingModel: 'single',
+          singleAmount: 500,
+          paymentProvider: 'stripe',
+        }),
+      })
+
+      expect(res.status).toBe(400)
+      const body = await res.json()
+      expect(body.error).toContain('USD')
+    })
+
+    it('Ghanaian user with Stripe and GHS currency - SHOULD FAIL', async () => {
+      await createTestUserWithSession('gh-stripe-ghs@test.com')
+
+      const res = await authRequest('/profile', {
+        method: 'PUT',
+        body: JSON.stringify({
+          username: 'ghstripeghs',
+          displayName: 'Ghanaian Stripe GHS User',
+          country: 'Ghana',
+          countryCode: 'GH',
+          currency: 'GHS', // Wrong - Stripe cross-border requires USD
+          purpose: 'tips',
+          pricingModel: 'single',
+          singleAmount: 50,
+          paymentProvider: 'stripe',
+        }),
+      })
+
+      expect(res.status).toBe(400)
+      const body = await res.json()
+      expect(body.error).toContain('USD')
+    })
+
+    // -------------------------------------------------------------------------
+    // STRIPE NATIVE COUNTRIES - Can use any supported currency
+    // -------------------------------------------------------------------------
+    it('US user with Stripe and USD - SHOULD SUCCEED', async () => {
+      await createTestUserWithSession('us-stripe@test.com')
+
+      const res = await authRequest('/profile', {
+        method: 'PUT',
+        body: JSON.stringify({
+          username: 'usstripe',
+          displayName: 'US Stripe User',
+          country: 'United States',
+          countryCode: 'US',
+          currency: 'USD',
+          purpose: 'tips',
+          pricingModel: 'single',
+          singleAmount: 5,
+          paymentProvider: 'stripe',
+        }),
+      })
+
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.profile.currency).toBe('USD')
+      expect(body.profile.paymentProvider).toBe('stripe')
+    })
+
+    it('UK user with Stripe and GBP - SHOULD SUCCEED', async () => {
+      await createTestUserWithSession('uk-stripe@test.com')
+
+      const res = await authRequest('/profile', {
+        method: 'PUT',
+        body: JSON.stringify({
+          username: 'ukstripe',
+          displayName: 'UK Stripe User',
+          country: 'United Kingdom',
+          countryCode: 'GB',
+          currency: 'GBP',
+          purpose: 'tips',
+          pricingModel: 'single',
+          singleAmount: 5,
+          paymentProvider: 'stripe',
+        }),
+      })
+
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.profile.currency).toBe('GBP')
+    })
+
+    it('South African user with Stripe and ZAR - SHOULD SUCCEED (ZA has native Stripe)', async () => {
+      await createTestUserWithSession('za-stripe@test.com')
+
+      const res = await authRequest('/profile', {
+        method: 'PUT',
+        body: JSON.stringify({
+          username: 'zastripe',
+          displayName: 'ZA Stripe User',
+          country: 'South Africa',
+          countryCode: 'ZA',
+          currency: 'ZAR',
+          purpose: 'tips',
+          pricingModel: 'single',
+          singleAmount: 100,
+          paymentProvider: 'stripe',
+        }),
+      })
+
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.profile.currency).toBe('ZAR')
+      // ZA is NOT cross-border, it has native Stripe support
+    })
+
+    // -------------------------------------------------------------------------
+    // EDGE CASES
+    // -------------------------------------------------------------------------
+    it('Nigerian user with no paymentProvider and NGN currency - SHOULD FAIL', async () => {
+      await createTestUserWithSession('ng-no-provider@test.com')
+
+      // When no paymentProvider is specified, we still enforce the cross-border check
+      // because we don't know if they'll use Stripe or Paystack yet.
+      // Users must explicitly choose Paystack to use local currency.
+      const res = await authRequest('/profile', {
+        method: 'PUT',
+        body: JSON.stringify({
+          username: 'ngnoprovider',
+          displayName: 'Nigerian No Provider',
+          country: 'Nigeria',
+          countryCode: 'NG',
+          currency: 'NGN',
+          purpose: 'tips',
+          pricingModel: 'single',
+          singleAmount: 5000,
+          // paymentProvider NOT specified - should fail because we can't assume Paystack
+        }),
+      })
+
+      // Should fail because no provider specified means we enforce USD for safety
+      expect(res.status).toBe(400)
+      const body = await res.json()
+      expect(body.error).toContain('USD')
+    })
+
+    it('Cross-border user can update profile with Paystack even if previously had no provider', async () => {
+      const { user } = await createTestUserWithSession('ng-update@test.com')
+
+      // First create profile without payment provider
+      await db.profile.create({
+        data: {
+          userId: user.id,
+          username: 'ngupdate',
+          displayName: 'Nigerian Update User',
+          country: 'Nigeria',
+          countryCode: 'NG',
+          currency: 'NGN',
+          purpose: 'tips',
+          pricingModel: 'single',
+          singleAmount: 500000, // 5000 NGN in kobo
+        },
+      })
+
+      // Then PATCH to add Paystack
+      const res = await authRequest('/profile', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          paymentProvider: 'paystack',
+        }),
+      })
+
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.profile.paymentProvider).toBe('paystack')
+      expect(body.profile.currency).toBe('NGN')
+    })
+
+    it('Cross-border user updating to Stripe MUST also switch to USD', async () => {
+      const { user } = await createTestUserWithSession('ng-switch-provider@test.com')
+
+      // First create profile with Paystack and NGN
+      await db.profile.create({
+        data: {
+          userId: user.id,
+          username: 'ngswitchprovider',
+          displayName: 'Nigerian Switch Provider',
+          country: 'Nigeria',
+          countryCode: 'NG',
+          currency: 'NGN',
+          purpose: 'tips',
+          pricingModel: 'single',
+          singleAmount: 500000,
+          paymentProvider: 'paystack',
+        },
+      })
+
+      // PATCH to switch to Stripe without changing currency should FAIL
+      const res = await authRequest('/profile', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          paymentProvider: 'stripe',
+          // Not updating currency - should fail
+        }),
+      })
+
+      expect(res.status).toBe(400)
+      const body = await res.json()
+      expect(body.error).toContain('USD')
+    })
+
+    it('Cross-border user can switch to Stripe if also updating to USD', async () => {
+      const { user } = await createTestUserWithSession('ng-switch-both@test.com')
+
+      // First create profile with Paystack and NGN
+      await db.profile.create({
+        data: {
+          userId: user.id,
+          username: 'ngswitchboth',
+          displayName: 'Nigerian Switch Both',
+          country: 'Nigeria',
+          countryCode: 'NG',
+          currency: 'NGN',
+          purpose: 'tips',
+          pricingModel: 'single',
+          singleAmount: 500000,
+          paymentProvider: 'paystack',
+        },
+      })
+
+      // PATCH to switch to Stripe AND USD should succeed
+      const res = await authRequest('/profile', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          paymentProvider: 'stripe',
+          currency: 'USD',
+          singleAmount: 10, // $10 USD
+        }),
+      })
+
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.profile.paymentProvider).toBe('stripe')
+      expect(body.profile.currency).toBe('USD')
+    })
+  })
+
+  // =============================================================================
+  // CURRENCY MINIMUM VALIDATION TESTS
+  // Ensure minimum amounts are enforced correctly for each currency
+  // =============================================================================
+  describe('PUT /profile - Currency minimum validation', () => {
+    it('rejects NGN amount below minimum (₦1,000)', async () => {
+      await createTestUserWithSession('ngn-min@test.com')
+
+      const res = await authRequest('/profile', {
+        method: 'PUT',
+        body: JSON.stringify({
+          username: 'ngnmin',
+          displayName: 'NGN Min Test',
+          country: 'Nigeria',
+          countryCode: 'NG',
+          currency: 'NGN',
+          purpose: 'tips',
+          pricingModel: 'single',
+          singleAmount: 500, // 500 NGN - below ₦1,000 minimum
+          paymentProvider: 'paystack',
+        }),
+      })
+
+      expect(res.status).toBe(400)
+      const body = await res.json()
+      expect(body.error).toContain('minimum')
+    })
+
+    it('accepts NGN amount at minimum (₦1,000)', async () => {
+      await createTestUserWithSession('ngn-exact-min@test.com')
+
+      const res = await authRequest('/profile', {
+        method: 'PUT',
+        body: JSON.stringify({
+          username: 'ngnexactmin',
+          displayName: 'NGN Exact Min Test',
+          country: 'Nigeria',
+          countryCode: 'NG',
+          currency: 'NGN',
+          purpose: 'tips',
+          pricingModel: 'single',
+          singleAmount: 1000, // Exactly at ₦1,000 minimum
+          paymentProvider: 'paystack',
+        }),
+      })
+
+      expect(res.status).toBe(200)
+    })
+
+    it('rejects USD amount below minimum ($1)', async () => {
+      await createTestUserWithSession('usd-min@test.com')
+
+      const res = await authRequest('/profile', {
+        method: 'PUT',
+        body: JSON.stringify({
+          username: 'usdmin',
+          displayName: 'USD Min Test',
+          country: 'United States',
+          countryCode: 'US',
+          currency: 'USD',
+          purpose: 'tips',
+          pricingModel: 'single',
+          singleAmount: 0.50, // $0.50 - below $1 minimum
+          paymentProvider: 'stripe',
+        }),
+      })
+
+      expect(res.status).toBe(400)
+      const body = await res.json()
+      expect(body.error).toContain('minimum')
+    })
+
+    it('accepts USD amount at minimum ($1)', async () => {
+      await createTestUserWithSession('usd-exact-min@test.com')
+
+      const res = await authRequest('/profile', {
+        method: 'PUT',
+        body: JSON.stringify({
+          username: 'usdexactmin',
+          displayName: 'USD Exact Min Test',
+          country: 'United States',
+          countryCode: 'US',
+          currency: 'USD',
+          purpose: 'tips',
+          pricingModel: 'single',
+          singleAmount: 1, // Exactly $1
+          paymentProvider: 'stripe',
+        }),
+      })
+
+      expect(res.status).toBe(200)
+    })
+  })
 })
