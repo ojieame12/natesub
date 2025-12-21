@@ -6,6 +6,11 @@ import { chargeAuthorization, initiateTransfer, createTransferRecipient } from '
 import { calculateServiceFee, calculateLegacyFee, type FeeMode } from '../services/fees.js'
 import { decryptAccountNumber, decryptAuthorizationCode, encryptAuthorizationCode } from '../utils/encryption.js'
 import { acquireLock, releaseLock } from '../services/lock.js'
+import {
+  scheduleSubscriptionRenewalReminders,
+  schedulePaymentFailedReminder,
+  schedulePastDueReminder,
+} from './reminders.js'
 
 // Configuration
 const MAX_RETRY_ATTEMPTS = 3
@@ -174,6 +179,12 @@ export async function processRecurringBilling(): Promise<BillingResult> {
               where: { id: sub.id },
               data: { status: 'past_due' },
             })
+
+            // Schedule past due notification (fire and forget)
+            schedulePastDueReminder(sub.id).catch(err =>
+              console.error(`[billing] Failed to schedule past due reminder for ${sub.id}:`, err.message)
+            )
+
             result.failed++
             console.log(`[billing] Sub ${sub.id} marked past_due after ${MAX_RETRY_ATTEMPTS} failed attempts`)
             continue
@@ -371,6 +382,11 @@ export async function processRecurringBilling(): Promise<BillingResult> {
 
       result.succeeded++
       console.log(`[billing] Sub ${sub.id} charged successfully: ${reference}`)
+
+      // Schedule reminders for next renewal (fire and forget)
+      scheduleSubscriptionRenewalReminders(sub.id).catch(err =>
+        console.error(`[billing] Failed to schedule renewal reminders for ${sub.id}:`, err.message)
+      )
     } catch (error: any) {
       // Create failed payment record for retry tracking
       await db.payment.create({
@@ -387,6 +403,13 @@ export async function processRecurringBilling(): Promise<BillingResult> {
           occurredAt: new Date(),
         },
       })
+
+      // Schedule payment failed notification (fire and forget)
+      // Use 24h as default retry interval
+      const nextRetryDate = new Date(Date.now() + 24 * 60 * 60 * 1000)
+      schedulePaymentFailedReminder(sub.id, nextRetryDate).catch(err =>
+        console.error(`[billing] Failed to schedule payment failed reminder for ${sub.id}:`, err.message)
+      )
 
       result.errors.push({
         subscriptionId: sub.id,

@@ -711,6 +711,12 @@ enum ReminderType {
 
   // Engagement
   no_subscribers_7d       // No subscribers after 7 days
+
+  // Subscription renewal reminders (subscribers)
+  subscription_renewal_3d   // Subscription renews in 3 days
+  subscription_renewal_1d   // Subscription renews tomorrow
+  subscription_payment_failed // Payment failed, will retry
+  subscription_past_due     // Subscription marked past due after failed retries
 }
 
 enum ReminderChannel {

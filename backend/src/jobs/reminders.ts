@@ -17,6 +17,8 @@ import {
   sendOnboardingIncompleteEmail,
   sendBankSetupIncompleteEmail,
   sendNoSubscribersEmail,
+  sendRenewalReminderEmail,
+  sendPaymentFailedEmail,
 } from '../services/email.js'
 import {
   isSmsEnabled,
@@ -438,6 +440,132 @@ export async function scheduleNoSubscribersReminder(userId: string): Promise<voi
 }
 
 // ============================================
+// SUBSCRIPTION RENEWAL REMINDERS
+// ============================================
+
+/**
+ * Schedule renewal reminders for a subscription
+ * Call this after subscription creation or successful renewal
+ */
+export async function scheduleSubscriptionRenewalReminders(subscriptionId: string): Promise<void> {
+  const subscription = await db.subscription.findUnique({
+    where: { id: subscriptionId },
+    select: {
+      id: true,
+      subscriberId: true,
+      interval: true,
+      currentPeriodEnd: true,
+      status: true,
+      cancelAtPeriodEnd: true,
+    },
+  })
+
+  // Don't schedule for one-time, canceled, or pending cancellation
+  if (!subscription) return
+  if (subscription.interval === 'one_time') return
+  if (subscription.status !== 'active') return
+  if (subscription.cancelAtPeriodEnd) return
+  if (!subscription.currentPeriodEnd) return
+
+  const renewalDate = subscription.currentPeriodEnd
+
+  // Cancel any existing renewal reminders first (in case of re-scheduling)
+  await cancelReminder({
+    entityType: 'subscription',
+    entityId: subscriptionId,
+    type: 'subscription_renewal_3d',
+  })
+  await cancelReminder({
+    entityType: 'subscription',
+    entityId: subscriptionId,
+    type: 'subscription_renewal_1d',
+  })
+
+  // 3 days before renewal
+  const threeDaysBefore = new Date(renewalDate.getTime() - 3 * 24 * 60 * 60 * 1000)
+  if (threeDaysBefore > new Date()) {
+    await scheduleReminder({
+      userId: subscription.subscriberId,
+      entityType: 'subscription',
+      entityId: subscriptionId,
+      type: 'subscription_renewal_3d',
+      scheduledFor: threeDaysBefore,
+    })
+  }
+
+  // 1 day before renewal
+  const oneDayBefore = new Date(renewalDate.getTime() - 24 * 60 * 60 * 1000)
+  if (oneDayBefore > new Date()) {
+    await scheduleReminder({
+      userId: subscription.subscriberId,
+      entityType: 'subscription',
+      entityId: subscriptionId,
+      type: 'subscription_renewal_1d',
+      scheduledFor: oneDayBefore,
+    })
+  }
+
+  console.log(`[reminders] Scheduled renewal reminders for subscription ${subscriptionId}`)
+}
+
+/**
+ * Schedule a failed payment notification
+ * Call this from billing job when charge fails
+ */
+export async function schedulePaymentFailedReminder(
+  subscriptionId: string,
+  retryDate: Date | null
+): Promise<void> {
+  const subscription = await db.subscription.findUnique({
+    where: { id: subscriptionId },
+    select: { subscriberId: true },
+  })
+
+  if (!subscription) return
+
+  // Schedule immediately (will be processed in next reminder run)
+  await scheduleReminder({
+    userId: subscription.subscriberId,
+    entityType: 'subscription',
+    entityId: subscriptionId,
+    type: 'subscription_payment_failed',
+    scheduledFor: new Date(), // Immediate
+  })
+}
+
+/**
+ * Schedule a past due notification
+ * Call this when subscription is marked past_due
+ */
+export async function schedulePastDueReminder(subscriptionId: string): Promise<void> {
+  const subscription = await db.subscription.findUnique({
+    where: { id: subscriptionId },
+    select: { subscriberId: true },
+  })
+
+  if (!subscription) return
+
+  await scheduleReminder({
+    userId: subscription.subscriberId,
+    entityType: 'subscription',
+    entityId: subscriptionId,
+    type: 'subscription_past_due',
+    scheduledFor: new Date(), // Immediate
+  })
+}
+
+/**
+ * Cancel all renewal reminders for a subscription
+ * Call this when subscription is canceled
+ */
+export async function cancelSubscriptionReminders(subscriptionId: string): Promise<void> {
+  await cancelAllRemindersForEntity({
+    entityType: 'subscription',
+    entityId: subscriptionId,
+  })
+}
+
+// ============================================
 // REMINDER PROCESSING (CRON JOB)
 // ============================================
 
@@ -709,6 +837,19 @@ async function processReminder(reminder: {
 
     case 'no_subscribers_7d':
       return await processNoSubscribersReminder(entityId)
+
+    // Subscription renewal reminders
+    case 'subscription_renewal_3d':
+      return await processSubscriptionRenewalReminder(entityId, 3)
+
+    case 'subscription_renewal_1d':
+      return await processSubscriptionRenewalReminder(entityId, 1)
+
+    case 'subscription_payment_failed':
+      return await processSubscriptionPaymentFailedReminder(entityId)
+
+    case 'subscription_past_due':
+      return await processSubscriptionPastDueReminder(entityId)
 
     default:
       console.warn(`[reminders] Unknown reminder type: ${type}`)
@@ -1204,6 +1345,106 @@ export async function scanAndScheduleMissedReminders(): Promise<number> {
   return scheduled
 }
 
+// ============================================
+// SUBSCRIPTION REMINDER PROCESSORS
+// ============================================
+
+async function processSubscriptionRenewalReminder(
+  subscriptionId: string,
+  daysUntilRenewal: number
+): Promise<boolean> {
+  const subscription = await db.subscription.findUnique({
+    where: { id: subscriptionId },
+    include: {
+      subscriber: true,
+      creator: { include: { profile: true } },
+    },
+  })
+
+  // Don't send if subscription is no longer active
+  if (!subscription || subscription.status !== 'active') {
+    return false
+  }
+
+  // Don't send if pending cancellation
+  if (subscription.cancelAtPeriodEnd) {
+    return false
+  }
+
+  const providerName = subscription.creator.profile?.displayName || 'a creator'
+  const renewalDate = subscription.currentPeriodEnd || new Date()
+
+  await sendRenewalReminderEmail(
+    subscription.subscriber.email,
+    providerName,
+    subscription.amount,
+    subscription.currency,
+    renewalDate
+  )
+
+  return true
+}
+
+async function processSubscriptionPaymentFailedReminder(
+  subscriptionId: string
+): Promise<boolean> {
+  const subscription = await db.subscription.findUnique({
+    where: { id: subscriptionId },
+    include: {
+      subscriber: true,
+      creator: { include: { profile: true } },
+    },
+  })
+
+  if (!subscription) return false
+
+  const providerName = subscription.creator.profile?.displayName || 'a creator'
+
+  // Calculate next retry date (24h from now if still retrying)
+  const retryDate = subscription.status === 'active'
+    ? new Date(Date.now() + 24 * 60 * 60 * 1000)
+    : null
+
+  await sendPaymentFailedEmail(
+    subscription.subscriber.email,
+    providerName,
+    subscription.amount,
+    subscription.currency,
+    retryDate
+  )
+
+  return true
+}
+
+async function processSubscriptionPastDueReminder(
+  subscriptionId: string
+): Promise<boolean> {
+  const subscription = await db.subscription.findUnique({
+    where: { id: subscriptionId },
+    include: {
+      subscriber: true,
+      creator: { include: { profile: true } },
+    },
+  })
+
+  if (!subscription || subscription.status !== 'past_due') {
+    return false
+  }
+
+  const providerName = subscription.creator.profile?.displayName || 'a creator'
+
+  // Send payment failed with no retry date (indicating it's past due)
+  await sendPaymentFailedEmail(
+    subscription.subscriber.email,
+    providerName,
+    subscription.amount,
+    subscription.currency,
+    null // No more retries
+  )
+
+  return true
+}
+
 // Export for cron/scheduler
 export default {
   processDueReminders,
@@ -1213,6 +1454,10 @@ export default {
   scheduleOnboardingReminders,
   cancelOnboardingReminders,
   scheduleNoSubscribersReminder,
+  scheduleSubscriptionRenewalReminders,
+  schedulePaymentFailedReminder,
+  schedulePastDueReminder,
+  cancelSubscriptionReminders,
   cancelReminder,
   cancelAllRemindersForEntity,
 }
