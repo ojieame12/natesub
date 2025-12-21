@@ -69,7 +69,7 @@ const initialState = {
     relationship: null,
     customRelationship: '',
     amount: 10,
-    isRecurring: true,
+    isRecurring: false, // Default to one-time (matches SelectRecipient UI)
     purpose: '',
     dueDate: null,
     message: '',
