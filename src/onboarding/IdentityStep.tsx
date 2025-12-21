@@ -6,12 +6,7 @@ import { useSaveOnboardingProgress } from '../api/hooks'
 import '../Dashboard.css'
 import './onboarding.css'
 
-// Cross-border countries: payments collected in USD, payouts in local currency
-// Note: ZA (South Africa) has native Stripe support, so NOT cross-border
-const CROSS_BORDER_COUNTRIES = ['NG', 'GH', 'KE']
-
 // Countries with payment support info
-// Cross-border countries: creators price in USD, payouts convert to local currency
 const countries = [
     { code: 'US', name: 'United States', flag: '🇺🇸', currency: 'USD' },
     { code: 'GB', name: 'United Kingdom', flag: '🇬🇧', currency: 'GBP' },
