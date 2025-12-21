@@ -89,12 +89,14 @@ profile.put(
     // Normalize currency for consistent handling
     const currency = data.currency.toUpperCase()
 
-    // CRITICAL: Cross-border creators MUST use USD
+    // CRITICAL: Cross-border STRIPE creators MUST use USD
     // Prices are stored and charged in USD; payouts convert to local currency
     // This prevents currency mismatch bugs where e.g. 5000 NGN gets charged as $5000 USD
-    if (isStripeCrossBorderSupported(data.countryCode) && currency !== 'USD') {
+    // EXCEPTION: Paystack users should use local currency (NGN/KES/ZAR)
+    const paymentProvider = data.paymentProvider || null
+    if (isStripeCrossBorderSupported(data.countryCode) && currency !== 'USD' && paymentProvider !== 'paystack') {
       return c.json({
-        error: 'Cross-border creators must use USD pricing. Your payouts will automatically convert to your local currency.',
+        error: 'Stripe cross-border creators must use USD pricing. Your payouts will automatically convert to your local currency.',
       }, 400)
     }
 
@@ -209,13 +211,15 @@ profile.patch(
       return c.json({ error: 'No updates provided' }, 400)
     }
 
-    // CRITICAL: Cross-border creators MUST use USD
+    // CRITICAL: Cross-border STRIPE creators MUST use USD
     // Check if the update would result in a cross-border country with non-USD currency
+    // EXCEPTION: Paystack users should use local currency (NGN/KES/ZAR)
     const newCountryCode = data.countryCode?.toUpperCase() || existingProfile.countryCode
     const newCurrency = data.currency?.toUpperCase() || existingProfile.currency
-    if (isStripeCrossBorderSupported(newCountryCode) && newCurrency !== 'USD') {
+    const newPaymentProvider = data.paymentProvider !== undefined ? data.paymentProvider : existingProfile.paymentProvider
+    if (isStripeCrossBorderSupported(newCountryCode) && newCurrency !== 'USD' && newPaymentProvider !== 'paystack') {
       return c.json({
-        error: 'Cross-border creators must use USD pricing. Your payouts will automatically convert to your local currency.',
+        error: 'Stripe cross-border creators must use USD pricing. Your payouts will automatically convert to your local currency.',
       }, 400)
     }
 
