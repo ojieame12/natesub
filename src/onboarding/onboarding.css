@@ -1555,6 +1555,54 @@ button.btn .spinning {
     transform: scale(0.95);
 }
 
+/* === FEE PREVIEW BOX === */
+.fee-preview-box {
+    margin-top: var(--space-xl);
+    padding: var(--space-lg);
+    background: var(--bg-card);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-xl);
+}
+
+.fee-preview-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 14px;
+    color: var(--text-secondary);
+    padding: var(--space-xs) 0;
+}
+
+.fee-preview-row.fee-deduction {
+    color: var(--text-tertiary);
+    font-size: 13px;
+}
+
+.fee-preview-row.fee-total {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.fee-preview-row.fee-total span:last-child {
+    color: var(--status-success);
+}
+
+.fee-preview-divider {
+    height: 1px;
+    background: var(--border-default);
+    margin: var(--space-sm) 0;
+}
+
+.fee-preview-note {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    margin-top: var(--space-md);
+    font-size: 12px;
+    color: var(--text-tertiary);
+}
+
 /* === TIER CARDS (Updated) === */
 .tier-card {
     padding: var(--space-lg);

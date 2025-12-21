@@ -17,6 +17,9 @@ export default function PaymentBreakdown({
     isOwner,
     interval = 'mo'
 }: PaymentBreakdownProps) {
+    // Check if using new tiered model (has platformFee field)
+    const hasTieredFees = feePreview.platformFee !== undefined
+
     return (
         <div className="sub-breakdown-card">
             <div className="sub-breakdown-row">
@@ -26,39 +29,56 @@ export default function PaymentBreakdown({
                 </span>
             </div>
 
-            {/* Subscriber's fee portion (4%) */}
-            <div className="sub-breakdown-row sub-breakdown-fee">
-                <div className="sub-breakdown-label-group">
-                    <span>Secure payment</span>
-                </div>
-                <span className="sub-breakdown-value">
-                    +{formatAmountWithSeparators(feePreview.serviceFee, currency)}
-                </span>
-            </div>
-
-            <div className="sub-breakdown-divider" />
-
-            {/* For subscribers: show what they pay */}
+            {/* For subscribers: show total (no fee breakdown, clean UX) */}
             {!isOwner && (
-                <div className="sub-breakdown-row sub-breakdown-total">
-                    <span className="sub-breakdown-label">Total Due</span>
-                    <span className="sub-breakdown-total-value">
-                        {formatAmountWithSeparators(feePreview.subscriberPays, currency)}
-                    </span>
-                </div>
-            )}
-
-            {/* For owners: show their fee and what they receive */}
-            {isOwner && (
                 <>
-                    <div className="sub-breakdown-row sub-breakdown-fee is-owner">
-                        <div className="sub-breakdown-label-group">
-                            <span>Subscription management</span>
-                        </div>
-                        <span className="sub-breakdown-value">
-                            -{formatAmountWithSeparators(feePreview.creatorFee, currency)}
+                    <div className="sub-breakdown-divider" />
+                    <div className="sub-breakdown-row sub-breakdown-total">
+                        <span className="sub-breakdown-label">Total</span>
+                        <span className="sub-breakdown-total-value">
+                            {formatAmountWithSeparators(amount, currency)}/{interval}
                         </span>
                     </div>
+                </>
+            )}
+
+            {/* For owners: show fee breakdown and what they receive */}
+            {isOwner && (
+                <>
+                    <div className="sub-breakdown-divider" />
+
+                    {/* New tiered model: show platform + processing separately */}
+                    {hasTieredFees ? (
+                        <>
+                            <div className="sub-breakdown-row sub-breakdown-fee is-owner">
+                                <div className="sub-breakdown-label-group">
+                                    <span>Platform fee ({feePreview.platformFeePercent})</span>
+                                </div>
+                                <span className="sub-breakdown-value">
+                                    -{formatAmountWithSeparators(feePreview.platformFee!, currency)}
+                                </span>
+                            </div>
+
+                            <div className="sub-breakdown-row sub-breakdown-fee is-owner">
+                                <div className="sub-breakdown-label-group">
+                                    <span>Processing ({feePreview.processingFeePercent})</span>
+                                </div>
+                                <span className="sub-breakdown-value">
+                                    -{formatAmountWithSeparators(feePreview.processingFee!, currency)}
+                                </span>
+                            </div>
+                        </>
+                    ) : (
+                        /* Legacy model: single combined fee */
+                        <div className="sub-breakdown-row sub-breakdown-fee is-owner">
+                            <div className="sub-breakdown-label-group">
+                                <span>Fees ({feePreview.effectiveRatePercent})</span>
+                            </div>
+                            <span className="sub-breakdown-value">
+                                -{formatAmountWithSeparators(feePreview.totalFee, currency)}
+                            </span>
+                        </div>
+                    )}
 
                     <div className="sub-breakdown-row sub-breakdown-total">
                         <span className="sub-breakdown-label">You Receive</span>
@@ -69,7 +89,10 @@ export default function PaymentBreakdown({
 
                     <div className="sub-breakdown-note">
                         <Info size={12} style={{ marginRight: 4 }} />
-                        Covers billing, retries, and payment processing
+                        {hasTieredFees
+                            ? 'Platform fee goes to NatePay. Processing goes to card networks.'
+                            : 'Covers billing, retries, and payment processing'
+                        }
                     </div>
                 </>
             )}

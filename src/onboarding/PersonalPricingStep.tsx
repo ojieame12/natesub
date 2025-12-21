@@ -1,11 +1,43 @@
 import { useState } from 'react'
-import { ChevronLeft, Plus, Trash2 } from 'lucide-react'
+import { ChevronLeft, Plus, Trash2, Info } from 'lucide-react'
 import { useOnboardingStore } from './store'
 import type { SubscriptionTier } from './store'
 import { Button, Pressable } from './components'
 import { useSaveOnboardingProgress } from '../api/hooks'
-import { getCurrencySymbol, getSuggestedAmounts } from '../utils/currency'
+import { getCurrencySymbol, getSuggestedAmounts, calculateTieredFeePreview, formatAmountWithSeparators } from '../utils/currency'
 import './onboarding.css'
+
+// Inline fee preview component to show what creator will receive
+function FeePreviewBox({ amount, currency }: { amount: number; currency: string }) {
+    const feePreview = calculateTieredFeePreview(amount, false, 'standard')
+
+    return (
+        <div className="fee-preview-box">
+            <div className="fee-preview-row">
+                <span>Subscriber pays</span>
+                <span>{formatAmountWithSeparators(amount, currency)}/mo</span>
+            </div>
+            <div className="fee-preview-divider" />
+            <div className="fee-preview-row fee-deduction">
+                <span>Platform fee ({feePreview.platformFeePercent})</span>
+                <span>-{formatAmountWithSeparators(feePreview.platformFee!, currency)}</span>
+            </div>
+            <div className="fee-preview-row fee-deduction">
+                <span>Processing ({feePreview.processingFeePercent})</span>
+                <span>-{formatAmountWithSeparators(feePreview.processingFee!, currency)}</span>
+            </div>
+            <div className="fee-preview-divider" />
+            <div className="fee-preview-row fee-total">
+                <span>You receive</span>
+                <span>{formatAmountWithSeparators(feePreview.creatorReceives, currency)}/mo</span>
+            </div>
+            <div className="fee-preview-note">
+                <Info size={12} />
+                <span>Lower platform fees on earnings above $500/mo</span>
+            </div>
+        </div>
+    )
+}
 
 export default function PersonalPricingStep() {
     const {
@@ -170,6 +202,11 @@ export default function PersonalPricingStep() {
                                     </Pressable>
                                 ))}
                             </div>
+
+                            {/* Fee Preview - show what creator will receive */}
+                            {singleAmount && singleAmount >= MIN_AMOUNT && (
+                                <FeePreviewBox amount={singleAmount} currency={currency} />
+                            )}
                         </>
                     ) : (
                         /* Tiers Mode */

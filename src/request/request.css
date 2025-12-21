@@ -1352,6 +1352,49 @@
     color: var(--text-primary);
 }
 
+/* Fee Breakdown */
+.request-fee-breakdown {
+    margin-top: var(--space-md);
+    padding: var(--space-md);
+    background: var(--bg-card);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-lg);
+}
+
+.request-fee-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--space-xs) 0;
+}
+
+.request-fee-row.request-fee-deduction {
+    color: var(--text-tertiary);
+    font-size: 13px;
+}
+
+.request-fee-row.request-fee-total {
+    padding-top: var(--space-sm);
+    margin-top: var(--space-xs);
+    border-top: 1px solid var(--border-default);
+    font-weight: 600;
+}
+
+.request-fee-row.request-fee-total .request-fee-value {
+    color: var(--status-success);
+}
+
+.request-fee-label {
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+.request-fee-value {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
 /* Send Button - 3D Primary Style */
 .request-send-btn {
     display: flex;

@@ -446,11 +446,16 @@ const CROSS_BORDER_BUFFER = 0.015 // 1.5%
 export interface FeePreview {
     creatorReceives: number      // What creator gets (in dollars)
     subscriberPays: number       // Total subscriber pays (in dollars)
-    serviceFee: number           // Subscriber's fee portion (4%)
-    creatorFee: number           // Creator's fee portion (4%)
-    totalFee: number             // Total platform fee (8%)
-    effectiveRate: number        // Fee percentage (0.04 = 4%)
-    effectiveRatePercent: string // Formatted as "4%"
+    serviceFee: number           // Subscriber's fee portion (legacy: 4%)
+    creatorFee: number           // Creator's fee portion (legacy: 4%)
+    totalFee: number             // Total platform fee
+    effectiveRate: number        // Fee percentage
+    effectiveRatePercent: string // Formatted as "X%"
+    // New tiered model fields (optional for backward compat)
+    platformFee?: number         // NatePay's cut (tiered: 5%/2%)
+    processingFee?: number       // Stripe/Paystack pass-through
+    platformFeePercent?: string  // e.g., "5%"
+    processingFeePercent?: string // e.g., "~3%"
 }
 
 /**
@@ -501,5 +506,106 @@ export function calculateFeePreview(
         totalFee: totalFee,            // Total platform fee
         effectiveRate: splitRate,
         effectiveRatePercent: `${(splitRate * 100).toFixed(0)}%`,
+    }
+}
+
+// =============================================================================
+// NEW TIERED FEE MODEL
+// Platform fee: 5% on first $500, 2% above (goes to NatePay)
+// Processing: ~3-6% pass-through (goes to Stripe/Paystack)
+// =============================================================================
+
+const TIER1_LIMIT = 500 // $500
+const TIERED_RATES = {
+    standard: { tier1: 0.05, tier2: 0.02 },
+    founding: { tier1: 0.03, tier2: 0.01 },
+}
+const PROCESSING_ESTIMATES = {
+    domestic: 0.035,    // ~3.5%
+    crossBorder: 0.06,  // ~6%
+}
+const MIN_PLATFORM_FEE = 1 // $1 minimum
+
+/**
+ * Calculate tiered platform fee
+ * 5% on first $500, 2% above (standard)
+ * 3% on first $500, 1% above (founding)
+ */
+export function calculatePlatformFee(
+    amountDollars: number,
+    tier: 'standard' | 'founding' = 'standard'
+): number {
+    if (amountDollars <= 0) return 0
+
+    const rates = TIERED_RATES[tier]
+    let fee: number
+
+    if (amountDollars <= TIER1_LIMIT) {
+        fee = amountDollars * rates.tier1
+    } else {
+        fee = (TIER1_LIMIT * rates.tier1) + ((amountDollars - TIER1_LIMIT) * rates.tier2)
+    }
+
+    return Math.max(fee, MIN_PLATFORM_FEE)
+}
+
+/**
+ * Calculate fee preview using NEW tiered model
+ * Shows platform fee and processing fee separately
+ *
+ * @param amountDollars - Creator's set price in dollars
+ * @param isCrossBorder - Whether subscriber is in different country
+ * @param tier - 'standard' or 'founding' (affects platform fee rate)
+ */
+export function calculateTieredFeePreview(
+    amountDollars: number,
+    isCrossBorder: boolean = false,
+    tier: 'standard' | 'founding' = 'standard'
+): FeePreview {
+    if (amountDollars === 0) {
+        return {
+            creatorReceives: 0,
+            subscriberPays: 0,
+            serviceFee: 0,
+            creatorFee: 0,
+            totalFee: 0,
+            effectiveRate: 0,
+            effectiveRatePercent: '0%',
+            platformFee: 0,
+            processingFee: 0,
+            platformFeePercent: '0%',
+            processingFeePercent: '0%',
+        }
+    }
+
+    // Calculate platform fee (tiered)
+    const platformFee = calculatePlatformFee(amountDollars, tier)
+
+    // Estimate processing fee
+    const processingRate = isCrossBorder ? PROCESSING_ESTIMATES.crossBorder : PROCESSING_ESTIMATES.domestic
+    const processingFee = amountDollars * processingRate
+
+    const totalFee = platformFee + processingFee
+    const effectiveRate = totalFee / amountDollars
+
+    // Platform fee percentage for display
+    const platformRate = platformFee / amountDollars
+    const platformFeePercent = amountDollars <= TIER1_LIMIT
+        ? `${(TIERED_RATES[tier].tier1 * 100).toFixed(0)}%`
+        : `${(platformRate * 100).toFixed(1)}%`
+
+    return {
+        creatorReceives: amountDollars - totalFee,
+        subscriberPays: amountDollars, // In recipient_pays mode, subscriber pays face value
+        serviceFee: totalFee,          // Total deducted (for legacy compat)
+        creatorFee: totalFee,          // Same as serviceFee in recipient_pays
+        totalFee: totalFee,
+        effectiveRate: effectiveRate,
+        effectiveRatePercent: `${(effectiveRate * 100).toFixed(0)}%`,
+        // New fields
+        platformFee: platformFee,
+        processingFee: processingFee,
+        platformFeePercent: platformFeePercent,
+        processingFeePercent: isCrossBorder ? '~6%' : '~3%',
     }
 }

@@ -381,3 +381,181 @@ export function calculateFeePreview(
     feeWasCapped: calc.feeWasCapped,
   }
 }
+
+// =============================================================================
+// NEW TIERED FEE MODEL (v2)
+// Platform fee: 5% on first $500, 2% above (standard)
+//               3% on first $500, 1% above (founding)
+// Processing: pass-through to Stripe/Paystack (not included in platform fee)
+// =============================================================================
+
+export type FeeTier = 'standard' | 'founding'
+export type FeeDirection = 'recipient_pays' | 'payer_pays'
+
+const TIER1_LIMIT_CENTS = 50000 // $500
+
+const TIERED_PLATFORM_RATES: Record<FeeTier, { tier1: number; tier2: number }> = {
+  standard: { tier1: 0.05, tier2: 0.02 },  // 5% / 2%
+  founding: { tier1: 0.03, tier2: 0.01 },  // 3% / 1%
+}
+
+const MIN_PLATFORM_FEE_CENTS = 100 // $1 minimum
+
+export interface TieredFeeCalculation {
+  payerPaysCents: number
+  recipientReceivesCents: number
+  platformFeeCents: number
+  processingFeeCents: number
+  totalFeeCents: number
+  platformFeePercent: number
+  processingFeePercent: number
+  direction: FeeDirection
+  tier: FeeTier
+  currency: string
+}
+
+/**
+ * Calculate platform fee using new tiered model
+ * 5% on first $500, 2% above (standard)
+ * 3% on first $500, 1% above (founding)
+ */
+export function calculateTieredPlatformFee(amountCents: number, tier: FeeTier = 'standard'): number {
+  if (amountCents <= 0) return 0
+
+  const rates = TIERED_PLATFORM_RATES[tier]
+  let fee: number
+
+  if (amountCents <= TIER1_LIMIT_CENTS) {
+    fee = amountCents * rates.tier1
+  } else {
+    fee = (TIER1_LIMIT_CENTS * rates.tier1) + ((amountCents - TIER1_LIMIT_CENTS) * rates.tier2)
+  }
+
+  return Math.max(Math.round(fee), MIN_PLATFORM_FEE_CENTS)
+}
+
+/**
+ * Get processing fee rate for a corridor
+ */
+export function getProcessingRate(currency: string, isCrossBorder: boolean = false): { percent: number; fixed: number } {
+  const normalizedCurrency = currency.toUpperCase()
+
+  // Cross-border adds ~3% on top of base rate
+  if (isCrossBorder) {
+    const base = PROCESSOR_FEES[normalizedCurrency] || DEFAULT_PROCESSOR_FEE
+    return {
+      percent: base.percentRate + 0.02 + 0.01, // +2% cross-border +1% FX
+      fixed: base.fixedCents,
+    }
+  }
+
+  const processor = PROCESSOR_FEES[normalizedCurrency] || DEFAULT_PROCESSOR_FEE
+  return {
+    percent: processor.percentRate,
+    fixed: processor.fixedCents,
+  }
+}
+
+/**
+ * Calculate processing fee for a transaction
+ */
+export function calculateProcessingFee(amountCents: number, currency: string, isCrossBorder: boolean = false): number {
+  const rate = getProcessingRate(currency, isCrossBorder)
+  return Math.round(amountCents * rate.percent) + rate.fixed
+}
+
+/**
+ * Calculate fees using new tiered model with direction support
+ *
+ * @param amountCents - Base amount in cents
+ * @param currency - ISO currency code
+ * @param options.tier - 'standard' or 'founding'
+ * @param options.direction - 'recipient_pays' (subscriber pays face value) or 'payer_pays' (recipient gets full amount)
+ * @param options.isCrossBorder - True if cross-border transaction
+ */
+export function calculateTieredFees(
+  amountCents: number,
+  currency: string,
+  options: {
+    tier?: FeeTier
+    direction?: FeeDirection
+    isCrossBorder?: boolean
+  } = {}
+): TieredFeeCalculation {
+  const {
+    tier = 'standard',
+    direction = 'recipient_pays',
+    isCrossBorder = false,
+  } = options
+
+  const normalizedCurrency = currency.toUpperCase()
+
+  if (amountCents <= 0) {
+    return {
+      payerPaysCents: 0,
+      recipientReceivesCents: 0,
+      platformFeeCents: 0,
+      processingFeeCents: 0,
+      totalFeeCents: 0,
+      platformFeePercent: 0,
+      processingFeePercent: 0,
+      direction,
+      tier,
+      currency: normalizedCurrency,
+    }
+  }
+
+  const platformFee = calculateTieredPlatformFee(amountCents, tier)
+  const processingFee = calculateProcessingFee(amountCents, normalizedCurrency, isCrossBorder)
+  const totalFee = platformFee + processingFee
+
+  if (direction === 'recipient_pays') {
+    // Subscriber pays face value, creator absorbs all fees
+    return {
+      payerPaysCents: amountCents,
+      recipientReceivesCents: amountCents - totalFee,
+      platformFeeCents: platformFee,
+      processingFeeCents: processingFee,
+      totalFeeCents: totalFee,
+      platformFeePercent: (platformFee / amountCents) * 100,
+      processingFeePercent: (processingFee / amountCents) * 100,
+      direction,
+      tier,
+      currency: normalizedCurrency,
+    }
+  } else {
+    // Payer pays extra so recipient gets the full amount
+    // Need to gross up for processing (it's calculated on charged amount)
+    const rate = getProcessingRate(normalizedCurrency, isCrossBorder)
+    const baseWithPlatform = amountCents + platformFee
+    // Solve: gross = baseWithPlatform + (gross * rate.percent) + rate.fixed
+    // gross * (1 - rate.percent) = baseWithPlatform + rate.fixed
+    // gross = (baseWithPlatform + rate.fixed) / (1 - rate.percent)
+    const grossAmount = Math.ceil((baseWithPlatform + rate.fixed) / (1 - rate.percent))
+    const actualProcessingFee = grossAmount - baseWithPlatform
+    const actualTotalFee = platformFee + actualProcessingFee
+
+    return {
+      payerPaysCents: grossAmount,
+      recipientReceivesCents: amountCents,
+      platformFeeCents: platformFee,
+      processingFeeCents: actualProcessingFee,
+      totalFeeCents: actualTotalFee,
+      platformFeePercent: (platformFee / amountCents) * 100,
+      processingFeePercent: (actualProcessingFee / amountCents) * 100,
+      direction,
+      tier,
+      currency: normalizedCurrency,
+    }
+  }
+}
+
+/**
+ * Get effective platform fee rate for display
+ * Shows the blended rate for amounts that cross the tier threshold
+ */
+export function getEffectivePlatformRate(amountCents: number, tier: FeeTier = 'standard'): number {
+  if (amountCents <= 0) return 0
+  const fee = calculateTieredPlatformFee(amountCents, tier)
+  return (fee / amountCents) * 100
+}
