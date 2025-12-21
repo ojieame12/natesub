@@ -312,6 +312,7 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
     const receiptStyle: React.CSSProperties = {
         width: '100%', maxWidth: 350,
         backgroundColor: '#ffffff',
+        borderRadius: '16px 16px 0 0',
         maskImage: `radial-gradient(circle at 10px calc(100% + 5px), transparent 12px, black 13px)`,
         WebkitMaskImage: `radial-gradient(circle at 10px calc(100% + 5px), transparent 12px, black 13px)`,
         WebkitMaskSize: '20px 100%', WebkitMaskPosition: '-10px 0', WebkitMaskRepeat: 'repeat-x',
