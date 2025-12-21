@@ -5,7 +5,7 @@ import { useOnboardingStore, type PaymentProvider } from './store'
 import { Button, Pressable } from './components'
 import { api } from '../api'
 import { getPricing } from '../utils/pricing'
-import { getMinimumAmount, getCurrencySymbol } from '../utils/currency'
+import { getMinimumAmount, getCurrencySymbol, getSuggestedAmounts } from '../utils/currency'
 import '../Dashboard.css'
 import './onboarding.css'
 
@@ -99,28 +99,47 @@ export default function PaymentMethodStep() {
     const handleContinue = async () => {
         if (!selectedMethod) return
 
-        // Local validation before POST
-        // Use currency-specific minimum amounts
-        const minAmount = getMinimumAmount(store.currency || 'USD')
-        const currencySymbol = getCurrencySymbol(store.currency || 'USD')
+        // Determine final currency based on payment method selection FIRST
+        // - Stripe for cross-border countries (NG/GH/KE) → USD
+        // - Paystack → local currency
+        const crossBorderCountries = ['NG', 'GH', 'KE']
+        let finalCurrency = store.currency || 'USD'
+
+        if (selectedMethod === 'stripe' && crossBorderCountries.includes(countryUpper)) {
+            finalCurrency = 'USD'
+        } else if (selectedMethod === 'paystack' && expectedPaystackCurrency) {
+            finalCurrency = expectedPaystackCurrency
+        }
+
+        // Get suggested amounts for the FINAL currency
+        const suggestedAmounts = getSuggestedAmounts(finalCurrency, store.branch === 'service' ? 'service' : 'personal')
+        const minAmount = getMinimumAmount(finalCurrency)
+        const currencySymbol = getCurrencySymbol(finalCurrency)
+
+        // Auto-set singleAmount if it's invalid for the final currency
+        // This handles the case where currency changes (e.g., NGN 10 → USD 10)
+        let finalSingleAmount = store.singleAmount
+        if (store.pricingModel === 'single') {
+            if (!finalSingleAmount || finalSingleAmount < minAmount) {
+                // Use the first suggested amount as a sensible default
+                finalSingleAmount = suggestedAmounts[0]
+                store.setPricing('single', store.tiers, finalSingleAmount)
+            }
+        }
+
+        // Basic validation (non-pricing fields)
         const validationErrors: string[] = []
         if (!store.username?.trim()) validationErrors.push('Username is required')
         if (!store.name?.trim()) validationErrors.push('Name is required')
         if (!store.country?.trim()) validationErrors.push('Country is required')
         if (!store.countryCode?.trim()) validationErrors.push('Country code is required')
 
-        // Validate pricing based on model type
+        // Validate pricing based on model type (should pass now with auto-fixed amount)
         if (store.pricingModel === 'tiers') {
-            // For tiers, check that at least one tier exists with valid amount
             if (!store.tiers || store.tiers.length === 0) {
                 validationErrors.push('At least one pricing tier is required')
             } else if (store.tiers.some(t => !t.amount || t.amount < minAmount)) {
                 validationErrors.push(`All tier amounts must be at least ${currencySymbol}${minAmount.toLocaleString()}`)
-            }
-        } else {
-            // For single pricing, validate singleAmount
-            if (!store.singleAmount || store.singleAmount < minAmount) {
-                validationErrors.push(`Minimum subscription amount is ${currencySymbol}${minAmount.toLocaleString()}`)
             }
         }
 
@@ -133,23 +152,10 @@ export default function PaymentMethodStep() {
         setError(null)
 
         try {
-            // Save payment provider to store
+            // Save payment provider and currency to store
             setPaymentProvider(selectedMethod as PaymentProvider)
-
-            // Adjust currency based on payment method selection
-            // - Stripe for cross-border countries (NG/GH/KE) → USD
-            // - Paystack → local currency
-            const crossBorderCountries = ['NG', 'GH', 'KE']
-            let finalCurrency = store.currency
-
-            if (selectedMethod === 'stripe' && crossBorderCountries.includes(countryUpper)) {
-                // Cross-border Stripe requires USD
-                finalCurrency = 'USD'
-                setCurrency('USD')
-            } else if (selectedMethod === 'paystack' && expectedPaystackCurrency) {
-                // Paystack uses local currency
-                finalCurrency = expectedPaystackCurrency
-                setCurrency(expectedPaystackCurrency)
+            if (finalCurrency !== store.currency) {
+                setCurrency(finalCurrency)
             }
 
             // Build profile data from store
@@ -163,7 +169,7 @@ export default function PaymentMethodStep() {
                 currency: finalCurrency,
                 purpose: store.branch === 'service' ? 'service' : (store.purpose || 'support'),
                 pricingModel: store.pricingModel,
-                singleAmount: store.pricingModel === 'single' ? store.singleAmount : null,
+                singleAmount: store.pricingModel === 'single' ? finalSingleAmount : null,
                 tiers: store.pricingModel === 'tiers' ? store.tiers : null,
                 paymentProvider: selectedMethod,
             }

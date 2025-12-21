@@ -1,10 +1,25 @@
 import { useState, useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Camera, Loader2, ExternalLink } from 'lucide-react'
+import { ArrowLeft, Camera, Loader2, ExternalLink, ChevronDown, Check } from 'lucide-react'
 import { Pressable, useToast, Skeleton, LoadingButton } from './components'
 import { useProfile, useUpdateProfile, uploadFile } from './api/hooks'
-import { getCurrencySymbol, formatCompactNumber, centsToDisplayAmount, calculateFeePreview } from './utils/currency'
+import { getCurrencySymbol, centsToDisplayAmount } from './utils/currency'
 import './EditPage.css'
+
+// Purpose options with labels
+type Purpose = 'tips' | 'support' | 'allowance' | 'fan_club' | 'exclusive_content' | 'service' | 'other'
+const PURPOSE_OPTIONS: { value: Purpose; label: string }[] = [
+  { value: 'support', label: 'Support Me' },
+  { value: 'tips', label: 'Tips & Appreciation' },
+  { value: 'service', label: 'Services' },
+  { value: 'fan_club', label: 'Fan Club' },
+  { value: 'exclusive_content', label: 'Exclusive Content' },
+  { value: 'allowance', label: 'Allowance' },
+  { value: 'other', label: 'Other' },
+]
+
+// Frequency options
+type Interval = 'month' | 'one_time'
 
 export default function EditPage() {
   const navigate = useNavigate()
@@ -16,12 +31,14 @@ export default function EditPage() {
 
   const profile = profileData?.profile
 
-  // Local state for editing - simplified to only essential fields
+  // Local state for editing
   const [displayName, setDisplayName] = useState('')
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [singleAmount, setSingleAmount] = useState<number>(10)
-  // Use string state for the input to allow free editing (decimals, empty string)
   const [priceInput, setPriceInput] = useState<string>('10')
+  const [purpose, setPurpose] = useState<Purpose>('support')
+  const [interval, setInterval] = useState<Interval>('month')
+  const [showPurposeDrawer, setShowPurposeDrawer] = useState(false)
   const [hasChanges, setHasChanges] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [isContinuing, setIsContinuing] = useState(false)
@@ -35,6 +52,8 @@ export default function EditPage() {
       const currency = profile.currency || 'USD'
       setDisplayName(profile.displayName || '')
       setAvatarUrl(profile.avatarUrl)
+      setPurpose((profile.purpose as Purpose) || 'support')
+      // Note: interval is per-subscription, not stored on profile. Default to 'month'
 
       const amt = profile.singleAmount ? centsToDisplayAmount(profile.singleAmount, currency) : 10
       setSingleAmount(amt)
@@ -56,12 +75,13 @@ export default function EditPage() {
     const changed =
       displayName !== (profile.displayName || '') ||
       avatarUrl !== (profile.avatarUrl || null) ||
+      purpose !== (profile.purpose || 'support') ||
       currentVal !== profileAmountDisplay
     setHasChanges(changed)
 
     // Sync numeric state for validation usage elsewhere
     setSingleAmount(currentVal)
-  }, [displayName, avatarUrl, priceInput, profile])
+  }, [displayName, avatarUrl, priceInput, purpose, profile])
 
   // ... (avatar handlers unchanged) ...
 
@@ -129,6 +149,7 @@ export default function EditPage() {
         ...profile,
         displayName,
         avatarUrl,
+        purpose,
         pricingModel: 'single',
         singleAmount,
         isPublic: true, // Force public on specific save
@@ -244,7 +265,7 @@ export default function EditPage() {
       </header>
 
       <div className="edit-page-content">
-        {/* Profile Section - Avatar + Display Name only */}
+        {/* Profile Section - Avatar + Display Name + Purpose */}
         <section className="edit-section">
           <h3 className="section-title">Profile</h3>
           <div className="profile-card">
@@ -278,15 +299,40 @@ export default function EditPage() {
                   placeholder="Your name or brand"
                 />
               </div>
+              {/* Purpose selector - compact inline */}
+              <Pressable
+                className="purpose-selector"
+                onClick={() => setShowPurposeDrawer(true)}
+              >
+                <span className="purpose-label">For</span>
+                <span className="purpose-value">
+                  {PURPOSE_OPTIONS.find(p => p.value === purpose)?.label || 'Support Me'}
+                </span>
+                <ChevronDown size={16} className="purpose-chevron" />
+              </Pressable>
             </div>
           </div>
         </section>
 
-
-
         {/* Pricing Section */}
         <section className="edit-section">
           <h3 className="section-title">Pricing</h3>
+
+          {/* Frequency toggle */}
+          <div className="pricing-toggle">
+            <Pressable
+              className={`toggle-option ${interval === 'month' ? 'active' : ''}`}
+              onClick={() => setInterval('month')}
+            >
+              Monthly
+            </Pressable>
+            <Pressable
+              className={`toggle-option ${interval === 'one_time' ? 'active' : ''}`}
+              onClick={() => setInterval('one_time')}
+            >
+              One-time
+            </Pressable>
+          </div>
 
           <div className="single-price-card">
             <span className="price-currency">{currencySymbol}</span>
@@ -298,31 +344,10 @@ export default function EditPage() {
               onChange={handlePriceChange}
               placeholder="0.00"
             />
-            <span className="price-period">/month</span>
+            <span className="price-period">{interval === 'month' ? '/month' : ''}</span>
           </div>
         </section>
 
-        {/* Fee Info Section */}
-        <section className="edit-section">
-          <h3 className="section-title">Subscription Management</h3>
-
-          {(() => {
-            const currency = profile.currency || 'USD'
-            const preview = calculateFeePreview(singleAmount || 0, currency)
-            return (
-              <div className="fee-mode-preview">
-                <div className="fee-preview-row">
-                  <span>Subscribers pay</span>
-                  <span className="fee-preview-amount">{currencySymbol}{formatCompactNumber(preview.subscriberPays)}</span>
-                </div>
-                <div className="fee-preview-row">
-                  <span>You receive</span>
-                  <span className="fee-preview-amount">{currencySymbol}{formatCompactNumber(preview.creatorReceives)}</span>
-                </div>
-              </div>
-            )
-          })()}
-        </section>
       </div>
 
       {/* Save Button */}
@@ -340,6 +365,36 @@ export default function EditPage() {
         </LoadingButton>
       </div>
 
+      {/* Purpose Drawer */}
+      {showPurposeDrawer && (
+        <>
+          <div
+            className="drawer-overlay"
+            onClick={() => setShowPurposeDrawer(false)}
+          />
+          <div className="country-drawer">
+            <div className="drawer-handle" />
+            <h3 className="drawer-title">What's this for?</h3>
+            <div className="country-list">
+              {PURPOSE_OPTIONS.map((option) => (
+                <Pressable
+                  key={option.value}
+                  className={`country-option ${purpose === option.value ? 'selected' : ''}`}
+                  onClick={() => {
+                    setPurpose(option.value)
+                    setShowPurposeDrawer(false)
+                  }}
+                >
+                  <span className="country-option-name">{option.label}</span>
+                  {purpose === option.value && (
+                    <Check size={20} className="country-option-check" />
+                  )}
+                </Pressable>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }

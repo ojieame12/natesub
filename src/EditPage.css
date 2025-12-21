@@ -934,3 +934,36 @@
     color: var(--text-secondary);
     flex-shrink: 0;
 }
+
+/* === PURPOSE SELECTOR (inline compact) === */
+.purpose-selector {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-xs);
+    padding: var(--space-sm) var(--space-md);
+    background: var(--neutral-100);
+    border-radius: var(--radius-full);
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.purpose-selector.pressed {
+    background: var(--neutral-200);
+}
+
+.purpose-label {
+    font-size: 13px;
+    color: var(--text-tertiary);
+}
+
+.purpose-value {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.purpose-chevron {
+    color: var(--text-tertiary);
+    flex-shrink: 0;
+}
