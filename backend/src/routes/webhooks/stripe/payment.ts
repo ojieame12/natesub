@@ -88,6 +88,8 @@ export async function handleChargeRefunded(event: Stripe.Event) {
 
   let feeCents: number
   let netCents: number
+  let creatorFeeCents: number | null = null
+  let subscriberFeeCents: number | null = null
 
   if (originalPayment && originalPayment.grossCents && originalPayment.grossCents > 0) {
     // Use the original payment's fee ratio for accurate refund calculation
@@ -96,19 +98,35 @@ export async function handleChargeRefunded(event: Stripe.Event) {
     const netRatio = originalPayment.netCents / originalPayment.grossCents
     feeCents = Math.round(refundAmount * feeRatio)
     netCents = Math.round(refundAmount * netRatio)
+
+    // Copy split fee breakdown from original payment (proportional to refund)
+    if (originalPayment.creatorFeeCents !== null && originalPayment.grossCents > 0) {
+      const refundRatio = refundAmount / originalPayment.grossCents
+      creatorFeeCents = Math.round(originalPayment.creatorFeeCents * refundRatio)
+    }
+    if (originalPayment.subscriberFeeCents !== null && originalPayment.grossCents > 0) {
+      const refundRatio = refundAmount / originalPayment.grossCents
+      subscriberFeeCents = Math.round(originalPayment.subscriberFeeCents * refundRatio)
+    }
   } else if (subscription.feeModel) {
     // Fallback: recalculate if original payment not found (shouldn't happen)
     // Note: This may be inaccurate for pass_to_subscriber mode
     console.warn(`[refund] Original payment not found for charge ${charge.id}, recalculating fees`)
     const creatorPurpose = subscription.creator?.profile?.purpose
-    
+
     // Check cross-border status for correct fee buffer
     const countryCode = subscription.creator?.profile?.countryCode
     const isCrossBorder = countryCode ? isStripeCrossBorderSupported(countryCode) : false
-    
+
     const feeCalc = calculateServiceFee(refundAmount, charge.currency.toUpperCase(), creatorPurpose, 'pass_to_subscriber', isCrossBorder)
     feeCents = feeCalc.feeCents
     netCents = refundAmount - feeCalc.feeCents
+
+    // For split_v1, estimate fee split
+    if (subscription.feeModel === 'split_v1') {
+      creatorFeeCents = feeCalc.creatorFeeCents || Math.round(feeCents / 2)
+      subscriberFeeCents = feeCalc.subscriberFeeCents || (feeCents - creatorFeeCents)
+    }
   } else {
     // Legacy model: fee based on creator's purpose
     const creatorPurpose = subscription.creator?.profile?.purpose as 'personal' | 'service' | null
@@ -117,7 +135,7 @@ export async function handleChargeRefunded(event: Stripe.Event) {
     netCents = legacyFees.netCents
   }
 
-  // Create refund payment record
+  // Create refund payment record with split fee fields
   await db.payment.create({
     data: {
       subscriptionId: subscription.id,
@@ -127,6 +145,8 @@ export async function handleChargeRefunded(event: Stripe.Event) {
       currency: charge.currency.toUpperCase(),
       feeCents: -feeCents, // Reverse the fee
       netCents: -netCents,
+      creatorFeeCents: creatorFeeCents !== null ? -creatorFeeCents : null,
+      subscriberFeeCents: subscriberFeeCents !== null ? -subscriberFeeCents : null,
       feeModel: subscription.feeModel,
       type: subscription.interval === 'month' ? 'recurring' : 'one_time',
       status: 'refunded',

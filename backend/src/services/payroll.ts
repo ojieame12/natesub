@@ -228,14 +228,14 @@ async function aggregatePayments(
 
   // Calculate base price (what creator set) instead of gross (what subscriber paid)
   // For split_v1 model: base = netCents + creatorFeeCents (creator's price before their 4% fee)
-  // For legacy: base = amountCents (subscriber paid = creator's price, fee absorbed or passed)
+  // For legacy: base = netCents (what creator received - consistent with line items and YTD)
   const basePriceCents = successfulPayments.reduce((sum, p) => {
     // If creatorFeeCents exists, use net + creatorFee as base price
     if (p.creatorFeeCents !== null && p.creatorFeeCents !== undefined) {
       return sum + p.netCents + p.creatorFeeCents
     }
-    // Legacy: use amountCents as base (fee was absorbed or passed separately)
-    return sum + p.amountCents
+    // Legacy: use netCents (what creator received) for consistency with line items/YTD
+    return sum + p.netCents
   }, 0)
 
   // For refunds/chargebacks, use the same logic
@@ -243,14 +243,14 @@ async function aggregatePayments(
     if (p.creatorFeeCents !== null && p.creatorFeeCents !== undefined) {
       return sum + Math.abs(p.netCents + p.creatorFeeCents)
     }
-    return sum + Math.abs(p.amountCents)
+    return sum + Math.abs(p.netCents)
   }, 0)
 
   const chargebacksCents = chargebacks.reduce((sum, p) => {
     if (p.creatorFeeCents !== null && p.creatorFeeCents !== undefined) {
       return sum + Math.abs(p.netCents + p.creatorFeeCents)
     }
-    return sum + Math.abs(p.amountCents)
+    return sum + Math.abs(p.netCents)
   }, 0)
 
   // Sum creator's fee portion only (4% in split model, or full fee for legacy)
@@ -271,7 +271,16 @@ async function aggregatePayments(
     const tierName = p.subscription?.tierName || null
     const paymentType: 'recurring' | 'one_time' = p.type === 'recurring' ? 'recurring' : 'one_time'
 
-    // Use net amount (what creator received) for income statement consistency
+    // Use base price (creator's set price) for consistency with summary
+    // For split_v1: base = netCents + creatorFeeCents
+    // For legacy: use netCents (what creator received)
+    let baseAmount: number
+    if (p.creatorFeeCents !== null && p.creatorFeeCents !== undefined) {
+      baseAmount = p.netCents + p.creatorFeeCents
+    } else {
+      baseAmount = p.netCents
+    }
+
     return {
       id: p.id,
       date: p.occurredAt,
@@ -280,7 +289,7 @@ async function aggregatePayments(
       subscriberId: p.subscription?.subscriber?.id || null,
       tierName,
       description: formatPaymentDescription(tierName, paymentType, email),
-      amount: p.netCents, // What creator actually received after fees
+      amount: baseAmount, // Base price matches "Client Payments" summary
       type: paymentType,
     }
   })
@@ -300,6 +309,7 @@ async function aggregatePayments(
  * Calculate year-to-date totals for a specific currency
  * Uses actual recorded netCents from payment records, not recomputed approximations
  * IMPORTANT: YTD must be per-currency to be mathematically valid
+ * IMPORTANT: Must account for refunds and chargebacks to be accurate
  */
 async function calculateYTD(
   userId: string,
@@ -308,28 +318,32 @@ async function calculateYTD(
 ): Promise<{ grossCents: number; netCents: number }> {
   const yearStart = new Date(asOfDate.getFullYear(), 0, 1, 0, 0, 0, 0)
 
-  const result = await db.payment.aggregate({
-    where: {
-      creatorId: userId,
-      status: 'succeeded',
-      // Only count inbound revenue (one_time, recurring) - exclude payout transfers
-      type: { in: ['one_time', 'recurring'] },
-      // Filter by currency - YTD totals must be per-currency
-      currency,
-      occurredAt: {
-        gte: yearStart,
-        lte: asOfDate,
-      },
-    },
-    _sum: {
-      amountCents: true,
-      netCents: true, // Sum actual recorded net amounts
-    },
-  })
+  // Use raw SQL to compute base price in the database
+  // This avoids loading all payments into memory for high-volume creators
+  // Base price = netCents + COALESCE(creatorFeeCents, 0) for split_v1
+  // For legacy (creatorFeeCents is NULL), this equals netCents
+  const result = await db.$queryRaw<Array<{ grossCents: bigint | null; netCents: bigint | null }>>`
+    SELECT
+      SUM("netCents" + COALESCE("creatorFeeCents", 0)) as "grossCents",
+      SUM("netCents") as "netCents"
+    FROM "Payment"
+    WHERE "creatorId" = ${userId}
+      AND "currency" = ${currency}
+      AND "occurredAt" >= ${yearStart}
+      AND "occurredAt" <= ${asOfDate}
+      AND (
+        -- Successful payments
+        ("status" = 'succeeded' AND "type" IN ('one_time', 'recurring'))
+        -- Refunds (negative values subtract automatically)
+        OR ("status" = 'refunded' AND "type" IN ('one_time', 'recurring', 'refund'))
+        -- Chargebacks (negative values subtract automatically)
+        OR ("status" IN ('dispute_lost', 'disputed') AND "type" IN ('one_time', 'recurring'))
+      )
+  `
 
-  const grossCents = result._sum.amountCents || 0
-  // Use actual recorded net amounts instead of recomputing from gross
-  const netCents = result._sum.netCents || 0
+  // Handle bigint conversion and null safety
+  const grossCents = result[0]?.grossCents ? Number(result[0].grossCents) : 0
+  const netCents = result[0]?.netCents ? Number(result[0].netCents) : 0
 
   return { grossCents, netCents }
 }
@@ -832,11 +846,17 @@ export interface CustomStatementResult {
   paymentCount: number
   payments: PaymentItem[]
   paymentsTruncated: boolean // True if payments array was capped at 100
+  totalsIncomplete: boolean // True if payment query hit limit (totals may be inaccurate)
   currency: string
   ytdGrossCents: number
   ytdNetCents: number
   otherCurrencies: string[] // Currencies excluded from this statement
 }
+
+// Maximum days allowed for custom statement date range (1 year)
+const MAX_STATEMENT_DAYS = 365
+// Maximum payments to load for totals calculation (prevents memory issues)
+const MAX_STATEMENT_PAYMENTS = 10000
 
 /**
  * Generate a custom statement for a date range and optional subscriber filter
@@ -847,6 +867,15 @@ export async function generateCustomStatement(
   request: CustomStatementRequest
 ): Promise<CustomStatementResult | null> {
   const { startDate, endDate, subscriberIds } = request
+
+  // Guardrail: Validate date range doesn't exceed maximum
+  const daysDiff = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24))
+  if (daysDiff > MAX_STATEMENT_DAYS) {
+    throw new Error(`Date range exceeds maximum of ${MAX_STATEMENT_DAYS} days. Please select a shorter range.`)
+  }
+  if (daysDiff < 0) {
+    throw new Error('End date must be after start date.')
+  }
 
   // Get profile for currency
   const profile = await db.profile.findUnique({
@@ -894,6 +923,7 @@ export async function generateCustomStatement(
   }
 
   // Get successful inbound payments (filtered by currency)
+  // Limit query to prevent memory issues for high-volume creators
   const successfulPayments = await db.payment.findMany({
     where: currencyFilteredWhere,
     include: {
@@ -910,7 +940,11 @@ export async function generateCustomStatement(
       },
     },
     orderBy: { occurredAt: 'desc' },
+    take: MAX_STATEMENT_PAYMENTS,
   })
+
+  // Check if we hit the limit (totals may be incomplete)
+  const paymentLimitReached = successfulPayments.length >= MAX_STATEMENT_PAYMENTS
 
   // Get refunds in the same period (same currency)
   // Include both Stripe refunds (type stays original) and Paystack refunds (type='refund')
@@ -944,25 +978,27 @@ export async function generateCustomStatement(
   })
 
   // Calculate base price (what creator set) instead of gross (what subscriber paid)
+  // For split_v1: base = netCents + creatorFeeCents
+  // For legacy: base = netCents (consistent with line items and YTD)
   const grossCents = successfulPayments.reduce((sum, p) => {
     if (p.creatorFeeCents !== null && p.creatorFeeCents !== undefined) {
       return sum + p.netCents + p.creatorFeeCents
     }
-    return sum + p.amountCents
+    return sum + p.netCents
   }, 0)
 
   const refundsCents = refunds.reduce((sum, p) => {
     if (p.creatorFeeCents !== null && p.creatorFeeCents !== undefined) {
       return sum + Math.abs(p.netCents + p.creatorFeeCents)
     }
-    return sum + Math.abs(p.amountCents)
+    return sum + Math.abs(p.netCents)
   }, 0)
 
   const chargebacksCents = chargebacks.reduce((sum, p) => {
     if (p.creatorFeeCents !== null && p.creatorFeeCents !== undefined) {
       return sum + Math.abs(p.netCents + p.creatorFeeCents)
     }
-    return sum + Math.abs(p.amountCents)
+    return sum + Math.abs(p.netCents)
   }, 0)
 
   // Sum creator's fee portion only (4% in split model)
@@ -983,7 +1019,17 @@ export async function generateCustomStatement(
     const tierName = p.subscription?.tierName || null
     const paymentType: 'recurring' | 'one_time' = p.type === 'recurring' ? 'recurring' : 'one_time'
 
-    // Use net amount (what creator received) for income statement consistency
+    // Use base price (creator's set price) for consistency with summary
+    // For split_v1: base = netCents + creatorFeeCents
+    // For legacy: use amountCents (gross) or netCents if fees were absorbed
+    let baseAmount: number
+    if (p.creatorFeeCents !== null && p.creatorFeeCents !== undefined) {
+      baseAmount = p.netCents + p.creatorFeeCents
+    } else {
+      // Legacy: use netCents (what creator received)
+      baseAmount = p.netCents
+    }
+
     return {
       id: p.id,
       date: p.occurredAt,
@@ -992,7 +1038,7 @@ export async function generateCustomStatement(
       subscriberId: p.subscription?.subscriber?.id || null,
       tierName,
       description: formatPaymentDescription(tierName, paymentType, email),
-      amount: p.netCents, // What creator actually received after fees
+      amount: baseAmount, // Base price matches summary's "Client Payments"
       type: paymentType,
     }
   })
@@ -1015,6 +1061,7 @@ export async function generateCustomStatement(
     paymentCount: successfulPayments.length,
     payments: truncatedPayments,
     paymentsTruncated: payments.length > maxPayments,
+    totalsIncomplete: paymentLimitReached,
     currency: statementCurrency,
     ytdGrossCents: ytd.grossCents,
     ytdNetCents: ytd.netCents,

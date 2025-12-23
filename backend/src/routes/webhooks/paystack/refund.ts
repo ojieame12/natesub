@@ -46,6 +46,8 @@ export async function handlePaystackRefundProcessed(data: any, eventId: string) 
   const refundAmount = amount || originalPayment.amountCents
   let feeCents = 0
   let netCents = refundAmount
+  let creatorFeeCents: number | null = null
+  let subscriberFeeCents: number | null = null
 
   if (originalPayment.grossCents && originalPayment.feeCents) {
     // Use original fee ratio for accurate refund calculation
@@ -53,9 +55,19 @@ export async function handlePaystackRefundProcessed(data: any, eventId: string) 
     const netRatio = originalPayment.netCents / originalPayment.grossCents
     feeCents = Math.round(refundAmount * feeRatio)
     netCents = Math.round(refundAmount * netRatio)
+
+    // Copy split fee breakdown from original payment (proportional to refund)
+    if (originalPayment.creatorFeeCents !== null && originalPayment.grossCents > 0) {
+      const refundRatio = refundAmount / originalPayment.grossCents
+      creatorFeeCents = Math.round(originalPayment.creatorFeeCents * refundRatio)
+    }
+    if (originalPayment.subscriberFeeCents !== null && originalPayment.grossCents > 0) {
+      const refundRatio = refundAmount / originalPayment.grossCents
+      subscriberFeeCents = Math.round(originalPayment.subscriberFeeCents * refundRatio)
+    }
   }
 
-  // Create refund payment record (negative amounts)
+  // Create refund payment record (negative amounts) with split fee fields
   // Use eventId for uniqueness to support multiple partial refunds for same transaction
   await db.payment.create({
     data: {
@@ -66,6 +78,8 @@ export async function handlePaystackRefundProcessed(data: any, eventId: string) 
       currency: currency?.toUpperCase() || originalPayment.currency,
       feeCents: -feeCents,
       netCents: -netCents,
+      creatorFeeCents: creatorFeeCents !== null ? -creatorFeeCents : null,
+      subscriberFeeCents: subscriberFeeCents !== null ? -subscriberFeeCents : null,
       type: 'refund',
       status: 'refunded',
       paystackEventId: eventId,

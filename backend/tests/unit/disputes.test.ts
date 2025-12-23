@@ -313,3 +313,159 @@ describe('Stripe Dispute Handlers', () => {
     expect(true).toBe(true)
   })
 })
+
+describe('Dispute Fee Breakdown Fallback', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  const mockDisputeData = {
+    id: 12345,
+    reference: 'TXN_ref_123',
+    amount: 50000,
+    currency: 'NGN',
+    reason: 'customer_complaint',
+    status: 'awaiting_merchant_response',
+  }
+
+  it('should copy creatorFeeCents from original payment when present (split_v1)', async () => {
+    const mockOriginalPayment = {
+      id: 'pmt-original',
+      creatorId: 'creator-123',
+      subscriberId: 'subscriber-456',
+      grossCents: 52000, // Original gross
+      netCents: 48000, // After 4% creator fee
+      creatorFeeCents: 2000, // 4% of 50000
+      subscriberFeeCents: 2000,
+      feeModel: 'split_v1',
+      subscription: {
+        id: 'sub-789',
+        creatorId: 'creator-123',
+        subscriberId: 'subscriber-456',
+        ltvCents: 100000,
+        interval: 'month',
+      },
+    }
+
+    mockFindFirst
+      .mockResolvedValueOnce(mockOriginalPayment) // Original payment lookup
+      .mockResolvedValueOnce(null) // Idempotency check
+
+    mockFindUnique
+      .mockResolvedValueOnce({ disputeCount: 0 })
+      .mockResolvedValueOnce({ email: 'creator@test.com', profile: { displayName: 'Creator' } })
+
+    await handlePaystackDisputeCreated(mockDisputeData, 'evt-123')
+
+    // Should create dispute with proportional fee breakdown
+    expect(mockCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          // Proportional: 50000/52000 = 0.9615
+          creatorFeeCents: expect.any(Number), // Should be -1923 (rounded)
+          subscriberFeeCents: expect.any(Number), // Should be -1923 (rounded)
+          feeModel: 'split_v1',
+        }),
+      })
+    )
+  })
+
+  it('should leave fee fields null when original payment has no creatorFeeCents (legacy)', async () => {
+    const mockOriginalPayment = {
+      id: 'pmt-original',
+      creatorId: 'creator-123',
+      subscriberId: 'subscriber-456',
+      grossCents: 50000,
+      netCents: 46000, // After 8% fee
+      creatorFeeCents: null, // Legacy payment
+      subscriberFeeCents: null,
+      feeModel: null,
+      subscription: {
+        id: 'sub-789',
+        creatorId: 'creator-123',
+        subscriberId: 'subscriber-456',
+        ltvCents: 100000,
+        interval: 'month',
+      },
+    }
+
+    mockFindFirst
+      .mockResolvedValueOnce(mockOriginalPayment)
+      .mockResolvedValueOnce(null)
+
+    mockFindUnique
+      .mockResolvedValueOnce({ disputeCount: 0 })
+      .mockResolvedValueOnce({ email: 'creator@test.com', profile: { displayName: 'Creator' } })
+
+    await handlePaystackDisputeCreated(mockDisputeData, 'evt-123')
+
+    // Should create dispute with null fee fields (legacy fallback)
+    expect(mockCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          creatorFeeCents: null,
+          subscriberFeeCents: null,
+          feeModel: null,
+        }),
+      })
+    )
+  })
+
+  it('should fallback gracefully when original payment not found', async () => {
+    // This tests the edge case where original payment lookup fails
+    // The dispute handler should still work but without fee breakdown
+    mockFindFirst.mockResolvedValueOnce(null)
+
+    await handlePaystackDisputeCreated(mockDisputeData, 'evt-123')
+
+    // Should not create any records when original payment is not found
+    expect(mockCreate).not.toHaveBeenCalled()
+  })
+
+  it('should handle partial disputes proportionally', async () => {
+    const mockOriginalPayment = {
+      id: 'pmt-original',
+      creatorId: 'creator-123',
+      subscriberId: 'subscriber-456',
+      grossCents: 100000, // 1000 NGN
+      netCents: 96000, // After 4% creator fee
+      creatorFeeCents: 4000, // 4% of 100000
+      subscriberFeeCents: 4000,
+      feeModel: 'split_v1',
+      subscription: {
+        id: 'sub-789',
+        creatorId: 'creator-123',
+        subscriberId: 'subscriber-456',
+        ltvCents: 200000,
+        interval: 'month',
+      },
+    }
+
+    // Partial dispute for 50% of original
+    const partialDisputeData = {
+      ...mockDisputeData,
+      amount: 50000, // 50% of original
+    }
+
+    mockFindFirst
+      .mockResolvedValueOnce(mockOriginalPayment)
+      .mockResolvedValueOnce(null)
+
+    mockFindUnique
+      .mockResolvedValueOnce({ disputeCount: 0 })
+      .mockResolvedValueOnce({ email: 'creator@test.com', profile: { displayName: 'Creator' } })
+
+    await handlePaystackDisputeCreated(partialDisputeData, 'evt-123')
+
+    // Should create dispute with 50% of original fees
+    expect(mockCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          amountCents: -50000,
+          // creatorFeeCents should be -2000 (50% of 4000)
+          // netCents should be -48000 (50% of 96000)
+        }),
+      })
+    )
+  })
+})

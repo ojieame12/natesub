@@ -22,7 +22,34 @@ export async function handleDisputeCreated(event: Stripe.Event) {
 
   if (!subscription) return
 
-  // Create dispute payment record (funds held)
+  // Find the original payment to copy fee breakdown
+  const originalPayment = await db.payment.findFirst({
+    where: {
+      subscriptionId: subscription.id,
+      stripeChargeId: dispute.charge as string,
+      status: 'succeeded',
+    },
+  })
+
+  // Calculate proportional fee breakdown if original payment has split fees
+  let creatorFeeCents: number | null = null
+  let subscriberFeeCents: number | null = null
+  let netCents = -dispute.amount
+
+  if (originalPayment && originalPayment.grossCents && originalPayment.grossCents > 0) {
+    const disputeRatio = dispute.amount / originalPayment.grossCents
+
+    if (originalPayment.creatorFeeCents !== null) {
+      creatorFeeCents = -Math.round(originalPayment.creatorFeeCents * disputeRatio)
+    }
+    if (originalPayment.subscriberFeeCents !== null) {
+      subscriberFeeCents = -Math.round(originalPayment.subscriberFeeCents * disputeRatio)
+    }
+    // Use proportional net for partial disputes
+    netCents = -Math.round(originalPayment.netCents * disputeRatio)
+  }
+
+  // Create dispute payment record (funds held) with fee breakdown
   await db.payment.create({
     data: {
       subscriptionId: subscription.id,
@@ -31,7 +58,10 @@ export async function handleDisputeCreated(event: Stripe.Event) {
       amountCents: -dispute.amount, // Negative - funds held
       currency: dispute.currency.toUpperCase(),
       feeCents: 0,
-      netCents: -dispute.amount,
+      netCents,
+      creatorFeeCents,
+      subscriberFeeCents,
+      feeModel: originalPayment?.feeModel || null,
       type: subscription.interval === 'month' ? 'recurring' : 'one_time',
       status: 'disputed', // Dispute is open, funds held - use 'disputed' for payroll tracking
       stripeDisputeId: dispute.id, // Track dispute for later resolution

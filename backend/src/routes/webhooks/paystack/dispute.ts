@@ -59,7 +59,25 @@ export async function handlePaystackDisputeCreated(data: PaystackDisputeData, ev
 
   const subscription = originalPayment.subscription
 
-  // Create dispute payment record (funds held)
+  // Calculate proportional fee breakdown if original payment has split fees
+  let creatorFeeCents: number | null = null
+  let subscriberFeeCents: number | null = null
+  let netCents = -amount
+
+  if (originalPayment.grossCents && originalPayment.grossCents > 0) {
+    const disputeRatio = amount / originalPayment.grossCents
+
+    if (originalPayment.creatorFeeCents !== null) {
+      creatorFeeCents = -Math.round(originalPayment.creatorFeeCents * disputeRatio)
+    }
+    if (originalPayment.subscriberFeeCents !== null) {
+      subscriberFeeCents = -Math.round(originalPayment.subscriberFeeCents * disputeRatio)
+    }
+    // Use proportional net for partial disputes
+    netCents = -Math.round(originalPayment.netCents * disputeRatio)
+  }
+
+  // Create dispute payment record (funds held) with fee breakdown
   await db.payment.create({
     data: {
       subscriptionId: subscription.id,
@@ -68,7 +86,10 @@ export async function handlePaystackDisputeCreated(data: PaystackDisputeData, ev
       amountCents: -amount, // Negative - funds held
       currency: currency?.toUpperCase() || 'NGN',
       feeCents: 0,
-      netCents: -amount,
+      netCents,
+      creatorFeeCents,
+      subscriberFeeCents,
+      feeModel: originalPayment.feeModel,
       type: subscription.interval === 'month' ? 'recurring' : 'one_time',
       status: 'disputed',
       paystackDisputeId: String(disputeId),
