@@ -13,7 +13,8 @@ export default function SubscribeEditorial() {
     const { username: urlUsername } = useParams<{ username: string }>()
 
     const {
-        name,
+        firstName,
+        lastName,
         avatarUrl,
         pricingModel,
         singleAmount,
@@ -30,7 +31,7 @@ export default function SubscribeEditorial() {
     )
     const [isSubscribed, setIsSubscribed] = useState(false)
 
-    const displayName = name || urlUsername || 'Someone'
+    const displayName = `${firstName} ${lastName}`.trim() || urlUsername || 'Someone'
     const selectedTier = tiers.find(t => t.id === selectedTierId)
     const currentAmount = pricingModel === 'single' ? singleAmount : selectedTier?.amount
 

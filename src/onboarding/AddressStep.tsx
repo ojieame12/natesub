@@ -11,7 +11,7 @@ export default function AddressStep() {
         city, setCity,
         state, setState,
         zip, setZip,
-        country, countryCode,
+        country,
         nextStep, prevStep, currentStep
     } = useOnboardingStore()
     const { mutateAsync: saveProgress } = useSaveOnboardingProgress()

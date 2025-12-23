@@ -160,7 +160,6 @@ describe('AddressStep', () => {
       useOnboardingStore.setState({ currentStep: 4 })
 
       renderWithProviders(<AddressStep />)
-      const user = userEvent.setup()
 
       // Find back button by its accessible role or by clicking
       const backButton = document.querySelector('.onboarding-back')

@@ -160,7 +160,7 @@ describe('PaymentMethodStep', () => {
       zip: '  94102  ',
     })
 
-    vi.mocked(api.stripe.connect).mockResolvedValue({ alreadyOnboarded: true })
+    vi.mocked(api.stripe.connect).mockResolvedValue({ success: true, alreadyOnboarded: true })
 
     renderWithProviders(<PaymentMethodStep />)
 
@@ -192,7 +192,7 @@ describe('PaymentMethodStep', () => {
       currentStep: 6, // Payment step in 8-step flow
     })
 
-    vi.mocked(api.stripe.connect).mockResolvedValue({ alreadyOnboarded: true })
+    vi.mocked(api.stripe.connect).mockResolvedValue({ success: true, alreadyOnboarded: true })
 
     renderWithProviders(<PaymentMethodStep />)
 
@@ -222,7 +222,7 @@ describe('PaymentMethodStep', () => {
       currentStep: 5, // Payment step in 7-step flow (no address)
     })
 
-    const mockConnectRes = { onboardingUrl: 'https://connect.stripe.com/setup' }
+    const mockConnectRes = { success: true, onboardingUrl: 'https://connect.stripe.com/setup' }
     vi.mocked(api.stripe.connect).mockResolvedValue(mockConnectRes)
 
     // Mock sessionStorage
@@ -261,7 +261,7 @@ describe('PaymentMethodStep', () => {
       currentStep: 6, // Payment step in 8-step flow (with address)
     })
 
-    const mockConnectRes = { onboardingUrl: 'https://connect.stripe.com/setup' }
+    const mockConnectRes = { success: true, onboardingUrl: 'https://connect.stripe.com/setup' }
     vi.mocked(api.stripe.connect).mockResolvedValue(mockConnectRes)
 
     // Mock sessionStorage
