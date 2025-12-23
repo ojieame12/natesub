@@ -3,6 +3,7 @@ import { screen, waitFor, fireEvent } from '@testing-library/react'
 import StripeComplete from './StripeComplete'
 import { renderWithProviders } from './test/testUtils'
 import { api } from './api'
+import { useOnboardingStore } from './onboarding/store'
 
 // Mock API
 vi.mock('./api', () => ({
@@ -37,6 +38,7 @@ describe('StripeComplete', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     sessionStorage.clear()
+    useOnboardingStore.getState().reset()
   })
 
   // Removed useFakeTimers to allow async useEffects to run naturally in waitFor
@@ -91,19 +93,39 @@ describe('StripeComplete', () => {
     expect(screen.getByText(/Checking status/)).toBeInTheDocument()
   })
 
-  it('navigates to dashboard on continue', async () => {
+  it('navigates to review step 7 for US users (8-step flow)', async () => {
+    // US users have 8-step flow, review is at step 7
+    useOnboardingStore.setState({ countryCode: 'US' })
     vi.mocked(api.stripe.getStatus).mockResolvedValue({ connected: true, status: 'active', details: {} as any })
-    
+
     renderWithProviders(<StripeComplete />)
-    
+
     await waitFor(() => {
       expect(screen.getByText('Continue to Dashboard')).toBeInTheDocument()
     })
-    
+
     const continueBtn = screen.getByText('Continue to Dashboard')
     fireEvent.click(continueBtn)
-    
-    // Checks that it navigates to dashboard (default behavior if no source)
+
+    // US has 8-step flow, review is at step 7
+    expect(mockNavigate).toHaveBeenCalledWith('/onboarding?step=7', { replace: true })
+  })
+
+  it('navigates to review step 6 for NG users (7-step flow)', async () => {
+    // NG users skip address step, have 7-step flow, review is at step 6
+    useOnboardingStore.setState({ countryCode: 'NG' })
+    vi.mocked(api.stripe.getStatus).mockResolvedValue({ connected: true, status: 'active', details: {} as any })
+
+    renderWithProviders(<StripeComplete />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Continue to Dashboard')).toBeInTheDocument()
+    })
+
+    const continueBtn = screen.getByText('Continue to Dashboard')
+    fireEvent.click(continueBtn)
+
+    // NG has 7-step flow (no address), review is at step 6
     expect(mockNavigate).toHaveBeenCalledWith('/onboarding?step=6', { replace: true })
   })
 

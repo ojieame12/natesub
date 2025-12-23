@@ -52,12 +52,21 @@ interface StripeDetails {
 
 type FlowSource = 'onboarding' | 'settings' | 'unknown'
 
+// Countries that skip the address step (cross-border recipients)
+const SKIP_ADDRESS_COUNTRIES = ['NG', 'GH', 'KE']
+
+// Calculate review step based on country (6 for 7-step flow, 7 for 8-step flow)
+function getReviewStep(countryCode: string | null): number {
+  const skipAddress = SKIP_ADDRESS_COUNTRIES.includes((countryCode || '').toUpperCase())
+  return skipAddress ? 6 : 7
+}
+
 export default function StripeComplete() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { data: profileData } = useProfile()
   const profile = profileData?.profile
-  const { reset: resetOnboarding } = useOnboardingStore()
+  const { reset: resetOnboarding, countryCode } = useOnboardingStore()
 
   const [status, setStatus] = useState<'loading' | 'success' | 'pending' | 'restricted' | 'network_error'>('loading')
   const [details, setDetails] = useState<StripeDetails | null>(null)
@@ -271,17 +280,18 @@ export default function StripeComplete() {
       sessionStorage.removeItem('stripe_return_to')
       navigate(returnTo, { replace: true })
     } else if (source === 'onboarding') {
-      // Return to Onboarding Step 6 (Launch Review)
-      // Step indices are 0-based, so 6 is the 7th step (Launch Review)
-      navigate('/onboarding?step=6', { replace: true })
+      // Return to Review step (dynamic based on country/flow length)
+      const reviewStep = getReviewStep(countryCode)
+      navigate(`/onboarding?step=${reviewStep}`, { replace: true })
     } else if (profile && !profile.isPublic) {
-      // Fallback: If source is unknown (lost session) but profile is not public, 
+      // Fallback: If source is unknown (lost session) but profile is not public,
       // assume we are in onboarding flow and need to launch.
-      navigate('/onboarding?step=6', { replace: true })
+      const reviewStep = getReviewStep(countryCode)
+      navigate(`/onboarding?step=${reviewStep}`, { replace: true })
     } else {
       navigate('/dashboard', { replace: true })
     }
-  }, [navigate, source, profile])
+  }, [navigate, source, profile, countryCode])
 
   // Auto-continue after success for a smoother flow (especially on mobile).
   // Only do this when user came from a known flow, so manual visits don't instantly redirect away.
@@ -317,7 +327,8 @@ export default function StripeComplete() {
       sessionStorage.removeItem('stripe_return_to')
       navigate(returnTo, { replace: true })
     } else if (source === 'onboarding') {
-      navigate('/onboarding?step=6', { replace: true })
+      const reviewStep = getReviewStep(countryCode)
+      navigate(`/onboarding?step=${reviewStep}`, { replace: true })
     } else {
       navigate('/dashboard', { replace: true })
     }
@@ -421,15 +432,15 @@ export default function StripeComplete() {
                     <ArrowRight size={16} className="fee-arrow" />
                     <div className="fee-step">
                       <span className="fee-amount">${subscriberPays.toFixed(2).replace(/\.00$/, '')}</span>
-                      <span className="fee-label">Subscriber pays (+4%)</span>
+                      <span className="fee-label">Subscriber pays</span>
                     </div>
                     <ArrowRight size={16} className="fee-arrow" />
                     <div className="fee-step">
                       <span className="fee-amount">${creatorReceives.toFixed(2).replace(/\.00$/, '')}</span>
-                      <span className="fee-label">You receive (-4%)</span>
+                      <span className="fee-label">You receive</span>
                     </div>
                   </div>
-                  <p className="fee-note">8% total fee split evenly: subscriber pays 4%, you pay 4%.</p>
+                  <p className="fee-note">Secure payment (4%) + Instant payout (4%) = 8% total</p>
                 </div>
               )
             })()}

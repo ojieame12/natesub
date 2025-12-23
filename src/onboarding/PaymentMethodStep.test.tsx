@@ -209,7 +209,7 @@ describe('PaymentMethodStep', () => {
     })
   })
 
-  it('sets stripe_return_to to next step (currentStep + 1)', async () => {
+  it('sets stripe_return_to to next step (currentStep + 1) for NG 7-step flow', async () => {
     useOnboardingStore.setState({
       username: 'testuser',
       firstName: 'Test',
@@ -239,8 +239,47 @@ describe('PaymentMethodStep', () => {
     fireEvent.click(screen.getByText('Connect with Stripe'))
 
     await waitFor(() => {
-      // Should set stripe_return_to to currentStep + 1 (6 = Review step)
+      // Should set stripe_return_to to currentStep + 1 (6 = Review step for NG)
       expect(setItemSpy).toHaveBeenCalledWith('stripe_return_to', '/onboarding?step=6')
+    })
+
+    // Cleanup
+    setItemSpy.mockRestore()
+    ;(window as any).location = originalLocation
+  })
+
+  it('sets stripe_return_to to step 7 for US 8-step flow', async () => {
+    useOnboardingStore.setState({
+      username: 'testuser',
+      firstName: 'Test',
+      lastName: 'User',
+      country: 'United States',
+      countryCode: 'US',
+      currency: 'USD',
+      pricingModel: 'single',
+      singleAmount: 10,
+      currentStep: 6, // Payment step in 8-step flow (with address)
+    })
+
+    const mockConnectRes = { onboardingUrl: 'https://connect.stripe.com/setup' }
+    vi.mocked(api.stripe.connect).mockResolvedValue(mockConnectRes)
+
+    // Mock sessionStorage
+    const setItemSpy = vi.spyOn(Storage.prototype, 'setItem')
+
+    // Mock window.location
+    const originalLocation = window.location
+    delete (window as any).location
+    window.location = { href: '' } as any
+
+    renderWithProviders(<PaymentMethodStep />)
+
+    fireEvent.click(screen.getByText('Stripe'))
+    fireEvent.click(screen.getByText('Connect with Stripe'))
+
+    await waitFor(() => {
+      // Should set stripe_return_to to currentStep + 1 (7 = Review step for US)
+      expect(setItemSpy).toHaveBeenCalledWith('stripe_return_to', '/onboarding?step=7')
     })
 
     // Cleanup

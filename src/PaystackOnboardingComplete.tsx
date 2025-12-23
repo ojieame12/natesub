@@ -3,17 +3,28 @@ import { useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { Loader2 } from 'lucide-react'
 import { setPaymentConfirmed } from './utils/paymentConfirmed'
+import { useOnboardingStore } from './onboarding/store'
 import './StripeComplete.css'
+
+// Countries that skip the address step (cross-border recipients)
+const SKIP_ADDRESS_COUNTRIES = ['NG', 'GH', 'KE']
+
+// Calculate review step based on country (6 for 7-step flow, 7 for 8-step flow)
+function getReviewStep(countryCode: string | null): number {
+  const skipAddress = SKIP_ADDRESS_COUNTRIES.includes((countryCode || '').toUpperCase())
+  return skipAddress ? 6 : 7
+}
 
 /**
  * PaystackOnboardingComplete - Handles redirect after Paystack bank setup
  *
- * This page auto-redirects to the review/launch step (step 6).
+ * This page auto-redirects to the review/launch step (dynamic based on flow).
  * No intermediate UI is shown - users go straight to setting up their page.
  */
 export default function PaystackOnboardingComplete() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const { countryCode } = useOnboardingStore()
   const hasProcessed = useRef(false)
 
   useEffect(() => {
@@ -46,10 +57,11 @@ export default function PaystackOnboardingComplete() {
         }
       })
 
-      // Immediately redirect to review/launch step
-      navigate('/onboarding?step=6', { replace: true })
+      // Immediately redirect to review/launch step (dynamic based on country)
+      const reviewStep = getReviewStep(countryCode)
+      navigate(`/onboarding?step=${reviewStep}`, { replace: true })
     }
-  }, [navigate, queryClient])
+  }, [navigate, queryClient, countryCode])
 
   // Show minimal loading state while redirecting
   return (
