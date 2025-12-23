@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { FileText, ChevronRight, Calendar, ArrowLeft } from 'lucide-react'
+import { FileText, ChevronRight, Calendar, ArrowLeft, AlertTriangle } from 'lucide-react'
 import type { PayPeriod } from '../api/client'
 import { Pressable, Skeleton, ErrorState } from '../components'
 import { usePayrollPeriods, useCurrentUser } from '../api/hooks'
@@ -38,8 +38,17 @@ export default function PayrollHistory() {
 
     const { data, isLoading, isError, refetch } = usePayrollPeriods()
     const periods = data?.periods || []
-    const ytdTotalCents = data?.ytdTotalCents || 0
+    const ytdByCurrency = data?.ytdByCurrency || {}
+    const warnings = data?.warnings || []
     const groupedPeriods = groupByMonth(periods)
+    const hasAddressWarning = warnings.some(w => w.type === 'missing_address')
+
+    // Get YTD entries sorted by user's preferred currency first
+    const ytdEntries = Object.entries(ytdByCurrency).sort(([a], [b]) => {
+        if (a === currencyCode) return -1
+        if (b === currencyCode) return 1
+        return a.localeCompare(b)
+    })
 
     return (
         <div className="payroll-page">
@@ -96,11 +105,36 @@ export default function PayrollHistory() {
                     </div>
                 ) : (
                     <>
-                        {/* YTD Summary */}
+                        {/* YTD Summary - per currency for mathematical accuracy */}
                         <div className="payroll-ytd-card">
                             <span className="payroll-ytd-label">Year to Date</span>
-                            <span className="payroll-ytd-amount">{formatCurrencyFromCents(ytdTotalCents, currencyCode)}</span>
+                            {ytdEntries.length === 0 ? (
+                                <span className="payroll-ytd-amount">{formatCurrencyFromCents(0, currencyCode)}</span>
+                            ) : ytdEntries.length === 1 ? (
+                                <span className="payroll-ytd-amount">
+                                    {formatCurrencyFromCents(ytdEntries[0][1], ytdEntries[0][0])}
+                                </span>
+                            ) : (
+                                <div className="payroll-ytd-multi">
+                                    {ytdEntries.map(([currency, amount]) => (
+                                        <span key={currency} className="payroll-ytd-amount">
+                                            {formatCurrencyFromCents(amount, currency)}
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
                         </div>
+
+                        {/* Address Warning */}
+                        {hasAddressWarning && (
+                            <Pressable
+                                className="payroll-warning-banner"
+                                onClick={() => navigate('/settings')}
+                            >
+                                <AlertTriangle size={16} />
+                                <span>Add your address in Settings for complete income statements</span>
+                            </Pressable>
+                        )}
 
                         {/* Grouped Periods */}
                         {Object.entries(groupedPeriods).map(([month, monthPeriods]) => (

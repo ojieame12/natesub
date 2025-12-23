@@ -97,6 +97,16 @@
     text-overflow: ellipsis;
 }
 
+.payroll-ytd-multi {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.payroll-ytd-multi .payroll-ytd-amount {
+    font-size: 24px;
+}
+
 /* === EMPTY STATE === */
 .payroll-empty {
     display: flex;
@@ -600,4 +610,66 @@
     color: var(--text-tertiary);
     max-width: 280px;
     line-height: 1.5;
+}
+
+/* ===========================================
+   WARNING BANNER
+   =========================================== */
+
+.payroll-warning-banner {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-md) var(--space-lg);
+    background: var(--status-warning-soft);
+    color: #b45309;
+    border-radius: var(--radius-lg);
+    font-size: 13px;
+    font-weight: 500;
+    margin-bottom: var(--space-lg);
+    transition: all 0.15s ease;
+}
+
+.payroll-warning-banner.pressed {
+    transform: scale(0.98);
+    opacity: 0.9;
+}
+
+/* ===========================================
+   VERIFICATION ENHANCEMENTS
+   =========================================== */
+
+.payroll-verified-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: var(--space-sm) var(--space-md);
+    background: var(--status-success-soft);
+    color: var(--status-success);
+    border-radius: var(--radius-lg);
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: var(--space-lg);
+}
+
+.payroll-verify-download-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-sm);
+    width: 100%;
+    max-width: 320px;
+    padding: var(--space-md) var(--space-lg);
+    background: var(--neutral-900);
+    color: white;
+    border-radius: var(--radius-lg);
+    font-size: 15px;
+    font-weight: 600;
+    transition: all 0.15s ease;
+    margin-bottom: var(--space-lg);
+}
+
+.payroll-verify-download-btn.pressed {
+    transform: scale(0.98);
+    opacity: 0.9;
 }

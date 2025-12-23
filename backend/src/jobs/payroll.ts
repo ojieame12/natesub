@@ -8,7 +8,7 @@ import {
   getPeriodBoundaries,
   getPayrollPeriod,
 } from '../services/payroll.js'
-import { generateAndUploadPayStatement, type PayStatementData } from '../services/pdf.js'
+import { generateAndUploadPayStatement, type IncomeStatementData, type PaymentRecord } from '../services/pdf.js'
 import { setPdfUrl } from '../services/payroll.js'
 import { env } from '../config/env.js'
 
@@ -144,25 +144,70 @@ export async function generatePayrollPeriods(): Promise<PayrollJobResult> {
           if (user?.profile) {
             const verificationUrl = `${env.APP_URL}/verify/${period.verificationCode}`
 
-            const pdfData: PayStatementData = {
-              creatorName: user.profile.displayName,
-              creatorEmail: user.email,
+            // Get active subscriber count
+            const activeSubscribers = await db.subscription.count({
+              where: {
+                creatorId,
+                status: { in: ['active', 'past_due'] },
+              },
+            })
+
+            // Get first payment date for "earning since"
+            const firstPayment = await db.payment.findFirst({
+              where: { creatorId, status: 'succeeded' },
+              orderBy: { occurredAt: 'asc' },
+              select: { occurredAt: true },
+            })
+            const earningsSince = firstPayment?.occurredAt || fullPeriod.periodStart
+
+            // Calculate months since first payment for average
+            const monthsActive = Math.max(1, Math.ceil(
+              (new Date().getTime() - earningsSince.getTime()) / (30 * 24 * 60 * 60 * 1000)
+            ))
+            const avgMonthlyEarnings = Math.round(fullPeriod.ytdNetCents / monthsActive)
+
+            // Build payments array from period payments
+            // Use formatted description from payroll service, not raw email
+            const payments: PaymentRecord[] = fullPeriod.payments.map((p) => ({
+              date: p.date,
+              amount: p.amount,
+              description: p.description || 'Subscription payment',
+            }))
+
+            // Count YTD payments - filter by period currency for accuracy
+            const ytdPaymentCount = await db.payment.count({
+              where: {
+                creatorId,
+                status: 'succeeded',
+                currency: fullPeriod.currency, // Match period currency
+                occurredAt: { gte: new Date(new Date().getFullYear(), 0, 1) },
+              },
+            })
+
+            const pdfData: IncomeStatementData = {
+              payeeName: user.profile.displayName,
+              payeeEmail: user.email,
+              payeeAddress: user.profile.address ? {
+                street: user.profile.address,
+                city: user.profile.city || undefined,
+                state: user.profile.state || undefined,
+                zip: user.profile.zip || undefined,
+              } : undefined,
               periodStart: fullPeriod.periodStart,
               periodEnd: fullPeriod.periodEnd,
-              periodType: fullPeriod.periodType,
-              grossCents: fullPeriod.grossCents,
-              platformFeeCents: fullPeriod.platformFeeCents,
-              processingFeeCents: fullPeriod.processingFeeCents,
-              netCents: fullPeriod.netCents,
-              paymentCount: fullPeriod.paymentCount,
-              ytdGrossCents: fullPeriod.ytdGrossCents,
-              ytdNetCents: fullPeriod.ytdNetCents,
-              payoutDate: fullPeriod.payoutDate,
-              payoutMethod: fullPeriod.payoutMethod,
+              activeSubscribers,
+              totalEarnings: fullPeriod.netCents,
+              payments,
+              depositDate: fullPeriod.payoutDate,
+              depositMethod: fullPeriod.payoutMethod || 'Bank Transfer',
               bankLast4: fullPeriod.bankLast4,
-              verificationCode: period.verificationCode,
+              ytdEarnings: fullPeriod.ytdNetCents,
+              ytdPaymentCount,
+              earningsSince,
+              avgMonthlyEarnings,
+              statementId: period.verificationCode,
               verificationUrl,
-              currency: user.profile.currency,
+              currency: fullPeriod.currency, // Use period currency, not profile default
             }
 
             const pdfUrl = await generateAndUploadPayStatement(creatorId, period.id, pdfData)

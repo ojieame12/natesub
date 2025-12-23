@@ -1,12 +1,13 @@
-// PDF Generation Service for Payroll Documents
-// Generates pay statements with verification QR codes
+// PDF Generation Service for Income Statements
+// Generates professional income statements for bank/visa verification
 
 import PDFDocument from 'pdfkit'
 import QRCode from 'qrcode'
 import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { env } from '../config/env.js'
-import type { PayrollDetail } from './payroll.js'
+import { fileURLToPath } from 'url'
+import { dirname, join } from 'path'
 
 // R2 client for storage
 const r2 = new S3Client({
@@ -18,15 +19,46 @@ const r2 = new S3Client({
   },
 })
 
+// Asset paths
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const assetsDir = join(__dirname, '../../assets')
+const logoPath = join(assetsDir, 'logo.png')
+const fontRegular = join(assetsDir, 'Manrope-Regular.ttf')
+const fontSemibold = join(assetsDir, 'Manrope-SemiBold.ttf')
+
+// ============================================
+// BRAND COLORS
+// ============================================
+const COLORS = {
+  accent: '#FF941A',
+  neutral50: '#FAFAF9',
+  neutral100: '#F5F5F4',
+  neutral200: '#E7E5E4',
+  neutral400: '#A8A29E',
+  neutral500: '#78716C',
+  neutral600: '#57534E',
+  neutral700: '#44403C',
+  neutral800: '#292524',
+  neutral900: '#1C1917',
+  green: '#34C759',
+  white: '#FFFFFF',
+}
+
 // ============================================
 // TYPES
 // ============================================
 
-export interface PayStatementData {
-  // Creator info
-  creatorName: string
-  creatorEmail: string
-  creatorAddress?: {
+export interface PaymentRecord {
+  date: Date
+  amount: number // cents
+  description: string
+}
+
+export interface IncomeStatementData {
+  // Payee info
+  payeeName: string
+  payeeEmail: string
+  payeeAddress?: {
     street?: string
     city?: string
     state?: string
@@ -34,34 +66,36 @@ export interface PayStatementData {
     country?: string
   }
 
-  // Period info
+  // Period
   periodStart: Date
   periodEnd: Date
-  periodType: string
 
-  // Earnings
-  grossCents: number
-  platformFeeCents: number
-  processingFeeCents: number
-  netCents: number
-  paymentCount: number
+  // Income details
+  activeSubscribers: number
+  totalEarnings: number // cents (net - what they received)
+  payments: PaymentRecord[]
 
-  // YTD
-  ytdGrossCents: number
-  ytdNetCents: number
-
-  // Payout
-  payoutDate: Date | null
-  payoutMethod: string | null
+  // Deposit info
+  depositDate: Date | null
+  depositMethod: string
   bankLast4: string | null
 
+  // YTD & History
+  ytdEarnings: number // cents
+  ytdPaymentCount: number
+  earningsSince: Date
+  avgMonthlyEarnings: number // cents
+
   // Verification
-  verificationCode: string
+  statementId: string
   verificationUrl: string
 
   // Currency
   currency: string
 }
+
+// Legacy type alias for backward compatibility
+export interface PayStatementData extends IncomeStatementData {}
 
 // ============================================
 // FORMATTING HELPERS
@@ -89,10 +123,21 @@ function formatDate(date: Date): string {
   })
 }
 
+function formatShortDate(date: Date): string {
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+  })
+}
+
 function formatPeriod(start: Date, end: Date): string {
   const startStr = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
   const endStr = end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   return `${startStr} - ${endStr}`
+}
+
+function formatMonthYear(date: Date): string {
+  return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
 }
 
 // ============================================
@@ -101,10 +146,10 @@ function formatPeriod(start: Date, end: Date): string {
 
 async function generateQRCodeDataUrl(url: string): Promise<string> {
   return QRCode.toDataURL(url, {
-    width: 100,
+    width: 80,
     margin: 1,
     color: {
-      dark: '#000000',
+      dark: COLORS.neutral800,
       light: '#FFFFFF',
     },
   })
@@ -114,7 +159,7 @@ async function generateQRCodeDataUrl(url: string): Promise<string> {
 // PDF GENERATION
 // ============================================
 
-export async function generatePayStatement(data: PayStatementData): Promise<Buffer> {
+export async function generateIncomeStatement(data: IncomeStatementData): Promise<Buffer> {
   const qrDataUrl = await generateQRCodeDataUrl(data.verificationUrl)
   const qrBuffer = Buffer.from(qrDataUrl.split(',')[1], 'base64')
 
@@ -124,286 +169,406 @@ export async function generatePayStatement(data: PayStatementData): Promise<Buff
         size: 'LETTER',
         margin: 50,
         info: {
-          Title: `Pay Statement - ${data.verificationCode}`,
+          Title: `Income Statement - ${data.statementId}`,
           Author: 'NatePay',
-          Subject: `Pay Statement for ${formatPeriod(data.periodStart, data.periodEnd)}`,
+          Subject: `Income Statement for ${formatPeriod(data.periodStart, data.periodEnd)}`,
         },
       })
+
+      // Register custom fonts
+      doc.registerFont('Manrope', fontRegular)
+      doc.registerFont('Manrope-SemiBold', fontSemibold)
 
       const chunks: Buffer[] = []
       doc.on('data', (chunk) => chunks.push(chunk))
       doc.on('end', () => resolve(Buffer.concat(chunks)))
       doc.on('error', reject)
 
-      // ==========================================
-      // HEADER
-      // ==========================================
-
-      // Logo/Brand
-      doc
-        .fontSize(24)
-        .font('Helvetica-Bold')
-        .fillColor('#1a1a1a')
-        .text('NatePay', 50, 50)
-
-      doc
-        .fontSize(10)
-        .font('Helvetica')
-        .fillColor('#666666')
-        .text('Pay Statement', 50, 78)
-
-      // QR Code (top right)
-      doc.image(qrBuffer, 462, 50, { width: 80 })
-
-      doc
-        .fontSize(8)
-        .fillColor('#666666')
-        .text('Scan to verify', 462, 132, { width: 80, align: 'center' })
-
-      // Divider
-      doc
-        .strokeColor('#e5e5e5')
-        .lineWidth(1)
-        .moveTo(50, 160)
-        .lineTo(562, 160)
-        .stroke()
+      const pageWidth = 612
+      const margin = 50
+      const contentWidth = pageWidth - (margin * 2)
 
       // ==========================================
-      // CREATOR INFO
+      // HEADER - Company Info
       // ==========================================
 
-      let currentY = 180
+      // Logo
+      doc.image(logoPath, margin, 35, { height: 32 })
 
+      // Document title
       doc
-        .fontSize(12)
-        .font('Helvetica-Bold')
-        .fillColor('#1a1a1a')
-        .text('Payee Information', 50, currentY)
+        .font('Manrope-SemiBold')
+        .fontSize(18)
+        .fillColor(COLORS.neutral900)
+        .text('Income Statement', pageWidth - margin - 150, 40, { width: 150, align: 'right' })
 
-      currentY += 20
-
+      // Company info
       doc
-        .fontSize(10)
-        .font('Helvetica')
-        .fillColor('#333333')
-        .text(data.creatorName, 50, currentY)
-        .text(data.creatorEmail, 50, currentY + 14)
-
-      currentY += 28
-
-      // Render Address if available
-      if (data.creatorAddress) {
-        const { street, city, state, zip, country } = data.creatorAddress
-
-        if (street) {
-          doc.text(street, 50, currentY); currentY += 14;
-        }
-
-        const cityStateZip = [city, state, zip].filter(Boolean).join(', ')
-        if (cityStateZip) {
-          doc.text(cityStateZip, 50, currentY); currentY += 14;
-        }
-
-        if (country) {
-          doc.text(country, 50, currentY); currentY += 14;
-        }
-      }
-
-      // ==========================================
-      // PERIOD INFO (right side)
-      // ==========================================
-
-      doc
-        .fontSize(12)
-        .font('Helvetica-Bold')
-        .text('Pay Period', 350, 180)
-
-      doc
-        .fontSize(10)
-        .font('Helvetica')
-        .text(formatPeriod(data.periodStart, data.periodEnd), 350, 200)
-        .text(`Statement Date: ${formatDate(new Date())}`, 350, 214)
-
-      // ==========================================
-      // EARNINGS BOX
-      // ==========================================
-
-      const boxY = 260
-      const boxHeight = 180
-
-      // Box background
-      doc
-        .roundedRect(50, boxY, 512, boxHeight, 8)
-        .fillColor('#f9fafb')
-        .fill()
-
-      // Box header
-      doc
-        .fontSize(14)
-        .font('Helvetica-Bold')
-        .fillColor('#1a1a1a')
-        .text('Earnings Summary', 70, boxY + 20)
-
-      // Earnings rows
-      const rowStartY = boxY + 50
-      const rowHeight = 24
-
-      // Gross earnings
-      doc
-        .fontSize(10)
-        .font('Helvetica')
-        .fillColor('#333333')
-        .text('Gross Earnings', 70, rowStartY)
-
-      doc
-        .fillColor('#666666')
-        .text(`${data.paymentCount} payment${data.paymentCount !== 1 ? 's' : ''}`, 70, rowStartY + 12)
-
-      doc
-        .font('Helvetica')
-        .text(formatCurrency(data.grossCents, data.currency), 442, rowStartY, { width: 100, align: 'right' })
-
-      // Platform fee
-      doc
-        .fillColor('#666666')
-        .text('Platform Fee (8%)', 70, rowStartY + rowHeight + 12)
-
-      doc
-        .text(`-${formatCurrency(data.platformFeeCents, data.currency)}`, 442, rowStartY + rowHeight + 12, { width: 100, align: 'right' })
-
-      // Processing fee
-      doc
-        .text('Processing Fee (2%)', 70, rowStartY + (rowHeight * 2) + 12)
-
-      doc
-        .text(`-${formatCurrency(data.processingFeeCents, data.currency)}`, 442, rowStartY + (rowHeight * 2) + 12, { width: 100, align: 'right' })
-
-      // Divider
-      doc
-        .strokeColor('#e5e5e5')
-        .lineWidth(1)
-        .moveTo(70, rowStartY + (rowHeight * 3) + 8)
-        .lineTo(542, rowStartY + (rowHeight * 3) + 8)
-        .stroke()
-
-      // Net earnings
-      doc
-        .fontSize(12)
-        .font('Helvetica-Bold')
-        .fillColor('#16a34a')
-        .text('Net Earnings', 70, rowStartY + (rowHeight * 3) + 18)
-
-      doc
-        .text(formatCurrency(data.netCents, data.currency), 442, rowStartY + (rowHeight * 3) + 18, { width: 100, align: 'right' })
-
-      // ==========================================
-      // YTD SUMMARY
-      // ==========================================
-
-      const ytdY = boxY + boxHeight + 30
-
-      doc
-        .fontSize(12)
-        .font('Helvetica-Bold')
-        .fillColor('#1a1a1a')
-        .text('Year-to-Date Summary', 50, ytdY)
-
-      doc
-        .fontSize(10)
-        .font('Helvetica')
-        .fillColor('#333333')
-
-      // YTD Grid
-      const ytdRowY = ytdY + 25
-
-      doc.text('YTD Gross:', 50, ytdRowY)
-      doc.text(formatCurrency(data.ytdGrossCents, data.currency), 150, ytdRowY)
-
-      doc.text('YTD Net:', 300, ytdRowY)
-      doc.text(formatCurrency(data.ytdNetCents, data.currency), 400, ytdRowY)
-
-      // ==========================================
-      // PAYOUT INFO
-      // ==========================================
-
-      const payoutY = ytdY + 60
-
-      doc
-        .fontSize(12)
-        .font('Helvetica-Bold')
-        .fillColor('#1a1a1a')
-        .text('Payout Information', 50, payoutY)
-
-      doc
-        .fontSize(10)
-        .font('Helvetica')
-        .fillColor('#333333')
-
-      const payoutRowY = payoutY + 25
-
-      if (data.payoutMethod) {
-        doc.text('Method:', 50, payoutRowY)
-        doc.text(data.payoutMethod === 'stripe' ? 'Stripe' : 'Paystack', 150, payoutRowY)
-      }
-
-      if (data.bankLast4) {
-        doc.text('Account:', 300, payoutRowY)
-        doc.text(`****${data.bankLast4}`, 400, payoutRowY)
-      }
-
-      if (data.payoutDate) {
-        doc.text('Payout Date:', 50, payoutRowY + 18)
-        doc.text(formatDate(data.payoutDate), 150, payoutRowY + 18)
-      }
-
-      // ==========================================
-      // FOOTER
-      // ==========================================
-
-      const footerY = 680
-
-      // Divider
-      doc
-        .strokeColor('#e5e5e5')
-        .lineWidth(1)
-        .moveTo(50, footerY)
-        .lineTo(562, footerY)
-        .stroke()
-
-      // Verification info
-      doc
+        .font('Manrope')
         .fontSize(9)
-        .font('Helvetica')
-        .fillColor('#666666')
-        .text('Verification Code:', 50, footerY + 15)
+        .fillColor(COLORS.neutral600)
+        .text('NATEPAY, LLC', margin, 75)
+        .text('natepay.co', margin, 87)
+
+      // Statement ID
+      doc
+        .font('Manrope')
+        .fontSize(9)
+        .fillColor(COLORS.neutral500)
+        .text(`Statement ID: ${data.statementId}`, pageWidth - margin - 150, 60, { width: 150, align: 'right' })
+        .text(`Issued: ${formatDate(new Date())}`, pageWidth - margin - 150, 72, { width: 150, align: 'right' })
+
+      // Divider
+      doc
+        .moveTo(margin, 105)
+        .lineTo(pageWidth - margin, 105)
+        .strokeColor(COLORS.neutral200)
+        .lineWidth(1)
+        .stroke()
+
+      // ==========================================
+      // PAYEE & PERIOD INFO
+      // ==========================================
+
+      let y = 125
+
+      // Payee section
+      doc
+        .font('Manrope-SemiBold')
+        .fontSize(9)
+        .fillColor(COLORS.neutral500)
+        .text('PAYEE', margin, y)
+
+      y += 14
 
       doc
-        .font('Helvetica-Bold')
-        .fillColor('#333333')
-        .text(data.verificationCode, 140, footerY + 15)
+        .font('Manrope-SemiBold')
+        .fontSize(12)
+        .fillColor(COLORS.neutral900)
+        .text(data.payeeName, margin, y)
+
+      y += 16
+
+      if (data.payeeAddress) {
+        doc
+          .font('Manrope')
+          .fontSize(10)
+          .fillColor(COLORS.neutral600)
+
+        const { street, city, state, zip, country } = data.payeeAddress
+        if (street) {
+          doc.text(street, margin, y)
+          y += 13
+        }
+        const cityLine = [city, state, zip].filter(Boolean).join(', ')
+        if (cityLine) {
+          doc.text(cityLine, margin, y)
+          y += 13
+        }
+        if (country) {
+          doc.text(country, margin, y)
+          y += 13
+        }
+      }
+
+      // Period section (right side)
+      doc
+        .font('Manrope-SemiBold')
+        .fontSize(9)
+        .fillColor(COLORS.neutral500)
+        .text('PAY PERIOD', 380, 120)
 
       doc
-        .font('Helvetica')
-        .fillColor('#666666')
-        .text('Verify this document at:', 50, footerY + 30)
+        .font('Manrope-SemiBold')
+        .fontSize(12)
+        .fillColor(COLORS.neutral900)
+        .text(formatPeriod(data.periodStart, data.periodEnd), 380, 134)
+
+      // ==========================================
+      // INCOME SUMMARY BOX
+      // ==========================================
+
+      const summaryY = 215
+      const summaryHeight = 75
+
+      // Box
+      doc
+        .roundedRect(margin, summaryY, contentWidth, summaryHeight, 8)
+        .fill(COLORS.neutral50)
 
       doc
-        .fillColor('#2563eb')
-        .text(data.verificationUrl, 160, footerY + 30, { link: data.verificationUrl })
+        .roundedRect(margin, summaryY, contentWidth, summaryHeight, 8)
+        .strokeColor(COLORS.neutral200)
+        .lineWidth(1)
+        .stroke()
+
+      // Left side - subscriber info
+      doc
+        .font('Manrope')
+        .fontSize(9)
+        .fillColor(COLORS.neutral500)
+        .text('Active Subscribers', margin + 20, summaryY + 12)
+
+      doc
+        .font('Manrope-SemiBold')
+        .fontSize(20)
+        .fillColor(COLORS.neutral900)
+        .text(data.activeSubscribers.toString(), margin + 20, summaryY + 26)
+
+      doc
+        .font('Manrope')
+        .fontSize(9)
+        .fillColor(COLORS.neutral500)
+        .text('Recurring Monthly', margin + 20, summaryY + 50)
+
+      // Center divider
+      doc
+        .moveTo(margin + 150, summaryY + 12)
+        .lineTo(margin + 150, summaryY + summaryHeight - 12)
+        .strokeColor(COLORS.neutral200)
+        .lineWidth(1)
+        .stroke()
+
+      // Right side - earnings
+      doc
+        .font('Manrope')
+        .fontSize(9)
+        .fillColor(COLORS.neutral500)
+        .text('Net Income This Period', margin + 170, summaryY + 12)
+
+      doc
+        .font('Manrope-SemiBold')
+        .fontSize(22)
+        .fillColor(COLORS.neutral900)
+        .text(formatCurrency(data.totalEarnings, data.currency), margin + 170, summaryY + 26)
+
+      // Deposit info
+      if (data.depositDate && data.bankLast4) {
+        doc
+          .font('Manrope')
+          .fontSize(9)
+          .fillColor(COLORS.neutral500)
+          .text(`Deposited ${formatShortDate(data.depositDate)} to account ending ${data.bankLast4}`, margin + 170, summaryY + 52)
+      }
+
+      // ==========================================
+      // PAYMENT HISTORY TABLE
+      // ==========================================
+
+      const tableY = summaryY + summaryHeight + 25
+
+      doc
+        .font('Manrope-SemiBold')
+        .fontSize(11)
+        .fillColor(COLORS.neutral900)
+        .text('Payment History', margin, tableY)
+
+      doc
+        .font('Manrope')
+        .fontSize(9)
+        .fillColor(COLORS.neutral500)
+        .text(`${data.payments.length} payments received`, margin + 120, tableY + 2)
+
+      // Table header
+      const headerY = tableY + 22
+
+      doc
+        .rect(margin, headerY, contentWidth, 22)
+        .fill(COLORS.neutral100)
+
+      doc
+        .font('Manrope-SemiBold')
+        .fontSize(9)
+        .fillColor(COLORS.neutral600)
+        .text('Date', margin + 15, headerY + 6)
+        .text('Description', margin + 100, headerY + 6)
+        .text('Amount', pageWidth - margin - 80, headerY + 6, { width: 65, align: 'right' })
+
+      // Table rows - show up to 6 payments to fit on one page
+      const maxRows = 6
+      const visiblePayments = data.payments.slice(0, maxRows)
+      let rowY = headerY + 22
+
+      visiblePayments.forEach((payment, index) => {
+        const isEven = index % 2 === 0
+
+        if (isEven) {
+          doc
+            .rect(margin, rowY, contentWidth, 20)
+            .fill(COLORS.white)
+        }
+
+        doc
+          .font('Manrope')
+          .fontSize(9)
+          .fillColor(COLORS.neutral700)
+          .text(formatShortDate(payment.date), margin + 15, rowY + 5)
+          .text(payment.description, margin + 100, rowY + 5)
+
+        doc
+          .font('Manrope-SemiBold')
+          .fontSize(9)
+          .fillColor(COLORS.neutral800)
+          .text(formatCurrency(payment.amount, data.currency), pageWidth - margin - 80, rowY + 5, { width: 65, align: 'right' })
+
+        rowY += 20
+      })
+
+      // Show "more payments" if truncated
+      if (data.payments.length > maxRows) {
+        doc
+          .font('Manrope')
+          .fontSize(9)
+          .fillColor(COLORS.neutral500)
+          .text(`+ ${data.payments.length - maxRows} more payments`, margin + 15, rowY + 5)
+        rowY += 20
+      }
+
+      // Table footer - total
+      doc
+        .rect(margin, rowY, contentWidth, 24)
+        .fill(COLORS.neutral100)
+
+      doc
+        .font('Manrope-SemiBold')
+        .fontSize(10)
+        .fillColor(COLORS.neutral900)
+        .text('Period Total', margin + 15, rowY + 8)
+
+      doc
+        .font('Manrope-SemiBold')
+        .fontSize(11)
+        .fillColor(COLORS.neutral900)
+        .text(formatCurrency(data.totalEarnings, data.currency), pageWidth - margin - 80, rowY + 7, { width: 65, align: 'right' })
+
+      // ==========================================
+      // YEAR-TO-DATE SUMMARY
+      // ==========================================
+
+      const ytdY = rowY + 45
+
+      doc
+        .font('Manrope-SemiBold')
+        .fontSize(11)
+        .fillColor(COLORS.neutral900)
+        .text('Year-to-Date Summary', margin, ytdY)
+
+      const ytdBoxY = ytdY + 15
+      const ytdBoxHeight = 55
+
+      doc
+        .roundedRect(margin, ytdBoxY, contentWidth, ytdBoxHeight, 8)
+        .fill(COLORS.neutral50)
+
+      // YTD Grid - 4 columns
+      const colWidth = contentWidth / 4
+
+      // Net Income YTD
+      doc
+        .font('Manrope')
+        .fontSize(8)
+        .fillColor(COLORS.neutral500)
+        .text('Net Income', margin + 15, ytdBoxY + 10)
+
+      doc
+        .font('Manrope-SemiBold')
+        .fontSize(12)
+        .fillColor(COLORS.neutral900)
+        .text(formatCurrency(data.ytdEarnings, data.currency), margin + 15, ytdBoxY + 23)
+
+      // Payments Received
+      doc
+        .font('Manrope')
+        .fontSize(8)
+        .fillColor(COLORS.neutral500)
+        .text('Payments Received', margin + colWidth + 15, ytdBoxY + 10)
+
+      doc
+        .font('Manrope-SemiBold')
+        .fontSize(12)
+        .fillColor(COLORS.neutral900)
+        .text(data.ytdPaymentCount.toString(), margin + colWidth + 15, ytdBoxY + 23)
+
+      // Avg Monthly
+      doc
+        .font('Manrope')
+        .fontSize(8)
+        .fillColor(COLORS.neutral500)
+        .text('Avg Monthly', margin + (colWidth * 2) + 15, ytdBoxY + 10)
+
+      doc
+        .font('Manrope-SemiBold')
+        .fontSize(12)
+        .fillColor(COLORS.neutral900)
+        .text(formatCurrency(data.avgMonthlyEarnings, data.currency), margin + (colWidth * 2) + 15, ytdBoxY + 23)
+
+      // Earning Since
+      doc
+        .font('Manrope')
+        .fontSize(8)
+        .fillColor(COLORS.neutral500)
+        .text('Earning Since', margin + (colWidth * 3) + 15, ytdBoxY + 10)
+
+      doc
+        .font('Manrope-SemiBold')
+        .fontSize(12)
+        .fillColor(COLORS.neutral900)
+        .text(formatMonthYear(data.earningsSince), margin + (colWidth * 3) + 15, ytdBoxY + 23)
+
+      // ==========================================
+      // FOOTER - Verification
+      // ==========================================
+
+      const footerY = ytdBoxY + ytdBoxHeight + 25
+
+      doc
+        .moveTo(margin, footerY)
+        .lineTo(pageWidth - margin, footerY)
+        .strokeColor(COLORS.neutral200)
+        .lineWidth(1)
+        .stroke()
+
+      // Verification text
+      doc
+        .font('Manrope')
+        .fontSize(9)
+        .fillColor(COLORS.neutral500)
+        .text('This statement can be verified at:', margin, footerY + 15)
+
+      doc
+        .font('Manrope-SemiBold')
+        .fontSize(9)
+        .fillColor(COLORS.accent)
+        .text(data.verificationUrl, margin, footerY + 28, { link: data.verificationUrl })
+
+      // QR Code
+      doc.image(qrBuffer, pageWidth - margin - 60, footerY + 10, { width: 50 })
 
       // Legal disclaimer
       doc
+        .font('Manrope')
         .fontSize(8)
-        .fillColor('#999999')
+        .fillColor(COLORS.neutral400)
         .text(
-          'This document is an official pay statement generated by NatePay. ' +
-          'For questions about this statement, contact support@natepay.co.',
-          50,
-          footerY + 55,
-          { width: 512 }
+          'This is an official income statement issued by NATEPAY, LLC, a Delaware limited liability company. ' +
+          'The information contained herein accurately reflects the earnings deposited to the payee during the specified period. ' +
+          'Platform fees are non-refundable. For verification, scan the QR code or visit the URL above.',
+          margin,
+          footerY + 50,
+          { width: contentWidth - 70 }
         )
 
-      // End document
+      // Company footer
+      doc
+        .font('Manrope')
+        .fontSize(7)
+        .fillColor(COLORS.neutral400)
+        .text(
+          'NATEPAY, LLC • 131 Continental Dr, Suite 305, Newark, DE 19713 • support@natepay.co • natepay.co',
+          margin,
+          footerY + 80
+        )
+
       doc.end()
     } catch (error) {
       reject(error)
@@ -411,56 +576,264 @@ export async function generatePayStatement(data: PayStatementData): Promise<Buff
   })
 }
 
+// Legacy function name for backward compatibility
+export const generatePayStatement = generateIncomeStatement
+
 // ============================================
 // STORAGE
 // ============================================
 
-export async function uploadPayStatement(
+export async function uploadIncomeStatement(
   userId: string,
   periodId: string,
   pdfBuffer: Buffer
 ): Promise<string> {
-  const key = `payroll/${userId}/${periodId}.pdf`
+  const key = `income-statements/${userId}/${periodId}.pdf`
 
   const command = new PutObjectCommand({
     Bucket: env.R2_BUCKET,
     Key: key,
     Body: pdfBuffer,
     ContentType: 'application/pdf',
-    CacheControl: 'private, max-age=31536000', // Cache for 1 year (immutable)
+    CacheControl: 'private, max-age=31536000',
   })
 
   await r2.send(command)
-
-  // Return the storage key, not a public URL
-  // Use getPayStatementSignedUrl() to generate time-limited access URLs
   return key
 }
 
+// Legacy function name
+export const uploadPayStatement = uploadIncomeStatement
+
 // Generate a time-limited signed URL for secure PDF access
-// URLs expire after 15 minutes - sufficient for download but limits exposure
-export async function getPayStatementSignedUrl(key: string): Promise<string> {
+export async function getIncomeStatementSignedUrl(key: string): Promise<string> {
   const command = new GetObjectCommand({
     Bucket: env.R2_BUCKET,
     Key: key,
-    ResponseContentDisposition: 'inline; filename="pay-statement.pdf"',
+    ResponseContentDisposition: 'inline; filename="income-statement.pdf"',
   })
 
-  // 15 minute expiry - enough time to download but limits exposure window
   const signedUrl = await getSignedUrl(r2, command, { expiresIn: 900 })
   return signedUrl
 }
+
+// Legacy function name
+export const getPayStatementSignedUrl = getIncomeStatementSignedUrl
 
 // ============================================
 // COMBINED: GENERATE & UPLOAD
 // ============================================
 
-export async function generateAndUploadPayStatement(
+export async function generateAndUploadIncomeStatement(
   userId: string,
   periodId: string,
-  data: PayStatementData
+  data: IncomeStatementData
 ): Promise<string> {
-  const pdfBuffer = await generatePayStatement(data)
-  const pdfUrl = await uploadPayStatement(userId, periodId, pdfBuffer)
+  const pdfBuffer = await generateIncomeStatement(data)
+  const pdfUrl = await uploadIncomeStatement(userId, periodId, pdfBuffer)
   return pdfUrl
+}
+
+// Legacy function name
+export const generateAndUploadPayStatement = generateAndUploadIncomeStatement
+
+// ============================================
+// VERIFICATION PDF
+// ============================================
+
+export interface VerificationPdfData {
+  creatorName: string
+  periodStart: Date
+  periodEnd: Date
+  grossCents: number
+  netCents: number
+  currency: string
+  paymentCount: number
+  payoutDate: Date | null
+  payoutMethod: string | null
+  verificationCode: string
+  verifiedAt: Date
+}
+
+export async function generateVerificationPdf(data: VerificationPdfData): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    try {
+      const doc = new PDFDocument({
+        size: 'LETTER',
+        margin: 50,
+        info: {
+          Title: `Income Verification - ${data.verificationCode}`,
+          Author: 'NatePay',
+          Subject: 'Income Verification Document',
+        },
+      })
+
+      // Register custom fonts
+      doc.registerFont('Manrope', fontRegular)
+      doc.registerFont('Manrope-SemiBold', fontSemibold)
+
+      const chunks: Buffer[] = []
+      doc.on('data', (chunk) => chunks.push(chunk))
+      doc.on('end', () => resolve(Buffer.concat(chunks)))
+      doc.on('error', reject)
+
+      const pageWidth = 612
+      const margin = 50
+      const contentWidth = pageWidth - (margin * 2)
+
+      // ==========================================
+      // HEADER
+      // ==========================================
+
+      // Logo
+      doc.image(logoPath, margin, 35, { height: 32 })
+
+      // Document title
+      doc
+        .font('Manrope-SemiBold')
+        .fontSize(18)
+        .fillColor(COLORS.neutral900)
+        .text('Income Verification', pageWidth - margin - 150, 40, { width: 150, align: 'right' })
+
+      // Verification ID
+      doc
+        .font('Manrope')
+        .fontSize(9)
+        .fillColor(COLORS.neutral500)
+        .text(`ID: ${data.verificationCode}`, pageWidth - margin - 150, 62, { width: 150, align: 'right' })
+
+      // Divider
+      doc
+        .moveTo(margin, 100)
+        .lineTo(pageWidth - margin, 100)
+        .strokeColor(COLORS.neutral200)
+        .lineWidth(1)
+        .stroke()
+
+      // ==========================================
+      // VERIFIED BADGE
+      // ==========================================
+
+      let y = 120
+
+      // Green verification box
+      doc
+        .roundedRect(margin, y, contentWidth, 70, 8)
+        .fill('#E8F5E9')
+
+      doc
+        .roundedRect(margin, y, contentWidth, 70, 8)
+        .strokeColor('#4CAF50')
+        .lineWidth(1)
+        .stroke()
+
+      // Checkmark icon (simplified as text)
+      doc
+        .font('Manrope-SemiBold')
+        .fontSize(24)
+        .fillColor('#4CAF50')
+        .text('✓', margin + 20, y + 18)
+
+      doc
+        .font('Manrope-SemiBold')
+        .fontSize(16)
+        .fillColor('#2E7D32')
+        .text('VERIFIED', margin + 55, y + 20)
+
+      doc
+        .font('Manrope')
+        .fontSize(10)
+        .fillColor('#558B2F')
+        .text(
+          'This income statement has been verified by NatePay Inc.',
+          margin + 55,
+          y + 42
+        )
+
+      // ==========================================
+      // DETAILS TABLE
+      // ==========================================
+
+      y = 210
+
+      doc
+        .font('Manrope-SemiBold')
+        .fontSize(12)
+        .fillColor(COLORS.neutral900)
+        .text('Verification Details', margin, y)
+
+      y += 25
+
+      const details = [
+        ['Recipient', data.creatorName],
+        ['Pay Period', formatPeriod(data.periodStart, data.periodEnd)],
+        ['Gross Income', formatCurrency(data.grossCents, data.currency)],
+        ['Net Income', formatCurrency(data.netCents, data.currency)],
+        ['Payments Received', data.paymentCount.toString()],
+        ['Payout Status', data.payoutDate ? `Deposited on ${formatDate(data.payoutDate)}` : 'Pending'],
+        ['Deposit Method', data.payoutMethod || 'Bank Transfer'],
+        ['Verification Code', data.verificationCode],
+        ['Verified On', formatDate(data.verifiedAt)],
+      ]
+
+      details.forEach(([label, value], index) => {
+        const isEven = index % 2 === 0
+        if (isEven) {
+          doc
+            .rect(margin, y - 5, contentWidth, 28)
+            .fill(COLORS.neutral50)
+        }
+
+        doc
+          .font('Manrope')
+          .fontSize(10)
+          .fillColor(COLORS.neutral500)
+          .text(label, margin + 15, y + 3)
+
+        doc
+          .font('Manrope-SemiBold')
+          .fontSize(10)
+          .fillColor(COLORS.neutral800)
+          .text(value, margin + 180, y + 3)
+
+        y += 28
+      })
+
+      // ==========================================
+      // FOOTER
+      // ==========================================
+
+      y += 30
+
+      doc
+        .moveTo(margin, y)
+        .lineTo(pageWidth - margin, y)
+        .strokeColor(COLORS.neutral200)
+        .lineWidth(1)
+        .stroke()
+
+      doc
+        .font('Manrope')
+        .fontSize(8)
+        .fillColor(COLORS.neutral400)
+        .text(
+          'This verification document confirms that the above income was processed through NATEPAY, LLC, ' +
+          'a Delaware limited liability company. This document is generated for verification purposes only. ' +
+          'For questions or concerns, contact support@natepay.co',
+          margin,
+          y + 15,
+          { width: contentWidth }
+        )
+
+      doc
+        .font('Manrope')
+        .fontSize(7)
+        .fillColor(COLORS.neutral400)
+        .text('NATEPAY, LLC • 131 Continental Dr, Suite 305, Newark, DE 19713 • support@natepay.co • natepay.co', margin, y + 50)
+
+      doc.end()
+    } catch (error) {
+      reject(error)
+    }
+  })
 }

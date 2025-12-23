@@ -1028,11 +1028,13 @@ export const payroll = {
   getPeriods: async () => {
     const response = await apiFetch<{
       periods: BackendPayPeriod[]
-      ytdTotalCents: number
+      ytdByCurrency: Record<string, number>
+      warnings?: Array<{ type: string; message: string }>
     }>('/payroll/periods')
     return {
       periods: response.periods.map(mapPayPeriod),
-      ytdTotalCents: response.ytdTotalCents,
+      ytdByCurrency: response.ytdByCurrency || {},
+      warnings: response.warnings || [],
     }
   },
 
@@ -1059,8 +1061,60 @@ export const payroll = {
         currency: string
         createdAt: string
         verificationCode: string
+        paymentCount: number
+        payoutDate: string | null
+        payoutMethod: string | null
+        platformConfirmed: boolean
       }
     }>(`/payroll/verify/${code}`),
+
+  // Get subscribers for filter dropdown
+  getSubscribers: () =>
+    apiFetch<{
+      subscribers: Array<{
+        id: string
+        email: string
+        displayName: string
+        tierName: string | null
+      }>
+    }>('/payroll/subscribers'),
+
+  // Generate custom statement with filters
+  generateCustomStatement: (params: {
+    startDate: string
+    endDate: string
+    subscriberIds?: string[]
+  }) =>
+    apiFetch<{
+      statement: {
+        periodStart: string
+        periodEnd: string
+        grossCents: number
+        refundsCents: number
+        chargebacksCents: number
+        totalFeeCents: number
+        netCents: number
+        paymentCount: number
+        currency: string
+        ytdGrossCents: number
+        ytdNetCents: number
+        payments: Array<{
+          id: string
+          date: string
+          subscriberName: string
+          subscriberEmail: string
+          description: string
+          amountCents: number
+          type: string
+        }>
+        isVerifiable: boolean
+        isFiltered: boolean
+      }
+      warnings: Array<{ type: string; message: string }>
+    }>('/payroll/custom-statement', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    }),
 }
 
 // ============================================

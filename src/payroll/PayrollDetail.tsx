@@ -94,7 +94,7 @@ export default function PayrollDetail() {
 
             {/* Page Title */}
             <div className="payroll-page-title">
-                <h1>Pay Statement</h1>
+                <h1>Income Statement</h1>
             </div>
 
             {/* Content */}
@@ -102,7 +102,7 @@ export default function PayrollDetail() {
                 {isError ? (
                     <ErrorState
                         title="Couldn't load statement"
-                        message="We had trouble loading this pay statement."
+                        message="We had trouble loading this income statement."
                         onRetry={refetch}
                     />
                 ) : isLoading ? (
@@ -118,7 +118,7 @@ export default function PayrollDetail() {
                 ) : !period ? (
                     <ErrorState
                         title="Statement not found"
-                        message="This pay statement doesn't exist."
+                        message="This income statement doesn't exist."
                         onRetry={() => navigate('/payroll')}
                     />
                 ) : (
@@ -128,7 +128,7 @@ export default function PayrollDetail() {
                             {/* Document Header */}
                             <div className="payroll-doc-header">
                                 <img src="/logo.svg" alt="NatePay" className="payroll-doc-logo" />
-                                <h2 className="payroll-doc-title">PAY STATEMENT</h2>
+                                <h2 className="payroll-doc-title">INCOME STATEMENT</h2>
                                 <p className="payroll-doc-period">
                                     {formatPeriodRange(period.startDate, period.endDate)}
                                 </p>
@@ -182,7 +182,7 @@ export default function PayrollDetail() {
                                 <h3 className="payroll-doc-section-title">Deductions</h3>
                                 <div className="payroll-doc-table">
                                     <div className="payroll-doc-row deduction">
-                                        <span className="payroll-doc-label">Platform Fee (8%)</span>
+                                        <span className="payroll-doc-label">Platform fee</span>
                                         <span className="payroll-doc-value">
                                             -{formatCurrencyFromCents(period.platformFee, currency)}
                                         </span>
@@ -193,7 +193,7 @@ export default function PayrollDetail() {
                             {/* Net Pay Section */}
                             <div className="payroll-doc-section net">
                                 <div className="payroll-doc-row total">
-                                    <span className="payroll-doc-label">NET PAY</span>
+                                    <span className="payroll-doc-label">NET INCOME</span>
                                     <span className="payroll-doc-value">
                                         {formatCurrencyFromCents(period.netAmount, currency)}
                                     </span>

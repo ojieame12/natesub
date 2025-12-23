@@ -41,6 +41,9 @@ export interface PaymentItem {
   date: Date
   subscriberName: string
   subscriberEmail: string
+  subscriberId: string | null
+  tierName: string | null
+  description: string
   amount: number
   type: 'recurring' | 'one_time'
 }
@@ -65,6 +68,10 @@ export interface VerificationResult {
   currency: string
   createdAt: Date
   verificationCode: string
+  // Enhanced fields for verification page
+  paymentCount: number
+  payoutDate: Date | null
+  payoutMethod: string | null
 }
 
 // ============================================
@@ -185,9 +192,11 @@ async function aggregatePayments(
     },
     include: {
       subscription: {
-        include: {
+        select: {
+          tierName: true,
           subscriber: {
             select: {
+              id: true,
               email: true,
             },
           },
@@ -197,12 +206,14 @@ async function aggregatePayments(
     orderBy: { occurredAt: 'desc' },
   })
 
-  // Get refunds in the same period (only for revenue payments)
+  // Get refunds in the same period
+  // Stripe: original payment status changes to 'refunded', keeps original type
+  // Paystack: creates separate record with type='refund', status='refunded'
   const refunds = await db.payment.findMany({
     where: {
       ...whereClause,
       status: 'refunded',
-      type: { in: ['one_time', 'recurring'] },
+      type: { in: ['one_time', 'recurring', 'refund'] },
     },
   })
 
@@ -215,29 +226,70 @@ async function aggregatePayments(
     },
   })
 
-  const grossCents = successfulPayments.reduce((sum, p) => sum + p.amountCents, 0)
-  const refundsCents = refunds.reduce((sum, p) => sum + Math.abs(p.amountCents), 0)
-  const chargebacksCents = chargebacks.reduce((sum, p) => sum + Math.abs(p.amountCents), 0)
+  // Calculate base price (what creator set) instead of gross (what subscriber paid)
+  // For split_v1 model: base = netCents + creatorFeeCents (creator's price before their 4% fee)
+  // For legacy: base = amountCents (subscriber paid = creator's price, fee absorbed or passed)
+  const basePriceCents = successfulPayments.reduce((sum, p) => {
+    // If creatorFeeCents exists, use net + creatorFee as base price
+    if (p.creatorFeeCents !== null && p.creatorFeeCents !== undefined) {
+      return sum + p.netCents + p.creatorFeeCents
+    }
+    // Legacy: use amountCents as base (fee was absorbed or passed separately)
+    return sum + p.amountCents
+  }, 0)
 
-  // Sum actual recorded fees and net amounts from payment records
-  // This uses the real fees charged at checkout, not recomputed approximations
-  const totalFeeCents = successfulPayments.reduce((sum, p) => sum + p.feeCents, 0)
+  // For refunds/chargebacks, use the same logic
+  const refundsCents = refunds.reduce((sum, p) => {
+    if (p.creatorFeeCents !== null && p.creatorFeeCents !== undefined) {
+      return sum + Math.abs(p.netCents + p.creatorFeeCents)
+    }
+    return sum + Math.abs(p.amountCents)
+  }, 0)
+
+  const chargebacksCents = chargebacks.reduce((sum, p) => {
+    if (p.creatorFeeCents !== null && p.creatorFeeCents !== undefined) {
+      return sum + Math.abs(p.netCents + p.creatorFeeCents)
+    }
+    return sum + Math.abs(p.amountCents)
+  }, 0)
+
+  // Sum creator's fee portion only (4% in split model, or full fee for legacy)
+  // This is what gets deducted from creator's payout
+  const creatorFeeTotalCents = successfulPayments.reduce((sum, p) => {
+    // Split model: use creatorFeeCents (4%)
+    if (p.creatorFeeCents !== null && p.creatorFeeCents !== undefined) {
+      return sum + p.creatorFeeCents
+    }
+    // Legacy: full fee deducted from creator
+    return sum + p.feeCents
+  }, 0)
+
   const totalNetCents = successfulPayments.reduce((sum, p) => sum + p.netCents, 0)
 
-  const paymentItems: PaymentItem[] = successfulPayments.map((p) => ({
-    id: p.id,
-    date: p.occurredAt,
-    subscriberName: p.subscription?.subscriber?.email?.split('@')[0] || 'Anonymous',
-    subscriberEmail: maskEmail(p.subscription?.subscriber?.email || ''),
-    amount: p.amountCents,
-    type: p.type === 'recurring' ? 'recurring' : 'one_time',
-  }))
+  const paymentItems: PaymentItem[] = successfulPayments.map((p) => {
+    const email = p.subscription?.subscriber?.email || ''
+    const tierName = p.subscription?.tierName || null
+    const paymentType: 'recurring' | 'one_time' = p.type === 'recurring' ? 'recurring' : 'one_time'
+
+    // Use net amount (what creator received) for income statement consistency
+    return {
+      id: p.id,
+      date: p.occurredAt,
+      subscriberName: email.split('@')[0] || 'Anonymous',
+      subscriberEmail: maskEmail(email),
+      subscriberId: p.subscription?.subscriber?.id || null,
+      tierName,
+      description: formatPaymentDescription(tierName, paymentType, email),
+      amount: p.netCents, // What creator actually received after fees
+      type: paymentType,
+    }
+  })
 
   return {
-    grossCents,
+    grossCents: basePriceCents,       // Now shows base price (what creator set)
     refundsCents,
     chargebacksCents,
-    totalFeeCents,
+    totalFeeCents: creatorFeeTotalCents, // Now shows only creator's fee portion (4%)
     totalNetCents,
     paymentCount: successfulPayments.length,
     payments: paymentItems,
@@ -245,13 +297,14 @@ async function aggregatePayments(
 }
 
 /**
- * Calculate year-to-date totals
+ * Calculate year-to-date totals for a specific currency
  * Uses actual recorded netCents from payment records, not recomputed approximations
+ * IMPORTANT: YTD must be per-currency to be mathematically valid
  */
 async function calculateYTD(
   userId: string,
   asOfDate: Date,
-  _purpose: UserPurpose | null // Kept for signature compatibility, but not used
+  currency: string
 ): Promise<{ grossCents: number; netCents: number }> {
   const yearStart = new Date(asOfDate.getFullYear(), 0, 1, 0, 0, 0, 0)
 
@@ -261,6 +314,8 @@ async function calculateYTD(
       status: 'succeeded',
       // Only count inbound revenue (one_time, recurring) - exclude payout transfers
       type: { in: ['one_time', 'recurring'] },
+      // Filter by currency - YTD totals must be per-currency
+      currency,
       occurredAt: {
         gte: yearStart,
         lte: asOfDate,
@@ -409,46 +464,66 @@ async function getDistinctCurrencies(
 /**
  * Find payout record for this period (actual Payment with type: 'payout')
  * Returns the payout that covers this period's earnings, if any
+ *
+ * Handles two scenarios:
+ * 1. Stripe: Payouts happen after period end, may be in different currency (cross-border)
+ * 2. Paystack: Transfers happen per-payment (immediately), often within the period
  */
 async function findPayoutForPeriod(
   userId: string,
+  periodStart: Date,
   periodEnd: Date,
-  currency: string
+  _currency: string // Kept for backward compatibility, not used for matching
 ): Promise<{ payoutDate: Date; payoutMethod: string | null } | null> {
-  // Look for a payout Payment that occurred after the period ended
-  // and matches the currency (payouts happen after earnings are collected)
-  const payout = await db.payment.findFirst({
+  // Strategy 1: Look for Stripe payout after period end
+  // Don't require currency match - cross-border payouts convert (e.g., USD earnings → NGN payout)
+  const stripePayout = await db.payment.findFirst({
     where: {
       creatorId: userId,
       type: 'payout',
       status: 'succeeded',
-      currency,
+      stripePaymentIntentId: { not: null }, // Stripe payout
       occurredAt: {
         gte: periodEnd,
       },
     },
-    orderBy: { occurredAt: 'asc' }, // Get the first payout after period end
-    select: {
-      occurredAt: true,
-      paystackTransactionRef: true,
-      stripePaymentIntentId: true,
-    },
+    orderBy: { occurredAt: 'asc' },
+    select: { occurredAt: true },
   })
 
-  if (!payout) return null
-
-  // Determine payout method based on which provider field is populated
-  let payoutMethod: string | null = null
-  if (payout.paystackTransactionRef) {
-    payoutMethod = 'paystack'
-  } else if (payout.stripePaymentIntentId) {
-    payoutMethod = 'stripe'
+  if (stripePayout) {
+    return {
+      payoutDate: stripePayout.occurredAt,
+      payoutMethod: 'stripe',
+    }
   }
 
-  return {
-    payoutDate: payout.occurredAt,
-    payoutMethod,
+  // Strategy 2: Look for Paystack transfers within period + 7 day buffer
+  // Paystack transfers happen per-transaction, often before period end
+  const paystackBuffer = 7 * 24 * 60 * 60 * 1000 // 7 days
+  const paystackPayout = await db.payment.findFirst({
+    where: {
+      creatorId: userId,
+      type: 'payout',
+      status: 'succeeded',
+      paystackTransactionRef: { not: null }, // Paystack transfer
+      occurredAt: {
+        gte: periodStart,
+        lte: new Date(periodEnd.getTime() + paystackBuffer),
+      },
+    },
+    orderBy: { occurredAt: 'desc' }, // Get the last payout in range
+    select: { occurredAt: true },
+  })
+
+  if (paystackPayout) {
+    return {
+      payoutDate: paystackPayout.occurredAt,
+      payoutMethod: 'paystack',
+    }
   }
+
+  return null
 }
 
 /**
@@ -521,22 +596,17 @@ export async function generatePayrollPeriod(
   }
 
   // Calculate adjusted gross (after refunds and chargebacks)
+  // grossCents is now base price (what creator set), not what subscriber paid
   const adjustedGrossCents = grossCents - refundsCents - chargebacksCents
 
-  // Use actual recorded fees from payment records (not recomputed approximations)
-  // For fee breakdown, approximate split: ~80% platform, ~20% processing (for display only)
-  const purpose = profile.purpose as UserPurpose
-  const platformFeePercent = getPlatformFeePercent(purpose)
-  const processingFeePercent = getProcessingFeePercent()
-  const totalFeePercent = platformFeePercent + processingFeePercent
-
-  // Split the actual total fee proportionally for display purposes
-  const platformFeeCents = Math.round(totalFeeCents * (platformFeePercent / totalFeePercent))
-  const processingFeeCents = totalFeeCents - platformFeeCents // Remainder to avoid rounding errors
+  // totalFeeCents is now creator's fee only (4% in split model)
+  // No separate processing fee - it's covered by subscriber's portion
+  const platformFeeCents = totalFeeCents // Creator's 4% fee
+  const processingFeeCents = 0           // Absorbed by subscriber's fee portion
   const netCents = adjustedGrossCents - totalFeeCents
 
-  // Calculate YTD
-  const ytd = await calculateYTD(userId, periodEnd, purpose)
+  // Calculate YTD (per-currency)
+  const ytd = await calculateYTD(userId, periodEnd, periodCurrency)
 
   // Get bank info
   const bankLast4 = await getBankLast4(userId)
@@ -545,7 +615,7 @@ export async function generatePayrollPeriod(
   const verificationCode = generateVerificationCode(userId, periodEnd)
 
   // Find actual payout record for this period
-  const payoutInfo = await findPayoutForPeriod(userId, periodEnd, periodCurrency)
+  const payoutInfo = await findPayoutForPeriod(userId, periodStart, periodEnd, periodCurrency)
 
   // Create period record
   const period = await db.payrollPeriod.create({
@@ -694,6 +764,10 @@ export async function verifyDocument(code: string): Promise<VerificationResult |
     currency: period.currency || 'USD',
     createdAt: period.createdAt,
     verificationCode: period.verificationCode,
+    // Enhanced fields for verification page
+    paymentCount: period.paymentCount,
+    payoutDate: period.payoutDate,
+    payoutMethod: period.payoutMethod,
   }
 }
 
@@ -719,4 +793,232 @@ function maskEmail(email: string): string {
   const [local, domain] = email.split('@')
   if (local.length <= 2) return `${local[0]}***@${domain}`
   return `${local[0]}***${local.slice(-1)}@${domain}`
+}
+
+/**
+ * Format payment description for income statements
+ * Format: "{tierName} - {type} ({maskedEmail})"
+ * Example: "Pro Plan - Subscription (j***n@example.com)"
+ */
+export function formatPaymentDescription(
+  tierName: string | null,
+  type: 'recurring' | 'one_time',
+  email: string
+): string {
+  const tier = tierName || 'Subscription'
+  const reason = type === 'recurring' ? 'Subscription' : 'One-time payment'
+  const maskedEmail = maskEmail(email)
+  return `${tier} - ${reason} (${maskedEmail})`
+}
+
+// ============================================
+// CUSTOM STATEMENT TYPES
+// ============================================
+
+export interface CustomStatementRequest {
+  startDate: Date
+  endDate: Date
+  subscriberIds?: string[]
+}
+
+export interface CustomStatementResult {
+  periodStart: Date
+  periodEnd: Date
+  grossCents: number
+  refundsCents: number
+  chargebacksCents: number
+  totalFeeCents: number
+  netCents: number
+  paymentCount: number
+  payments: PaymentItem[]
+  paymentsTruncated: boolean // True if payments array was capped at 100
+  currency: string
+  ytdGrossCents: number
+  ytdNetCents: number
+  otherCurrencies: string[] // Currencies excluded from this statement
+}
+
+/**
+ * Generate a custom statement for a date range and optional subscriber filter
+ * This creates an on-demand report without persisting to the database
+ */
+export async function generateCustomStatement(
+  userId: string,
+  request: CustomStatementRequest
+): Promise<CustomStatementResult | null> {
+  const { startDate, endDate, subscriberIds } = request
+
+  // Get profile for currency
+  const profile = await db.profile.findUnique({
+    where: { userId },
+    select: { currency: true, purpose: true },
+  })
+
+  if (!profile) return null
+
+  // Build where clause for payments
+  const whereClause: any = {
+    creatorId: userId,
+    status: 'succeeded',
+    type: { in: ['one_time', 'recurring'] },
+    occurredAt: {
+      gte: startDate,
+      lte: endDate,
+    },
+  }
+
+  // Filter by subscriber IDs if provided
+  if (subscriberIds && subscriberIds.length > 0) {
+    whereClause.subscriberId = { in: subscriberIds }
+  }
+
+  // First, determine the currency for this statement
+  // Custom statements must be single-currency to be valid
+  const currencyCheck = await db.payment.findMany({
+    where: whereClause,
+    select: { currency: true },
+    distinct: ['currency'],
+  })
+
+  const currencies = currencyCheck.map((p) => p.currency)
+
+  // Use profile currency as default, or first found currency
+  const statementCurrency = currencies.includes(profile.currency)
+    ? profile.currency
+    : (currencies[0] || profile.currency)
+
+  // Add currency filter to ensure single-currency statement
+  const currencyFilteredWhere = {
+    ...whereClause,
+    currency: statementCurrency,
+  }
+
+  // Get successful inbound payments (filtered by currency)
+  const successfulPayments = await db.payment.findMany({
+    where: currencyFilteredWhere,
+    include: {
+      subscription: {
+        select: {
+          tierName: true,
+          subscriber: {
+            select: {
+              id: true,
+              email: true,
+            },
+          },
+        },
+      },
+    },
+    orderBy: { occurredAt: 'desc' },
+  })
+
+  // Get refunds in the same period (same currency)
+  // Include both Stripe refunds (type stays original) and Paystack refunds (type='refund')
+  const refunds = await db.payment.findMany({
+    where: {
+      creatorId: userId,
+      currency: statementCurrency,
+      status: 'refunded',
+      type: { in: ['one_time', 'recurring', 'refund'] },
+      occurredAt: {
+        gte: startDate,
+        lte: endDate,
+      },
+      ...(subscriberIds && subscriberIds.length > 0 ? { subscriberId: { in: subscriberIds } } : {}),
+    },
+  })
+
+  // Get chargebacks (same currency)
+  const chargebacks = await db.payment.findMany({
+    where: {
+      creatorId: userId,
+      status: { in: ['dispute_lost', 'disputed'] },
+      type: { in: ['one_time', 'recurring'] },
+      currency: statementCurrency,
+      occurredAt: {
+        gte: startDate,
+        lte: endDate,
+      },
+      ...(subscriberIds && subscriberIds.length > 0 ? { subscriberId: { in: subscriberIds } } : {}),
+    },
+  })
+
+  // Calculate base price (what creator set) instead of gross (what subscriber paid)
+  const grossCents = successfulPayments.reduce((sum, p) => {
+    if (p.creatorFeeCents !== null && p.creatorFeeCents !== undefined) {
+      return sum + p.netCents + p.creatorFeeCents
+    }
+    return sum + p.amountCents
+  }, 0)
+
+  const refundsCents = refunds.reduce((sum, p) => {
+    if (p.creatorFeeCents !== null && p.creatorFeeCents !== undefined) {
+      return sum + Math.abs(p.netCents + p.creatorFeeCents)
+    }
+    return sum + Math.abs(p.amountCents)
+  }, 0)
+
+  const chargebacksCents = chargebacks.reduce((sum, p) => {
+    if (p.creatorFeeCents !== null && p.creatorFeeCents !== undefined) {
+      return sum + Math.abs(p.netCents + p.creatorFeeCents)
+    }
+    return sum + Math.abs(p.amountCents)
+  }, 0)
+
+  // Sum creator's fee portion only (4% in split model)
+  const totalFeeCents = successfulPayments.reduce((sum, p) => {
+    if (p.creatorFeeCents !== null && p.creatorFeeCents !== undefined) {
+      return sum + p.creatorFeeCents
+    }
+    return sum + p.feeCents
+  }, 0)
+
+  // Calculate net correctly: adjusted gross minus fees
+  const adjustedGrossCents = grossCents - refundsCents - chargebacksCents
+  const netCents = adjustedGrossCents - totalFeeCents
+
+  // Build payment items
+  const payments: PaymentItem[] = successfulPayments.map((p) => {
+    const email = p.subscription?.subscriber?.email || ''
+    const tierName = p.subscription?.tierName || null
+    const paymentType: 'recurring' | 'one_time' = p.type === 'recurring' ? 'recurring' : 'one_time'
+
+    // Use net amount (what creator received) for income statement consistency
+    return {
+      id: p.id,
+      date: p.occurredAt,
+      subscriberName: email.split('@')[0] || 'Anonymous',
+      subscriberEmail: maskEmail(email),
+      subscriberId: p.subscription?.subscriber?.id || null,
+      tierName,
+      description: formatPaymentDescription(tierName, paymentType, email),
+      amount: p.netCents, // What creator actually received after fees
+      type: paymentType,
+    }
+  })
+
+  // Calculate YTD (per-currency)
+  const ytd = await calculateYTD(userId, endDate, statementCurrency)
+
+  // Cap payments array to prevent very large responses (totals use full dataset)
+  const maxPayments = 100
+  const truncatedPayments = payments.slice(0, maxPayments)
+
+  return {
+    periodStart: startDate,
+    periodEnd: endDate,
+    grossCents,
+    refundsCents,
+    chargebacksCents,
+    totalFeeCents,
+    netCents,
+    paymentCount: successfulPayments.length,
+    payments: truncatedPayments,
+    paymentsTruncated: payments.length > maxPayments,
+    currency: statementCurrency,
+    ytdGrossCents: ytd.grossCents,
+    ytdNetCents: ytd.netCents,
+    // Warn if payments in other currencies were excluded
+    otherCurrencies: currencies.filter((c) => c !== statementCurrency),
+  }
 }

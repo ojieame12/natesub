@@ -1,8 +1,11 @@
 import { useParams } from 'react-router-dom'
-import { CheckCircle, XCircle, Loader2, FileText } from 'lucide-react'
+import { CheckCircle, XCircle, Loader2, FileText, Download } from 'lucide-react'
+import { Pressable } from '../components'
 import { usePayrollVerify } from '../api/hooks'
 import { formatCurrencyFromCents } from '../utils/currency'
 import './payroll.css'
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
 
 // Format date for display
 const formatDate = (date: string) => {
@@ -75,9 +78,9 @@ export default function PayrollVerify() {
                 <div className="payroll-verify-icon success">
                     <CheckCircle size={32} />
                 </div>
-                <h1 className="payroll-verify-title">Pay Statement Verified</h1>
+                <h1 className="payroll-verify-title">Income Statement Verified</h1>
                 <p className="payroll-verify-message">
-                    This is a valid pay statement issued by NatePay.
+                    This is a valid income statement issued by NatePay.
                 </p>
 
                 {/* Verified Details */}
@@ -91,21 +94,46 @@ export default function PayrollVerify() {
                         <span className="payroll-verify-value">{formatPeriodRange(doc.periodStart, doc.periodEnd)}</span>
                     </div>
                     <div className="payroll-verify-row">
-                        <span className="payroll-verify-label">Net Pay</span>
+                        <span className="payroll-verify-label">Net Income</span>
                         <span className="payroll-verify-value highlight">
                             {formatCurrencyFromCents(doc.netCents, doc.currency || 'USD')}
                         </span>
                     </div>
+                    <div className="payroll-verify-row">
+                        <span className="payroll-verify-label">Payments</span>
+                        <span className="payroll-verify-value">{doc.paymentCount}</span>
+                    </div>
+                    {doc.payoutDate && (
+                        <div className="payroll-verify-row">
+                            <span className="payroll-verify-label">Deposited</span>
+                            <span className="payroll-verify-value">{formatDate(doc.payoutDate)}</span>
+                        </div>
+                    )}
                     <div className="payroll-verify-row">
                         <span className="payroll-verify-label">Issued</span>
                         <span className="payroll-verify-value">{formatDate(doc.createdAt)}</span>
                     </div>
                 </div>
 
+                {/* Platform Confirmation */}
+                <div className="payroll-verified-badge">
+                    <CheckCircle size={14} />
+                    <span>Confirmed by NatePay</span>
+                </div>
+
                 <div className="payroll-verify-badge">
                     <FileText size={16} />
                     <span>Verification Code: {doc.verificationCode}</span>
                 </div>
+
+                {/* Download Button */}
+                <Pressable
+                    className="payroll-verify-download-btn"
+                    onClick={() => window.open(`${API_URL}/payroll/verify/${code}/pdf`, '_blank')}
+                >
+                    <Download size={18} />
+                    <span>Download Verification PDF</span>
+                </Pressable>
 
                 <p className="payroll-verify-disclaimer">
                     This verification confirms that a payment was processed through NatePay.
