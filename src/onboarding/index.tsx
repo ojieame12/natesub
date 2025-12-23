@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from 'react'
+import { useRef, useEffect, useState, useMemo } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useOnboardingStore } from './store'
 import { useAuthState } from '../hooks/useAuthState'
@@ -6,15 +6,19 @@ import StartStep from './StartStep'
 import EmailStep from './EmailStep'
 import OtpStep from './OtpStep'
 import IdentityStep from './IdentityStep'
+import AddressStep from './AddressStep'
 import PersonalUsernameStep from './PersonalUsernameStep'
 import PaymentMethodStep from './PaymentMethodStep'
 import PersonalReviewStep from './PersonalReviewStep'
 import './onboarding.css'
 
+// Countries where we skip address collection (cross-border recipients have simpler verification)
+const SKIP_ADDRESS_COUNTRIES = ['NG', 'GH', 'KE']
+
 export default function OnboardingFlow() {
     const location = useLocation()
     const { onboarding, status } = useAuthState()
-    const { currentStep, hydrateFromServer } = useOnboardingStore()
+    const { currentStep, countryCode, hydrateFromServer } = useOnboardingStore()
     const [direction, setDirection] = useState<'forward' | 'back'>('forward')
     const [isAnimating, setIsAnimating] = useState(false)
     const prevStepRef = useRef(currentStep)
@@ -22,16 +26,31 @@ export default function OnboardingFlow() {
     const lastAppliedUrlStep = useRef<number | null>(null)
     const shouldSkipNextAnimation = useRef(false)
 
-    // "Naked Onboarding" Steps
-    const steps = [
-        <StartStep key="start" />,
-        <EmailStep key="email" />,
-        <OtpStep key="otp" />,
-        <IdentityStep key="identity" />,
-        <PersonalUsernameStep key="username" />,
-        <PaymentMethodStep key="payments" />,
-        <PersonalReviewStep key="review" />,
-    ]
+    // Determine if we should show the address step based on country
+    const showAddressStep = countryCode && !SKIP_ADDRESS_COUNTRIES.includes(countryCode)
+
+    // "Naked Onboarding" Steps - dynamically include AddressStep for non-cross-border countries
+    const steps = useMemo(() => {
+        const baseSteps = [
+            <StartStep key="start" />,
+            <EmailStep key="email" />,
+            <OtpStep key="otp" />,
+            <IdentityStep key="identity" />,
+        ]
+
+        // Add address step only for non-cross-border countries (US, UK, EU, etc.)
+        if (showAddressStep) {
+            baseSteps.push(<AddressStep key="address" />)
+        }
+
+        baseSteps.push(
+            <PersonalUsernameStep key="username" />,
+            <PaymentMethodStep key="payments" />,
+            <PersonalReviewStep key="review" />
+        )
+
+        return baseSteps
+    }, [showAddressStep])
 
     // Hydrate onboarding state from URL ?step= param or server state
     useEffect(() => {

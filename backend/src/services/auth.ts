@@ -13,6 +13,7 @@ const SESSION_EXPIRES_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
 const MAX_OTP_ATTEMPTS = 5
 const OTP_LOCKOUT_MS = 15 * 60 * 1000 // 15 minutes
 const MAX_OTP_GENERATION_ATTEMPTS = 5
+const SESSION_DETAILS_CACHE_TTL_SECONDS = 30 // Reduce DB load for chatty clients (admin UI)
 
 // Onboarding state returned to frontend
 export interface OnboardingState {
@@ -22,6 +23,17 @@ export interface OnboardingState {
   onboardingBranch: OnboardingBranch | null
   onboardingData: Record<string, any> | null
   redirectTo: string
+}
+
+// Countries that skip the address step (cross-border recipients have simpler Stripe verification)
+const SKIP_ADDRESS_COUNTRIES = ['NG', 'GH', 'KE']
+
+// Dynamic completion step based on whether address step is shown
+// - With address step: 8 steps (0-7), completion at step 8
+// - Without address step: 7 steps (0-6), completion at step 7
+function getOnboardingCompleteStep(countryCode?: string | null): number {
+  const skipAddress = SKIP_ADDRESS_COUNTRIES.includes((countryCode || '').toUpperCase())
+  return skipAddress ? 7 : 8
 }
 
 // Hash token for storage (never store raw tokens)
@@ -121,9 +133,9 @@ export function computeOnboardingState(user: {
     paymentProvider: string | null
   } | null
 }): OnboardingState {
-  // Update this if onboarding adds/removes steps.
-  // We clear onboarding state when the user reaches (or surpasses) this step.
-  const ONBOARDING_COMPLETE_STEP = 7
+  // Dynamic completion step based on country (from onboarding data)
+  const countryCode = (user.onboardingData as Record<string, any>)?.countryCode
+  const ONBOARDING_COMPLETE_STEP = getOnboardingCompleteStep(countryCode)
 
   const hasProfile = !!user.profile
   // Payment is only "active" when Stripe/Paystack is fully connected
@@ -331,6 +343,26 @@ export async function validateSessionWithDetails(sessionToken: string): Promise<
   role: UserRole
 } | null> {
   const tokenHash = hashToken(sessionToken)
+  const cacheKey = `session:details:${tokenHash}`
+
+  // Admin UI can be very chatty (many parallel requests). Cache session details briefly
+  // to reduce repeated DB reads. Keep TTL short to respect role changes / blocks quickly.
+  if (process.env.NODE_ENV !== 'test') {
+    try {
+      const cached = await redis.get(cacheKey)
+      if (cached) {
+        const parsed = JSON.parse(cached) as { userId: string; createdAt: string; email: string; role: UserRole }
+        return {
+          userId: parsed.userId,
+          createdAt: new Date(parsed.createdAt),
+          email: parsed.email,
+          role: parsed.role,
+        }
+      }
+    } catch {
+      // Cache read/parse failure should not block auth
+    }
+  }
 
   const session = await db.session.findUnique({
     where: { token: tokenHash },
@@ -343,6 +375,9 @@ export async function validateSessionWithDetails(sessionToken: string): Promise<
 
   if (session.expiresAt < new Date()) {
     await db.session.delete({ where: { id: session.id } })
+    if (process.env.NODE_ENV !== 'test') {
+      redis.del(cacheKey).catch(() => { })
+    }
     return null
   }
 
@@ -355,15 +390,27 @@ export async function validateSessionWithDetails(sessionToken: string): Promise<
 
   if (!user || user.deletedAt) {
     await db.session.delete({ where: { id: session.id } })
+    if (process.env.NODE_ENV !== 'test') {
+      redis.del(cacheKey).catch(() => { })
+    }
     return null
   }
 
-  return {
+  const details = {
     userId: session.userId,
     createdAt: session.createdAt,
     email: user.email,
     role: user.role,
   }
+
+  if (process.env.NODE_ENV !== 'test') {
+    redis.setex(cacheKey, SESSION_DETAILS_CACHE_TTL_SECONDS, JSON.stringify({
+      ...details,
+      createdAt: details.createdAt.toISOString(),
+    })).catch(() => { })
+  }
+
+  return details
 }
 
 // Logout (delete session)
@@ -373,6 +420,10 @@ export async function logout(sessionToken: string): Promise<void> {
   await db.session.deleteMany({
     where: { token: tokenHash },
   })
+
+  if (process.env.NODE_ENV !== 'test') {
+    redis.del(`session:details:${tokenHash}`).catch(() => { })
+  }
 }
 
 // Get current user with onboarding state
@@ -411,14 +462,7 @@ export async function saveOnboardingProgress(
     data?: Record<string, any>
   }
 ) {
-  // Keep in sync with computeOnboardingState(). When onboarding is complete, clear the state.
-  const ONBOARDING_COMPLETE_STEP = 7
-  if (data.step >= ONBOARDING_COMPLETE_STEP) {
-    await clearOnboardingState(userId)
-    return { success: true }
-  }
-
-  // Merge with existing onboarding data if present
+  // Merge with existing onboarding data first to get countryCode for dynamic completion
   const user = await db.user.findUnique({
     where: { id: userId },
     select: { onboardingData: true },
@@ -426,6 +470,16 @@ export async function saveOnboardingProgress(
 
   const existingData = (user?.onboardingData as Record<string, any>) || {}
   const mergedData = data.data ? { ...existingData, ...data.data } : existingData
+
+  // Dynamic completion step based on country
+  const countryCode = mergedData.countryCode || existingData.countryCode
+  const ONBOARDING_COMPLETE_STEP = getOnboardingCompleteStep(countryCode)
+
+  // When onboarding is complete, clear the state
+  if (data.step >= ONBOARDING_COMPLETE_STEP) {
+    await clearOnboardingState(userId)
+    return { success: true }
+  }
 
   await db.user.update({
     where: { id: userId },

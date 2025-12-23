@@ -7,7 +7,8 @@ describe('onboarding/store', () => {
     store.reset()
 
     // Local state before hydration
-    store.setName('Local Name')
+    store.setFirstName('Local')
+    store.setLastName('Name')
     store.setCountry('Local Country', 'LC')
     store.setUsername('local_user')
     expect(useOnboardingStore.getState().currentStep).toBe(0)
@@ -16,7 +17,8 @@ describe('onboarding/store', () => {
       step: 5,
       branch: 'service',
       data: {
-        name: 'Server Name',
+        firstName: 'Server',
+        lastName: 'Name',
         country: 'Server Country',
         countryCode: 'SC',
         currency: 'USD',
@@ -32,7 +34,8 @@ describe('onboarding/store', () => {
     expect(hydrated.currentStep).toBe(5)
     expect(hydrated.branch).toBe('service')
     // Server wins for key fields
-    expect(hydrated.name).toBe('Server Name')
+    expect(hydrated.firstName).toBe('Server')
+    expect(hydrated.lastName).toBe('Name')
     expect(hydrated.country).toBe('Server Country')
     expect(hydrated.countryCode).toBe('SC')
     expect(hydrated.username).toBe('server_user')
@@ -43,19 +46,38 @@ describe('onboarding/store', () => {
     expect(hydrated.feeMode).toBe('pass_to_subscriber')
   })
 
+  it('hydrates old name field for backwards compatibility', () => {
+    const store = useOnboardingStore.getState()
+    store.reset()
+
+    // Old server data with single 'name' field
+    store.hydrateFromServer({
+      step: 3,
+      data: {
+        name: 'Alice Smith',
+      },
+    })
+
+    const hydrated = useOnboardingStore.getState()
+    // Should split into firstName/lastName
+    expect(hydrated.firstName).toBe('Alice')
+    expect(hydrated.lastName).toBe('Smith')
+  })
+
   it('reset returns to initial state', () => {
     const store = useOnboardingStore.getState()
     store.setEmail('test@example.com')
     store.setOtp('123456')
-    store.setName('Alice')
+    store.setFirstName('Alice')
+    store.setLastName('Smith')
     store.nextStep()
 
     store.reset()
     const reset = useOnboardingStore.getState()
     expect(reset.email).toBe('')
     expect(reset.otp).toBe('')
-    expect(reset.name).toBe('')
+    expect(reset.firstName).toBe('')
+    expect(reset.lastName).toBe('')
     expect(reset.currentStep).toBe(0)
   })
 })
-

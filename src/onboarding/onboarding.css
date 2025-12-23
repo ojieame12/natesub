@@ -393,6 +393,54 @@
     padding: var(--space-xl) 0 var(--space-3xl);
 }
 
+/* === NAME ROW (first/last name side by side) === */
+.name-row {
+    display: flex;
+    gap: var(--space-md);
+}
+
+.name-row .input {
+    flex: 1;
+    min-width: 0;
+}
+
+/* === ADDRESS FORM === */
+.address-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.address-row {
+    display: flex;
+    gap: var(--space-md);
+}
+
+.address-row .input {
+    flex: 1;
+    min-width: 0;
+}
+
+.address-row .input.state {
+    flex: 0.6;
+}
+
+.address-row .input.zip {
+    flex: 0.4;
+}
+
+.address-info {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    color: var(--text-secondary);
+    font-size: 14px;
+}
+
+.address-info svg {
+    color: var(--text-tertiary);
+}
+
 /* === INPUT (uses existing design tokens) === */
 .input {
     width: 100%;
@@ -2939,6 +2987,17 @@ button.btn .spinning {
     align-items: center;
     justify-content: center;
     color: var(--text-secondary);
+}
+
+.setup-name-row {
+    display: flex;
+    gap: var(--space-sm);
+    width: 100%;
+}
+
+.setup-name-row .setup-name-input {
+    flex: 1;
+    min-width: 0;
 }
 
 .setup-name-input {

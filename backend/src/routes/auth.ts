@@ -199,13 +199,21 @@ auth.get('/me', requireAuth, async (c) => {
 })
 
 const onboardingDataSchema = z.object({
-  // Identity fields
-  name: z.string().min(1).max(100).optional(),
+  // Identity fields (split names for Stripe KYC prefill)
+  firstName: z.string().min(1).max(50).optional(),
+  lastName: z.string().min(1).max(50).optional(),
+  name: z.string().min(1).max(100).optional(), // Legacy - kept for backwards compatibility
   displayName: z.string().min(1).max(100).optional(),
   country: z.string().min(2).max(100).optional(),
   countryCode: z.string().length(2).optional(),
   currency: z.string().length(3).optional(),
   username: z.string().min(3).max(20).regex(/^[a-z0-9_]+$/i).optional(),
+
+  // Address fields (for Stripe KYC prefill - reduces onboarding screens)
+  address: z.string().max(200).optional(),
+  city: z.string().max(100).optional(),
+  state: z.string().max(100).optional(),
+  zip: z.string().max(20).optional(),
 
   // Profile fields
   avatarUrl: z.string().url().optional(),

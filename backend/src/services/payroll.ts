@@ -151,9 +151,13 @@ export function generateVerificationCode(userId: string, periodEnd: Date): strin
 // DATA AGGREGATION
 // ============================================
 
+// Maximum payments to load for line-item display (prevents memory issues)
+const MAX_PAYMENT_LINE_ITEMS = 100
+
 /**
  * Aggregate payments for a user within a period
- * Handles refunds and chargebacks by subtracting from gross
+ * Uses DB-side aggregation for totals (scalable for high-volume creators)
+ * Only loads capped line-items for display
  */
 async function aggregatePayments(
   userId: string,
@@ -169,27 +173,84 @@ async function aggregatePayments(
   paymentCount: number
   payments: PaymentItem[]
 }> {
-  // Build where clause with optional currency filter
+  // Use DB-side aggregation for totals (avoids loading all rows into memory)
+  // This is critical for high-volume creators with 1000+ payments per period
+  const currencyFilter = currency ? db.$queryRaw`AND "currency" = ${currency}` : db.$queryRaw``
+
+  const totals = await db.$queryRaw<Array<{
+    gross_cents: bigint | null
+    fee_cents: bigint | null
+    net_cents: bigint | null
+    payment_count: bigint
+    refunds_cents: bigint | null
+    chargebacks_cents: bigint | null
+  }>>`
+    SELECT
+      -- Successful payments: base price = netCents + COALESCE(creatorFeeCents, 0)
+      SUM(CASE
+        WHEN "status" = 'succeeded' AND "type" IN ('one_time', 'recurring')
+        THEN "netCents" + COALESCE("creatorFeeCents", 0)
+        ELSE 0
+      END) as gross_cents,
+      -- Creator fee portion (4% in split model, or full feeCents for legacy)
+      SUM(CASE
+        WHEN "status" = 'succeeded' AND "type" IN ('one_time', 'recurring')
+        THEN COALESCE("creatorFeeCents", "feeCents")
+        ELSE 0
+      END) as fee_cents,
+      -- Net earnings
+      SUM(CASE
+        WHEN "status" = 'succeeded' AND "type" IN ('one_time', 'recurring')
+        THEN "netCents"
+        ELSE 0
+      END) as net_cents,
+      -- Payment count
+      COUNT(*) FILTER (
+        WHERE "status" = 'succeeded' AND "type" IN ('one_time', 'recurring')
+      ) as payment_count,
+      -- Refunds: use base price for consistency
+      SUM(CASE
+        WHEN "status" = 'refunded' AND "type" IN ('one_time', 'recurring', 'refund')
+        THEN ABS("netCents" + COALESCE("creatorFeeCents", 0))
+        ELSE 0
+      END) as refunds_cents,
+      -- Chargebacks
+      SUM(CASE
+        WHEN "status" IN ('dispute_lost', 'disputed') AND "type" IN ('one_time', 'recurring')
+        THEN ABS("netCents" + COALESCE("creatorFeeCents", 0))
+        ELSE 0
+      END) as chargebacks_cents
+    FROM "payments"
+    WHERE "creatorId" = ${userId}
+      AND "occurredAt" >= ${periodStart}
+      AND "occurredAt" <= ${periodEnd}
+      ${currencyFilter}
+  `
+
+  const row = totals[0]
+  const grossCents = Number(row?.gross_cents || 0)
+  const totalFeeCents = Number(row?.fee_cents || 0)
+  const totalNetCents = Number(row?.net_cents || 0)
+  const paymentCount = Number(row?.payment_count || 0)
+  const refundsCents = Number(row?.refunds_cents || 0)
+  const chargebacksCents = Number(row?.chargebacks_cents || 0)
+
+  // Only load capped line-items for UI display (not for totals calculation)
   const whereClause: any = {
     creatorId: userId,
+    status: 'succeeded',
+    type: { in: ['one_time', 'recurring'] },
     occurredAt: {
       gte: periodStart,
       lte: periodEnd,
     },
   }
-
   if (currency) {
     whereClause.currency = currency
   }
 
-  // Get successful inbound payments (revenue only, exclude payouts)
-  const successfulPayments = await db.payment.findMany({
-    where: {
-      ...whereClause,
-      status: 'succeeded',
-      // Only count inbound revenue (one_time, recurring) - exclude payout transfers
-      type: { in: ['one_time', 'recurring'] },
-    },
+  const lineItemPayments = await db.payment.findMany({
+    where: whereClause,
     include: {
       subscription: {
         select: {
@@ -204,76 +265,15 @@ async function aggregatePayments(
       },
     },
     orderBy: { occurredAt: 'desc' },
+    take: MAX_PAYMENT_LINE_ITEMS, // Cap to prevent memory issues
   })
 
-  // Get refunds in the same period
-  // Stripe: original payment status changes to 'refunded', keeps original type
-  // Paystack: creates separate record with type='refund', status='refunded'
-  const refunds = await db.payment.findMany({
-    where: {
-      ...whereClause,
-      status: 'refunded',
-      type: { in: ['one_time', 'recurring', 'refund'] },
-    },
-  })
-
-  // Get chargebacks (disputes lost, only for revenue payments)
-  const chargebacks = await db.payment.findMany({
-    where: {
-      ...whereClause,
-      status: { in: ['dispute_lost', 'disputed'] },
-      type: { in: ['one_time', 'recurring'] },
-    },
-  })
-
-  // Calculate base price (what creator set) instead of gross (what subscriber paid)
-  // For split_v1 model: base = netCents + creatorFeeCents (creator's price before their 4% fee)
-  // For legacy: base = netCents (what creator received - consistent with line items and YTD)
-  const basePriceCents = successfulPayments.reduce((sum, p) => {
-    // If creatorFeeCents exists, use net + creatorFee as base price
-    if (p.creatorFeeCents !== null && p.creatorFeeCents !== undefined) {
-      return sum + p.netCents + p.creatorFeeCents
-    }
-    // Legacy: use netCents (what creator received) for consistency with line items/YTD
-    return sum + p.netCents
-  }, 0)
-
-  // For refunds/chargebacks, use the same logic
-  const refundsCents = refunds.reduce((sum, p) => {
-    if (p.creatorFeeCents !== null && p.creatorFeeCents !== undefined) {
-      return sum + Math.abs(p.netCents + p.creatorFeeCents)
-    }
-    return sum + Math.abs(p.netCents)
-  }, 0)
-
-  const chargebacksCents = chargebacks.reduce((sum, p) => {
-    if (p.creatorFeeCents !== null && p.creatorFeeCents !== undefined) {
-      return sum + Math.abs(p.netCents + p.creatorFeeCents)
-    }
-    return sum + Math.abs(p.netCents)
-  }, 0)
-
-  // Sum creator's fee portion only (4% in split model, or full fee for legacy)
-  // This is what gets deducted from creator's payout
-  const creatorFeeTotalCents = successfulPayments.reduce((sum, p) => {
-    // Split model: use creatorFeeCents (4%)
-    if (p.creatorFeeCents !== null && p.creatorFeeCents !== undefined) {
-      return sum + p.creatorFeeCents
-    }
-    // Legacy: full fee deducted from creator
-    return sum + p.feeCents
-  }, 0)
-
-  const totalNetCents = successfulPayments.reduce((sum, p) => sum + p.netCents, 0)
-
-  const paymentItems: PaymentItem[] = successfulPayments.map((p) => {
+  const paymentItems: PaymentItem[] = lineItemPayments.map((p) => {
     const email = p.subscription?.subscriber?.email || ''
     const tierName = p.subscription?.tierName || null
     const paymentType: 'recurring' | 'one_time' = p.type === 'recurring' ? 'recurring' : 'one_time'
 
     // Use base price (creator's set price) for consistency with summary
-    // For split_v1: base = netCents + creatorFeeCents
-    // For legacy: use netCents (what creator received)
     let baseAmount: number
     if (p.creatorFeeCents !== null && p.creatorFeeCents !== undefined) {
       baseAmount = p.netCents + p.creatorFeeCents
@@ -289,18 +289,18 @@ async function aggregatePayments(
       subscriberId: p.subscription?.subscriber?.id || null,
       tierName,
       description: formatPaymentDescription(tierName, paymentType, email),
-      amount: baseAmount, // Base price matches "Client Payments" summary
+      amount: baseAmount,
       type: paymentType,
     }
   })
 
   return {
-    grossCents: basePriceCents,       // Now shows base price (what creator set)
+    grossCents,
     refundsCents,
     chargebacksCents,
-    totalFeeCents: creatorFeeTotalCents, // Now shows only creator's fee portion (4%)
+    totalFeeCents,
     totalNetCents,
-    paymentCount: successfulPayments.length,
+    paymentCount,
     payments: paymentItems,
   }
 }

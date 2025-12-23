@@ -10,6 +10,7 @@ vi.mock('../../src/services/payroll.js', () => ({
   getPayrollPeriods: vi.fn(),
   getPayrollPeriod: vi.fn(),
   generateMissingPeriods: vi.fn(),
+  generatePayrollPeriodsForAllCurrencies: vi.fn(), // New incremental generation
   verifyDocument: vi.fn(),
   setPdfUrl: vi.fn(),
   getPeriodBoundaries: vi.fn(),
@@ -27,6 +28,7 @@ import {
   getPayrollPeriods,
   getPayrollPeriod,
   generateMissingPeriods,
+  generatePayrollPeriodsForAllCurrencies,
   verifyDocument,
   setPdfUrl,
   getPeriodBoundaries,
@@ -41,6 +43,7 @@ import {
 const mockGetPayrollPeriods = vi.mocked(getPayrollPeriods)
 const mockGetPayrollPeriod = vi.mocked(getPayrollPeriod)
 const mockGenerateMissingPeriods = vi.mocked(generateMissingPeriods)
+const mockGeneratePayrollPeriodsForAllCurrencies = vi.mocked(generatePayrollPeriodsForAllCurrencies)
 const mockVerifyDocument = vi.mocked(verifyDocument)
 const mockSetPdfUrl = vi.mocked(setPdfUrl)
 const mockGetPeriodBoundaries = vi.mocked(getPeriodBoundaries)
@@ -215,7 +218,15 @@ describe('payroll routes', () => {
     it('returns empty list when no periods exist', async () => {
       const { user, rawToken } = await createServiceProviderWithSession()
 
-      mockGenerateMissingPeriods.mockResolvedValue(undefined)
+      // Mock period boundaries for incremental generation
+      const now = new Date()
+      const lastPeriodStart = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+      const lastPeriodEnd = new Date(now.getTime() - 16 * 24 * 60 * 60 * 1000)
+      mockGetPeriodBoundaries.mockImplementation((date: Date) => ({
+        start: date < now ? lastPeriodStart : now,
+        end: date < now ? lastPeriodEnd : new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000),
+      }))
+      mockGeneratePayrollPeriodsForAllCurrencies.mockResolvedValue(0)
       mockGetPayrollPeriods.mockResolvedValue([])
 
       const res = await authRequest('/payroll/periods', { method: 'GET' }, rawToken)
@@ -226,7 +237,8 @@ describe('payroll routes', () => {
       expect(body.ytdByCurrency).toEqual({})
       expect(body.total).toBe(0)
 
-      expect(mockGenerateMissingPeriods).toHaveBeenCalledWith(user.id)
+      // Now uses incremental generation (last period only) instead of full backfill
+      expect(mockGeneratePayrollPeriodsForAllCurrencies).toHaveBeenCalled()
     })
 
     it('returns list of periods with correct status', async () => {
@@ -248,7 +260,14 @@ describe('payroll routes', () => {
         periodEnd: new Date(now.getTime() + 86400000), // Tomorrow
       })
 
-      mockGenerateMissingPeriods.mockResolvedValue(undefined)
+      // Mock period boundaries for incremental generation
+      const lastPeriodStart = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+      const lastPeriodEnd = new Date(now.getTime() - 16 * 24 * 60 * 60 * 1000)
+      mockGetPeriodBoundaries.mockImplementation((date: Date) => ({
+        start: date < now ? lastPeriodStart : now,
+        end: date < now ? lastPeriodEnd : new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000),
+      }))
+      mockGeneratePayrollPeriodsForAllCurrencies.mockResolvedValue(0)
       mockGetPayrollPeriods.mockResolvedValue([currentPeriod, pendingPeriod, pastPeriod])
 
       const res = await authRequest('/payroll/periods', { method: 'GET' }, rawToken)
@@ -270,7 +289,8 @@ describe('payroll routes', () => {
     it('calculates YTD total correctly', async () => {
       const { rawToken } = await createServiceProviderWithSession()
 
-      const currentYear = new Date().getFullYear()
+      const now = new Date()
+      const currentYear = now.getFullYear()
       const periods = [
         createMockPeriod({
           id: 'period-1',
@@ -289,7 +309,14 @@ describe('payroll routes', () => {
         }),
       ]
 
-      mockGenerateMissingPeriods.mockResolvedValue(undefined)
+      // Mock period boundaries for incremental generation
+      const lastPeriodStart = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+      const lastPeriodEnd = new Date(now.getTime() - 16 * 24 * 60 * 60 * 1000)
+      mockGetPeriodBoundaries.mockImplementation((date: Date) => ({
+        start: date < now ? lastPeriodStart : now,
+        end: date < now ? lastPeriodEnd : new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000),
+      }))
+      mockGeneratePayrollPeriodsForAllCurrencies.mockResolvedValue(0)
       mockGetPayrollPeriods.mockResolvedValue(periods)
 
       const res = await authRequest('/payroll/periods', { method: 'GET' }, rawToken)

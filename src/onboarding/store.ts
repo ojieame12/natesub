@@ -73,11 +73,18 @@ interface OnboardingStore {
     email: string
     otp: string
 
-    // Identity
-    name: string
+    // Identity (split names for Stripe KYC prefill)
+    firstName: string
+    lastName: string
     country: string
     countryCode: string
     currency: string
+
+    // Address (for Stripe KYC prefill - reduces onboarding screens)
+    address: string
+    city: string
+    state: string
+    zip: string
 
     // Purpose - what's this subscription for?
     purpose: SubscriptionPurpose | null
@@ -114,9 +121,14 @@ interface OnboardingStore {
     setIsGenerating: (isGenerating: boolean) => void
     setEmail: (email: string) => void
     setOtp: (otp: string) => void
-    setName: (name: string) => void
+    setFirstName: (firstName: string) => void
+    setLastName: (lastName: string) => void
     setCountry: (country: string, countryCode: string) => void
     setCurrency: (currency: string) => void
+    setAddress: (address: string) => void
+    setCity: (city: string) => void
+    setState: (state: string) => void
+    setZip: (zip: string) => void
     setPurpose: (purpose: SubscriptionPurpose) => void
     setPricing: (model: PricingModel, tiers: SubscriptionTier[], singleAmount: number | null) => void
     setBio: (bio: string) => void
@@ -163,10 +175,15 @@ const initialState = {
     isGenerating: false,
     email: '',
     otp: '',
-    name: '',
+    firstName: '',
+    lastName: '',
     country: '',
     countryCode: '',
     currency: 'USD',
+    address: '',
+    city: '',
+    state: '',
+    zip: '',
     purpose: 'support' as SubscriptionPurpose,
     pricingModel: 'single' as PricingModel,
     singleAmount: 10,
@@ -213,9 +230,16 @@ export const useOnboardingStore = create<OnboardingStore>()(
             setOtp: (otp) => set({ otp }),
 
             // Identity
-            setName: (name) => set({ name }),
+            setFirstName: (firstName) => set({ firstName }),
+            setLastName: (lastName) => set({ lastName }),
             setCountry: (country, countryCode) => set({ country, countryCode }),
             setCurrency: (currency) => set({ currency }),
+
+            // Address
+            setAddress: (address) => set({ address }),
+            setCity: (city) => set({ city }),
+            setState: (state) => set({ state }),
+            setZip: (zip) => set({ zip }),
 
             // Purpose
             setPurpose: (purpose) => set({ purpose }),
@@ -249,6 +273,11 @@ export const useOnboardingStore = create<OnboardingStore>()(
                 avatarFile: null,
                 paymentProvider: null, // Reset to null so we re-evaluate safest option
                 feeMode: 'split',
+                // Reset address fields
+                address: '',
+                city: '',
+                state: '',
+                zip: '',
             }),
 
             // Hydrate from server data (for resume flows)
@@ -266,12 +295,24 @@ export const useOnboardingStore = create<OnboardingStore>()(
                 // Merge server data with local state (server wins for key fields)
                 if (serverData.data) {
                     const d = serverData.data
-                    // Identity
-                    if (d.name) updates.name = d.name
+                    // Identity (support both old 'name' and new firstName/lastName)
+                    if (d.firstName) updates.firstName = d.firstName
+                    if (d.lastName) updates.lastName = d.lastName
+                    // Migrate old 'name' field to firstName/lastName
+                    if (d.name && !d.firstName) {
+                        const parts = d.name.trim().split(' ')
+                        updates.firstName = parts[0] || ''
+                        updates.lastName = parts.slice(1).join(' ') || ''
+                    }
                     if (d.country) updates.country = d.country
                     if (d.countryCode) updates.countryCode = d.countryCode
                     if (d.currency) updates.currency = d.currency
                     if (d.username) updates.username = d.username
+                    // Address
+                    if (d.address) updates.address = d.address
+                    if (d.city) updates.city = d.city
+                    if (d.state) updates.state = d.state
+                    if (d.zip) updates.zip = d.zip
                     // Pricing
                     if (d.singleAmount !== undefined) updates.singleAmount = d.singleAmount
                     if (d.pricingModel) updates.pricingModel = d.pricingModel
@@ -313,10 +354,15 @@ export const useOnboardingStore = create<OnboardingStore>()(
                 serviceCredential: state.serviceCredential,
                 generatedBio: state.generatedBio,
                 email: state.email,
-                name: state.name,
+                firstName: state.firstName,
+                lastName: state.lastName,
                 country: state.country,
                 countryCode: state.countryCode,
                 currency: state.currency,
+                address: state.address,
+                city: state.city,
+                state: state.state,
+                zip: state.zip,
                 purpose: state.purpose,
                 pricingModel: state.pricingModel,
                 singleAmount: state.singleAmount,

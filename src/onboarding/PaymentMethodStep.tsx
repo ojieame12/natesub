@@ -129,7 +129,7 @@ export default function PaymentMethodStep() {
         // Basic validation (non-pricing fields)
         const validationErrors: string[] = []
         if (!store.username?.trim()) validationErrors.push('Username is required')
-        if (!store.name?.trim()) validationErrors.push('Name is required')
+        if (!store.firstName?.trim()) validationErrors.push('First name is required')
         if (!store.country?.trim()) validationErrors.push('Country is required')
         if (!store.countryCode?.trim()) validationErrors.push('Country code is required')
 
@@ -158,9 +158,11 @@ export default function PaymentMethodStep() {
             }
 
             // Build profile data from store
+            // Compose displayName from firstName + lastName
+            const displayName = `${store.firstName || ''} ${store.lastName || ''}`.trim() || store.username
             const profileData = {
                 username: store.username,
-                displayName: store.name,
+                displayName,
                 bio: store.bio || store.generatedBio || null,
                 avatarUrl: store.avatarUrl,
                 country: store.country,
@@ -171,6 +173,11 @@ export default function PaymentMethodStep() {
                 singleAmount: store.pricingModel === 'single' ? finalSingleAmount : null,
                 tiers: store.pricingModel === 'tiers' ? store.tiers : null,
                 paymentProvider: selectedMethod,
+                // Address fields for Stripe KYC prefill (trimmed for clean data)
+                address: store.address?.trim() || undefined,
+                city: store.city?.trim() || undefined,
+                state: store.state?.trim() || undefined,
+                zip: store.zip?.trim() || undefined,
             }
 
             // Save profile to backend
@@ -179,10 +186,11 @@ export default function PaymentMethodStep() {
             await api.profile.updateSettings({ isPublic: false })
 
             // Persist onboarding progress so the flow can resume after redirects
+            // Save next step (Review) - backend uses countryCode to determine dynamic completion
             await api.auth.saveOnboardingProgress({
-                step: currentStep + 1, // next step is Launch Review
+                step: currentStep + 1,
                 branch: branch === 'service' ? 'service' : 'personal',
-                data: { paymentProvider: selectedMethod },
+                data: { paymentProvider: selectedMethod, countryCode: store.countryCode },
             }).catch(() => { })
 
             // Handle Stripe connect flow
@@ -194,8 +202,9 @@ export default function PaymentMethodStep() {
                         // Store source for redirect handling when user returns from Stripe
                         sessionStorage.setItem('stripe_onboarding_source', 'onboarding')
                         sessionStorage.setItem('stripe_onboarding_started_at', Date.now().toString())
-                        // Fallback: if StripeComplete can't determine source, it can still navigate back here.
-                        sessionStorage.setItem('stripe_return_to', '/onboarding?step=6')
+                        // Fallback: return to Review step (next step after Payment)
+                        // Dynamic based on whether address step is shown
+                        sessionStorage.setItem('stripe_return_to', `/onboarding?step=${currentStep + 1}`)
                         // Profile is saved - redirect to Stripe onboarding
                         // Don't reset() here - AuthRedirect will route properly when user returns
                         window.location.href = result.onboardingUrl

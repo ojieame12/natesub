@@ -5,6 +5,7 @@ import { db } from '../db/client.js'
 import { redis } from '../db/redis.js'
 import {
   generatePayrollPeriod,
+  generatePayrollPeriodsForAllCurrencies,
   getPeriodBoundaries,
   getPayrollPeriod,
 } from '../services/payroll.js'
@@ -110,113 +111,126 @@ export async function generatePayrollPeriods(): Promise<PayrollJobResult> {
       }
 
       try {
-        // Generate payroll period
-        const period = await generatePayrollPeriod(creatorId, periodStart, periodEnd)
+        // Generate payroll periods for ALL currencies the creator received
+        // This prevents missing statements for multi-currency creators
+        const periodsGenerated = await generatePayrollPeriodsForAllCurrencies(creatorId, periodStart, periodEnd)
 
-        if (!period) {
+        if (periodsGenerated === 0) {
           result.skipped++
           console.log(`[payroll] No payments for ${creatorId} in period`)
           continue
         }
 
-        result.generated++
-        console.log(`[payroll] Generated period ${period.id} for ${creatorId}`)
+        result.generated += periodsGenerated
+        console.log(`[payroll] Generated ${periodsGenerated} period(s) for ${creatorId}`)
 
-        // Auto-generate PDF
-        const fullPeriod = await getPayrollPeriod(creatorId, period.id)
-        if (fullPeriod && !fullPeriod.pdfUrl) {
-          const user = await db.user.findUnique({
-            where: { id: creatorId },
-            include: {
-              profile: {
-                select: {
-                  displayName: true,
-                  currency: true,
-                  address: true,
-                  city: true,
-                  state: true,
-                  zip: true,
+        // Fetch all periods for this date range to generate PDFs
+        const periodsForPdf = await db.payrollPeriod.findMany({
+          where: {
+            userId: creatorId,
+            periodStart,
+            periodEnd,
+            pdfUrl: null, // Only ones without PDF
+          },
+        })
+
+        for (const period of periodsForPdf) {
+          // Auto-generate PDF for this period
+          const fullPeriod = await getPayrollPeriod(creatorId, period.id)
+          if (fullPeriod) {
+            const user = await db.user.findUnique({
+              where: { id: creatorId },
+              include: {
+                profile: {
+                  select: {
+                    displayName: true,
+                    currency: true,
+                    address: true,
+                    city: true,
+                    state: true,
+                    zip: true,
+                  },
                 },
               },
-            },
-          })
-
-          if (user?.profile) {
-            const verificationUrl = `${env.APP_URL}/verify/${period.verificationCode}`
-
-            // Get active subscriber count
-            const activeSubscribers = await db.subscription.count({
-              where: {
-                creatorId,
-                status: { in: ['active', 'past_due'] },
-              },
             })
 
-            // Get first payment date for "earning since"
-            const firstPayment = await db.payment.findFirst({
-              where: { creatorId, status: 'succeeded' },
-              orderBy: { occurredAt: 'asc' },
-              select: { occurredAt: true },
-            })
-            const earningsSince = firstPayment?.occurredAt || fullPeriod.periodStart
+            if (user?.profile) {
+              const verificationUrl = `${env.APP_URL}/verify/${period.verificationCode}`
 
-            // Calculate months since first payment for average
-            const monthsActive = Math.max(1, Math.ceil(
-              (new Date().getTime() - earningsSince.getTime()) / (30 * 24 * 60 * 60 * 1000)
-            ))
-            const avgMonthlyEarnings = Math.round(fullPeriod.ytdNetCents / monthsActive)
+              // Get active subscriber count
+              const activeSubscribers = await db.subscription.count({
+                where: {
+                  creatorId,
+                  status: { in: ['active', 'past_due'] },
+                },
+              })
 
-            // Build payments array from period payments
-            // Use formatted description from payroll service, not raw email
-            const payments: PaymentRecord[] = fullPeriod.payments.map((p) => ({
-              date: p.date,
-              amount: p.amount,
-              description: p.description || 'Subscription payment',
-            }))
+              // Get first payment date for "earning since"
+              const firstPayment = await db.payment.findFirst({
+                where: { creatorId, status: 'succeeded' },
+                orderBy: { occurredAt: 'asc' },
+                select: { occurredAt: true },
+              })
+              const earningsSince = firstPayment?.occurredAt || fullPeriod.periodStart
 
-            // Count YTD payments - filter by period currency for accuracy
-            const ytdPaymentCount = await db.payment.count({
-              where: {
-                creatorId,
-                status: 'succeeded',
-                currency: fullPeriod.currency, // Match period currency
-                occurredAt: { gte: new Date(new Date().getFullYear(), 0, 1) },
-              },
-            })
+              // Calculate months since first payment for average
+              const monthsActive = Math.max(1, Math.ceil(
+                (new Date().getTime() - earningsSince.getTime()) / (30 * 24 * 60 * 60 * 1000)
+              ))
+              const avgMonthlyEarnings = Math.round(fullPeriod.ytdNetCents / monthsActive)
 
-            const pdfData: IncomeStatementData = {
-              payeeName: user.profile.displayName,
-              payeeEmail: user.email,
-              payeeAddress: user.profile.address ? {
-                street: user.profile.address,
-                city: user.profile.city || undefined,
-                state: user.profile.state || undefined,
-                zip: user.profile.zip || undefined,
-              } : undefined,
-              periodStart: fullPeriod.periodStart,
-              periodEnd: fullPeriod.periodEnd,
-              activeSubscribers,
-              totalEarnings: fullPeriod.netCents,
-              payments,
-              depositDate: fullPeriod.payoutDate,
-              depositMethod: fullPeriod.payoutMethod || 'Bank Transfer',
-              bankLast4: fullPeriod.bankLast4,
-              ytdEarnings: fullPeriod.ytdNetCents,
-              ytdPaymentCount,
-              earningsSince,
-              avgMonthlyEarnings,
-              statementId: period.verificationCode,
-              verificationUrl,
-              currency: fullPeriod.currency, // Use period currency, not profile default
+              // Build payments array from period payments
+              // Use formatted description from payroll service, not raw email
+              const payments: PaymentRecord[] = fullPeriod.payments.map((p) => ({
+                date: p.date,
+                amount: p.amount,
+                description: p.description || 'Subscription payment',
+              }))
+
+              // Count YTD payments - filter by period currency for accuracy
+              const ytdPaymentCount = await db.payment.count({
+                where: {
+                  creatorId,
+                  status: 'succeeded',
+                  currency: fullPeriod.currency, // Match period currency
+                  occurredAt: { gte: new Date(new Date().getFullYear(), 0, 1) },
+                },
+              })
+
+              const pdfData: IncomeStatementData = {
+                payeeName: user.profile.displayName,
+                payeeEmail: user.email,
+                payeeAddress: user.profile.address ? {
+                  street: user.profile.address,
+                  city: user.profile.city || undefined,
+                  state: user.profile.state || undefined,
+                  zip: user.profile.zip || undefined,
+                } : undefined,
+                periodStart: fullPeriod.periodStart,
+                periodEnd: fullPeriod.periodEnd,
+                activeSubscribers,
+                totalEarnings: fullPeriod.netCents,
+                payments,
+                depositDate: fullPeriod.payoutDate,
+                depositMethod: fullPeriod.payoutMethod || 'Bank Transfer',
+                bankLast4: fullPeriod.bankLast4,
+                ytdEarnings: fullPeriod.ytdNetCents,
+                ytdPaymentCount,
+                earningsSince,
+                avgMonthlyEarnings,
+                statementId: period.verificationCode,
+                verificationUrl,
+                currency: fullPeriod.currency, // Use period currency, not profile default
+              }
+
+              const pdfUrl = await generateAndUploadPayStatement(creatorId, period.id, pdfData)
+              await setPdfUrl(period.id, pdfUrl)
+
+              result.pdfsGenerated++
+              console.log(`[payroll] Generated PDF for period ${period.id}`)
             }
-
-            const pdfUrl = await generateAndUploadPayStatement(creatorId, period.id, pdfData)
-            await setPdfUrl(period.id, pdfUrl)
-
-            result.pdfsGenerated++
-            console.log(`[payroll] Generated PDF for period ${period.id}`)
           }
-        }
+        } // End for periodsForPdf loop
       } catch (error: any) {
         result.errors.push({
           userId: creatorId,
@@ -270,15 +284,16 @@ export async function generateUserMissingPeriods(userId: string): Promise<number
       const period = getPeriodBoundaries(checkDate)
 
       if (period.end < now) {
-        const result = await generatePayrollPeriod(userId, period.start, period.end)
-        if (result) generated++
+        // Generate for ALL currencies the user received in this period
+        const count = await generatePayrollPeriodsForAllCurrencies(userId, period.start, period.end)
+        generated += count
       }
 
       // Move to next period
       checkDate = new Date(period.end.getTime() + 1)
     }
 
-    console.log(`[payroll] Generated ${generated} historical periods for ${userId}`)
+    console.log(`[payroll] Generated ${generated} historical period(s) for ${userId}`)
     return generated
   } finally {
     await redis.del(userLockKey)

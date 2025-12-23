@@ -30,7 +30,10 @@ export default function PersonalReviewStep() {
     const [showPurposeDrawer, setShowPurposeDrawer] = useState(false)
 
     const {
-        name,
+        firstName,
+        lastName,
+        setFirstName,
+        setLastName,
         username,
         purpose,
         branch,
@@ -40,7 +43,11 @@ export default function PersonalReviewStep() {
         currency,
         avatarUrl,
         paymentProvider,
-        setName,
+        address,
+        city,
+        state,
+        zip,
+        currentStep,
         setAvatarUrl,
         setPurpose,
         setPricing,
@@ -48,6 +55,9 @@ export default function PersonalReviewStep() {
         prevStep,
         reset
     } = useOnboardingStore()
+
+    // Construct display name from first/last name
+    const displayName = `${firstName} ${lastName}`.trim()
 
     const resolvedPurpose = branch === 'service' ? 'service' : (purpose || 'support')
     const currencySymbol = getCurrencySymbol(currency)
@@ -136,7 +146,7 @@ export default function PersonalReviewStep() {
     }
 
     const handleLaunch = async () => {
-        if (!name || !username) {
+        if (!displayName || !username) {
             setError('Please fill in all fields.')
             return
         }
@@ -151,10 +161,10 @@ export default function PersonalReviewStep() {
         setError(null)
 
         try {
-            // 1. Final Profile Update
+            // 1. Final Profile Update (includes address for Stripe KYC prefill)
             await api.profile.update({
                 username,
-                displayName: name,
+                displayName,
                 avatarUrl,
                 purpose: resolvedPurpose,
                 currency,
@@ -164,13 +174,22 @@ export default function PersonalReviewStep() {
                 singleAmount: finalAmount,
                 tiers: null,
                 paymentProvider,
+                // Address fields for Stripe KYC prefill (trimmed for clean data)
+                address: address?.trim() || undefined,
+                city: city?.trim() || undefined,
+                state: state?.trim() || undefined,
+                zip: zip?.trim() || undefined,
             })
 
             // 2. Publish Page
             await api.profile.updateSettings({ isPublic: true })
 
-            // 3. Complete Onboarding
-            await api.auth.saveOnboardingProgress({ step: 7, data: {} })
+            // 3. Complete Onboarding - dynamic step based on flow length
+            // Backend uses countryCode to determine completion threshold
+            await api.auth.saveOnboardingProgress({
+                step: currentStep + 1,
+                data: { countryCode },
+            })
 
             // 4. Go to their new page (owner view with share button)
             reset()
@@ -209,7 +228,7 @@ export default function PersonalReviewStep() {
                                 <img src={avatarUrl} alt="" className="setup-avatar-image" />
                             ) : (
                                 <div className="setup-avatar-placeholder">
-                                    {name ? name.charAt(0).toUpperCase() : 'U'}
+                                    {firstName ? firstName.charAt(0).toUpperCase() : 'U'}
                                 </div>
                             )}
                             <div className="setup-avatar-overlay">
@@ -224,14 +243,23 @@ export default function PersonalReviewStep() {
                             style={{ display: 'none' }}
                         />
 
-                        {/* Display Name */}
-                        <input
-                            type="text"
-                            className="setup-name-input"
-                            value={name}
-                            onChange={(e) => setName(e.target.value)}
-                            placeholder="Your name"
-                        />
+                        {/* Display Name (first + last) */}
+                        <div className="setup-name-row">
+                            <input
+                                type="text"
+                                className="setup-name-input"
+                                value={firstName}
+                                onChange={(e) => setFirstName(e.target.value)}
+                                placeholder="First"
+                            />
+                            <input
+                                type="text"
+                                className="setup-name-input"
+                                value={lastName}
+                                onChange={(e) => setLastName(e.target.value)}
+                                placeholder="Last"
+                            />
+                        </div>
 
                         {/* Link preview */}
                         <span className="setup-link">{getShareableLink(username || '...')}</span>

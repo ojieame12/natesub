@@ -25,7 +25,8 @@ describe('onboarding/AIGeneratingStep', () => {
 
   it('fetches recorded audio, converts to base64 with correct mimeType, and calls generate', async () => {
     useOnboardingStore.getState().reset()
-    useOnboardingStore.getState().setName('Alice')
+    useOnboardingStore.getState().setFirstName('Alice')
+    useOnboardingStore.getState().setLastName('Smith')
     useOnboardingStore.getState().setPricing('single', [], 12)
     useOnboardingStore.getState().setServiceDescriptionAudioUrl('https://r2.example.com/audio.webm')
 
@@ -49,7 +50,7 @@ describe('onboarding/AIGeneratingStep', () => {
       expect(mocks.generate).toHaveBeenCalledWith(expect.objectContaining({
         audio: { data: 'base64data', mimeType: 'audio/webm' },
         price: 12,
-        userName: 'Alice',
+        userName: 'Alice Smith', // firstName + lastName composite
         includeMarketResearch: false,
       }))
     })

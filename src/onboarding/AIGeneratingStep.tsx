@@ -23,7 +23,8 @@ export default function AIGeneratingStep() {
     const {
         serviceDescription,
         serviceDescriptionAudioUrl,
-        name,
+        firstName,
+        lastName,
         singleAmount,
         setGeneratedContent,
         setIsGenerating,
@@ -53,11 +54,12 @@ export default function AIGeneratingStep() {
             }
 
             // Call real API
+            const userName = `${firstName || ''} ${lastName || ''}`.trim()
             const result = await generatePage({
                 audio: audioData,
                 textDescription: serviceDescription || undefined,
                 price: singleAmount || 25,
-                userName: name || '',
+                userName,
                 includeMarketResearch: false,
             })
 

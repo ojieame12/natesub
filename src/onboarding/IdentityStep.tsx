@@ -51,7 +51,7 @@ const countries = [
 ]
 
 export default function IdentityStep() {
-    const { name, setName, country, countryCode, currency, setCountry, setCurrency, nextStep, prevStep, currentStep } = useOnboardingStore()
+    const { firstName, lastName, setFirstName, setLastName, country, countryCode, currency, setCountry, setCurrency, nextStep, prevStep, currentStep } = useOnboardingStore()
     const [showCountryPicker, setShowCountryPicker] = useState(false)
     const [searchQuery, setSearchQuery] = useState('')
     const { mutateAsync: saveProgress } = useSaveOnboardingProgress()
@@ -75,7 +75,7 @@ export default function IdentityStep() {
         try {
             await saveProgress({
                 step: currentStep + 1, // Will be moving to next step
-                data: { name, country, countryCode, currency },
+                data: { firstName, lastName, country, countryCode, currency },
             })
         } catch (err) {
             // Non-blocking - continue even if save fails
@@ -102,13 +102,21 @@ export default function IdentityStep() {
                 </div>
 
                 <div className="step-body">
-                    <input
-                        className="input"
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        placeholder="Your name"
-                        autoFocus
-                    />
+                    <div className="name-row">
+                        <input
+                            className="input"
+                            value={firstName}
+                            onChange={(e) => setFirstName(e.target.value)}
+                            placeholder="First name"
+                            autoFocus
+                        />
+                        <input
+                            className="input"
+                            value={lastName}
+                            onChange={(e) => setLastName(e.target.value)}
+                            placeholder="Last name"
+                        />
+                    </div>
 
                     <Pressable
                         className="country-selector"
@@ -135,7 +143,7 @@ export default function IdentityStep() {
                         size="lg"
                         fullWidth
                         onClick={handleContinue}
-                        disabled={!name.trim() || !countryCode}
+                        disabled={!firstName.trim() || !lastName.trim() || !countryCode}
                     >
                         Continue
                     </Button>

@@ -44,7 +44,8 @@ describe('PaymentMethodStep', () => {
     // NG users default to local currency (NGN), payment method choice handles currency
     useOnboardingStore.setState({
       username: 'testuser',
-      name: 'Test User',
+      firstName: 'Test',
+      lastName: 'User',
       country: 'Nigeria',
       countryCode: 'NG',
       currency: 'NGN', // Default to local currency
@@ -88,6 +89,7 @@ describe('PaymentMethodStep', () => {
       expect(api.profile.update).toHaveBeenCalledWith(expect.objectContaining({
         paymentProvider: 'stripe',
         username: 'testuser',
+        displayName: 'Test User', // firstName + lastName composite
         currency: 'USD', // Auto-switched from NGN to USD for Stripe
       }))
       expect(api.stripe.connect).toHaveBeenCalled()
@@ -113,6 +115,7 @@ describe('PaymentMethodStep', () => {
       // Currency stays NGN for Paystack
       expect(api.profile.update).toHaveBeenCalledWith(expect.objectContaining({
         paymentProvider: 'paystack',
+        displayName: 'Test User', // firstName + lastName composite
         currency: 'NGN',
       }))
       expect(mockNavigate).toHaveBeenCalledWith('/onboarding/paystack')
@@ -136,5 +139,112 @@ describe('PaymentMethodStep', () => {
       expect(screen.getByText(/Username is required/)).toBeInTheDocument()
       expect(api.profile.update).not.toHaveBeenCalled()
     })
+  })
+
+  it('includes trimmed address fields in profile update', async () => {
+    // Setup US user with address (US shows address step)
+    useOnboardingStore.setState({
+      username: 'ususer',
+      firstName: 'Ada',
+      lastName: 'Lovelace',
+      country: 'United States',
+      countryCode: 'US',
+      currency: 'USD',
+      pricingModel: 'single',
+      singleAmount: 10,
+      currentStep: 6, // Payment step with address flow
+      // Address with extra whitespace to test trimming
+      address: '  123 Main St  ',
+      city: '  San Francisco  ',
+      state: '  CA  ',
+      zip: '  94102  ',
+    })
+
+    vi.mocked(api.stripe.connect).mockResolvedValue({ alreadyOnboarded: true })
+
+    renderWithProviders(<PaymentMethodStep />)
+
+    fireEvent.click(screen.getByText('Stripe'))
+    fireEvent.click(screen.getByText('Connect with Stripe'))
+
+    await waitFor(() => {
+      expect(api.profile.update).toHaveBeenCalledWith(expect.objectContaining({
+        displayName: 'Ada Lovelace',
+        // Address fields should be trimmed
+        address: '123 Main St',
+        city: 'San Francisco',
+        state: 'CA',
+        zip: '94102',
+      }))
+    })
+  })
+
+  it('saves progress with currentStep + 1 and countryCode', async () => {
+    useOnboardingStore.setState({
+      username: 'testuser',
+      firstName: 'Test',
+      lastName: 'User',
+      country: 'United States',
+      countryCode: 'US',
+      currency: 'USD',
+      pricingModel: 'single',
+      singleAmount: 10,
+      currentStep: 6, // Payment step in 8-step flow
+    })
+
+    vi.mocked(api.stripe.connect).mockResolvedValue({ alreadyOnboarded: true })
+
+    renderWithProviders(<PaymentMethodStep />)
+
+    fireEvent.click(screen.getByText('Stripe'))
+    fireEvent.click(screen.getByText('Connect with Stripe'))
+
+    await waitFor(() => {
+      // Should save currentStep + 1 (7) with countryCode for backend dynamic completion
+      expect(api.auth.saveOnboardingProgress).toHaveBeenCalledWith({
+        step: 7, // currentStep (6) + 1
+        branch: 'personal',
+        data: { paymentProvider: 'stripe', countryCode: 'US' },
+      })
+    })
+  })
+
+  it('sets stripe_return_to to next step (currentStep + 1)', async () => {
+    useOnboardingStore.setState({
+      username: 'testuser',
+      firstName: 'Test',
+      lastName: 'User',
+      country: 'Nigeria',
+      countryCode: 'NG',
+      currency: 'NGN',
+      pricingModel: 'single',
+      singleAmount: 5000,
+      currentStep: 5, // Payment step in 7-step flow (no address)
+    })
+
+    const mockConnectRes = { onboardingUrl: 'https://connect.stripe.com/setup' }
+    vi.mocked(api.stripe.connect).mockResolvedValue(mockConnectRes)
+
+    // Mock sessionStorage
+    const setItemSpy = vi.spyOn(Storage.prototype, 'setItem')
+
+    // Mock window.location
+    const originalLocation = window.location
+    delete (window as any).location
+    window.location = { href: '' } as any
+
+    renderWithProviders(<PaymentMethodStep />)
+
+    fireEvent.click(screen.getByText('Stripe'))
+    fireEvent.click(screen.getByText('Connect with Stripe'))
+
+    await waitFor(() => {
+      // Should set stripe_return_to to currentStep + 1 (6 = Review step)
+      expect(setItemSpy).toHaveBeenCalledWith('stripe_return_to', '/onboarding?step=6')
+    })
+
+    // Cleanup
+    setItemSpy.mockRestore()
+    ;(window as any).location = originalLocation
   })
 })

@@ -11,7 +11,6 @@ import {
   getPayrollPeriods,
   getPayrollPeriod,
   generatePayrollPeriod,
-  generateMissingPeriods,
   verifyDocument,
   setPdfUrl,
   getPeriodBoundaries,
@@ -60,8 +59,21 @@ async function requireServicePurpose(c: Context, next: Next) {
 payroll.get('/periods', requireAuth, requireServicePurpose, async (c) => {
   const userId = c.get('userId')
 
-  // First generate any missing periods
-  await generateMissingPeriods(userId)
+  // Only generate the LAST completed period on-demand (incremental approach)
+  // Full historical backfill runs via scheduled job to avoid O(months) on every page load
+  const now = new Date()
+  const currentPeriod = getPeriodBoundaries(now)
+
+  // Check if the previous period needs generation (most recent completed period)
+  // Move back 16 days to ensure we're in the previous period
+  const prevPeriodDate = new Date(currentPeriod.start.getTime() - 16 * 24 * 60 * 60 * 1000)
+  const lastPeriod = getPeriodBoundaries(prevPeriodDate)
+
+  if (lastPeriod.end < now) {
+    // Generate for all currencies received in this period
+    const { generatePayrollPeriodsForAllCurrencies } = await import('../services/payroll.js')
+    await generatePayrollPeriodsForAllCurrencies(userId, lastPeriod.start, lastPeriod.end)
+  }
 
   // Then fetch all periods
   const periods = await getPayrollPeriods(userId)
@@ -82,7 +94,7 @@ payroll.get('/periods', requireAuth, requireServicePurpose, async (c) => {
 
   // Calculate YTD totals per currency (current year)
   // YTD must be per-currency to be mathematically valid
-  const currentYear = new Date().getFullYear()
+  const currentYear = now.getFullYear()
   const ytdByCurrency: Record<string, number> = {}
 
   periods
@@ -90,9 +102,6 @@ payroll.get('/periods', requireAuth, requireServicePurpose, async (c) => {
     .forEach((p) => {
       ytdByCurrency[p.currency] = (ytdByCurrency[p.currency] || 0) + p.netCents
     })
-
-  // Determine status for each period based on payout info
-  const now = new Date()
 
   // Return with pagination-ready structure
   return c.json({
@@ -345,14 +354,28 @@ payroll.get('/current', requireAuth, requireServicePurpose, async (c) => {
     orderBy: { occurredAt: 'desc' },
   })
 
-  // Use actual recorded fees from payment records (not hardcoded percentages)
-  const grossCents = payments.reduce((sum, p) => sum + p.amountCents, 0)
-  const totalFeeCents = payments.reduce((sum, p) => sum + p.feeCents, 0)
+  // Calculate base price (what creator set) instead of gross (what subscriber paid)
+  // For split_v1: base = netCents + creatorFeeCents
+  // For legacy: base = amountCents
+  const grossCents = payments.reduce((sum, p) => {
+    if (p.creatorFeeCents !== null && p.creatorFeeCents !== undefined) {
+      return sum + p.netCents + p.creatorFeeCents
+    }
+    return sum + p.amountCents
+  }, 0)
+
+  // Sum creator's fee portion (4% in split model, or total fee for legacy)
+  const platformFeeCents = payments.reduce((sum, p) => {
+    if (p.creatorFeeCents !== null && p.creatorFeeCents !== undefined) {
+      return sum + p.creatorFeeCents
+    }
+    return sum + p.feeCents
+  }, 0)
+
   const netCents = payments.reduce((sum, p) => sum + p.netCents, 0)
 
-  // Split fees proportionally for display (approximate: 80% platform, 20% processing)
-  const platformFeeCents = Math.round(totalFeeCents * 0.8)
-  const processingFeeCents = totalFeeCents - platformFeeCents
+  // Processing fee is 0 in split model (absorbed by subscriber's portion)
+  const processingFeeCents = 0
 
   return c.json({
     periodStart: start.toISOString(),

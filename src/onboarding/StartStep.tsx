@@ -38,7 +38,7 @@ export default function StartStep() {
     const nextStep = useOnboardingStore((s) => s.nextStep)
     const reset = useOnboardingStore((s) => s.reset)
     const email = useOnboardingStore((s) => s.email)
-    const name = useOnboardingStore((s) => s.name)
+    const firstName = useOnboardingStore((s) => s.firstName)
     const prefersReducedMotion = useReducedMotion()
     const [activeIndex, setActiveIndex] = useState(0)
     const [isAnimating, setIsAnimating] = useState(false)
@@ -51,7 +51,7 @@ export default function StartStep() {
     const loadedImagesRef = useRef<Set<string>>(new Set()) // Mirror of state for callback access
     const preloadingRef = useRef<Set<string>>(new Set())
 
-    const hasExistingProgress = Boolean(email || name)
+    const hasExistingProgress = Boolean(email || firstName)
 
     const markImageLoaded = useCallback((src: string) => {
         if (loadedImagesRef.current.has(src)) return

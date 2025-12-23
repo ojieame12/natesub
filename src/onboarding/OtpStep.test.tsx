@@ -66,6 +66,7 @@ describe('onboarding/OtpStep', () => {
     useOnboardingStore.getState().reset()
     useOnboardingStore.getState().setEmail('test@example.com')
 
+    // Backend can send either old 'name' field or new firstName/lastName
     verifyMagicLink.mockResolvedValueOnce({
       success: true,
       token: 'tok',
@@ -73,7 +74,7 @@ describe('onboarding/OtpStep', () => {
       hasActivePayment: false,
       onboardingStep: 4,
       onboardingBranch: 'service',
-      onboardingData: { name: 'Alice', username: 'alice' },
+      onboardingData: { name: 'Alice Smith', username: 'alice' }, // Old format
       redirectTo: '/onboarding',
     })
 
@@ -88,7 +89,9 @@ describe('onboarding/OtpStep', () => {
     expect(verifyMagicLink).toHaveBeenCalledWith({ otp: '123456', email: 'test@example.com' })
     expect(useOnboardingStore.getState().currentStep).toBe(4)
     expect(useOnboardingStore.getState().branch).toBe('service')
-    expect(useOnboardingStore.getState().name).toBe('Alice')
+    // Old 'name' field should be migrated to firstName/lastName
+    expect(useOnboardingStore.getState().firstName).toBe('Alice')
+    expect(useOnboardingStore.getState().lastName).toBe('Smith')
   })
 
   it('shows improved error message for expired/used codes and clears inputs', async () => {

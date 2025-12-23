@@ -12,7 +12,8 @@ export default function CreateProfileStep() {
 
   // Get data from store
   const username = useOnboardingStore(state => state.username)
-  const name = useOnboardingStore(state => state.name)
+  const firstName = useOnboardingStore(state => state.firstName)
+  const lastName = useOnboardingStore(state => state.lastName)
   const country = useOnboardingStore(state => state.country)
   const countryCode = useOnboardingStore(state => state.countryCode)
   const currency = useOnboardingStore(state => state.currency)
@@ -35,9 +36,10 @@ export default function CreateProfileStep() {
 
         // 1. Create profile with safe defaults
         // purpose='support' satisfies backend enum validation
+        const displayName = `${firstName || ''} ${lastName || ''}`.trim() || username
         await api.profile.update({
           username,
-          displayName: name || username,
+          displayName,
           country: country || 'United States',
           countryCode,
           currency: currency || 'USD',
@@ -65,7 +67,7 @@ export default function CreateProfileStep() {
     }
 
     createProfile()
-  }, [username, name, country, countryCode, currency, navigate, refetch, goToStep])
+  }, [username, firstName, lastName, country, countryCode, currency, navigate, refetch, goToStep])
 
   if (error) {
     return (

@@ -77,11 +77,20 @@ stripeRoutes.post('/connect', requireAuth, paymentRateLimit, async (c) => {
   }
 
   try {
+    // Build address info for Stripe KYC prefill (reduces onboarding screens)
+    const addressInfo = (user.profile.address || user.profile.city) ? {
+      line1: user.profile.address || undefined,
+      city: user.profile.city || undefined,
+      state: user.profile.state || undefined,
+      postal_code: user.profile.zip || undefined,
+    } : undefined
+
     const result = await createExpressAccount(
       userId,
       user.email,
       user.profile.countryCode,
-      user.profile.displayName // Prefill KYC with name
+      user.profile.displayName, // Prefill KYC with name
+      addressInfo // Prefill KYC with address
     )
 
     if (result.alreadyOnboarded) {
