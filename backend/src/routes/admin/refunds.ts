@@ -449,7 +449,7 @@ refunds.get('/stats', async (c) => {
       DATE("createdAt") as date,
       COUNT(*)::bigint as count,
       SUM("amountCents")::bigint as amount
-    FROM "Payment"
+    FROM "payments"
     WHERE status = 'refunded'
       AND "createdAt" >= ${periodStart}
     GROUP BY DATE("createdAt")

@@ -85,7 +85,7 @@ tax.get('/summary/:year', async (c) => {
       SUM(COALESCE("grossCents", "amountCents"))::bigint as total_amount,
       SUM(COALESCE("feeCents", 0))::bigint as total_fees,
       COUNT(*)::bigint as count
-    FROM "Payment"
+    FROM "payments"
     WHERE status = 'succeeded'
       AND "createdAt" >= ${yearStart}
       AND "createdAt" < ${yearEnd}
@@ -157,8 +157,8 @@ tax.get('/creator-earnings/:year', async (c) => {
       SUM(p."netCents")::bigint as net_earnings,
       COUNT(*)::bigint as payment_count,
       p.currency
-    FROM "Payment" p
-    JOIN "Subscription" s ON p."subscriptionId" = s.id
+    FROM "payments" p
+    JOIN "subscriptions" s ON p."subscriptionId" = s.id
     WHERE p.status = 'succeeded'
       AND p."createdAt" >= ${yearStart}
       AND p."createdAt" < ${yearEnd}
@@ -273,8 +273,8 @@ tax.post('/export-1099', async (c) => {
       SUM(p."netCents")::bigint as net_earnings,
       COUNT(*)::bigint as payment_count,
       p.currency
-    FROM "Payment" p
-    JOIN "Subscription" s ON p."subscriptionId" = s.id
+    FROM "payments" p
+    JOIN "subscriptions" s ON p."subscriptionId" = s.id
     WHERE p.status = 'succeeded'
       AND p."createdAt" >= ${yearStart}
       AND p."createdAt" < ${yearEnd}

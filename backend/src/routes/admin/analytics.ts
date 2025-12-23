@@ -148,8 +148,8 @@ analytics.get('/ltv', async (c) => {
           ELSE EXTRACT(EPOCH FROM (NOW() - s."createdAt")) / 86400
         END
       ) as avg_subscription_days
-    FROM "Payment" p
-    JOIN "Subscription" s ON p."subscriptionId" = s.id
+    FROM "payments" p
+    JOIN "subscriptions" s ON p."subscriptionId" = s.id
     WHERE p.status = 'succeeded'
   `
 
@@ -183,8 +183,8 @@ analytics.get('/ltv', async (c) => {
         END
       )::float as avg_lifespan_days,
       COUNT(CASE WHEN s."canceledAt" IS NOT NULL THEN 1 END)::bigint as churn_count
-    FROM "Payment" p
-    JOIN "Subscription" s ON p."subscriptionId" = s.id
+    FROM "payments" p
+    JOIN "subscriptions" s ON p."subscriptionId" = s.id
     WHERE p.status = 'succeeded'
     GROUP BY s."creatorId"
     HAVING COUNT(DISTINCT s."subscriberId") >= 3
@@ -371,7 +371,7 @@ analytics.get('/at-risk', async (c) => {
       COUNT(*)::bigint as total_subs,
       COUNT(CASE WHEN "canceledAt" >= ${sevenDaysAgo} THEN 1 END)::bigint as cancelled_count,
       (COUNT(CASE WHEN "canceledAt" >= ${sevenDaysAgo} THEN 1 END)::float / NULLIF(COUNT(*), 0) * 100) as churn_rate
-    FROM "Subscription"
+    FROM "subscriptions"
     WHERE "createdAt" < ${sevenDaysAgo}
     GROUP BY "creatorId"
     HAVING COUNT(*) >= 5

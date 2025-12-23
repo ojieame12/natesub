@@ -326,7 +326,7 @@ async function calculateYTD(
     SELECT
       SUM("netCents" + COALESCE("creatorFeeCents", 0)) as "grossCents",
       SUM("netCents") as "netCents"
-    FROM "Payment"
+    FROM "payments"
     WHERE "creatorId" = ${userId}
       AND "currency" = ${currency}
       AND "occurredAt" >= ${yearStart}
