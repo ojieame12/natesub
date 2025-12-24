@@ -1,0 +1,157 @@
+/**
+ * Page Transition Animations
+ *
+ * Two animation systems:
+ * 1. View Transitions API (modern browsers) - uses ::view-transition pseudo-elements
+ * 2. CSS fallback - uses .page-enter class animation
+ *
+ * Both use the same timing and easing for consistency.
+ */
+
+/* ============================================
+   VIEW TRANSITIONS API (Chrome, Edge, Safari 18+)
+   ============================================ */
+
+/* Define the transition animation */
+::view-transition-old(root) {
+  animation: page-fade-out 200ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+::view-transition-new(root) {
+  animation: page-fade-in 200ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+/* Subtle fade + scale for glass aesthetic */
+@keyframes page-fade-out {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+}
+
+@keyframes page-fade-in {
+  from {
+    opacity: 0;
+    transform: scale(1.02);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* ============================================
+   CSS FALLBACK (Firefox, older browsers)
+   ============================================ */
+
+.page-transition-container {
+  width: 100%;
+  height: 100%;
+}
+
+.page-enter {
+  animation: page-enter-animation 250ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes page-enter-animation {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ============================================
+   NAVIGATION-SPECIFIC TRANSITIONS
+   ============================================ */
+
+/* Tab bar navigation - horizontal slide hint */
+.tab-transition-left {
+  animation: slide-in-left 200ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.tab-transition-right {
+  animation: slide-in-right 200ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes slide-in-left {
+  from {
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Detail page - slide up from bottom */
+.page-slide-up {
+  animation: slide-up 250ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Modal-like pages - scale in */
+.page-scale-in {
+  animation: scale-in 200ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* ============================================
+   REDUCED MOTION SUPPORT
+   ============================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root),
+  .page-enter,
+  .tab-transition-left,
+  .tab-transition-right,
+  .page-slide-up,
+  .page-scale-in {
+    animation: none;
+  }
+
+  .page-transition-container {
+    opacity: 1;
+    transform: none;
+  }
+}

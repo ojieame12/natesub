@@ -3,7 +3,7 @@ import { useNavigate, useLocation, Outlet } from 'react-router-dom'
 import { Home, Users, Plus, Activity, User } from 'lucide-react'
 import { prefetchAll } from './utils/prefetch'
 import { useAuthState, useHaptics } from './hooks'
-import { ContentSkeleton } from './components'
+import { ContentSkeleton, PageTransition } from './components'
 import './AppLayout.css'
 
 const NAV_ITEMS_RIGHT = [
@@ -112,8 +112,11 @@ export default function AppLayout({ children }: AppLayoutProps) {
             <main className="app-content">
                 {children || (
                     // Suspense boundary inside layout keeps BottomNav visible during lazy loads
+                    // PageTransition adds smooth fade/slide animations between routes
                     <Suspense fallback={<ContentSkeleton />}>
-                        <Outlet />
+                        <PageTransition>
+                            <Outlet />
+                        </PageTransition>
                     </Suspense>
                 )}
             </main>

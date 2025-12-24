@@ -224,6 +224,17 @@ model Profile {
   platformTrialEndsAt      DateTime? // When the free trial ends
   platformDebitCents       Int      @default(0) // Accumulated platform debt to recover from earnings
 
+  // Cached Balance (synced from Stripe/Paystack)
+  balanceAvailableCents  Int?       // Available balance in cents
+  balancePendingCents    Int?       // Pending balance in cents (in-transit to bank)
+  balanceCurrency        String?    // Currency of cached balance
+  balanceLastSyncedAt    DateTime?  // When balance was last synced from provider
+
+  // Last Payout Tracking (for activity feed)
+  lastPayoutAmountCents  Int?       // Amount of most recent payout
+  lastPayoutAt           DateTime?  // When most recent payout was initiated
+  lastPayoutStatus       String?    // 'pending' | 'in_transit' | 'paid' | 'failed'
+
   // Public URL
   shareUrl String?
 
