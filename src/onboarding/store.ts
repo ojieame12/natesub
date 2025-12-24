@@ -259,10 +259,41 @@ export const useOnboardingStore = create<OnboardingStore>()(
             // Fee mode
             setFeeMode: (mode) => set({ feeMode: mode }),
 
-            // Navigation
-            nextStep: () => set((state) => ({ currentStep: state.currentStep + 1 })),
-            prevStep: () => set((state) => ({ currentStep: Math.max(0, state.currentStep - 1) })),
-            goToStep: (step) => set({ currentStep: step }),
+            // Navigation - with debounce protection against rapid tapping
+            nextStep: () => set((state) => {
+                // Prevent rapid navigation (300ms cooldown)
+                const now = Date.now()
+                const lastNav = (state as any)._lastNavTime || 0
+                if (now - lastNav < 300) {
+                    return state // Ignore rapid taps
+                }
+                return {
+                    currentStep: state.currentStep + 1,
+                    _lastNavTime: now,
+                }
+            }),
+            prevStep: () => set((state) => {
+                const now = Date.now()
+                const lastNav = (state as any)._lastNavTime || 0
+                if (now - lastNav < 300) {
+                    return state
+                }
+                return {
+                    currentStep: Math.max(0, state.currentStep - 1),
+                    _lastNavTime: now,
+                }
+            }),
+            goToStep: (step) => set((state) => {
+                const now = Date.now()
+                const lastNav = (state as any)._lastNavTime || 0
+                if (now - lastNav < 300) {
+                    return state
+                }
+                return {
+                    currentStep: step,
+                    _lastNavTime: now,
+                }
+            }),
             reset: () => set({
                 ...initialState,
                 // Reset specific fields to their initial values,
