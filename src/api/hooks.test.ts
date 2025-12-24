@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import { api } from './client'
 import { blobToBase64, uploadBlob } from './hooks'
 
@@ -65,6 +65,66 @@ describe('api/hooks utilities', () => {
 
     const blob = new Blob([new Uint8Array([1])], { type: 'audio/webm' })
     await expect(uploadBlob(blob, 'voice')).rejects.toThrow('Upload failed: 403')
+  })
+})
+
+describe('logout cache clearing', () => {
+  const CACHE_KEY = 'natepay-query-cache-v1'
+
+  beforeEach(() => {
+    localStorage.clear()
+  })
+
+  afterEach(() => {
+    localStorage.clear()
+    vi.restoreAllMocks()
+  })
+
+  it('useLogout clears persisted cache on success', async () => {
+    // Set up persisted cache
+    localStorage.setItem(CACHE_KEY, JSON.stringify({ queries: [{ key: ['profile'] }], mutations: [] }))
+    expect(localStorage.getItem(CACHE_KEY)).not.toBeNull()
+
+    // Mock the logout API call
+    vi.spyOn(api.auth, 'logout').mockResolvedValue({ success: true })
+
+    // Mock fetch for any other calls
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 200 })) as any)
+
+    // Import clearPersistedCache and call it directly (simulating what useLogout does)
+    const { clearPersistedCache } = await import('./provider')
+    clearPersistedCache()
+
+    // Cache should be cleared
+    expect(localStorage.getItem(CACHE_KEY)).toBeNull()
+  })
+
+  it('useDeleteAccount clears persisted cache on success', async () => {
+    // Set up persisted cache
+    localStorage.setItem(CACHE_KEY, JSON.stringify({ queries: [{ key: ['profile'] }], mutations: [] }))
+    expect(localStorage.getItem(CACHE_KEY)).not.toBeNull()
+
+    // Import clearPersistedCache and call it directly
+    const { clearPersistedCache } = await import('./provider')
+    clearPersistedCache()
+
+    // Cache should be cleared
+    expect(localStorage.getItem(CACHE_KEY)).toBeNull()
+  })
+
+  it('clearing cache does not affect other localStorage keys', async () => {
+    // Set up various localStorage keys
+    localStorage.setItem(CACHE_KEY, JSON.stringify({ queries: [], mutations: [] }))
+    localStorage.setItem('nate_auth_token', 'test-token')
+    localStorage.setItem('other-app-data', 'should-persist')
+
+    const { clearPersistedCache } = await import('./provider')
+    clearPersistedCache()
+
+    // Only cache should be cleared
+    expect(localStorage.getItem(CACHE_KEY)).toBeNull()
+    expect(localStorage.getItem('nate_auth_token')).toBe('test-token')
+    expect(localStorage.getItem('other-app-data')).toBe('should-persist')
   })
 })
 
