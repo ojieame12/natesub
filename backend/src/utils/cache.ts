@@ -62,14 +62,31 @@ export async function cached<T>(
 
 /**
  * Invalidate a cache key or pattern
+ *
+ * For pattern-based invalidation, uses SCAN instead of KEYS to avoid
+ * blocking Redis on large keyspaces. SCAN is O(1) per iteration vs O(n) for KEYS.
  */
 export async function invalidateCache(keyOrPattern: string): Promise<void> {
   try {
     if (keyOrPattern.includes('*')) {
-      // Pattern-based invalidation (use with caution - expensive)
-      const keys = await redis.keys(keyOrPattern)
-      if (keys.length > 0) {
-        await redis.del(...keys)
+      // Use SCAN for pattern-based invalidation (non-blocking, safer for large keyspaces)
+      // KEYS is O(n) and can block Redis; SCAN is O(1) per iteration
+      let cursor = '0'
+      const keysToDelete: string[] = []
+
+      do {
+        const [nextCursor, keys] = await redis.scan(cursor, 'MATCH', keyOrPattern, 'COUNT', 100)
+        cursor = nextCursor
+        keysToDelete.push(...keys)
+      } while (cursor !== '0')
+
+      if (keysToDelete.length > 0) {
+        // Delete in batches to avoid memory issues with large key sets
+        const batchSize = 100
+        for (let i = 0; i < keysToDelete.length; i += batchSize) {
+          const batch = keysToDelete.slice(i, i + batchSize)
+          await redis.del(...batch)
+        }
       }
     } else {
       await redis.del(keyOrPattern)
@@ -100,4 +117,27 @@ export function adminRevenueKey(endpoint: string, params?: Record<string, any>):
  */
 export function adminDashboardKey(endpoint: string): string {
   return `admin:dashboard:${endpoint}`
+}
+
+/**
+ * Invalidate all admin revenue caches
+ *
+ * Call this after payment mutations (webhook processing, refunds, etc.)
+ * to ensure admin dashboard shows fresh data.
+ */
+export async function invalidateAdminRevenueCache(): Promise<void> {
+  const patterns = [
+    'admin:revenue:overview',
+    'admin:revenue:by-provider:*',
+    'admin:revenue:by-currency:*',
+    'admin:revenue:daily:*',
+    'admin:revenue:monthly:*',
+    'admin:revenue:top-creators:*',
+    'admin:revenue:refunds:*',
+    'admin:dashboard:*',
+  ]
+
+  for (const pattern of patterns) {
+    await invalidateCache(pattern)
+  }
 }

@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { db } from '../db/client.js'
+import { redis } from '../db/redis.js'
 import { requireAuth } from '../middleware/auth.js'
 import { paymentRateLimit } from '../middleware/rateLimit.js'
 import {
@@ -15,6 +16,9 @@ import {
 import { isStripeSupported, isStripeCrossBorderSupported, getStripeSupportedCountries } from '../utils/constants.js'
 import { env } from '../config/env.js'
 
+// Lock TTL for Stripe connect operations (prevents double-click race conditions)
+const CONNECT_LOCK_TTL_SECONDS = 30
+
 const stripeRoutes = new Hono()
 
 // Get supported countries for Stripe Connect
@@ -26,57 +30,74 @@ stripeRoutes.get('/supported-countries', async (c) => {
   })
 })
 
+// Stub mode handler - extracted for clarity and testability
+async function handleStubMode(userId: string) {
+  const stubAccountId = `stub_acct_${Date.now()}`
+
+  await db.profile.update({
+    where: { userId },
+    data: {
+      stripeAccountId: stubAccountId,
+      paymentProvider: 'stripe',
+      payoutStatus: 'active',
+    },
+  })
+
+  console.log(`[stripe/connect] Stub mode: created fake account ${stubAccountId} for user ${userId}`)
+
+  return {
+    success: true,
+    alreadyOnboarded: true,
+    message: 'Payments connected (stub mode)',
+  }
+}
+
 // Start Connect onboarding
 stripeRoutes.post('/connect', requireAuth, paymentRateLimit, async (c) => {
   const userId = c.get('userId')
 
-  console.log(`[stripe/connect] Request received. PAYMENTS_MODE=${env.PAYMENTS_MODE}`)
+  // Acquire lock to prevent race conditions from double-clicks or multiple tabs
+  // This complements Stripe's idempotency keys with a user-level lock
+  const lockKey = `stripe:connect:lock:${userId}`
+  const gotLock = await redis.set(lockKey, '1', 'EX', CONNECT_LOCK_TTL_SECONDS, 'NX')
 
-  // Get user and profile
-  const user = await db.user.findUnique({
-    where: { id: userId },
-    include: { profile: true },
-  })
-
-  if (!user?.profile) {
-    return c.json({ error: 'Profile not found. Complete onboarding first.' }, 400)
-  }
-
-  // Validate country is supported by Stripe
-  if (!isStripeSupported(user.profile.countryCode)) {
+  if (!gotLock) {
+    console.log(`[stripe/connect] Lock not acquired for ${userId}, request already in progress`)
     return c.json({
-      error: 'Stripe is not available in your country',
-      countryCode: user.profile.countryCode,
-      suggestion: 'Consider using Flutterwave or Paystack for payments in your region.',
-      supportedCountries: getStripeSupportedCountries(),
-    }, 400)
-  }
-
-  // STUB MODE: Skip actual Stripe onboarding for E2E tests
-  console.log(`[stripe/connect] Checking stub mode: PAYMENTS_MODE='${env.PAYMENTS_MODE}' === 'stub' ? ${env.PAYMENTS_MODE === 'stub'}`)
-  if (env.PAYMENTS_MODE === 'stub') {
-    const stubAccountId = `stub_acct_${Date.now()}`
-
-    // Update profile with stub account ID and mark as active
-    await db.profile.update({
-      where: { userId },
-      data: {
-        stripeAccountId: stubAccountId,
-        paymentProvider: 'stripe',
-        payoutStatus: 'active',
-      },
-    })
-
-    console.log(`[stripe/connect] Stub mode: created fake account ${stubAccountId} for user ${userId}`)
-
-    return c.json({
-      success: true,
-      alreadyOnboarded: true,
-      message: 'Payments connected (stub mode)',
-    })
+      error: 'A connection request is already in progress. Please wait.',
+      code: 'CONNECT_IN_PROGRESS',
+    }, 429)
   }
 
   try {
+    console.log(`[stripe/connect] Request received. PAYMENTS_MODE=${env.PAYMENTS_MODE}`)
+
+    // Get user and profile
+    const user = await db.user.findUnique({
+      where: { id: userId },
+      include: { profile: true },
+    })
+
+    if (!user?.profile) {
+      return c.json({ error: 'Profile not found. Complete onboarding first.' }, 400)
+    }
+
+    // Validate country is supported by Stripe
+    if (!isStripeSupported(user.profile.countryCode)) {
+      return c.json({
+        error: 'Stripe is not available in your country',
+        countryCode: user.profile.countryCode,
+        suggestion: 'Consider using Flutterwave or Paystack for payments in your region.',
+        supportedCountries: getStripeSupportedCountries(),
+      }, 400)
+    }
+
+    // STUB MODE: Skip actual Stripe onboarding for E2E tests
+    // This is controlled by PAYMENTS_MODE env var - never set to 'stub' in production
+    if (env.PAYMENTS_MODE === 'stub') {
+      return c.json(await handleStubMode(userId))
+    }
+
     // Build address info for Stripe KYC prefill (reduces onboarding screens)
     const addressInfo = (user.profile.address || user.profile.city) ? {
       line1: user.profile.address || undefined,
@@ -108,7 +129,6 @@ stripeRoutes.post('/connect', requireAuth, paymentRateLimit, async (c) => {
     })
   } catch (error: any) {
     console.error('Stripe Connect error:', error)
-    // Provide more specific error messages for debugging
     const errorMessage = error?.message || error?.raw?.message || 'Failed to create payment account'
     const errorType = error?.type || error?.code || 'unknown'
     console.error(`[stripe/connect] Error type: ${errorType}, message: ${errorMessage}`)
@@ -116,6 +136,9 @@ stripeRoutes.post('/connect', requireAuth, paymentRateLimit, async (c) => {
       error: errorMessage,
       errorType,
     }, 500)
+  } finally {
+    // Always release the lock
+    await redis.del(lockKey)
   }
 })
 
