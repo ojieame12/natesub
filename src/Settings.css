@@ -322,3 +322,25 @@
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+
+/* === SMS CONSENT DISCLOSURE === */
+.sms-consent-disclosure {
+    margin-top: var(--space-sm);
+    padding: var(--space-md);
+    background: var(--neutral-50);
+    border-radius: var(--radius-md);
+}
+
+.sms-consent-text {
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    margin: 0 0 var(--space-xs);
+}
+
+.sms-consent-legal {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    line-height: 1.4;
+    margin: 0;
+}

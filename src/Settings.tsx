@@ -195,6 +195,16 @@ function PhoneNumberSection({ user }: { user: any }) {
           onChange={e => setPhone(e.target.value)}
           type="tel"
         />
+
+        <div className="sms-consent-disclosure">
+          <p className="sms-consent-text">
+            By adding your phone number, you consent to receive SMS from NatePay
+            for payment confirmations, invoice reminders, and account alerts.
+          </p>
+          <p className="sms-consent-legal">
+            Msg & Data rates may apply. Up to 5 msgs/month. Reply STOP to unsubscribe.
+          </p>
+        </div>
       </div>
     )
   }
