@@ -101,6 +101,24 @@ interface PageSkeletonProps {
  * PageSkeleton - Full page loading skeleton for Suspense fallback
  * Matches common page layouts to prevent layout shift
  */
+/**
+ * ContentSkeleton - Loading skeleton for content area only (within layout)
+ * Used as Suspense fallback inside AppLayout to keep nav visible during route transitions
+ */
+export function ContentSkeleton() {
+  return (
+    <div className="content-skeleton">
+      <div className="content-skeleton-inner">
+        <Skeleton width="50%" height={24} style={{ marginBottom: 16 }} />
+        <SkeletonCard height={80} />
+        <div style={{ marginTop: 20 }}>
+          <SkeletonText lines={2} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function PageSkeleton({ variant = 'default' }: PageSkeletonProps) {
   return (
     <div className="page-skeleton">

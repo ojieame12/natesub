@@ -71,7 +71,8 @@ export default function Profile() {
     memberSince: formatMemberSince(userData?.createdAt || null),
   }
 
-  const isLoading = profileLoading || metricsLoading
+  // Progressive loading: each section uses its specific loading state
+  // instead of blocking all content on any loading state
 
   const handleViewPage = () => {
     window.open(getPublicPageUrl(username), '_blank')
@@ -124,9 +125,9 @@ export default function Profile() {
       </header>
 
       <div className="profile-content">
-        {/* Profile Card */}
+        {/* Profile Card - show skeleton only while profile loading */}
         <section className="profile-card">
-          {isLoading ? (
+          {profileLoading ? (
             <>
               <Skeleton width={80} height={80} borderRadius="50%" />
               <Skeleton width={120} height={24} style={{ marginTop: 16 }} />
@@ -152,9 +153,9 @@ export default function Profile() {
           )}
         </section>
 
-        {/* Stats */}
+        {/* Stats - show skeleton only while metrics loading */}
         <section className="profile-stats-card">
-          {isLoading ? (
+          {metricsLoading ? (
             <>
               <div className="stat">
                 <Skeleton width={40} height={28} />

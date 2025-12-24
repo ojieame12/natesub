@@ -8,8 +8,17 @@
         rgba(245, 245, 244, 0.6) 75%
     );
     background-size: 200% 100%;
-    animation: shimmer 1.8s infinite linear, skeletonFadeIn 0.4s ease-out both;
     border-radius: var(--radius-sm);
+    /*
+     * Delayed animations prevent flash on fast loads:
+     * - Fade-in: 150ms delay before showing
+     * - Shimmer: 300ms delay before animating
+     * If content loads within 150ms, skeleton never visibly appears
+     */
+    opacity: 0;
+    animation:
+        skeletonFadeIn 0.2s ease-out 0.1s forwards,
+        shimmer 1.8s linear 0.25s infinite;
 }
 
 @keyframes shimmer {
@@ -22,13 +31,8 @@
 }
 
 @keyframes skeletonFadeIn {
-    from {
-        opacity: 0;
-        transform: translateY(4px);
-    }
     to {
         opacity: 1;
-        transform: translateY(0);
     }
 }
 
@@ -118,4 +122,29 @@
     flex: 1;
     padding: var(--space-lg);
     padding-bottom: calc(var(--safe-area-bottom, 0px) + 100px);
+}
+
+/* === CONTENT SKELETON (Layout route fallback) === */
+/* Shows loading state in content area only, keeps nav visible */
+
+.content-skeleton {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: var(--space-lg);
+    animation: contentSkeletonFade 0.25s ease-out both;
+}
+
+.content-skeleton-inner {
+    max-width: 600px;
+    width: 100%;
+}
+
+@keyframes contentSkeletonFade {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
 }

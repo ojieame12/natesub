@@ -8,6 +8,7 @@ import { PageSkeleton, ScrollRestoration, useToast, SplashScreen, AmbientBackgro
 import { useAuthState } from './hooks/useAuthState'
 import { AUTH_ERROR_EVENT } from './api/client'
 import { isReservedUsername } from './utils/constants'
+import { prefetchRoutes, prefetchCoreData } from './utils/prefetch'
 import './index.css'
 
 // NOTE: Auth token is persisted in localStorage and only cleared on explicit logout
@@ -349,13 +350,36 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
  * then renders routes once auth state is confirmed.
  */
 function AppShell() {
-  const { isReady } = useAuthState()
+  const { isReady, status } = useAuthState()
   const location = useLocation()
   const navigate = useNavigate()
-  const [showSplash, setShowSplash] = useState(true)
+
+  // Only show splash on true cold start - not on remounts (HMR, error recovery, etc.)
+  const hasShownSplash = sessionStorage.getItem('splash_shown') === 'true'
+  const [showSplash, setShowSplash] = useState(!hasShownSplash)
+  const [splashExiting, setSplashExiting] = useState(false)
   const [minTimeElapsed, setMinTimeElapsed] = useState(false)
+  const hasPrefetched = useRef(false)
   const enableMockRoutes =
     import.meta.env.DEV || import.meta.env.VITE_ENABLE_MOCK_ROUTES === 'true'
+
+  // Mark splash as shown when it's hidden (persists across remounts within session)
+  useEffect(() => {
+    if (!showSplash) {
+      sessionStorage.setItem('splash_shown', 'true')
+    }
+  }, [showSplash])
+
+  // Prefetch main routes and core data when auth completes
+  useEffect(() => {
+    if (status === 'authenticated' && !hasPrefetched.current) {
+      hasPrefetched.current = true
+      // Prefetch main tab routes so they're ready when user lands on dashboard
+      prefetchRoutes(['/dashboard', '/activity', '/subscribers', '/profile'])
+      // Prefetch core data (profile, metrics) so navigation feels instant
+      prefetchCoreData()
+    }
+  }, [status])
 
   // Deep link handler for iOS Universal Links / Android App Links
   // When the app is opened via a link (e.g., after Stripe redirect), navigate to the path
@@ -391,27 +415,31 @@ function AppShell() {
   }, [])
 
   // Hide splash once auth is ready AND minimum time has elapsed
+  // Uses exit animation for smooth transition
   useEffect(() => {
-    if (isReady && minTimeElapsed) {
-      // Small delay for smooth transition
-      const timer = setTimeout(() => setShowSplash(false), 100)
+    if (isReady && minTimeElapsed && !splashExiting) {
+      // Start exit animation
+      setSplashExiting(true)
+      // Remove splash after animation completes (300ms)
+      const timer = setTimeout(() => setShowSplash(false), 300)
       return () => clearTimeout(timer)
     }
-  }, [isReady, minTimeElapsed])
+  }, [isReady, minTimeElapsed, splashExiting])
 
   // For public routes (and a few protected return routes), skip splash after minimum time
   const isPublic = isPublicRoute(location.pathname)
   const bypassSplash = isPublic || shouldBypassSplash(location.pathname)
   useEffect(() => {
-    if (bypassSplash && minTimeElapsed) {
-      const timer = setTimeout(() => setShowSplash(false), 0)
+    if (bypassSplash && minTimeElapsed && !splashExiting) {
+      setSplashExiting(true)
+      const timer = setTimeout(() => setShowSplash(false), 300)
       return () => clearTimeout(timer)
     }
-  }, [bypassSplash, minTimeElapsed])
+  }, [bypassSplash, minTimeElapsed, splashExiting])
 
   // Show splash while checking auth (except for public routes after min time)
   if (showSplash && !bypassSplash) {
-    return <SplashScreen />
+    return <SplashScreen exiting={splashExiting} />
   }
 
   return (
@@ -431,32 +459,17 @@ function AppShell() {
           <Route path="/onboarding/paystack" element={<PaystackConnect />} />
           <Route path="/onboarding/paystack/complete" element={<PaystackOnboardingComplete />} />
 
-          {/* Main app with tab bar - protected routes */}
-          <Route path="/dashboard" element={
-            <RequireAuth>
-              <AppLayout><Dashboard /></AppLayout>
-            </RequireAuth>
-          } />
-          <Route path="/activity" element={
-            <RequireAuth>
-              <AppLayout><Activity /></AppLayout>
-            </RequireAuth>
-          } />
-          <Route path="/subscribers" element={
-            <RequireAuth>
-              <AppLayout><Subscribers /></AppLayout>
-            </RequireAuth>
-          } />
-          <Route path="/analytics" element={
-            <RequireAuth>
-              <Analytics />
-            </RequireAuth>
-          } />
-          <Route path="/profile" element={
-            <RequireAuth>
-              <AppLayout><Profile /></AppLayout>
-            </RequireAuth>
-          } />
+          {/* Main app with tab bar - protected routes using layout route pattern */}
+          {/* RequireAuth + AppLayout persist across tab navigation, only content changes */}
+          <Route element={<RequireAuth><AppLayout /></RequireAuth>}>
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/activity" element={<Activity />} />
+            <Route path="/subscribers" element={<Subscribers />} />
+            <Route path="/profile" element={<Profile />} />
+          </Route>
+
+          {/* Analytics - protected but no tab bar */}
+          <Route path="/analytics" element={<RequireAuth><Analytics /></RequireAuth>} />
 
           {/* Standalone protected pages (no tab bar) */}
           <Route path="/activity/:id" element={<RequireAuth><ActivityDetail /></RequireAuth>} />

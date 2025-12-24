@@ -9,6 +9,7 @@ export {
   SkeletonCard,
   SkeletonList,
   SkeletonListItem,
+  ContentSkeleton,
   PageSkeleton,
 } from './Skeleton'
 export { SplashScreen } from './SplashScreen'

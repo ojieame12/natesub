@@ -516,9 +516,14 @@ export async function getAccountBalance(stripeAccountId: string) {
     stripeAccount: stripeAccountId,
   })
 
+  // Get the primary currency from the first available balance entry
+  // For cross-border accounts (NG, KE, GH, ZA), this will be USD
+  const currency = balance.available[0]?.currency?.toUpperCase() || 'USD'
+
   return {
     available: balance.available.reduce((sum, b) => sum + b.amount, 0),
     pending: balance.pending.reduce((sum, b) => sum + b.amount, 0),
+    currency,
   }
 }
 

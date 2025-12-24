@@ -147,6 +147,190 @@ async function aggregateGrossOnly(where: any): Promise<{ totalCents: number; cou
 adminRevenue.use('*', adminAuth)
 
 // ============================================
+// COMBINED REVENUE DATA (reduces round trips)
+// ============================================
+
+/**
+ * GET /admin/revenue/all
+ * Combined revenue data - returns overview, by-provider, by-currency, daily, monthly, top-creators, refunds
+ * in a single request. Reduces 7 API calls to 1 for the Revenue dashboard.
+ * Cached for 60 seconds.
+ */
+adminRevenue.get('/all', async (c) => {
+  const query = z.object({
+    period: z.enum(['today', 'week', 'month', 'year', 'all']).default('month'),
+    days: z.coerce.number().default(30),
+    months: z.coerce.number().default(12),
+    topCreatorsLimit: z.coerce.number().min(1).max(100).default(20)
+  }).parse(c.req.query())
+
+  const result = await cached(
+    adminRevenueKey('all', query),
+    CACHE_TTL.SHORT, // 60 seconds
+    async () => {
+      // Use timezone-aware dates
+      const startOfDay = todayStart()
+      const startOfMonth = thisMonthStart()
+      const { start: startOfLastMonth, end: endOfLastMonth } = previousMonth()
+      const { start: periodStart } = parsePeriod(query.period)
+      const { start: dailyStart, end: dailyEnd } = lastNDays(query.days)
+      const { start: monthlyStart, end: monthlyEnd } = lastNMonths(query.months)
+
+      // Build all queries in parallel
+      const [
+        // Overview stats
+        allTimeStats,
+        thisMonthStats,
+        lastMonthStats,
+        todayStats,
+        paymentCounts,
+        lastPayment,
+        lastProcessedWebhook,
+        // By provider
+        stripeStats,
+        paystackStats,
+        // By currency
+        byCurrencyGroups,
+        legacyByCurrency,
+        // Daily (simplified - raw SQL not supported in parallel, use JS aggregation)
+        dailyPayments,
+        // Monthly (simplified)
+        monthlyPayments,
+        // Top creators (raw SQL)
+        topCreatorsRaw,
+        // Refunds
+        refunded,
+        disputed,
+        disputeLost,
+      ] = await Promise.all([
+        // Overview
+        aggregatePaymentStatsByCurrency({ status: 'succeeded', type: { in: ['recurring', 'one_time'] } }),
+        aggregatePaymentStatsByCurrency({ status: 'succeeded', type: { in: ['recurring', 'one_time'] }, occurredAt: { gte: startOfMonth } }),
+        aggregatePaymentStatsByCurrency({ status: 'succeeded', type: { in: ['recurring', 'one_time'] }, occurredAt: { gte: startOfLastMonth, lte: endOfLastMonth } }),
+        aggregatePaymentStatsByCurrency({ status: 'succeeded', type: { in: ['recurring', 'one_time'] }, occurredAt: { gte: startOfDay } }),
+        db.payment.groupBy({ by: ['status'], where: { type: { in: ['recurring', 'one_time'] } }, _count: true }),
+        db.payment.findFirst({ where: { status: 'succeeded', type: { in: ['recurring', 'one_time'] } }, orderBy: { occurredAt: 'desc' }, select: { occurredAt: true } }),
+        db.webhookEvent.findFirst({ where: { status: 'processed', processedAt: { not: null } }, orderBy: { processedAt: 'desc' }, select: { processedAt: true, provider: true, eventType: true } }),
+        // By provider
+        aggregatePaymentStats({ status: 'succeeded', type: { in: ['recurring', 'one_time'] }, stripePaymentIntentId: { not: null }, ...(periodStart && { occurredAt: { gte: periodStart } }) }),
+        aggregatePaymentStats({ status: 'succeeded', type: { in: ['recurring', 'one_time'] }, paystackTransactionRef: { not: null }, ...(periodStart && { occurredAt: { gte: periodStart } }) }),
+        // By currency
+        db.payment.groupBy({ by: ['currency'], where: { status: 'succeeded', type: { in: ['recurring', 'one_time'] }, ...(periodStart && { occurredAt: { gte: periodStart } }) }, _sum: { grossCents: true, feeCents: true, netCents: true }, _count: true }),
+        db.payment.groupBy({ by: ['currency'], where: { status: 'succeeded', type: { in: ['recurring', 'one_time'] }, grossCents: null, ...(periodStart && { occurredAt: { gte: periodStart } }) }, _sum: { amountCents: true }, _count: true }),
+        // Daily payments for JS aggregation
+        db.payment.findMany({ where: { status: 'succeeded', type: { in: ['recurring', 'one_time'] }, occurredAt: { gte: dailyStart, lte: dailyEnd } }, select: { grossCents: true, amountCents: true, feeCents: true, netCents: true, occurredAt: true } }),
+        // Monthly payments for JS aggregation
+        db.payment.findMany({ where: { status: 'succeeded', type: { in: ['recurring', 'one_time'] }, occurredAt: { gte: monthlyStart, lte: monthlyEnd } }, select: { grossCents: true, amountCents: true, feeCents: true, netCents: true, occurredAt: true } }),
+        // Top creators
+        periodStart
+          ? db.$queryRaw<Array<{ creatorId: string; totalVolumeCents: bigint; platformFeeCents: bigint; creatorEarningsCents: bigint; paymentCount: bigint }>>`
+              SELECT "creatorId", SUM(COALESCE("grossCents", "amountCents"))::bigint AS "totalVolumeCents", SUM("feeCents")::bigint AS "platformFeeCents", SUM("netCents")::bigint AS "creatorEarningsCents", COUNT(*)::bigint AS "paymentCount"
+              FROM "payments" WHERE "status" = 'succeeded' AND "type" IN ('recurring', 'one_time') AND "occurredAt" >= ${periodStart}
+              GROUP BY "creatorId" ORDER BY "totalVolumeCents" DESC LIMIT ${query.topCreatorsLimit}`
+          : db.$queryRaw<Array<{ creatorId: string; totalVolumeCents: bigint; platformFeeCents: bigint; creatorEarningsCents: bigint; paymentCount: bigint }>>`
+              SELECT "creatorId", SUM(COALESCE("grossCents", "amountCents"))::bigint AS "totalVolumeCents", SUM("feeCents")::bigint AS "platformFeeCents", SUM("netCents")::bigint AS "creatorEarningsCents", COUNT(*)::bigint AS "paymentCount"
+              FROM "payments" WHERE "status" = 'succeeded' AND "type" IN ('recurring', 'one_time')
+              GROUP BY "creatorId" ORDER BY "totalVolumeCents" DESC LIMIT ${query.topCreatorsLimit}`,
+        // Refunds
+        aggregateGrossOnly({ status: 'refunded', ...(periodStart && { occurredAt: { gte: periodStart } }) }),
+        aggregateGrossOnly({ status: 'disputed', ...(periodStart && { occurredAt: { gte: periodStart } }) }),
+        aggregateGrossOnly({ status: 'dispute_lost', ...(periodStart && { occurredAt: { gte: periodStart } }) }),
+      ])
+
+      // Process daily data
+      const dailyMap = new Map<string, { volume: number; fees: number; payouts: number; count: number }>()
+      for (const p of dailyPayments) {
+        const day = p.occurredAt.toISOString().split('T')[0]
+        const existing = dailyMap.get(day) || { volume: 0, fees: 0, payouts: 0, count: 0 }
+        existing.volume += p.grossCents ?? p.amountCents ?? 0
+        existing.fees += p.feeCents || 0
+        existing.payouts += p.netCents || 0
+        existing.count += 1
+        dailyMap.set(day, existing)
+      }
+
+      const days: Array<{ date: string; volumeCents: number; feesCents: number; payoutsCents: number; count: number }> = []
+      const currentDay = new Date(dailyStart)
+      while (currentDay <= dailyEnd) {
+        const day = currentDay.toISOString().split('T')[0]
+        const data = dailyMap.get(day) || { volume: 0, fees: 0, payouts: 0, count: 0 }
+        days.push({ date: day, volumeCents: data.volume, feesCents: data.fees, payoutsCents: data.payouts, count: data.count })
+        currentDay.setDate(currentDay.getDate() + 1)
+      }
+
+      // Process monthly data
+      const monthlyMap = new Map<string, { volume: number; fees: number; payouts: number; count: number }>()
+      for (const p of monthlyPayments) {
+        const month = p.occurredAt.toISOString().slice(0, 7)
+        const existing = monthlyMap.get(month) || { volume: 0, fees: 0, payouts: 0, count: 0 }
+        existing.volume += p.grossCents ?? p.amountCents ?? 0
+        existing.fees += p.feeCents || 0
+        existing.payouts += p.netCents || 0
+        existing.count += 1
+        monthlyMap.set(month, existing)
+      }
+
+      const months: Array<{ month: string; volumeCents: number; feesCents: number; payoutsCents: number; count: number }> = []
+      const currentMonth = new Date(Date.UTC(monthlyStart.getUTCFullYear(), monthlyStart.getUTCMonth(), 1))
+      const endMonth = new Date(Date.UTC(monthlyEnd.getUTCFullYear(), monthlyEnd.getUTCMonth(), 1))
+      while (currentMonth <= endMonth) {
+        const key = currentMonth.toISOString().slice(0, 7)
+        const data = monthlyMap.get(key) || { volume: 0, fees: 0, payouts: 0, count: 0 }
+        months.push({ month: key, volumeCents: data.volume, feesCents: data.fees, payoutsCents: data.payouts, count: data.count })
+        currentMonth.setUTCMonth(currentMonth.getUTCMonth() + 1)
+      }
+
+      // Get creator details for top creators
+      const creatorIds = topCreatorsRaw.map(c => c.creatorId)
+      const creators = creatorIds.length > 0 ? await db.user.findMany({
+        where: { id: { in: creatorIds } },
+        select: { id: true, email: true, profile: { select: { username: true, displayName: true, country: true } } }
+      }) : []
+      const creatorMap = new Map(creators.map(c => [c.id, c]))
+
+      // Process by-currency
+      const legacyMap = new Map(legacyByCurrency.map(c => [c.currency, c._sum.amountCents || 0]))
+      const currencies = byCurrencyGroups.map(c => ({
+        currency: c.currency,
+        totalVolumeCents: (c._sum.grossCents || 0) + (legacyMap.get(c.currency) || 0),
+        platformFeeCents: c._sum.feeCents || 0,
+        creatorPayoutsCents: c._sum.netCents || 0,
+        paymentCount: c._count
+      }))
+
+      const statusCounts = Object.fromEntries(paymentCounts.map(p => [p.status, p._count]))
+
+      return {
+        overview: {
+          allTime: { totalVolumeCents: allTimeStats.totalVolumeCents, platformFeeCents: allTimeStats.platformFeeCents, creatorPayoutsCents: allTimeStats.creatorPayoutsCents, paymentCount: allTimeStats.paymentCount },
+          thisMonth: { totalVolumeCents: thisMonthStats.totalVolumeCents, platformFeeCents: thisMonthStats.platformFeeCents, creatorPayoutsCents: thisMonthStats.creatorPayoutsCents, paymentCount: thisMonthStats.paymentCount },
+          lastMonth: { totalVolumeCents: lastMonthStats.totalVolumeCents, platformFeeCents: lastMonthStats.platformFeeCents, creatorPayoutsCents: lastMonthStats.creatorPayoutsCents, paymentCount: lastMonthStats.paymentCount },
+          today: { totalVolumeCents: todayStats.totalVolumeCents, platformFeeCents: todayStats.platformFeeCents, creatorPayoutsCents: todayStats.creatorPayoutsCents, paymentCount: todayStats.paymentCount },
+          byCurrency: { allTime: allTimeStats.byCurrency, thisMonth: thisMonthStats.byCurrency, lastMonth: lastMonthStats.byCurrency, today: todayStats.byCurrency },
+          currencies: { allTime: { currencies: allTimeStats.currencies, isMultiCurrency: allTimeStats.isMultiCurrency }, thisMonth: { currencies: thisMonthStats.currencies, isMultiCurrency: thisMonthStats.isMultiCurrency }, lastMonth: { currencies: lastMonthStats.currencies, isMultiCurrency: lastMonthStats.isMultiCurrency }, today: { currencies: todayStats.currencies, isMultiCurrency: todayStats.isMultiCurrency } },
+          paymentsByStatus: statusCounts,
+          freshness: { businessTimezone: BUSINESS_TIMEZONE, lastPaymentAt: lastPayment?.occurredAt?.toISOString() || null, lastWebhookProcessedAt: lastProcessedWebhook?.processedAt?.toISOString() || null, lastWebhookProvider: lastProcessedWebhook?.provider || null, lastWebhookType: lastProcessedWebhook?.eventType || null },
+        },
+        byProvider: { period: query.period, stripe: stripeStats, paystack: paystackStats },
+        byCurrency: { period: query.period, currencies },
+        daily: { days },
+        monthly: { months },
+        topCreators: {
+          period: query.period,
+          creators: topCreatorsRaw.map(tc => {
+            const creator = creatorMap.get(tc.creatorId)
+            return { creatorId: tc.creatorId, email: creator?.email, username: creator?.profile?.username, displayName: creator?.profile?.displayName, country: creator?.profile?.country, totalVolumeCents: Number(tc.totalVolumeCents), platformFeeCents: Number(tc.platformFeeCents), creatorEarningsCents: Number(tc.creatorEarningsCents), paymentCount: Number(tc.paymentCount) }
+          })
+        },
+        refunds: { period: query.period, refunds: { totalCents: refunded.totalCents, count: refunded.count }, disputes: { totalCents: disputed.totalCents, count: disputed.count }, chargebacks: { totalCents: disputeLost.totalCents, count: disputeLost.count } }
+      }
+    }
+  )
+
+  return c.json(result)
+})
+
+// ============================================
 // REVENUE OVERVIEW
 // ============================================
 

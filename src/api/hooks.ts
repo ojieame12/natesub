@@ -236,7 +236,7 @@ export function useStripeStatus() {
   return useQuery({
     queryKey: ['stripeStatus'],
     queryFn: () => api.stripe.getStatus(),
-    staleTime: 30 * 1000, // 30 seconds
+    staleTime: 2 * 60 * 1000, // 2 minutes - status rarely changes once connected
   })
 }
 
@@ -298,7 +298,7 @@ export function usePaystackStatus() {
   return useQuery({
     queryKey: ['paystackStatus'],
     queryFn: api.paystack.getStatus,
-    staleTime: 30 * 1000, // 30 seconds
+    staleTime: 2 * 60 * 1000, // 2 minutes - status rarely changes once connected
   })
 }
 

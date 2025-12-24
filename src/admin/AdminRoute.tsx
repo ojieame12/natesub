@@ -17,9 +17,8 @@ const ADMIN_ME_TIMEOUT_MS = 20_000
 
 // Check admin status via backend (single source of truth)
 async function checkAdminStatus(): Promise<{ isAdmin: boolean; email?: string | null; role?: string }> {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  }
+  // No Content-Type needed for GET requests - avoids CORS preflight
+  const headers: Record<string, string> = {}
 
   const token = getAuthToken()
   if (token) {

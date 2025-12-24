@@ -215,6 +215,9 @@ async function apiFetch<T>(
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT_MS)
 
+  // Use caller's signal if provided (for React Query cancellation), otherwise use timeout controller
+  const signal = options.signal ?? controller.signal
+
   // Build headers with optional Authorization token
   const headers: Record<string, string> = {
     ...(options.headers as Record<string, string>),
@@ -244,7 +247,7 @@ async function apiFetch<T>(
       ...options,
       credentials: 'include', // Still include cookies for web
       headers,
-      signal: controller.signal,
+      signal,
     })
   } catch (networkError: any) {
     clearTimeout(timeoutId)

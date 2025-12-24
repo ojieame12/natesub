@@ -67,12 +67,14 @@ stripeRoutes.get('/accounts', async (c) => {
     }
   })
 
-  // NOTE: This endpoint is used by the admin UI list view and can be very slow
+  // NOTE: This endpoint is used by the admin UI list view and can be slow
   // if we call Stripe sequentially. We concurrency-limit and use cached account
   // status (5m TTL) to keep the list responsive.
+  // Future improvement: cache status in DB and refresh async for even faster loads.
+  const fetchStartTime = Date.now()
   const accountsWithStripeData = await mapWithConcurrency(
     profiles,
-    6,
+    10, // Increased from 6 for faster loading
     async (p) => {
       try {
         const status = await getAccountStatus(p.stripeAccountId!, { skipBankDetails: true })
@@ -132,7 +134,9 @@ stripeRoutes.get('/accounts', async (c) => {
     accounts: accountsWithStripeData,
     total,
     page: query.page,
-    totalPages: Math.ceil(total / query.limit)
+    totalPages: Math.ceil(total / query.limit),
+    fetchTimeMs: Date.now() - fetchStartTime,
+    fetchedAt: new Date().toISOString()
   })
 })
 

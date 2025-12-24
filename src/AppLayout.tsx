@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react'
+import { Suspense, useMemo, useState } from 'react'
 import { useNavigate, useLocation, Outlet } from 'react-router-dom'
 import { Home, Users, Plus, Activity, User } from 'lucide-react'
-import { prefetchRoute } from './utils/prefetch'
+import { prefetchAll } from './utils/prefetch'
 import { useAuthState, useHaptics } from './hooks'
+import { ContentSkeleton } from './components'
 import './AppLayout.css'
 
 const NAV_ITEMS_RIGHT = [
@@ -50,10 +51,10 @@ function BottomNav() {
                 onMouseLeave={() => setPressedTab(null)}
                 onTouchStart={() => {
                     handlePress()
-                    prefetchRoute(item.path)
+                    prefetchAll(item.path)
                 }}
                 onTouchEnd={() => setPressedTab(null)}
-                onMouseEnter={() => prefetchRoute(item.path)}
+                onMouseEnter={() => prefetchAll(item.path)}
             >
                 <Icon size={24} className={`tab-icon ${isActive ? 'active-bounce' : ''}`} />
             </button>
@@ -81,10 +82,10 @@ function BottomNav() {
                     onTouchStart={() => {
                         setCenterPressed(true)
                         impact('medium')
-                        prefetchRoute('/new-request')
+                        prefetchAll('/new-request')
                     }}
                     onTouchEnd={() => setCenterPressed(false)}
-                    onMouseEnter={() => prefetchRoute('/new-request')}
+                    onMouseEnter={() => prefetchAll('/new-request')}
                 >
                     <Plus size={24} className="tab-icon" />
                 </button>
@@ -109,7 +110,12 @@ export default function AppLayout({ children }: AppLayoutProps) {
     return (
         <div className="app-layout">
             <main className="app-content">
-                {children || <Outlet />}
+                {children || (
+                    // Suspense boundary inside layout keeps BottomNav visible during lazy loads
+                    <Suspense fallback={<ContentSkeleton />}>
+                        <Outlet />
+                    </Suspense>
+                )}
             </main>
 
             {showNav && <BottomNav />}

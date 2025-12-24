@@ -60,7 +60,6 @@ export default function PaymentSettings() {
   const { data: profileData } = useProfile()
   const isMountedRef = useRef(true)
 
-  const profileCurrency = profileData?.profile?.currency || 'USD'
   const defaultProvider = profileData?.profile?.paymentProvider || null
   const userCountryCode = profileData?.profile?.countryCode || null
 
@@ -70,7 +69,7 @@ export default function PaymentSettings() {
   const [stripeStatus, setStripeStatus] = useState<StripeStatus | null>(null)
   const [paystackStatus, setPaystackStatus] = useState<PaystackConnectionStatus | null>(null)
 
-  const [stripeBalance, setStripeBalance] = useState<{ available: number; pending: number } | null>(null)
+  const [stripeBalance, setStripeBalance] = useState<{ available: number; pending: number; currency?: string } | null>(null)
   const [stripeBalanceLoading, setStripeBalanceLoading] = useState(false)
 
   const [stripeError, setStripeError] = useState<string | null>(null)
@@ -370,13 +369,13 @@ export default function PaymentSettings() {
               <div className="balance-item">
                 <div className="balance-label">Available</div>
                 <div className="balance-value">
-                  {stripeBalanceLoading ? '…' : formatCurrencyFromCents(stripeBalance?.available || 0, profileCurrency)}
+                  {stripeBalanceLoading ? '…' : formatCurrencyFromCents(stripeBalance?.available || 0, stripeBalance?.currency || 'USD')}
                 </div>
               </div>
               <div className="balance-item">
                 <div className="balance-label">Pending</div>
                 <div className="balance-value pending">
-                  {stripeBalanceLoading ? '…' : formatCurrencyFromCents(stripeBalance?.pending || 0, profileCurrency)}
+                  {stripeBalanceLoading ? '…' : formatCurrencyFromCents(stripeBalance?.pending || 0, stripeBalance?.currency || 'USD')}
                 </div>
               </div>
             </div>

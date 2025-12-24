@@ -52,9 +52,8 @@ const triggerHaptic = async (style: 'light' | 'medium' | 'heavy') => {
 }
 
 // Base styles - defined outside component to prevent recreation
-const baseStyles: CSSProperties = {
-    transition: 'transform 0.1s ease, opacity 0.15s ease',
-}
+// Note: transition is handled by CSS (.pressable class in index.css) using design system variables
+const baseStyles: CSSProperties = {}
 
 /**
  * Pressable - A touch-friendly button component with press animation
@@ -141,8 +140,9 @@ const Pressable = memo(function Pressable({
     }), [disabled, style])
 
     // Memoize className to avoid string recreation
+    // Always include 'pressable' base class for CSS transitions (var(--ease-spring))
     const combinedClassName = useMemo(() => {
-        const classes = [className]
+        const classes = ['pressable', className]
         if (isPressed) classes.push('pressed')
         if (disabled) classes.push('disabled')
         return classes.filter(Boolean).join(' ')

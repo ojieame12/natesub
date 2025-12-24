@@ -199,7 +199,9 @@ export async function aggregatePayments(
           COUNT(*) FILTER (WHERE "status" = 'succeeded' AND "type" IN ('one_time', 'recurring')) as payment_count,
           SUM(CASE WHEN "status" = 'refunded' AND "type" IN ('one_time', 'recurring', 'refund')
             THEN ABS("netCents" + COALESCE("creatorFeeCents", 0)) ELSE 0 END) as refunds_cents,
-          SUM(CASE WHEN "status" IN ('dispute_lost', 'disputed') AND "type" IN ('one_time', 'recurring')
+          -- Only count 'dispute_lost' as chargebacks (finalized losses)
+          -- 'disputed' (open disputes) are excluded to avoid overstating losses
+          SUM(CASE WHEN "status" = 'dispute_lost' AND "type" IN ('one_time', 'recurring')
             THEN ABS("netCents" + COALESCE("creatorFeeCents", 0)) ELSE 0 END) as chargebacks_cents
         FROM "payments"
         WHERE "creatorId" = ${userId}
@@ -218,7 +220,9 @@ export async function aggregatePayments(
           COUNT(*) FILTER (WHERE "status" = 'succeeded' AND "type" IN ('one_time', 'recurring')) as payment_count,
           SUM(CASE WHEN "status" = 'refunded' AND "type" IN ('one_time', 'recurring', 'refund')
             THEN ABS("netCents" + COALESCE("creatorFeeCents", 0)) ELSE 0 END) as refunds_cents,
-          SUM(CASE WHEN "status" IN ('dispute_lost', 'disputed') AND "type" IN ('one_time', 'recurring')
+          -- Only count 'dispute_lost' as chargebacks (finalized losses)
+          -- 'disputed' (open disputes) are excluded to avoid overstating losses
+          SUM(CASE WHEN "status" = 'dispute_lost' AND "type" IN ('one_time', 'recurring')
             THEN ABS("netCents" + COALESCE("creatorFeeCents", 0)) ELSE 0 END) as chargebacks_cents
         FROM "payments"
         WHERE "creatorId" = ${userId}

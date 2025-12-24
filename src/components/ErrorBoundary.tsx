@@ -34,7 +34,12 @@ export class ErrorBoundary extends Component<Props, State> {
     }
 
     handleGoHome = () => {
-        window.location.href = '/dashboard'
+        // Reset error state to re-enable rendering
+        this.setState({ hasError: false, error: null })
+        // Navigate using History API to avoid full reload (which shows splash)
+        window.history.pushState({}, '', '/dashboard')
+        // Dispatch popstate to trigger React Router navigation
+        window.dispatchEvent(new PopStateEvent('popstate'))
     }
 
     render() {

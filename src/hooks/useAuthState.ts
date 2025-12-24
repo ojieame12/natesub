@@ -12,7 +12,7 @@
  */
 
 import { useMemo } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { api } from '../api/client'
 import { getAuthToken, hasAuthSession, clearAuthSession } from '../api/client'
 import { hasRecentPaymentConfirmation } from '../utils/paymentConfirmed'
@@ -84,6 +84,9 @@ export function useAuthState(): AuthState {
       const result = await api.auth.me()
       return result
     },
+    // Keep previous data while refetching to prevent UI flickering
+    // This ensures status stays 'authenticated' during background refetches
+    placeholderData: keepPreviousData,
     // Retry transient errors (500, network) once only, but not 401s
     retry: (failureCount, err) => {
       const status = (err as any)?.status
@@ -107,13 +110,20 @@ export function useAuthState(): AuthState {
   })
 
   // Compute status based on query state
+  // With keepPreviousData, `user` retains previous value during refetch,
+  // so we stay 'authenticated' instead of flashing to 'checking'
   const status = useMemo<AuthStatus>(() => {
     // No token or session = definitely unauthenticated
     if (!shouldCheckAuth) {
       return 'unauthenticated'
     }
 
-    // Have token/session but still loading = checking
+    // Have user data = authenticated (even during refetch with keepPreviousData)
+    if (user) {
+      return 'authenticated'
+    }
+
+    // No user data yet + loading = true initial load, show 'checking'
     if (isLoading) {
       return 'checking'
     }
@@ -132,11 +142,6 @@ export function useAuthState(): AuthState {
       }
       // Still retrying
       return 'checking'
-    }
-
-    // Have token/session, have user data = authenticated
-    if (user) {
-      return 'authenticated'
     }
 
     // Shouldn't reach here, but default to checking

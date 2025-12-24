@@ -136,7 +136,8 @@ export default function Dashboard() {
   // Build menu items based on service vs personal
   const menuItems = useMemo(() => getMenuItems(isService), [isService])
 
-  const isLoading = profileLoading || metricsLoading || activityLoading
+  // Progressive loading: show each section as its data becomes available
+  // Instead of blocking all content on any loading state
   const hasError = metricsError || activityError
 
   // ============================================
@@ -554,48 +555,28 @@ export default function Dashboard() {
             message="We had trouble loading your dashboard data. Please try again."
             onRetry={loadData}
           />
-        ) : isLoading ? (
-          <>
-            {/* Stats Card Skeleton */}
-            <section className="stats-card">
-              <div className="stats-primary">
-                <Skeleton width={180} height={14} />
-                <Skeleton width={100} height={40} style={{ marginTop: 8 }} />
-              </div>
-              <div className="stats-secondary-row">
-                <div className="stats-metric">
-                  <Skeleton width={60} height={28} />
-                  <Skeleton width={80} height={12} style={{ marginTop: 4 }} />
-                </div>
-                <div className="stats-metric">
-                  <Skeleton width={60} height={28} />
-                  <Skeleton width={80} height={12} style={{ marginTop: 4 }} />
-                </div>
-              </div>
-            </section>
-
-            {/* Link Card Skeleton */}
-            <div className="link-card">
-              <Skeleton width={48} height={48} borderRadius="50%" />
-              <div className="link-info">
-                <Skeleton width={140} height={12} />
-                <Skeleton width={100} height={14} style={{ marginTop: 4 }} />
-              </div>
-            </div>
-
-            {/* Activity Skeleton */}
-            <section className="dash-activity-card">
-              <div className="dash-activity-header">
-                <Skeleton width={80} height={18} />
-                <Skeleton width={60} height={14} />
-              </div>
-              <SkeletonList count={4} />
-            </section>
-          </>
         ) : (
           <>
-            {/* Stats Card */}
-            <section className="stats-card" style={{ height: '220px', padding: '24px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+            {/* Stats Card - show skeleton only while metrics loading */}
+            {metricsLoading ? (
+              <section className="stats-card">
+                <div className="stats-primary">
+                  <Skeleton width={180} height={14} />
+                  <Skeleton width={100} height={40} style={{ marginTop: 8 }} />
+                </div>
+                <div className="stats-secondary-row">
+                  <div className="stats-metric">
+                    <Skeleton width={60} height={28} />
+                    <Skeleton width={80} height={12} style={{ marginTop: 4 }} />
+                  </div>
+                  <div className="stats-metric">
+                    <Skeleton width={60} height={28} />
+                    <Skeleton width={80} height={12} style={{ marginTop: 4 }} />
+                  </div>
+                </div>
+              </section>
+            ) : (
+              <section className="stats-card" style={{ height: '220px', padding: '24px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
               <div className="stats-primary">
                 <span className="stats-label" style={{ marginBottom: '0', opacity: 0.8, lineHeight: '1.2' }}>Monthly Recurring Revenue</span>
                 <span className="stats-mrr" style={{ lineHeight: '1', marginTop: '2px' }}>
@@ -630,7 +611,8 @@ export default function Dashboard() {
                   opacity: 0.9
                 }}
               />
-            </section>
+              </section>
+            )}
 
             {/* Payment Status Banner */}
             {profile?.payoutStatus === 'pending' && (
@@ -660,34 +642,53 @@ export default function Dashboard() {
               </Pressable>
             )}
 
-            {/* Shareable Link Card - prefetch on hover for instant navigation */}
-            <Pressable
-              className="link-card"
-              onClick={() => profile?.username && navigate(`/${profile.username}`)}
-              onMouseEnter={prefetchSubscriptionPage}
-              onTouchStart={prefetchSubscriptionPage}
-            >
-              <div className="link-avatar">
-                {profile?.avatarUrl ? (
-                  <img src={profile.avatarUrl} alt="" className="link-avatar-img" />
-                ) : (
-                  displayName ? displayName.charAt(0).toUpperCase() : 'U'
-                )}
+            {/* Shareable Link Card - show skeleton while profile loading */}
+            {profileLoading ? (
+              <div className="link-card">
+                <Skeleton width={48} height={48} borderRadius="50%" />
+                <div className="link-info">
+                  <Skeleton width={140} height={12} />
+                  <Skeleton width={100} height={14} style={{ marginTop: 4 }} />
+                </div>
               </div>
-              <div className="link-info">
-                <span className="link-label">Your subscription page</span>
-                <span className="link-url">{pageUrl}</span>
-              </div>
-              <Pressable className="link-btn link-btn-copy" onClick={(e) => { e?.stopPropagation(); handleCopyLink(); }}>
-                {copied ? <Check size={20} /> : <Copy size={20} />}
+            ) : (
+              <Pressable
+                className="link-card"
+                onClick={() => profile?.username && navigate(`/${profile.username}`)}
+                onMouseEnter={prefetchSubscriptionPage}
+                onTouchStart={prefetchSubscriptionPage}
+              >
+                <div className="link-avatar">
+                  {profile?.avatarUrl ? (
+                    <img src={profile.avatarUrl} alt="" className="link-avatar-img" />
+                  ) : (
+                    displayName ? displayName.charAt(0).toUpperCase() : 'U'
+                  )}
+                </div>
+                <div className="link-info">
+                  <span className="link-label">Your subscription page</span>
+                  <span className="link-url">{pageUrl}</span>
+                </div>
+                <Pressable className="link-btn link-btn-copy" onClick={(e) => { e?.stopPropagation(); handleCopyLink(); }}>
+                  {copied ? <Check size={20} /> : <Copy size={20} />}
+                </Pressable>
+                <Pressable className="link-btn link-btn-share" onClick={(e) => { e?.stopPropagation(); handleShare(); }}>
+                  <Share2 size={20} />
+                </Pressable>
               </Pressable>
-              <Pressable className="link-btn link-btn-share" onClick={(e) => { e?.stopPropagation(); handleShare(); }}>
-                <Share2 size={20} />
-              </Pressable>
-            </Pressable>
+            )}
 
-            {/* Activity Section */}
-            <section className="dash-activity-card">
+            {/* Activity Section - show skeleton while activity loading */}
+            {activityLoading ? (
+              <section className="dash-activity-card">
+                <div className="dash-activity-header">
+                  <Skeleton width={80} height={18} />
+                  <Skeleton width={60} height={14} />
+                </div>
+                <SkeletonList count={4} />
+              </section>
+            ) : (
+              <section className="dash-activity-card">
               <div className="dash-activity-header">
                 <span className="dash-activity-title">Activity</span>
                 <Pressable className="dash-activity-view-all" onClick={() => navigate('/activity')}>
@@ -744,7 +745,8 @@ export default function Dashboard() {
                   })
                 )}
               </div>
-            </section>
+              </section>
+            )}
           </>
         )}
       </main>
