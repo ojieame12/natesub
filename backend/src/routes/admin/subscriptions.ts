@@ -86,6 +86,251 @@ subscriptions.get('/', async (c) => {
 })
 
 // ============================================
+// UPCOMING PAYMENTS
+// ============================================
+
+/**
+ * Helper: Get date bucket (YYYY-MM-DD) for a given date in UTC
+ */
+function getDateBucket(date: Date): string {
+  return date.toISOString().split('T')[0]
+}
+
+/**
+ * Helper: Calculate days until billing with proper semantics (UTC-based)
+ * - 0 = due today (UTC date matches)
+ * - 1 = due tomorrow
+ * - negative = overdue
+ *
+ * Uses UTC to ensure consistent behavior across servers/timezones.
+ */
+function getDaysUntilBilling(billingDate: Date, now: Date): number {
+  // Use UTC date boundaries for consistent cross-timezone behavior
+  const todayUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
+  const billingUTC = Date.UTC(billingDate.getUTCFullYear(), billingDate.getUTCMonth(), billingDate.getUTCDate())
+  return Math.floor((billingUTC - todayUTC) / (1000 * 60 * 60 * 24))
+}
+
+/**
+ * GET /admin/subscriptions/upcoming
+ * List subscriptions with payments due in the next X days
+ *
+ * Features:
+ * - Global summary computed from full dataset (not just page)
+ * - Per-day totals with amounts grouped by currency
+ * - Overdue visibility with includeOverdue=true
+ * - Date buckets (YYYY-MM-DD in UTC) for clear semantics
+ *
+ * Timezone: All date calculations use UTC.
+ * - dueDate: YYYY-MM-DD in UTC
+ * - daysUntilBilling: 0 = due today (UTC), 1 = tomorrow (UTC), negative = overdue
+ */
+subscriptions.get('/upcoming', async (c) => {
+  const query = z.object({
+    days: z.coerce.number().min(1).max(30).default(7),
+    limit: z.coerce.number().min(1).max(200).default(50),
+    page: z.coerce.number().default(1),
+    includeOverdue: z.enum(['true', 'false']).default('false').transform(v => v === 'true'),
+  }).parse(c.req.query())
+
+  const now = new Date()
+  const futureDate = new Date(now.getTime() + query.days * 24 * 60 * 60 * 1000)
+  const skip = (query.page - 1) * query.limit
+
+  // Base filter for active recurring subscriptions not marked for cancellation
+  const baseWhere = {
+    status: 'active' as const,
+    interval: 'month' as const,
+    cancelAtPeriodEnd: false,
+    currentPeriodEnd: { not: null },
+  }
+
+  // Upcoming window filter
+  const upcomingWhere = {
+    ...baseWhere,
+    currentPeriodEnd: {
+      gte: now,
+      lte: futureDate,
+    },
+  }
+
+  // Overdue filter (currentPeriodEnd < now but still active)
+  const overdueWhere = {
+    ...baseWhere,
+    currentPeriodEnd: {
+      lt: now,
+    },
+  }
+
+  // Fetch paginated results and counts
+  const [upcoming, upcomingCount, overdueCount] = await Promise.all([
+    db.subscription.findMany({
+      where: query.includeOverdue
+        ? { OR: [upcomingWhere, overdueWhere] }
+        : upcomingWhere,
+      include: {
+        creator: {
+          select: {
+            id: true,
+            email: true,
+            profile: { select: { username: true, displayName: true } },
+          },
+        },
+        subscriber: {
+          select: {
+            id: true,
+            email: true,
+          },
+        },
+      },
+      orderBy: { currentPeriodEnd: 'asc' },
+      skip,
+      take: query.limit,
+    }),
+    db.subscription.count({ where: upcomingWhere }),
+    db.subscription.count({ where: overdueWhere }),
+  ])
+
+  // Compute GLOBAL summary using DB-side aggregation (avoids loading all records)
+  const combinedWhere = query.includeOverdue
+    ? { OR: [upcomingWhere, overdueWhere] }
+    : upcomingWhere
+
+  // Use groupBy for currency totals (DB-side aggregation)
+  const currencyTotals = await db.subscription.groupBy({
+    by: ['currency'],
+    where: combinedWhere,
+    _sum: { amount: true },
+    _count: true,
+  })
+
+  const totalByCurrency: Record<string, { count: number; totalCents: number }> = {}
+  for (const row of currencyTotals) {
+    totalByCurrency[row.currency] = {
+      count: row._count,
+      totalCents: row._sum.amount || 0,
+    }
+  }
+
+  // Use raw SQL for date+currency grouping (more efficient than loading all records)
+  // Note: Conditional queries because Prisma $queryRaw doesn't support SQL fragment embedding
+  type DateCurrencyRow = {
+    date_bucket: string
+    currency: string
+    count: bigint
+    total_cents: bigint
+  }
+
+  const dateCurrencyRows = query.includeOverdue
+    ? await db.$queryRaw<Array<DateCurrencyRow>>`
+        SELECT
+          TO_CHAR("currentPeriodEnd"::date, 'YYYY-MM-DD') AS date_bucket,
+          currency,
+          COUNT(*)::bigint AS count,
+          SUM(amount)::bigint AS total_cents
+        FROM "subscriptions"
+        WHERE status = 'active'
+          AND interval = 'month'
+          AND "cancelAtPeriodEnd" = false
+          AND "currentPeriodEnd" IS NOT NULL
+          AND (
+            ("currentPeriodEnd" >= ${now} AND "currentPeriodEnd" <= ${futureDate})
+            OR "currentPeriodEnd" < ${now}
+          )
+        GROUP BY date_bucket, currency
+        ORDER BY date_bucket
+      `
+    : await db.$queryRaw<Array<DateCurrencyRow>>`
+        SELECT
+          TO_CHAR("currentPeriodEnd"::date, 'YYYY-MM-DD') AS date_bucket,
+          currency,
+          COUNT(*)::bigint AS count,
+          SUM(amount)::bigint AS total_cents
+        FROM "subscriptions"
+        WHERE status = 'active'
+          AND interval = 'month'
+          AND "cancelAtPeriodEnd" = false
+          AND "currentPeriodEnd" IS NOT NULL
+          AND "currentPeriodEnd" >= ${now}
+          AND "currentPeriodEnd" <= ${futureDate}
+        GROUP BY date_bucket, currency
+        ORDER BY date_bucket
+      `
+
+  // Build per-date summary
+  const byDate: Record<string, {
+    count: number
+    daysUntil: number
+    isOverdue: boolean
+    byCurrency: Record<string, { count: number; totalCents: number }>
+  }> = {}
+
+  for (const row of dateCurrencyRows) {
+    const dateBucket = row.date_bucket
+    const billingDate = new Date(dateBucket + 'T00:00:00Z')
+    const daysUntil = getDaysUntilBilling(billingDate, now)
+    const isOverdue = daysUntil < 0
+
+    if (!byDate[dateBucket]) {
+      byDate[dateBucket] = {
+        count: 0,
+        daysUntil,
+        isOverdue,
+        byCurrency: {},
+      }
+    }
+
+    const rowCount = Number(row.count)
+    byDate[dateBucket].count += rowCount
+    byDate[dateBucket].byCurrency[row.currency] = {
+      count: rowCount,
+      totalCents: Number(row.total_cents),
+    }
+  }
+
+  const total = query.includeOverdue ? upcomingCount + overdueCount : upcomingCount
+
+  return c.json({
+    subscriptions: upcoming.map((s) => {
+      const daysUntil = s.currentPeriodEnd ? getDaysUntilBilling(s.currentPeriodEnd, now) : null
+      return {
+        id: s.id,
+        creator: {
+          id: s.creator.id,
+          email: s.creator.email,
+          username: s.creator.profile?.username,
+          displayName: s.creator.profile?.displayName,
+        },
+        subscriber: {
+          id: s.subscriber.id,
+          email: s.subscriber.email,
+        },
+        amount: s.amount,
+        currency: s.currency,
+        currentPeriodEnd: s.currentPeriodEnd,
+        dueDate: s.currentPeriodEnd ? getDateBucket(s.currentPeriodEnd) : null,
+        daysUntilBilling: daysUntil,
+        isOverdue: daysUntil !== null && daysUntil < 0,
+        ltvCents: s.ltvCents,
+        provider: s.stripeSubscriptionId ? 'stripe' : s.paystackAuthorizationCode ? 'paystack' : 'unknown',
+      }
+    }),
+    summary: {
+      total,
+      upcomingCount,
+      overdueCount,
+      days: query.days,
+      includeOverdue: query.includeOverdue,
+      timezone: 'UTC', // All date calculations use UTC for consistency
+      byDate, // Per-date breakdown with amounts
+      totalByCurrency, // Overall currency breakdown
+    },
+    page: query.page,
+    totalPages: Math.ceil(total / query.limit),
+  })
+})
+
+// ============================================
 // SUBSCRIPTION DETAIL
 // ============================================
 

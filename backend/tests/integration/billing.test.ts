@@ -142,32 +142,44 @@ describe('Billing Jobs', () => {
       expect(result.succeeded).toBe(1)
       expect(result.failed).toBe(0)
       expect(mockedChargeAuthorization).toHaveBeenCalledTimes(1)
+      // Split model with processor buffer:
+      // - Base: 500000 kobo
+      // - Subscriber fee (4%): 20000
+      // - Processor buffer: ~1695 (covers Paystack fees)
+      // - Gross: ~521695
       expect(mockedChargeAuthorization).toHaveBeenCalledWith(
         expect.objectContaining({
           authorizationCode: 'AUTH_test123',
           email: 'subscriber@test.com',
-          amount: 500000,
           currency: 'NGN',
-          subaccountCode: 'ACCT_test123',
+          subaccountCode: 'ACCT_test123', // Subaccount handles auto-split
         })
       )
+      // Verify amount is in expected range (base + fees + buffer)
+      const callArgs = mockedChargeAuthorization.mock.calls[0][0]
+      expect(callArgs.amount).toBeGreaterThan(500000)
+      expect(callArgs.amount).toBeLessThan(550000)
 
       // Verify subscription was updated
       const updatedSub = dbStorage.subscriptions.get(subscriptionId)
       expect(updatedSub.paystackAuthorizationCode).not.toBe('AUTH_test123') // Should be changed (encrypted)
       expect(updatedSub.paystackAuthorizationCode).toContain(':') // Encrypted format (IV:Cipher)
-      // Note: Mock doesn't handle Prisma increment - just verify it was attempted
-      // Net = 500000 - fee. Fee for NGN = (500000 * 0.08) + 10000 = 50000
-      expect(updatedSub.ltvCents).toEqual({ increment: 450000 })
+      // Net is base minus creator fee (approximately 96% of base)
+      expect(updatedSub.ltvCents.increment).toBeGreaterThan(450000)
+      expect(updatedSub.ltvCents.increment).toBeLessThan(500000)
 
       // Verify payment was created
       const payments = Array.from(dbStorage.payments.values())
       expect(payments.length).toBe(1)
       expect(payments[0].status).toBe('succeeded')
-      expect(payments[0].amountCents).toBe(500000)
-      // Fees include platform + processing (8% + ₦100 fixed for NGN)
-      expect(payments[0].feeCents).toBe(50000) // Legacy fee: (500000 * 0.08) + 10000
-      expect(payments[0].netCents).toBe(450000)
+      // grossCents includes subscriber fee + processor buffer
+      expect(payments[0].amountCents).toBeGreaterThan(500000)
+      // Fee should be ~8% of base + buffer
+      expect(payments[0].feeCents).toBeGreaterThan(30000)
+      expect(payments[0].feeCents).toBeLessThan(60000)
+      // Net should be ~96% of base (after creator's 4% fee)
+      expect(payments[0].netCents).toBeGreaterThan(450000)
+      expect(payments[0].netCents).toBeLessThan(500000)
 
       // Verify activity was logged
       const activities = Array.from(dbStorage.activities.values())

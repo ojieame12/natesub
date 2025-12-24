@@ -64,12 +64,21 @@ export const stripe = new Stripe(env.STRIPE_SECRET_KEY, {
 
 type AccountLinkType = Stripe.AccountLinkCreateParams['type']
 
+// Address info for Stripe KYC prefill
+interface AddressInfo {
+  line1?: string
+  city?: string
+  state?: string
+  postal_code?: string
+}
+
 // Create Express account for a user
 export async function createExpressAccount(
   userId: string,
   email: string,
   country: string,
-  displayName?: string
+  displayName?: string,
+  address?: AddressInfo
 ) {
   // Check if user already has an account
   const profile = await db.profile.findUnique({ where: { userId } })
@@ -117,6 +126,24 @@ export async function createExpressAccount(
   // User provides their local details and receives payouts to their local bank
   const isCrossBorder = isStripeCrossBorderSupported(country)
 
+  // Build individual object with available prefill data
+  const individual: Stripe.AccountCreateParams.Individual = {
+    email,
+    first_name: firstName,
+    last_name: lastName,
+  }
+
+  // Add address prefill if available (reduces Stripe onboarding screens)
+  if (address && (address.line1 || address.city)) {
+    individual.address = {
+      line1: address.line1,
+      city: address.city,
+      state: address.state,
+      postal_code: address.postal_code,
+      country, // Same as account country
+    }
+  }
+
   const accountParams: Stripe.AccountCreateParams = {
     type: 'express',
     email,
@@ -128,11 +155,7 @@ export async function createExpressAccount(
       ...(isCrossBorder ? {} : { card_payments: { requested: true } }),
     },
     business_type: 'individual',
-    individual: {
-      email,
-      first_name: firstName,
-      last_name: lastName,
-    },
+    individual,
     // Cross-border: use recipient service agreement
     // Platform is business of record, user just receives payouts
     ...(isCrossBorder && {
@@ -306,6 +329,12 @@ export async function createCheckoutSession(params: {
     creatorFeeCents?: number      // Creator's portion (4%)
     baseAmountCents?: number      // Creator's set price
   }
+  // Dispute evidence (for chargeback defense)
+  evidenceMetadata?: {
+    checkoutIp: string
+    checkoutUserAgent: string
+    checkoutAcceptLanguage: string
+  }
 }) {
   // Get creator's Stripe account
   const creatorProfile = await db.profile.findUnique({
@@ -384,6 +413,10 @@ export async function createCheckoutSession(params: {
     baseAmountCents: params.feeMetadata?.baseAmountCents?.toString() || '',
     // Platform debit recovery tracking
     platformDebitRecovered: platformDebitToRecover.toString(),
+    // Dispute evidence (for chargeback defense)
+    checkoutIp: params.evidenceMetadata?.checkoutIp || '',
+    checkoutUserAgent: params.evidenceMetadata?.checkoutUserAgent || '',
+    checkoutAcceptLanguage: params.evidenceMetadata?.checkoutAcceptLanguage || '',
   }
 
   // Total application fee = service fee + debit recovery
@@ -391,6 +424,17 @@ export async function createCheckoutSession(params: {
 
   // Create checkout session with circuit breaker protection
   // For both one-time and subscriptions, use application_fee_amount (fixed fee)
+  //
+  // BILLING DESCRIPTOR: Use suffix for recognizable bank statement entry
+  // This helps prevent chargebacks from subscribers who don't recognize the charge.
+  // Full descriptor = "NATEPAY* " + creator name (max 22 chars total)
+  // Stripe requires suffix to be max 22 chars and alphanumeric
+  const descriptorSuffix = creatorProfile.displayName
+    .replace(/[^a-zA-Z0-9 ]/g, '') // Remove special chars
+    .substring(0, 18) // Leave room for "NATEPAY* " prefix
+    .trim()
+    .toUpperCase() || 'PAYMENT'
+
   const session = await stripeCircuitBreaker(() =>
     stripe.checkout.sessions.create(
       {
@@ -407,6 +451,8 @@ export async function createCheckoutSession(params: {
           transfer_data: {
             destination: stripeAccountId,
           },
+          // Billing descriptor for card statements - helps prevent chargebacks
+          statement_descriptor_suffix: descriptorSuffix,
         } : undefined,
         // Subscriptions: set application_fee_percent for platform fee
         // IMPORTANT: application_fee_percent applies to the TOTAL charge amount,
@@ -421,6 +467,9 @@ export async function createCheckoutSession(params: {
             destination: stripeAccountId,
           },
           metadata, // Store fee info for tracking/auditing
+          // Billing descriptor for subscription invoices - reduces chargebacks
+          // Shows "NATEPAY* CREATOR" on bank statements for renewals
+          description: `Subscription to ${descriptorSuffix}`,
         } : undefined,
         success_url: params.successUrl,
         cancel_url: params.cancelUrl,

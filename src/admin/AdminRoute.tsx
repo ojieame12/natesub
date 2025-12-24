@@ -13,6 +13,7 @@ import { useQuery } from '@tanstack/react-query'
 import { getAuthToken } from '../api/client'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
+const ADMIN_ME_TIMEOUT_MS = 20_000
 
 // Check admin status via backend (single source of truth)
 async function checkAdminStatus(): Promise<{ isAdmin: boolean; email?: string | null; role?: string }> {
@@ -25,10 +26,24 @@ async function checkAdminStatus(): Promise<{ isAdmin: boolean; email?: string | 
     headers['Authorization'] = `Bearer ${token}`
   }
 
-  const response = await fetch(`${API_URL}/admin/me`, {
-    credentials: 'include',
-    headers,
-  })
+  const controller = new AbortController()
+  const timeoutId = window.setTimeout(() => controller.abort(), ADMIN_ME_TIMEOUT_MS)
+
+  let response: Response
+  try {
+    response = await fetch(`${API_URL}/admin/me`, {
+      credentials: 'include',
+      headers,
+      signal: controller.signal,
+    })
+  } catch (err: any) {
+    if (err?.name === 'AbortError') {
+      throw new Error('Request timed out')
+    }
+    throw err
+  } finally {
+    window.clearTimeout(timeoutId)
+  }
 
   if (!response.ok) {
     // Auth failures should route to "Access Denied"; server/network failures should show "Connection Error".

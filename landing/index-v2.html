@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Primary SEO -->
+  <title>NatePay — Recurring Payments with Income Proof</title>
+  <meta name="description" content="Create a payment link. Get paid monthly. Download pay statements that landlords and banks actually accept. What Deel charges $49/month for, we include free.">
+  <meta name="keywords" content="recurring payments, payment link, pay statements, income verification, proof of income, freelance payments">
+  <meta name="author" content="NatePay">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://natepay.co">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://natepay.co">
+  <meta property="og:title" content="NatePay — Recurring Payments with Income Proof">
+  <meta property="og:description" content="Get paid monthly. Prove your income. What Deel charges $49/month for, we include free.">
+  <meta property="og:image" content="https://natepay.co/og-image.png">
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="NatePay — Recurring Payments with Income Proof">
+  <meta name="twitter:description" content="Get paid monthly. Prove your income. What Deel charges $49/month for, we include free.">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="logo.svg">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="styles-v2.css">
+
+  <!-- Structured Data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "NatePay",
+    "applicationCategory": "FinanceApplication",
+    "operatingSystem": "Web",
+    "description": "Recurring payments with verifiable pay statements.",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    }
+  }
+  </script>
+</head>
+<body>
+
+  <!-- Navigation -->
+  <nav class="nav" id="nav">
+    <div class="nav-container">
+      <a href="/" class="nav-logo">
+        <img src="logo.svg" alt="NatePay" width="85" height="29">
+      </a>
+      <div class="nav-links">
+        <a href="#how-it-works" class="nav-link">How It Works</a>
+        <a href="#pricing" class="nav-link">Pricing</a>
+        <a href="https://app.natepay.co/login" class="nav-link">Login</a>
+        <a href="https://app.natepay.co/signup" class="btn btn-primary btn-sm">Get Started</a>
+      </div>
+      <button class="nav-toggle" id="nav-toggle" aria-label="Menu">
+        <span></span>
+        <span></span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- Mobile Menu -->
+  <div class="mobile-menu" id="mobile-menu">
+    <a href="#how-it-works">How It Works</a>
+    <a href="#pricing">Pricing</a>
+    <a href="https://app.natepay.co/login">Login</a>
+    <a href="https://app.natepay.co/signup" class="btn btn-primary">Get Started</a>
+  </div>
+
+  <!-- Hero: Problem-First -->
+  <header class="hero">
+    <div class="container">
+      <p class="hero-eyebrow">The freelancer's dilemma</p>
+      <h1>You make $4,000/month.<br><span class="hero-muted">You can't rent a $1,500 apartment.</span></h1>
+      <p class="hero-sub">
+        Your income is real. But bank statements showing "WISE" and "PAYPAL" deposits don't look like income.<br>
+        <strong>NatePay fixes that.</strong>
+      </p>
+      <div class="hero-cta">
+        <a href="https://app.natepay.co/signup" class="btn btn-primary btn-lg">Create Your Payment Link</a>
+      </div>
+      <p class="hero-note">Free to start. 4% + 4% when you get paid.</p>
+    </div>
+  </header>
+
+  <!-- What NatePay Does -->
+  <section class="what-it-does">
+    <div class="container">
+      <div class="flow">
+        <div class="flow-step">
+          <div class="flow-icon">🔗</div>
+          <h3>Create a link</h3>
+          <p>Set your price. Monthly or one-time.</p>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">
+          <div class="flow-icon">💳</div>
+          <h3>They subscribe</h3>
+          <p>Apple Pay, Google Pay, or card.</p>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">
+          <div class="flow-icon">🏦</div>
+          <h3>You get paid</h3>
+          <p>Direct to your bank. Every month.</p>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step flow-step-highlight">
+          <div class="flow-icon">📄</div>
+          <h3>You get proof</h3>
+          <p>Pay statements with QR verification.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- The Proof Section (Hero Feature) -->
+  <section class="proof-section" id="proof">
+    <div class="container">
+      <div class="proof-header">
+        <p class="section-label">The feature that changes everything</p>
+        <h2>Pay statements that actually work</h2>
+        <p class="section-sub">Every payment generates a verifiable document. Not a screenshot. Not a CSV export. A real pay statement with QR verification.</p>
+      </div>
+
+      <div class="proof-demo">
+        <div class="statement-card">
+          <div class="statement-header">PAY STATEMENT</div>
+          <div class="statement-meta">
+            <span>Nathan Johnson</span>
+            <span>December 2025</span>
+          </div>
+          <div class="statement-divider"></div>
+          <div class="statement-row">
+            <span>Base Amount</span>
+            <span>$2,000.00</span>
+          </div>
+          <div class="statement-row statement-fee">
+            <span>Service Fee (4%)</span>
+            <span>-$80.00</span>
+          </div>
+          <div class="statement-row statement-total">
+            <span>Net Payment</span>
+            <span>$1,920.00</span>
+          </div>
+          <div class="statement-divider"></div>
+          <div class="statement-ytd">
+            <div class="ytd-row">
+              <span>YTD Gross</span>
+              <span>$24,000</span>
+            </div>
+            <div class="ytd-row">
+              <span>YTD Net</span>
+              <span>$23,040</span>
+            </div>
+            <div class="ytd-row">
+              <span>Payments</span>
+              <span>12 of 12</span>
+            </div>
+          </div>
+          <div class="statement-divider"></div>
+          <div class="statement-verify">
+            <div class="qr-box">QR</div>
+            <div class="verify-text">
+              <span>Scan to verify</span>
+              <span class="verify-url">natepay.co/v/xK9mP2</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="proof-benefits">
+          <h3>What this means for you:</h3>
+          <ul>
+            <li>
+              <strong>Apartment applications</strong>
+              <span>Landlords scan the QR. It's verified. You get approved.</span>
+            </li>
+            <li>
+              <strong>Loan applications</strong>
+              <span>Banks see consistent income. 12 months of proof.</span>
+            </li>
+            <li>
+              <strong>Visa applications</strong>
+              <span>Immigration sees ongoing employment. Documented.</span>
+            </li>
+            <li>
+              <strong>Credit applications</strong>
+              <span>Your "freelance income" finally looks real.</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="deel-callout">
+        <div class="deel-comparison">
+          <div class="deel-them">
+            <span class="deel-name">Deel, Remote, Oyster</span>
+            <span class="deel-price">$29 – $599/month</span>
+            <span class="deel-for">for "compliant payment documentation"</span>
+          </div>
+          <div class="deel-vs">vs</div>
+          <div class="deel-us">
+            <span class="deel-name">NatePay</span>
+            <span class="deel-price">Included</span>
+            <span class="deel-for">with every payment</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- How It Works -->
+  <section class="how-it-works" id="how-it-works">
+    <div class="container container-narrow">
+      <h2>How it works</h2>
+
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-content">
+            <h3>Create your payment link</h3>
+            <p>Set your amount. Choose monthly or one-time. Public link for anyone, or private request for a specific person.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-content">
+            <h3>Share it</h3>
+            <p>Send to your client, employer, or supporter. Or put it in your bio.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-content">
+            <h3>They subscribe</h3>
+            <p>One tap. Apple Pay, Google Pay, or card. They're charged automatically each month.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">4</div>
+          <div class="step-content">
+            <h3>You get paid + proof</h3>
+            <p>Money hits your bank. Pay statement auto-generated. QR code for verification. Done.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-cta">
+        <a href="https://app.natepay.co/signup" class="btn btn-primary">Create Your Link</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Who It's For -->
+  <section class="who-its-for">
+    <div class="container">
+      <h2>Who uses NatePay</h2>
+
+      <div class="use-cases">
+        <div class="use-case">
+          <div class="use-case-emoji">👨‍💻</div>
+          <h3>Freelancers</h3>
+          <p>Monthly retainers on autopilot. No more invoicing.</p>
+        </div>
+        <div class="use-case">
+          <div class="use-case-emoji">🎨</div>
+          <h3>Creators</h3>
+          <p>Subscriptions without Patreon's 12% cut.</p>
+        </div>
+        <div class="use-case">
+          <div class="use-case-emoji">🌍</div>
+          <h3>Remote workers</h3>
+          <p>Get paid by US/UK companies. Direct to your local bank.</p>
+        </div>
+        <div class="use-case">
+          <div class="use-case-emoji">👨‍👩‍👧</div>
+          <h3>Families</h3>
+          <p>Recurring allowances. No monthly Wise transfers.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Pricing -->
+  <section class="pricing" id="pricing">
+    <div class="container container-narrow">
+      <h2>Pricing</h2>
+
+      <div class="pricing-box">
+        <div class="pricing-split">
+          <div class="split-item">
+            <span class="split-rate">4%</span>
+            <span class="split-who">paid by subscriber</span>
+          </div>
+          <div class="split-plus">+</div>
+          <div class="split-item">
+            <span class="split-rate">4%</span>
+            <span class="split-who">paid by you</span>
+          </div>
+        </div>
+
+        <div class="pricing-includes">
+          <p><strong>That's it. All-in.</strong></p>
+          <ul>
+            <li>✓ No monthly fees</li>
+            <li>✓ No payout fees</li>
+            <li>✓ No processing fees on top</li>
+            <li>✓ Pay statements included</li>
+          </ul>
+        </div>
+
+        <div class="pricing-example">
+          <p><strong>Example:</strong> You set $100/month</p>
+          <p>Subscriber pays $104. You receive $96. You keep <strong>96%</strong>.</p>
+        </div>
+      </div>
+
+      <div class="pricing-compare">
+        <table>
+          <thead>
+            <tr><th>Platform</th><th>Creator pays</th><th>Subscriber pays</th><th>Income proof?</th></tr>
+          </thead>
+          <tbody>
+            <tr class="row-highlight"><td><strong>NatePay</strong></td><td>4%</td><td>4%</td><td><strong>✓ Yes</strong></td></tr>
+            <tr><td>Patreon</td><td>8-12%</td><td>0%</td><td>✗ No</td></tr>
+            <tr><td>Ko-fi</td><td>0-5%</td><td>0%</td><td>✗ No</td></tr>
+            <tr><td>Gumroad</td><td>10%</td><td>0%</td><td>✗ No</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- Payouts (The Moat) -->
+  <section class="payouts" id="payouts">
+    <div class="container container-narrow">
+      <h2>Direct to your bank. Worldwide.</h2>
+      <p class="section-sub">No Payoneer. No PayPal. No intermediaries.</p>
+
+      <div class="payout-grid">
+        <div class="payout-region">
+          <div class="payout-flags">🇺🇸 🇬🇧 🇪🇺</div>
+          <h3>US, UK, Europe</h3>
+          <p>Any bank account. USD, GBP, EUR.</p>
+        </div>
+        <div class="payout-region payout-highlight">
+          <div class="payout-flags">🇳🇬 🇰🇪 🇿🇦</div>
+          <h3>Nigeria, Kenya, South Africa</h3>
+          <p>Direct to your local bank in local currency. GTBank, First Bank, M-Pesa, Standard Bank — all of them.</p>
+          <span class="payout-badge">No Payoneer needed</span>
+        </div>
+      </div>
+
+      <p class="payout-note">Other platforms treat Africa as an afterthought. We built it in from day one.</p>
+    </div>
+  </section>
+
+  <!-- Trust -->
+  <section class="trust">
+    <div class="container">
+      <div class="trust-items">
+        <div class="trust-item">
+          <span class="trust-icon">🏛️</span>
+          <span>US incorporated (Delaware)</span>
+        </div>
+        <div class="trust-item">
+          <span class="trust-icon">💳</span>
+          <span>Powered by Stripe</span>
+        </div>
+        <div class="trust-item">
+          <span class="trust-icon">🌍</span>
+          <span>African payouts via Paystack</span>
+        </div>
+        <div class="trust-item">
+          <span class="trust-icon">🔒</span>
+          <span>Bank-grade security</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Final CTA -->
+  <section class="final-cta">
+    <div class="container">
+      <h2>Get paid monthly.<br>Prove your income.</h2>
+      <p>One link. Recurring payments. Verifiable pay statements.</p>
+      <a href="https://app.natepay.co/signup" class="btn btn-primary btn-lg">Create Your Payment Link</a>
+      <p class="final-note">Free to create. Only pay when you get paid.</p>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-brand">
+        <img src="logo.svg" alt="NatePay" width="85" height="29">
+        <p>Recurring payments with income proof.</p>
+      </div>
+      <div class="footer-links">
+        <a href="mailto:support@natepay.co">Support</a>
+        <a href="/terms">Terms</a>
+        <a href="/privacy">Privacy</a>
+      </div>
+      <p class="footer-legal">© 2025 NatePay, LLC · Delaware, USA</p>
+    </div>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>

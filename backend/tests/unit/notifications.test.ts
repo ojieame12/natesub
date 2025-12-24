@@ -49,7 +49,9 @@ describe('Notification Jobs', () => {
     mockReleaseLock.mockResolvedValue(true)
   })
 
-  describe('sendRenewalReminders', () => {
+  // DEPRECATED: sendRenewalReminders is replaced by scheduled reminders (jobs/reminders.ts)
+  // These tests are skipped but kept for reference if legacy code needs to be re-enabled
+  describe.skip('sendRenewalReminders (DEPRECATED)', () => {
     it('should find subscriptions expiring in 3-4 days', async () => {
       mockFindMany.mockResolvedValue([])
 

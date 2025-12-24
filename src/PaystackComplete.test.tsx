@@ -96,6 +96,7 @@ describe('PaystackComplete', () => {
 
     fireEvent.click(screen.getByText('Done'))
 
-    expect(mockNavigate).toHaveBeenCalledWith('/creator123?success=true&provider=paystack')
+    // Now includes reference for verification on creator page
+    expect(mockNavigate).toHaveBeenCalledWith('/creator123?success=true&provider=paystack&reference=ref_123')
   })
 })

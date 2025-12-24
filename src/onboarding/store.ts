@@ -337,11 +337,10 @@ export const useOnboardingStore = create<OnboardingStore>()(
         }),
         {
             name: 'natepay-onboarding',
-            version: 1,
-            // Use sessionStorage instead of localStorage to prevent stale state across sessions
-            // This means onboarding progress is lost when the tab closes, but prevents
-            // the "teleporting" bug where users are sent to random onboarding steps
-            storage: createJSONStorage(() => sessionStorage),
+            version: 2, // Bumped to force migration from sessionStorage
+            // Use localStorage with TTL to persist onboarding progress across tab closes
+            // while still preventing stale state via the 24-hour TTL check below
+            storage: createJSONStorage(() => localStorage),
             partialize: (state) => ({
                 // Persist key state for resume
                 // Note: serviceDescriptionAudio (Blob) is NOT persisted - only the URL after upload
@@ -381,7 +380,7 @@ export const useOnboardingStore = create<OnboardingStore>()(
                     console.error('[onboarding] Failed to rehydrate state:', error)
                     // Clear corrupted storage
                     try {
-                        sessionStorage.removeItem('natepay-onboarding')
+                        localStorage.removeItem('natepay-onboarding')
                     } catch (e) {
                         // Ignore
                     }
@@ -389,7 +388,8 @@ export const useOnboardingStore = create<OnboardingStore>()(
                 }
 
                 // Check for stale state (older than 24 hours)
-                // Only auto-reset if user hasn't completed authentication (step 3+)
+                // Reset if: (1) state is stale AND (2) user hasn't authenticated yet
+                // This prevents the "teleporting" bug while allowing recovery after tab close
                 if (state) {
                     const lastUpdated = (state as any)._lastUpdated
                     const twentyFourHours = 24 * 60 * 60 * 1000
@@ -399,7 +399,7 @@ export const useOnboardingStore = create<OnboardingStore>()(
                     if (isStale && hasNotAuthenticated) {
                         console.log('[onboarding] Resetting stale state (>24h, not authenticated)')
                         try {
-                            sessionStorage.removeItem('natepay-onboarding')
+                            localStorage.removeItem('natepay-onboarding')
                         } catch (e) {
                             // Ignore
                         }
@@ -408,6 +408,10 @@ export const useOnboardingStore = create<OnboardingStore>()(
                             ...initialState
                         })
                     }
+
+                    // For authenticated users, trust server state over local state
+                    // The hydrateFromServer function should be called after login
+                    // to reconcile any differences
                 }
             },
         }

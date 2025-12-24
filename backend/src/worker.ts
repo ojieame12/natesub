@@ -2,6 +2,7 @@ import { createWorker } from './lib/queue.js'
 import { emailProcessor } from './workers/emailProcessor.js'
 import { billingProcessor } from './workers/billingProcessor.js'
 import { webhookProcessor } from './workers/webhookProcessor.js'
+import { updateEmailProcessor } from './workers/updateEmailProcessor.js'
 import { db } from './db/client.js'
 
 console.log('🚀 Starting Background Workers...')
@@ -10,9 +11,10 @@ console.log('🚀 Starting Background Workers...')
 const emailWorker = createWorker('email-queue', emailProcessor, 5) // 5 concurrent emails
 const billingWorker = createWorker('billing-queue', billingProcessor, 1) // 1 concurrent billing job (singleton)
 const webhookWorker = createWorker('webhook-queue', webhookProcessor, 10) // 10 concurrent webhooks
+const updateEmailWorker = createWorker('update-email-queue', updateEmailProcessor, 10) // 10 concurrent update emails
 
 // Handle graceful shutdown
-const workers = [emailWorker, billingWorker, webhookWorker]
+const workers = [emailWorker, billingWorker, webhookWorker, updateEmailWorker]
 
 async function shutdown() {
   console.log('🛑 Shutting down workers...')

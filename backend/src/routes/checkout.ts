@@ -41,6 +41,14 @@ checkout.post(
   async (c) => {
     const { creatorUsername, tierId, amount, interval, subscriberEmail, payerCountry, viewId } = c.req.valid('json')
 
+    // Capture client evidence for dispute defense (Visa-compliant)
+    const clientIp = c.req.header('x-forwarded-for')?.split(',')[0]?.trim()
+      || c.req.header('cf-connecting-ip')
+      || c.req.header('x-real-ip')
+      || 'unknown'
+    const userAgent = c.req.header('user-agent') || 'unknown'
+    const acceptLanguage = c.req.header('accept-language') || 'unknown'
+
     // Find creator
     const profile = await db.profile.findUnique({
       where: { username: creatorUsername.toLowerCase() },
@@ -275,10 +283,9 @@ checkout.post(
         const reference = generateReference('SUB')
         const result = await initializePaystackCheckout({
           email: subscriberEmail,
-          creatorAmount: amount,
-          serviceFee: feeCalc.feeCents,
-          totalAmount: feeCalc.grossCents,
+          amount: feeCalc.grossCents, // Total subscriber pays - Paystack splits via subaccount
           currency: profile.currency,
+          subaccountCode: profile.paystackSubaccountCode!, // Split to creator's subaccount
           callbackUrl: `${env.APP_URL}/payment/success?creator=${profile.username}`,
           reference,
           metadata: {
@@ -286,16 +293,20 @@ checkout.post(
             tierId: tierId || '',
             interval,
             viewId: viewId || '', // Analytics: page view ID for conversion tracking
-            // Fee metadata for webhook processing (split model)
-            baseAmount: feeCalc.baseCents,           // Creator's price
-            creatorAmount: feeCalc.netCents,         // What creator receives after their 4%
-            serviceFee: feeCalc.feeCents,            // Total platform fee (8%)
-            subscriberFee: feeCalc.subscriberFeeCents, // Subscriber's portion (4%)
-            creatorFee: feeCalc.creatorFeeCents,     // Creator's portion (4%)
+            // Fee metadata for tracking (subaccount handles actual split)
+            baseAmount: feeCalc.baseCents,
+            creatorAmount: feeCalc.netCents,
+            serviceFee: feeCalc.feeCents,
+            subscriberFee: feeCalc.subscriberFeeCents,
+            creatorFee: feeCalc.creatorFeeCents,
             feeModel: feeCalc.feeModel,
             feeMode: feeCalc.feeMode,
             feeEffectiveRate: feeCalc.effectiveRate,
             feeWasCapped: feeCalc.feeWasCapped,
+            // Dispute evidence (for chargeback defense)
+            checkoutIp: clientIp,
+            checkoutUserAgent: userAgent.substring(0, 500), // Limit length
+            checkoutAcceptLanguage: acceptLanguage.substring(0, 200),
           },
         })
 
@@ -374,6 +385,12 @@ checkout.post(
           creatorFeeCents: feeCalc.creatorFeeCents,
           baseAmountCents: feeCalc.baseCents,
           feeWasCapped: feeCalc.feeWasCapped,
+        },
+        // Dispute evidence (for chargeback defense)
+        evidenceMetadata: {
+          checkoutIp: clientIp,
+          checkoutUserAgent: userAgent.substring(0, 500), // Limit length
+          checkoutAcceptLanguage: acceptLanguage.substring(0, 200),
         },
       })
 

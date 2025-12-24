@@ -84,9 +84,12 @@ export default function PaystackComplete() {
 
   const handleDone = () => {
     // Navigate back to creator's page with success context (consistent with Stripe flow)
+    // IMPORTANT: Include the reference so the creator page can verify
     if (verification?.creatorUsername || creatorUsername) {
       const username = verification?.creatorUsername || creatorUsername
-      navigate(`/${username}?success=true&provider=paystack`)
+      // Pass reference for verification on the creator page
+      const refParam = reference ? `&reference=${reference}` : ''
+      navigate(`/${username}?success=true&provider=paystack${refParam}`)
     } else if (canGoBack) {
       // No creator info - go back if we can
       navigate(-1)

@@ -193,9 +193,10 @@ describe('SubscribeBoundary', () => {
 
       await vi.advanceTimersByTimeAsync(100)
 
-      // Owner should see subscription management fee and what they receive
-      expect(screen.getByText('Subscription management')).toBeInTheDocument()
+      // Owner should see subscription price and what they receive
+      expect(screen.getByText('Subscription price')).toBeInTheDocument()
       expect(screen.getByText('You receive')).toBeInTheDocument()
+      expect(screen.getByText('after 4% platform fee')).toBeInTheDocument()
     })
 
     it('does not record page view for owner', async () => {

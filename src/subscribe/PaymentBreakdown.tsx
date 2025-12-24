@@ -52,7 +52,7 @@ export default function PaymentBreakdown({
                         <>
                             <div className="sub-breakdown-row sub-breakdown-fee is-owner">
                                 <div className="sub-breakdown-label-group">
-                                    <span>Platform fee ({feePreview.platformFeePercent})</span>
+                                    <span>Instant payout ({feePreview.platformFeePercent})</span>
                                 </div>
                                 <span className="sub-breakdown-value">
                                     -{formatAmountWithSeparators(feePreview.platformFee!, currency)}
@@ -72,7 +72,7 @@ export default function PaymentBreakdown({
                         /* Legacy model: single combined fee */
                         <div className="sub-breakdown-row sub-breakdown-fee is-owner">
                             <div className="sub-breakdown-label-group">
-                                <span>Fees ({feePreview.effectiveRatePercent})</span>
+                                <span>Instant payout ({feePreview.effectiveRatePercent})</span>
                             </div>
                             <span className="sub-breakdown-value">
                                 -{formatAmountWithSeparators(feePreview.totalFee, currency)}
@@ -89,10 +89,7 @@ export default function PaymentBreakdown({
 
                     <div className="sub-breakdown-note">
                         <Info size={12} style={{ marginRight: 4 }} />
-                        {hasTieredFees
-                            ? 'Platform fee goes to NatePay. Processing goes to card networks.'
-                            : 'Covers billing, retries, and payment processing'
-                        }
+                        Covers instant payouts, billing & payment processing
                     </div>
                 </>
             )}

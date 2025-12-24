@@ -147,6 +147,7 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
     const [status, setStatus] = useState<'idle' | 'processing' | 'verifying' | 'success'>(isSuccessReturn ? 'verifying' : 'idle')
     const [payerCountry, setPayerCountry] = useState<string | null>(null)
     const viewIdRef = useRef<string | null>(null)
+    const verificationAttemptedRef = useRef(false)
 
     // Use single amount only (tiers removed from the flow)
     const currentAmount = profile.singleAmount || 0
@@ -190,7 +191,8 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
         const stripeSessionId = searchParams.get('session_id')
         const paystackRef = searchParams.get('reference') || searchParams.get('trxref')
 
-        if (isSuccessReturn) {
+        if (isSuccessReturn && !verificationAttemptedRef.current) {
+            verificationAttemptedRef.current = true
             if (stripeSessionId) {
                 // STRIPE VERIFICATION
                 api.checkout.verifySession(stripeSessionId, profile.username)

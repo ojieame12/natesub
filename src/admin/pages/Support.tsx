@@ -11,6 +11,7 @@ import StatCard from '../components/StatCard'
 import ActionModal from '../components/ActionModal'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
+const ADMIN_FETCH_TIMEOUT_MS = 20_000
 
 async function adminFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers: Record<string, string> = {
@@ -23,11 +24,25 @@ async function adminFetch<T>(path: string, options: RequestInit = {}): Promise<T
     headers['Authorization'] = `Bearer ${token}`
   }
 
-  const response = await fetch(`${API_URL}${path}`, {
-    ...options,
-    credentials: 'include',
-    headers,
-  })
+  const controller = new AbortController()
+  const timeoutId = window.setTimeout(() => controller.abort(), ADMIN_FETCH_TIMEOUT_MS)
+
+  let response: Response
+  try {
+    response = await fetch(`${API_URL}${path}`, {
+      ...options,
+      credentials: 'include',
+      headers,
+      signal: options.signal ?? controller.signal,
+    })
+  } catch (err: any) {
+    if (err?.name === 'AbortError') {
+      throw new Error('Request timed out')
+    }
+    throw err
+  } finally {
+    window.clearTimeout(timeoutId)
+  }
 
   const data = await response.json().catch(() => ({ error: 'Invalid response' }))
   if (!response.ok) throw new Error(data.error || 'Request failed')

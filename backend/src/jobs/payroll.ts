@@ -11,6 +11,7 @@ import {
 } from '../services/payroll.js'
 import { generateAndUploadPayStatement, type IncomeStatementData, type PaymentRecord } from '../services/pdf.js'
 import { setPdfUrl } from '../services/payroll.js'
+import { alertSystemError } from '../services/slack.js'
 import { env } from '../config/env.js'
 
 // Lock key prefix for deduplication
@@ -237,12 +238,45 @@ export async function generatePayrollPeriods(): Promise<PayrollJobResult> {
           error: error.message || 'Unknown error',
         })
         console.error(`[payroll] Error processing ${creatorId}:`, error.message)
+
+        // Alert on individual creator failures for visibility
+        await alertSystemError({
+          service: 'payroll',
+          error: `Failed to generate payroll for creator ${creatorId}`,
+          context: {
+            creatorId,
+            periodStart: periodStart.toISOString(),
+            periodEnd: periodEnd.toISOString(),
+            errorMessage: error.message,
+          },
+        }).catch((alertErr) => {
+          // Don't let alert failures break the job
+          console.error('[payroll] Failed to send error alert:', alertErr.message)
+        })
       }
     }
 
     console.log(
       `[payroll] Complete: ${result.generated} periods, ${result.pdfsGenerated} PDFs, ${result.skipped} skipped`
     )
+
+    // Send summary alert if there were any errors
+    if (result.errors.length > 0) {
+      await alertSystemError({
+        service: 'payroll',
+        error: `Payroll job completed with ${result.errors.length} error(s)`,
+        context: {
+          processed: result.processed,
+          generated: result.generated,
+          pdfsGenerated: result.pdfsGenerated,
+          skipped: result.skipped,
+          errorCount: result.errors.length,
+          errors: result.errors.slice(0, 5), // First 5 errors for brevity
+        },
+      }).catch((alertErr) => {
+        console.error('[payroll] Failed to send summary alert:', alertErr.message)
+      })
+    }
 
     return result
   } finally {

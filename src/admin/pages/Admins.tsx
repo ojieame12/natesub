@@ -45,12 +45,12 @@ export default function Admins() {
 
   // Queries
   const { data: adminsData, isLoading: adminsLoading, error: adminsError, refetch } = useAdminsList()
-  const { data: auditData, isLoading: auditLoading } = useAdminAuditLog(50)
+  const { data: auditData, isLoading: auditLoading } = useAdminAuditLog(50, { enabled: activeTab === 'audit' })
   const { data: usersData, isLoading: usersLoading } = useAdminUsers({
     search: promoteSearch || undefined,
     status: 'active',
     limit: 20,
-  })
+  }, { enabled: activeTab === 'promote' && !!promoteSearch })
 
   // Mutations
   const promoteMutation = usePromoteToAdmin()

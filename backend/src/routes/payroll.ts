@@ -15,6 +15,7 @@ import {
   setPdfUrl,
   getPeriodBoundaries,
   generateCustomStatement,
+  aggregatePayments,
 } from '../services/payroll.js'
 import {
   generateAndUploadPayStatement,
@@ -328,51 +329,14 @@ payroll.get('/current', requireAuth, requireServicePurpose, async (c) => {
   const now = new Date()
   const { start, end } = getPeriodBoundaries(now)
 
-  // Aggregate current period payments (only inbound revenue, exclude payouts)
-  const payments = await db.payment.findMany({
-    where: {
-      creatorId: userId,
-      status: 'succeeded',
-      // Only count inbound revenue - exclude payout transfers
-      type: { in: ['one_time', 'recurring'] },
-      occurredAt: {
-        gte: start,
-        lte: now, // Up to now, not end of period
-      },
-    },
-    include: {
-      subscription: {
-        include: {
-          subscriber: {
-            select: {
-              email: true,
-            },
-          },
-        },
-      },
-    },
-    orderBy: { occurredAt: 'desc' },
-  })
-
-  // Calculate base price (what creator set) instead of gross (what subscriber paid)
-  // For split_v1: base = netCents + creatorFeeCents
-  // For legacy: base = amountCents
-  const grossCents = payments.reduce((sum, p) => {
-    if (p.creatorFeeCents !== null && p.creatorFeeCents !== undefined) {
-      return sum + p.netCents + p.creatorFeeCents
-    }
-    return sum + p.amountCents
-  }, 0)
-
-  // Sum creator's fee portion (4% in split model, or total fee for legacy)
-  const platformFeeCents = payments.reduce((sum, p) => {
-    if (p.creatorFeeCents !== null && p.creatorFeeCents !== undefined) {
-      return sum + p.creatorFeeCents
-    }
-    return sum + p.feeCents
-  }, 0)
-
-  const netCents = payments.reduce((sum, p) => sum + p.netCents, 0)
+  // Use DB-side aggregation for totals (scalable for high-volume creators)
+  // This avoids loading all payments into memory
+  const {
+    grossCents,
+    totalFeeCents,
+    totalNetCents,
+    paymentCount,
+  } = await aggregatePayments(userId, start, now) // Up to now, not end of period
 
   // Processing fee is 0 in split model (absorbed by subscriber's portion)
   const processingFeeCents = 0
@@ -382,10 +346,10 @@ payroll.get('/current', requireAuth, requireServicePurpose, async (c) => {
     periodEnd: end.toISOString(),
     isComplete: false,
     grossCents,
-    platformFeeCents,
+    platformFeeCents: totalFeeCents,
     processingFeeCents,
-    netCents,
-    paymentCount: payments.length,
+    netCents: totalNetCents,
+    paymentCount,
   })
 })
 

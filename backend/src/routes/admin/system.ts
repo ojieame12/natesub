@@ -24,6 +24,7 @@ import { getSessionToken, isAdminRole, requireRole, logAdminAction, requireFresh
 import { validateSession } from '../../services/auth.js'
 
 import { redis } from '../../db/redis.js'
+import { cached, CACHE_TTL, adminDashboardKey } from '../../utils/cache.js'
 
 const system = new Hono()
 
@@ -294,48 +295,56 @@ system.get('/metrics', async (c) => {
 
 /**
  * GET /admin/dashboard
- * Dashboard stats
+ * Dashboard stats (cached for 60 seconds)
  */
 system.get('/dashboard', async (c) => {
-  const startOfDay = todayStart()
-  const startOfMonth = thisMonthStart()
+  const result = await cached(
+    adminDashboardKey('overview'),
+    CACHE_TTL.SHORT, // 60 seconds
+    async () => {
+      const startOfDay = todayStart()
+      const startOfMonth = thisMonthStart()
 
-  const [
-    totalUsers,
-    newUsersToday,
-    newUsersThisMonth,
-    activeSubscriptions,
-    totalRevenueCents,
-    revenueThisMonthCents,
-    disputedPayments,
-    failedPaymentsToday
-  ] = await Promise.all([
-    db.user.count({ where: { deletedAt: null } }),
-    db.user.count({ where: { createdAt: { gte: startOfDay }, deletedAt: null } }),
-    db.user.count({ where: { createdAt: { gte: startOfMonth }, deletedAt: null } }),
-    db.subscription.count({ where: { status: 'active' } }),
-    // Include both recurring and one-time payments for accurate revenue
-    db.payment.aggregate({
-      where: { status: 'succeeded', type: { in: ['recurring', 'one_time'] } },
-      _sum: { feeCents: true }
-    }),
-    db.payment.aggregate({
-      where: { status: 'succeeded', type: { in: ['recurring', 'one_time'] }, occurredAt: { gte: startOfMonth } },
-      _sum: { feeCents: true }
-    }),
-    db.payment.count({ where: { status: 'disputed' } }),
-    db.payment.count({ where: { status: 'failed', occurredAt: { gte: startOfDay } } })
-  ])
+      const [
+        totalUsers,
+        newUsersToday,
+        newUsersThisMonth,
+        activeSubscriptions,
+        totalRevenueCents,
+        revenueThisMonthCents,
+        disputedPayments,
+        failedPaymentsToday
+      ] = await Promise.all([
+        db.user.count({ where: { deletedAt: null } }),
+        db.user.count({ where: { createdAt: { gte: startOfDay }, deletedAt: null } }),
+        db.user.count({ where: { createdAt: { gte: startOfMonth }, deletedAt: null } }),
+        db.subscription.count({ where: { status: 'active' } }),
+        // Include both recurring and one-time payments for accurate revenue
+        db.payment.aggregate({
+          where: { status: 'succeeded', type: { in: ['recurring', 'one_time'] } },
+          _sum: { feeCents: true }
+        }),
+        db.payment.aggregate({
+          where: { status: 'succeeded', type: { in: ['recurring', 'one_time'] }, occurredAt: { gte: startOfMonth } },
+          _sum: { feeCents: true }
+        }),
+        db.payment.count({ where: { status: 'disputed' } }),
+        db.payment.count({ where: { status: 'failed', occurredAt: { gte: startOfDay } } })
+      ])
 
-  return c.json({
-    users: { total: totalUsers, newToday: newUsersToday, newThisMonth: newUsersThisMonth },
-    subscriptions: { active: activeSubscriptions },
-    revenue: {
-      totalCents: totalRevenueCents._sum.feeCents || 0,
-      thisMonthCents: revenueThisMonthCents._sum.feeCents || 0
-    },
-    flags: { disputedPayments, failedPaymentsToday }
-  })
+      return {
+        users: { total: totalUsers, newToday: newUsersToday, newThisMonth: newUsersThisMonth },
+        subscriptions: { active: activeSubscriptions },
+        revenue: {
+          totalCents: totalRevenueCents._sum.feeCents || 0,
+          thisMonthCents: revenueThisMonthCents._sum.feeCents || 0
+        },
+        flags: { disputedPayments, failedPaymentsToday }
+      }
+    }
+  )
+
+  return c.json(result)
 })
 
 // ============================================
@@ -505,6 +514,7 @@ system.post('/sync/stripe-invoice', adminSensitiveRateLimit, async (c) => {
 /**
  * GET /admin/sync/stripe-missing
  * Find Stripe invoices that are missing from local database
+ * Uses batch lookup to avoid N+1 queries
  */
 system.get('/sync/stripe-missing', async (c) => {
   const query = z.object({
@@ -518,20 +528,42 @@ system.get('/sync/stripe-missing', async (c) => {
       expand: ['data.subscription'],
     })
 
+    // Collect all payment intents and charge IDs for batch lookup
+    const paymentIntentIds: string[] = []
+    const chargeIds: string[] = []
+
+    for (const invoice of invoices.data) {
+      const inv = invoice as any
+      if (inv.payment_intent) paymentIntentIds.push(inv.payment_intent as string)
+      if (inv.charge) chargeIds.push(inv.charge as string)
+    }
+
+    // Single batch query instead of N queries
+    const existingPayments = await db.payment.findMany({
+      where: {
+        OR: [
+          { stripePaymentIntentId: { in: paymentIntentIds } },
+          { stripeChargeId: { in: chargeIds } },
+        ].filter(ids => ids.stripePaymentIntentId?.in?.length || ids.stripeChargeId?.in?.length)
+      },
+      select: {
+        stripePaymentIntentId: true,
+        stripeChargeId: true,
+      }
+    })
+
+    // Create lookup sets for O(1) existence checks
+    const existingPaymentIntents = new Set(existingPayments.map(p => p.stripePaymentIntentId).filter(Boolean))
+    const existingCharges = new Set(existingPayments.map(p => p.stripeChargeId).filter(Boolean))
+
     const missing: any[] = []
 
     for (const invoice of invoices.data) {
       const inv = invoice as any
-      const payment = await db.payment.findFirst({
-        where: {
-          OR: [
-            { stripePaymentIntentId: inv.payment_intent as string },
-            { stripeChargeId: inv.charge as string },
-          ].filter(Boolean)
-        }
-      })
+      const hasPayment = existingPaymentIntents.has(inv.payment_intent as string) ||
+                         existingCharges.has(inv.charge as string)
 
-      if (!payment) {
+      if (!hasPayment) {
         missing.push({
           invoiceId: invoice.id,
           amount: invoice.amount_paid,

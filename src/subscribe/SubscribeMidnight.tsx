@@ -173,6 +173,7 @@ export default function SubscribeMidnight({ profile, isOwner }: SubscribeMidnigh
     )
     const [payerCountry, setPayerCountry] = useState<string | null>(null)
     const viewIdRef = useRef<string | null>(null)
+    const verificationAttemptedRef = useRef(false)
 
     // Data
     const isService = profile.purpose === 'service'
@@ -214,7 +215,8 @@ export default function SubscribeMidnight({ profile, isOwner }: SubscribeMidnigh
         const stripeSessionId = searchParams.get('session_id')
         const paystackRef = searchParams.get('reference') || searchParams.get('trxref')
 
-        if (isSuccessReturn) {
+        if (isSuccessReturn && !verificationAttemptedRef.current) {
+            verificationAttemptedRef.current = true
             if (stripeSessionId) {
                 // STRIPE VERIFICATION
                 api.checkout.verifySession(stripeSessionId, profile.username)
@@ -460,7 +462,7 @@ export default function SubscribeMidnight({ profile, isOwner }: SubscribeMidnigh
                             opacity: 0.7,
                             color: '#888'
                         }}>
-                            <span>Service Fee (4%)</span>
+                            <span>Secure payment</span>
                             <span>+{formatCurrency(subscriberFee, currency)}</span>
                         </div>
                     )}

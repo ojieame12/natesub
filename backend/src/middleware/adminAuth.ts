@@ -20,6 +20,7 @@ import { HTTPException } from 'hono/http-exception'
 import { getCookie } from 'hono/cookie'
 import { createHash } from 'crypto'
 import { db } from '../db/client.js'
+import { redis } from '../db/redis.js'
 import { validateSession, validateSessionWithDetails } from '../services/auth.js'
 import type { UserRole } from '@prisma/client'
 
@@ -31,6 +32,10 @@ export type ApiKeyScope = 'full' | 'read-only'
 
 // Session freshness window for sensitive operations (15 minutes)
 const FRESH_SESSION_WINDOW_MS = 15 * 60 * 1000
+
+// Admin UI triggers many parallel requests; logging every request creates unnecessary DB churn.
+// Throttle successful access logs per admin identity.
+const ADMIN_ACCESS_LOG_TTL_SECONDS = 60
 
 // Extend Hono context with admin info
 declare module 'hono' {
@@ -159,6 +164,33 @@ async function logAdminAccess(
   details?: { userId?: string; email?: string; role?: string; authMethod?: string; scope?: string; reason?: string; keyPrefix?: string; keyId?: string }
 ): Promise<void> {
   try {
+    // Throttle *successful* access logs (failures are rare and useful to keep).
+    // This reduces system_log write volume which otherwise can slow down admin endpoints.
+    if (success) {
+      const authMethod = details?.authMethod || c.get('adminAuthMethod') || 'unknown'
+      const scope = details?.scope || c.get('adminApiKeyScope') || 'unknown'
+      const identity =
+        details?.userId ||
+        c.get('adminUserId') ||
+        details?.keyId ||
+        c.get('adminApiKeyId') ||
+        details?.keyPrefix ||
+        c.get('adminApiKeyPrefix') ||
+        details?.email ||
+        c.get('adminEmail') ||
+        'unknown'
+
+      const throttleKey = `admin:accesslog:${authMethod}:${scope}:${identity}`
+
+      try {
+        const recentlyLogged = await redis.get(throttleKey)
+        if (recentlyLogged) return
+        await redis.setex(throttleKey, ADMIN_ACCESS_LOG_TTL_SECONDS, '1')
+      } catch {
+        // If Redis is unavailable, fall back to always logging (safest)
+      }
+    }
+
     // Get keyPrefix from context if not in details (for database keys)
     const keyPrefix = details?.keyPrefix || c.get('adminApiKeyPrefix')
     const keyId = details?.keyId || c.get('adminApiKeyId')

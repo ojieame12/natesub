@@ -18,6 +18,7 @@ import { requireRole, logAdminAction, requireFreshSession } from '../../middlewa
 import { adminSensitiveRateLimit } from '../../middleware/rateLimit.js'
 import { stripe } from '../../services/stripe.js'
 import { env } from '../../config/env.js'
+import { invalidateAdminRevenueCache } from '../../utils/cache.js'
 
 const refunds = new Hono()
 
@@ -345,6 +346,9 @@ refunds.post('/:paymentId/process', adminSensitiveRateLimit, requireFreshSession
     where: { id: paymentId },
     data: { status: 'refunded' },
   })
+
+  // Invalidate admin revenue cache after refund
+  await invalidateAdminRevenueCache()
 
   // Log successful refund
   await logAdminAction(c, 'Refund processed', {

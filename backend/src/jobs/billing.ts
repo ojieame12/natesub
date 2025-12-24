@@ -2,9 +2,9 @@
 // Run daily via cron or scheduled task manager
 
 import { db } from '../db/client.js'
-import { chargeAuthorization, initiateTransfer, createTransferRecipient } from '../services/paystack.js'
-import { calculateServiceFee, calculateLegacyFee, type FeeMode } from '../services/fees.js'
-import { decryptAccountNumber, decryptAuthorizationCode, encryptAuthorizationCode } from '../utils/encryption.js'
+import { chargeAuthorization } from '../services/paystack.js'
+import { calculateServiceFee, type FeeMode } from '../services/fees.js'
+import { decryptAuthorizationCode, encryptAuthorizationCode } from '../utils/encryption.js'
 import { acquireLock, releaseLock } from '../services/lock.js'
 import {
   scheduleSubscriptionRenewalReminders,
@@ -116,32 +116,18 @@ export async function processRecurringBilling(): Promise<BillingResult> {
     }
 
     try {
-      // Check fee model to determine requirements
-      // Both 'flat' and 'progressive' are new models
-      const isNewFeeModel = sub.feeModel === 'flat' || sub.feeModel === 'split_v1' || sub.feeModel?.startsWith('progressive')
-
       // Skip if no authorization code
-      // For new model: need bank details for transfer; for legacy: need subaccount
       if (!sub.paystackAuthorizationCode) {
         result.skipped++
         console.log(`[billing] Skipping sub ${sub.id}: missing auth code`)
         continue
       }
 
-      if (isNewFeeModel) {
-        // New model requires bank details for transfer
-        if (!sub.creator?.profile?.paystackBankCode || !sub.creator?.profile?.paystackAccountNumber) {
-          result.skipped++
-          console.log(`[billing] Skipping sub ${sub.id}: missing bank details for transfer`)
-          continue
-        }
-      } else {
-        // Legacy model requires subaccount
-        if (!sub.creator?.profile?.paystackSubaccountCode) {
-          result.skipped++
-          console.log(`[billing] Skipping sub ${sub.id}: missing subaccount code`)
-          continue
-        }
+      // Skip if no subaccount (required for Paystack auto-split)
+      if (!sub.creator?.profile?.paystackSubaccountCode) {
+        result.skipped++
+        console.log(`[billing] Skipping sub ${sub.id}: missing subaccount code`)
+        continue
       }
 
       // Check retry count from metadata or create tracking
@@ -197,37 +183,19 @@ export async function processRecurringBilling(): Promise<BillingResult> {
       const billingMonth = (sub.currentPeriodEnd || now).toISOString().slice(0, 7) // YYYY-MM
       const reference = `REC-${sub.id.slice(0, 8)}-${billingMonth.replace('-', '')}${retryAttempt > 0 ? `-R${retryAttempt}` : ''}`
 
-      // Calculate fees based on subscription's fee model
-      let feeCents: number
-      let netCents: number
-      let grossCents: number | null = null
-      let feeModel: string | null = null
-      let feeEffectiveRate: number | null = null
-      const feeWasCapped = false  // Flat fee model has no caps
+      // Calculate fees using current fee model
+      // Subaccount percentage_charge handles the actual split
+      const creatorPurpose = sub.creator.profile.purpose
+      const subscriptionFeeMode = (sub.feeMode || sub.creator.profile.feeMode) as FeeMode
+      const feeCalc = calculateServiceFee(sub.amount, sub.currency, creatorPurpose, subscriptionFeeMode)
+      const grossCents = feeCalc.grossCents // Total to charge subscriber
+      const feeCents = feeCalc.feeCents
+      const netCents = feeCalc.netCents // What creator receives (tracked for records)
+      const feeModel = feeCalc.feeModel
+      const feeEffectiveRate = feeCalc.effectiveRate
+      const feeWasCapped = false
 
-      if (isNewFeeModel) {
-        // New model: flat fee based on creator's purpose and feeMode
-        // Use subscription's feeMode (locked at creation) with fallback to profile for legacy subs
-        const creatorPurpose = sub.creator.profile.purpose
-        const subscriptionFeeMode = (sub.feeMode || sub.creator.profile.feeMode) as FeeMode
-        const feeCalc = calculateServiceFee(sub.amount, sub.currency, creatorPurpose, subscriptionFeeMode)
-        grossCents = feeCalc.grossCents // Total to charge subscriber
-        feeCents = feeCalc.feeCents
-        netCents = feeCalc.netCents // What creator receives
-        feeModel = feeCalc.feeModel
-        feeEffectiveRate = feeCalc.effectiveRate
-      } else {
-        // Legacy model: percentage-based fee deducted from creator
-        const creatorPurpose = sub.creator.profile.purpose as 'personal' | 'service' | null
-        const legacyFees = calculateLegacyFee(sub.amount, creatorPurpose, sub.currency)
-        feeCents = legacyFees.feeCents
-        netCents = legacyFees.netCents
-      }
-
-      // Charge the subscriber
-      // New model: charge full amount (gross), then transfer to creator
-      // Legacy model: use subaccount split
-      // SECURITY: Decrypt authorization code before use (handle decryption failure gracefully)
+      // SECURITY: Decrypt authorization code before use
       const authCode = decryptAuthorizationCode(sub.paystackAuthorizationCode)
       if (!authCode) {
         result.skipped++
@@ -235,19 +203,21 @@ export async function processRecurringBilling(): Promise<BillingResult> {
         continue
       }
 
+      // Charge subscriber with subaccount split
+      // Paystack automatically splits based on subaccount's percentage_charge
       const chargeResult = await chargeAuthorization({
         authorizationCode: authCode,
         email: sub.subscriber.email,
-        amount: isNewFeeModel ? grossCents! : sub.amount,
+        amount: grossCents,
         currency: sub.currency,
-        subaccountCode: isNewFeeModel ? undefined : (sub.creator.profile?.paystackSubaccountCode || undefined), // Omit for new model
+        subaccountCode: sub.creator.profile.paystackSubaccountCode!, // Split to creator
         metadata: {
           subscriptionId: sub.id,
           creatorId: sub.creatorId,
           subscriberId: sub.subscriberId,
           interval: 'month',
           isRecurring: true,
-          feeModel: feeModel || undefined,
+          feeModel,
           creatorAmount: netCents,
           serviceFee: feeCents,
         },
@@ -294,76 +264,8 @@ export async function processRecurringBilling(): Promise<BillingResult> {
         },
       })
 
-      // For new fee model: initiate transfer to creator
-      if (isNewFeeModel && sub.creator.profile.paystackBankCode && sub.creator.profile.paystackAccountNumber) {
-        // Paystack only allows alphanumeric and hyphens (no underscores)
-        const payoutReference = `PAYOUT-${reference}`
-
-        // Idempotency check: ensure we don't double-transfer
-        const existingPayout = await db.payment.findFirst({
-          where: {
-            paystackTransactionRef: payoutReference,
-            type: 'payout',
-          },
-        })
-
-        if (existingPayout) {
-          console.log(`[billing] Payout ${payoutReference} already exists, skipping transfer`)
-        } else {
-          try {
-            const accountNumber = decryptAccountNumber(sub.creator.profile.paystackAccountNumber)
-            if (accountNumber) {
-              // IMPORTANT: Create payout record FIRST before initiating transfer
-              // This ensures we always have a record even if transfer succeeds but DB write fails later
-              const payoutRecord = await db.payment.create({
-                data: {
-                  subscriptionId: sub.id,
-                  creatorId: sub.creatorId,
-                  subscriberId: sub.subscriberId,
-                  amountCents: netCents,
-                  currency: sub.currency,
-                  feeCents: 0,
-                  netCents,
-                  feeModel,
-                  feeEffectiveRate,
-                  feeWasCapped,
-                  type: 'payout',
-                  status: 'pending',
-                  paystackTransactionRef: payoutReference,
-                },
-              })
-
-              try {
-                const { recipientCode } = await createTransferRecipient({
-                  name: sub.creator.profile.displayName,
-                  accountNumber,
-                  bankCode: sub.creator.profile.paystackBankCode,
-                  currency: sub.currency,
-                })
-
-                await initiateTransfer({
-                  amount: netCents,
-                  recipientCode,
-                  reason: `Recurring payment from ${sub.subscriber.email}`,
-                  reference: payoutReference,
-                })
-
-                console.log(`[billing] Initiated transfer of ${netCents} to creator ${sub.creatorId}`)
-              } catch (transferErr: any) {
-                // Transfer failed - update payout record to reflect failure
-                await db.payment.update({
-                  where: { id: payoutRecord.id },
-                  data: { status: 'failed' },
-                })
-                console.error(`[billing] Transfer failed for sub ${sub.id}:`, transferErr.message)
-              }
-            }
-          } catch (dbErr: any) {
-            // DB write failed - log but don't fail the overall charge
-            console.error(`[billing] Failed to create payout record for sub ${sub.id}:`, dbErr.message)
-          }
-        }
-      }
+      // Note: Creator payout is handled automatically by Paystack subaccount split
+      // No manual transfer needed - Paystack sends creator's share directly on T+1
 
       // Create activity log
       await db.activity.create({
@@ -504,61 +406,33 @@ export async function processRetries(): Promise<BillingResult> {
     try {
       result.processed++
 
-      // Check fee model to determine requirements
-      // Both 'flat' and 'progressive' are new models
-      const isNewFeeModel = sub.feeModel === 'flat' || sub.feeModel === 'split_v1' || sub.feeModel?.startsWith('progressive')
-
       // Skip if missing required credentials
       if (!sub.paystackAuthorizationCode) {
         result.skipped++
         continue
       }
 
-      if (isNewFeeModel) {
-        // New model requires bank details for transfer
-        if (!sub.creator?.profile?.paystackBankCode || !sub.creator?.profile?.paystackAccountNumber) {
-          result.skipped++
-          continue
-        }
-      } else {
-        // Legacy model requires subaccount
-        if (!sub.creator?.profile?.paystackSubaccountCode) {
-          result.skipped++
-          continue
-        }
+      if (!sub.creator?.profile?.paystackSubaccountCode) {
+        result.skipped++
+        continue
       }
 
       // Generate deterministic reference for idempotency
-      // If we retry the same billing cycle, Paystack will reject the duplicate
-      const billingMonth = (sub.currentPeriodEnd || now).toISOString().slice(0, 7) // YYYY-MM
+      const billingMonth = (sub.currentPeriodEnd || now).toISOString().slice(0, 7)
       const reference = `RET-${sub.id.slice(0, 8)}-${billingMonth.replace('-', '')}-R${attemptCount + 1}`
 
-      // Calculate fees based on subscription's fee model
-      let feeCents: number
-      let netCents: number
-      let grossCents: number | null = null
-      let feeModel: string | null = null
-      let feeEffectiveRate: number | null = null
-      const feeWasCapped = false  // Flat fee model has no caps
+      // Calculate fees using current fee model
+      const creatorPurpose = sub.creator?.profile?.purpose
+      const subscriptionFeeMode = (sub.feeMode || sub.creator?.profile?.feeMode) as FeeMode
+      const feeCalc = calculateServiceFee(sub.amount, sub.currency, creatorPurpose, subscriptionFeeMode)
+      const grossCents = feeCalc.grossCents
+      const feeCents = feeCalc.feeCents
+      const netCents = feeCalc.netCents
+      const feeModel = feeCalc.feeModel
+      const feeEffectiveRate = feeCalc.effectiveRate
+      const feeWasCapped = false
 
-      if (isNewFeeModel) {
-        // Use subscription's feeMode (locked at creation) with fallback to profile for legacy subs
-        const creatorPurpose = sub.creator?.profile?.purpose
-        const subscriptionFeeMode = (sub.feeMode || sub.creator?.profile?.feeMode) as FeeMode
-        const feeCalc = calculateServiceFee(sub.amount, sub.currency, creatorPurpose, subscriptionFeeMode)
-        grossCents = feeCalc.grossCents
-        feeCents = feeCalc.feeCents
-        netCents = feeCalc.netCents
-        feeModel = feeCalc.feeModel
-        feeEffectiveRate = feeCalc.effectiveRate
-      } else {
-        const creatorPurpose = sub.creator?.profile?.purpose as 'personal' | 'service' | null
-        const legacyFees = calculateLegacyFee(sub.amount, creatorPurpose, sub.currency)
-        feeCents = legacyFees.feeCents
-        netCents = legacyFees.netCents
-      }
-
-      // SECURITY: Decrypt authorization code before use (handle decryption failure gracefully)
+      // SECURITY: Decrypt authorization code
       const authCode = decryptAuthorizationCode(sub.paystackAuthorizationCode)
       if (!authCode) {
         result.skipped++
@@ -566,12 +440,13 @@ export async function processRetries(): Promise<BillingResult> {
         continue
       }
 
+      // Charge with subaccount split
       const chargeResult = await chargeAuthorization({
         authorizationCode: authCode,
         email: sub.subscriber.email,
-        amount: isNewFeeModel ? grossCents! : sub.amount,
+        amount: grossCents,
         currency: sub.currency,
-        subaccountCode: isNewFeeModel ? undefined : (sub.creator.profile?.paystackSubaccountCode || undefined),
+        subaccountCode: sub.creator.profile.paystackSubaccountCode!,
         metadata: {
           subscriptionId: sub.id,
           creatorId: sub.creatorId,
@@ -579,7 +454,7 @@ export async function processRetries(): Promise<BillingResult> {
           interval: 'month',
           isRetry: true,
           retryAttempt: attemptCount + 1,
-          feeModel: feeModel || undefined,
+          feeModel,
           creatorAmount: netCents,
           serviceFee: feeCents,
         },
@@ -625,75 +500,7 @@ export async function processRetries(): Promise<BillingResult> {
         },
       })
 
-      // For new fee model: initiate transfer to creator
-      if (isNewFeeModel && sub.creator?.profile?.paystackBankCode && sub.creator?.profile?.paystackAccountNumber) {
-        // Paystack only allows alphanumeric and hyphens (no underscores)
-        const payoutReference = `PAYOUT-${reference}`
-
-        // Idempotency check: ensure we don't double-transfer
-        const existingPayout = await db.payment.findFirst({
-          where: {
-            paystackTransactionRef: payoutReference,
-            type: 'payout',
-          },
-        })
-
-        if (existingPayout) {
-          console.log(`[billing] Payout ${payoutReference} already exists, skipping transfer`)
-        } else {
-          try {
-            const accountNumber = decryptAccountNumber(sub.creator.profile.paystackAccountNumber)
-            if (accountNumber) {
-              // SECURITY FIX: Create payout record BEFORE initiating transfer
-              // This prevents race condition where webhook arrives before DB record exists
-              const payoutRecord = await db.payment.create({
-                data: {
-                  subscriptionId: sub.id,
-                  creatorId: sub.creatorId,
-                  subscriberId: sub.subscriberId,
-                  amountCents: netCents,
-                  currency: sub.currency,
-                  feeCents: 0,
-                  netCents,
-                  feeModel,
-                  feeEffectiveRate,
-                  feeWasCapped,
-                  type: 'payout',
-                  status: 'pending',
-                  paystackTransactionRef: payoutReference,
-                },
-              })
-
-              try {
-                const { recipientCode } = await createTransferRecipient({
-                  name: sub.creator.profile.displayName,
-                  accountNumber,
-                  bankCode: sub.creator.profile.paystackBankCode,
-                  currency: sub.currency,
-                })
-
-                await initiateTransfer({
-                  amount: netCents,
-                  recipientCode,
-                  reason: `Retry payment from ${sub.subscriber.email}`,
-                  reference: payoutReference,
-                })
-
-                console.log(`[billing] Initiated retry transfer of ${netCents} to creator ${sub.creatorId}`)
-              } catch (transferErr: any) {
-                // Transfer failed - update the payout record to failed
-                await db.payment.update({
-                  where: { id: payoutRecord.id },
-                  data: { status: 'failed' },
-                })
-                console.error(`[billing] Transfer failed for retry sub ${sub.id}:`, transferErr.message)
-              }
-            }
-          } catch (dbErr: any) {
-            console.error(`[billing] Failed to create payout record for retry sub ${sub.id}:`, dbErr.message)
-          }
-        }
-      }
+      // Note: Creator payout handled automatically by Paystack subaccount split
 
       result.succeeded++
       console.log(`[billing] Retry ${attemptCount + 1} succeeded for sub ${sub.id}`)

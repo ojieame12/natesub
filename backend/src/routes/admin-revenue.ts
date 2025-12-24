@@ -26,6 +26,81 @@ type PaymentStats = {
   paymentCount: number
 }
 
+type PaymentStatsByCurrency = {
+  // Per-currency breakdown (accurate)
+  byCurrency: Record<string, PaymentStats>
+  // Summed totals (for backward compatibility - may mix currencies)
+  totalVolumeCents: number
+  platformFeeCents: number
+  creatorPayoutsCents: number
+  paymentCount: number
+  // Flag indicating if data includes multiple currencies
+  isMultiCurrency: boolean
+  currencies: string[]
+}
+
+/**
+ * Aggregate payment stats grouped by currency
+ * This is the accurate version that respects currency boundaries
+ */
+async function aggregatePaymentStatsByCurrency(where: any): Promise<PaymentStatsByCurrency> {
+  const [byCurrency, legacyByCurrency] = await Promise.all([
+    db.payment.groupBy({
+      by: ['currency'],
+      where,
+      _sum: { grossCents: true, feeCents: true, netCents: true },
+      _count: true,
+    }),
+    db.payment.groupBy({
+      by: ['currency'],
+      where: { ...where, grossCents: null },
+      _sum: { amountCents: true },
+      _count: true,
+    }),
+  ])
+
+  const legacyMap = new Map(legacyByCurrency.map(c => [c.currency, c._sum.amountCents || 0]))
+
+  const result: Record<string, PaymentStats> = {}
+  let totalVolume = 0
+  let totalFees = 0
+  let totalPayouts = 0
+  let totalCount = 0
+  const currencies: string[] = []
+
+  for (const c of byCurrency) {
+    const legacyVolume = legacyMap.get(c.currency) || 0
+    const stats: PaymentStats = {
+      totalVolumeCents: (c._sum.grossCents || 0) + legacyVolume,
+      platformFeeCents: c._sum.feeCents || 0,
+      creatorPayoutsCents: c._sum.netCents || 0,
+      paymentCount: c._count,
+    }
+    result[c.currency] = stats
+    currencies.push(c.currency)
+
+    // Sum for backward compatibility (mixing currencies)
+    totalVolume += stats.totalVolumeCents
+    totalFees += stats.platformFeeCents
+    totalPayouts += stats.creatorPayoutsCents
+    totalCount += stats.paymentCount
+  }
+
+  return {
+    byCurrency: result,
+    totalVolumeCents: totalVolume,
+    platformFeeCents: totalFees,
+    creatorPayoutsCents: totalPayouts,
+    paymentCount: totalCount,
+    isMultiCurrency: currencies.length > 1,
+    currencies,
+  }
+}
+
+/**
+ * Legacy aggregation function (mixes currencies)
+ * @deprecated Use aggregatePaymentStatsByCurrency for accurate per-currency data
+ */
 async function aggregatePaymentStats(where: any): Promise<PaymentStats> {
   const [agg, legacyVolume] = await Promise.all([
     db.payment.aggregate({
@@ -100,10 +175,11 @@ adminRevenue.get('/overview', async (c) => {
         lastPayment,
         lastProcessedWebhook,
       ] = await Promise.all([
-        aggregatePaymentStats({ status: 'succeeded', type: { in: ['recurring', 'one_time'] } }),
-        aggregatePaymentStats({ status: 'succeeded', type: { in: ['recurring', 'one_time'] }, occurredAt: { gte: startOfMonth } }),
-        aggregatePaymentStats({ status: 'succeeded', type: { in: ['recurring', 'one_time'] }, occurredAt: { gte: startOfLastMonth, lte: endOfLastMonth } }),
-        aggregatePaymentStats({ status: 'succeeded', type: { in: ['recurring', 'one_time'] }, occurredAt: { gte: startOfDay } }),
+        // Use per-currency aggregation for accurate data
+        aggregatePaymentStatsByCurrency({ status: 'succeeded', type: { in: ['recurring', 'one_time'] } }),
+        aggregatePaymentStatsByCurrency({ status: 'succeeded', type: { in: ['recurring', 'one_time'] }, occurredAt: { gte: startOfMonth } }),
+        aggregatePaymentStatsByCurrency({ status: 'succeeded', type: { in: ['recurring', 'one_time'] }, occurredAt: { gte: startOfLastMonth, lte: endOfLastMonth } }),
+        aggregatePaymentStatsByCurrency({ status: 'succeeded', type: { in: ['recurring', 'one_time'] }, occurredAt: { gte: startOfDay } }),
         db.payment.groupBy({
           by: ['status'],
           where: { type: { in: ['recurring', 'one_time'] } },
@@ -124,10 +200,45 @@ adminRevenue.get('/overview', async (c) => {
       const statusCounts = Object.fromEntries(paymentCounts.map(p => [p.status, p._count]))
 
       return {
-        allTime: allTimeStats,
-        thisMonth: thisMonthStats,
-        lastMonth: lastMonthStats,
-        today: todayStats,
+        // Backward compatible flat stats (may mix currencies if multi-currency)
+        allTime: {
+          totalVolumeCents: allTimeStats.totalVolumeCents,
+          platformFeeCents: allTimeStats.platformFeeCents,
+          creatorPayoutsCents: allTimeStats.creatorPayoutsCents,
+          paymentCount: allTimeStats.paymentCount,
+        },
+        thisMonth: {
+          totalVolumeCents: thisMonthStats.totalVolumeCents,
+          platformFeeCents: thisMonthStats.platformFeeCents,
+          creatorPayoutsCents: thisMonthStats.creatorPayoutsCents,
+          paymentCount: thisMonthStats.paymentCount,
+        },
+        lastMonth: {
+          totalVolumeCents: lastMonthStats.totalVolumeCents,
+          platformFeeCents: lastMonthStats.platformFeeCents,
+          creatorPayoutsCents: lastMonthStats.creatorPayoutsCents,
+          paymentCount: lastMonthStats.paymentCount,
+        },
+        today: {
+          totalVolumeCents: todayStats.totalVolumeCents,
+          platformFeeCents: todayStats.platformFeeCents,
+          creatorPayoutsCents: todayStats.creatorPayoutsCents,
+          paymentCount: todayStats.paymentCount,
+        },
+        // NEW: Per-currency breakdown for accurate multi-currency reporting
+        byCurrency: {
+          allTime: allTimeStats.byCurrency,
+          thisMonth: thisMonthStats.byCurrency,
+          lastMonth: lastMonthStats.byCurrency,
+          today: todayStats.byCurrency,
+        },
+        // NEW: Currency metadata
+        currencies: {
+          allTime: { currencies: allTimeStats.currencies, isMultiCurrency: allTimeStats.isMultiCurrency },
+          thisMonth: { currencies: thisMonthStats.currencies, isMultiCurrency: thisMonthStats.isMultiCurrency },
+          lastMonth: { currencies: lastMonthStats.currencies, isMultiCurrency: lastMonthStats.isMultiCurrency },
+          today: { currencies: todayStats.currencies, isMultiCurrency: todayStats.isMultiCurrency },
+        },
         paymentsByStatus: statusCounts,
         freshness: {
           businessTimezone: BUSINESS_TIMEZONE,
@@ -492,10 +603,11 @@ adminRevenue.get('/monthly', async (c) => {
  * GET /admin/revenue/top-creators
  * Top creators by revenue
  * Cached for 5 minutes
+ * Uses raw SQL with ORDER BY and LIMIT for efficiency (avoids loading all creators)
  */
 adminRevenue.get('/top-creators', async (c) => {
   const query = z.object({
-    limit: z.coerce.number().default(20),
+    limit: z.coerce.number().min(1).max(100).default(20),
     period: z.enum(['today', 'week', 'month', 'year', 'all']).default('month')
   }).parse(c.req.query())
 
@@ -506,39 +618,53 @@ adminRevenue.get('/top-creators', async (c) => {
       // Use timezone-aware date parsing
       const { start: startDate } = parsePeriod(query.period)
 
-      const where: any = { status: 'succeeded', type: { in: ['recurring', 'one_time'] } }
-      if (startDate) where.occurredAt = { gte: startDate }
-
-      const [topCreators, legacyTopCreators] = await Promise.all([
-        db.payment.groupBy({
-          by: ['creatorId'],
-          where,
-          _sum: { grossCents: true, feeCents: true, netCents: true },
-          _count: true,
-        }),
-        db.payment.groupBy({
-          by: ['creatorId'],
-          where: { ...where, grossCents: null },
-          _sum: { amountCents: true },
-          _count: true,
-        }),
-      ])
-
-      const legacyMap = new Map(legacyTopCreators.map(c => [c.creatorId, c._sum.amountCents || 0]))
-
-      const combined = topCreators.map(tc => ({
-        creatorId: tc.creatorId,
-        totalVolumeCents: (tc._sum.grossCents || 0) + (legacyMap.get(tc.creatorId) || 0),
-        platformFeeCents: tc._sum.feeCents || 0,
-        creatorEarningsCents: tc._sum.netCents || 0,
-        paymentCount: tc._count,
-      }))
-
-      combined.sort((a, b) => b.totalVolumeCents - a.totalVolumeCents)
-      const top = combined.slice(0, query.limit)
+      // Use raw SQL to sort and limit in the database (much more efficient)
+      // This avoids loading all creators into memory
+      const topCreators = startDate
+        ? await db.$queryRaw<Array<{
+            creatorId: string
+            totalVolumeCents: bigint
+            platformFeeCents: bigint
+            creatorEarningsCents: bigint
+            paymentCount: bigint
+          }>>`
+            SELECT
+              "creatorId",
+              SUM(COALESCE("grossCents", "amountCents"))::bigint AS "totalVolumeCents",
+              SUM("feeCents")::bigint AS "platformFeeCents",
+              SUM("netCents")::bigint AS "creatorEarningsCents",
+              COUNT(*)::bigint AS "paymentCount"
+            FROM "payments"
+            WHERE "status" = 'succeeded'
+              AND "type" IN ('recurring', 'one_time')
+              AND "occurredAt" >= ${startDate}
+            GROUP BY "creatorId"
+            ORDER BY "totalVolumeCents" DESC
+            LIMIT ${query.limit}
+          `
+        : await db.$queryRaw<Array<{
+            creatorId: string
+            totalVolumeCents: bigint
+            platformFeeCents: bigint
+            creatorEarningsCents: bigint
+            paymentCount: bigint
+          }>>`
+            SELECT
+              "creatorId",
+              SUM(COALESCE("grossCents", "amountCents"))::bigint AS "totalVolumeCents",
+              SUM("feeCents")::bigint AS "platformFeeCents",
+              SUM("netCents")::bigint AS "creatorEarningsCents",
+              COUNT(*)::bigint AS "paymentCount"
+            FROM "payments"
+            WHERE "status" = 'succeeded'
+              AND "type" IN ('recurring', 'one_time')
+            GROUP BY "creatorId"
+            ORDER BY "totalVolumeCents" DESC
+            LIMIT ${query.limit}
+          `
 
       // Get creator details
-      const creatorIds = top.map(c => c.creatorId)
+      const creatorIds = topCreators.map(c => c.creatorId)
       const creators = await db.user.findMany({
         where: { id: { in: creatorIds } },
         select: {
@@ -552,7 +678,7 @@ adminRevenue.get('/top-creators', async (c) => {
 
       return {
         period: query.period,
-        creators: top.map(tc => {
+        creators: topCreators.map(tc => {
           const creator = creatorMap.get(tc.creatorId)
           return {
             creatorId: tc.creatorId,
@@ -560,10 +686,10 @@ adminRevenue.get('/top-creators', async (c) => {
             username: creator?.profile?.username,
             displayName: creator?.profile?.displayName,
             country: creator?.profile?.country,
-            totalVolumeCents: tc.totalVolumeCents,
-            platformFeeCents: tc.platformFeeCents,
-            creatorEarningsCents: tc.creatorEarningsCents,
-            paymentCount: tc.paymentCount
+            totalVolumeCents: Number(tc.totalVolumeCents),
+            platformFeeCents: Number(tc.platformFeeCents),
+            creatorEarningsCents: Number(tc.creatorEarningsCents),
+            paymentCount: Number(tc.paymentCount)
           }
         })
       }

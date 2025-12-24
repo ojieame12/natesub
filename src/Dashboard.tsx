@@ -29,7 +29,7 @@ import {
 import { Pressable, useToast, Skeleton, SkeletonList, ErrorState, AnimatedNumber } from './components'
 import { useViewTransition } from './hooks'
 import { useCurrentUser, useMetrics, useActivity, useProfile, useAnalyticsStats } from './api/hooks'
-import { centsToDisplayAmount, getCurrencySymbol, formatCompactNumber, formatSmartAmount } from './utils/currency'
+import { centsToDisplayAmount, getCurrencySymbol, formatCompactNumber, formatCompactAmount } from './utils/currency'
 import './Dashboard.css'
 
 // Menu items are built dynamically based on service vs personal branch
@@ -599,7 +599,7 @@ export default function Dashboard() {
               <div className="stats-primary">
                 <span className="stats-label" style={{ marginBottom: '0', opacity: 0.8, lineHeight: '1.2' }}>Monthly Recurring Revenue</span>
                 <span className="stats-mrr" style={{ lineHeight: '1', marginTop: '2px' }}>
-                  <AnimatedNumber value={metrics?.mrr ?? 0} duration={600} format={(n) => formatSmartAmount(n, currencyCode, 10)} />
+                  <AnimatedNumber value={metrics?.mrr ?? 0} duration={600} format={(n) => formatCompactAmount(n, currencyCode)} />
                 </span>
               </div>
               <div className="stats-secondary-row">
@@ -611,7 +611,7 @@ export default function Dashboard() {
                 </div>
                 <div className="stats-metric">
                   <div className="stats-metric-value" style={{ lineHeight: '1' }}>
-                    <AnimatedNumber value={metrics?.totalRevenue ?? 0} duration={600} format={(n) => formatSmartAmount(n, currencyCode, 10)} />
+                    <AnimatedNumber value={metrics?.totalRevenue ?? 0} duration={600} format={(n) => formatCompactAmount(n, currencyCode)} />
                   </div>
                   <span className="stats-label" style={{ marginTop: '2px', opacity: 0.8, lineHeight: '1.2' }}>Total Revenue</span>
                 </div>

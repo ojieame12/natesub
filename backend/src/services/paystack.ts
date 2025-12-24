@@ -316,17 +316,18 @@ export async function updateSubaccountFee(
 // ============================================
 
 /**
- * Initialize checkout with subscriber-pays fee model
+ * Initialize checkout with subaccount split
  *
- * New model: Platform receives full payment, then transfers to creator
- * This allows for progressive fees with caps that can't be expressed as percentages
+ * Uses Paystack subaccount to automatically split payments:
+ * - Platform fee (8-10%) retained by platform via subaccount percentage_charge
+ * - Creator receives the rest directly from Paystack on T+1 settlement
+ * - No manual transfers needed
  */
 export async function initializePaystackCheckout(params: {
   email: string
-  creatorAmount: number   // What creator will receive
-  serviceFee: number      // Platform fee (flat: 10% personal, 8% service)
-  totalAmount: number     // What subscriber pays (creatorAmount + serviceFee)
+  amount: number          // Total amount subscriber pays (in kobo/cents)
   currency: string
+  subaccountCode: string  // Creator's Paystack subaccount
   callbackUrl: string
   reference: string
   metadata: {
@@ -334,27 +335,33 @@ export async function initializePaystackCheckout(params: {
     tierId?: string
     interval: string
     viewId?: string         // Analytics: page view ID for conversion tracking
+    // Fee metadata for tracking (subaccount handles actual split)
     creatorAmount: number
     serviceFee: number
     feeModel: string
-    feeMode: string         // 'absorb' | 'pass_to_subscriber' | 'split'
+    feeMode: string
     feeEffectiveRate: number
-    feeWasCapped?: boolean  // Optional - flat fee model has no caps
-    // Split fee fields (v2 model)
-    baseAmount?: number     // Creator's set price
-    subscriberFee?: number  // Subscriber's portion (4%)
-    creatorFee?: number     // Creator's portion (4%)
+    feeWasCapped?: boolean
+    baseAmount?: number
+    subscriberFee?: number
+    creatorFee?: number
+    // Dispute evidence (for chargeback defense)
+    checkoutIp?: string
+    checkoutUserAgent?: string
+    checkoutAcceptLanguage?: string
   }
 }): Promise<TransactionInit> {
-  // Platform receives full payment (no subaccount split)
-  // Creator payout will be handled via transfer after webhook confirmation
+  // Use subaccount split - Paystack automatically:
+  // 1. Deducts platform fee (based on subaccount's percentage_charge)
+  // 2. Sends remaining to creator's bank on T+1 settlement
   const response = await paystackFetch<TransactionInit>('/transaction/initialize', {
     method: 'POST',
     body: JSON.stringify({
       email: params.email,
-      amount: params.totalAmount, // Subscriber pays total (creator amount + fee)
+      amount: params.amount,
       currency: params.currency.toUpperCase(),
-      // No subaccount - platform receives full amount
+      subaccount: params.subaccountCode,
+      bearer: 'account', // Platform bears Paystack's transaction fees
       callback_url: params.callbackUrl,
       metadata: params.metadata,
       reference: params.reference,

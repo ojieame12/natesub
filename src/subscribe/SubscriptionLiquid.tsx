@@ -769,7 +769,7 @@ export default function SubscriptionLiquid({ profile, canceled, isOwner }: Subsc
                                         <span className="sub-payment-amount">{formatAmountWithSeparators(currentAmount, currency)}</span>
                                     </div>
                                     <div className="sub-payment-row sub-payment-fee">
-                                        <span>Service fee</span>
+                                        <span>Secure payment</span>
                                         <span className="sub-payment-amount">{formatAmountWithSeparators(feePreview.serviceFee, currency)}</span>
                                     </div>
                                     <div className="sub-payment-row sub-payment-total">

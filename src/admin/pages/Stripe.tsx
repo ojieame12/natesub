@@ -3,6 +3,7 @@
  */
 
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   useAdminStripeAccounts,
   useAdminStripeBalance,
@@ -623,13 +624,13 @@ export default function Stripe() {
                       )}
 
                       {accountDetail.local && (
-                        <a
-                          href={`/admin/users?search=${encodeURIComponent(accountDetail.local.email)}`}
+                        <Link
+                          to={`/admin/users?search=${encodeURIComponent(accountDetail.local.email)}`}
                           className="admin-btn admin-btn-secondary"
                           style={{ textAlign: 'center', textDecoration: 'none' }}
                         >
                           View Full User Profile
-                        </a>
+                        </Link>
                       )}
                     </div>
                   </div>

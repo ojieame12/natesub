@@ -6,6 +6,8 @@ import { requireAuth } from '../middleware/auth.js'
 import { updateSendRateLimit } from '../middleware/rateLimit.js'
 import { sendUpdateEmail } from '../services/email.js'
 import { acquireLock, releaseLock } from '../services/lock.js'
+import { updateEmailQueue } from '../lib/queue.js'
+import type { UpdateEmailJobData } from '../workers/updateEmailProcessor.js'
 
 const updates = new Hono()
 
@@ -423,83 +425,43 @@ updates.post(
         },
       })
 
-      // Send emails (in batches to avoid overwhelming email provider)
-      // This runs after response is sent to client
-      const sendEmails = async () => {
-        // Get all delivery records with their IDs for tracking
-        const deliveries = await db.updateDelivery.findMany({
-          where: {
-            updateId: id,
-            subscriberId: { in: eligibleSubscribers.map(s => s.subscriber.id) },
-          },
-          select: {
-            id: true,
-            subscriberId: true,
-          },
-        })
+      // Enqueue emails via BullMQ for reliable delivery with retries
+      // This is more reliable than fire-and-forget: server crash = retried jobs
+      const deliveries = await db.updateDelivery.findMany({
+        where: {
+          updateId: id,
+          subscriberId: { in: eligibleSubscribers.map(s => s.subscriber.id) },
+        },
+        select: {
+          id: true,
+          subscriberId: true,
+        },
+      })
 
-        // Create a map for quick lookup
-        const deliveryMap = new Map(deliveries.map(d => [d.subscriberId, d.id]))
+      // Create a map for quick lookup
+      const deliveryMap = new Map(deliveries.map(d => [d.subscriberId, d.id]))
 
-        const batchSize = 10
-        for (let i = 0; i < eligibleSubscribers.length; i += batchSize) {
-          const batch = eligibleSubscribers.slice(i, i + batchSize)
+      // Enqueue each email as a separate job for individual retry handling
+      for (const sub of eligibleSubscribers) {
+        const deliveryId = deliveryMap.get(sub.subscriber.id)
+        if (!deliveryId) continue
 
-          await Promise.all(batch.map(async (sub) => {
-            const deliveryId = deliveryMap.get(sub.subscriber.id)
-
-            try {
-              await sendUpdateEmail(
-                sub.subscriber.email,
-                creatorName,
-                update.title,
-                update.body,
-                {
-                  photoUrl: update.photoUrl,
-                  creatorUsername,
-                  deliveryId,  // Pass delivery ID for tracking pixel
-                }
-              )
-
-              // Mark delivery as sent
-              await db.updateDelivery.updateMany({
-                where: {
-                  updateId: id,
-                  subscriberId: sub.subscriber.id,
-                },
-                data: {
-                  status: 'sent',
-                  sentAt: new Date(),
-                },
-              })
-            } catch (error: any) {
-              console.error(`Failed to send update email to ${sub.subscriber.email}:`, error.message)
-
-              // Mark delivery as failed
-              await db.updateDelivery.updateMany({
-                where: {
-                  updateId: id,
-                  subscriberId: sub.subscriber.id,
-                },
-                data: {
-                  status: 'failed',
-                  error: error.message?.substring(0, 500) || 'Unknown error',
-                },
-              })
-            }
-          }))
-
-          // Small delay between batches to avoid rate limits
-          if (i + batchSize < eligibleSubscribers.length) {
-            await new Promise(resolve => setTimeout(resolve, 100))
-          }
+        const jobData: UpdateEmailJobData = {
+          updateId: id,
+          deliveryId,
+          subscriberEmail: sub.subscriber.email,
+          creatorName,
+          creatorUsername,
+          title: update.title,
+          body: update.body,
+          photoUrl: update.photoUrl,
         }
+
+        // Use a unique job ID for idempotency (prevents duplicate sends on retry)
+        await updateEmailQueue.add('update-email', jobData)
       }
 
-      // Fire and forget - emails sent in background
-      sendEmails().catch(err => {
-        console.error(`[updates] Background email send failed for update ${id}:`, err.message)
-      })
+      console.log(`[updates] Enqueued ${eligibleSubscribers.length} email jobs for update ${id}`)
 
       return c.json({
         success: true,

@@ -11,6 +11,7 @@ import {
   sanitizeForLog,
 } from '../../../utils/webhookValidation.js'
 import { normalizeEmailAddress } from '../utils.js'
+import { invalidateAdminRevenueCache } from '../../../utils/cache.js'
 
 async function resolveStripeCheckoutCustomer(session: Stripe.Checkout.Session): Promise<{ email: string; name: string | null }> {
   const directEmail = session.customer_details?.email || session.customer_email || null
@@ -88,6 +89,11 @@ export async function handleCheckoutCompleted(event: Stripe.Event) {
 
   // Platform debit recovery (for service providers with lapsed platform subscription)
   const platformDebitRecovered = parseMetadataAmount(validatedMeta.platformDebitRecovered)
+
+  // Dispute evidence metadata (for chargeback defense)
+  const checkoutIp = validatedMeta.checkoutIp || null
+  const checkoutUserAgent = validatedMeta.checkoutUserAgent || null
+  const checkoutAcceptLanguage = validatedMeta.checkoutAcceptLanguage || null
 
   // Log with sanitized values for audit trail
   console.log(`[checkout.session.completed] Processing session ${session.id} for creator ${sanitizeForLog(creatorId)}`)
@@ -283,7 +289,7 @@ export async function handleCheckoutCompleted(event: Stripe.Event) {
         }
 
         // Create payment record for one-time payments only
-        await tx.payment.create({
+        const oneTimePayment = await tx.payment.create({
           data: {
             subscriptionId: newSubscription.id,
             creatorId,
@@ -306,6 +312,23 @@ export async function handleCheckoutCompleted(event: Stripe.Event) {
             stripeChargeId,
           },
         })
+
+        // Create dispute evidence record for chargeback defense
+        if (checkoutIp || checkoutUserAgent) {
+          await tx.disputeEvidence.create({
+            data: {
+              paymentId: oneTimePayment.id,
+              checkoutIp,
+              checkoutUserAgent,
+              checkoutAcceptLanguage,
+              checkoutTimestamp: new Date(),
+              confirmationEmailSent: true, // We send confirmation email below
+            },
+          }).catch((err: any) => {
+            // Non-fatal - don't fail the payment if evidence can't be saved
+            console.warn(`[checkout] Failed to create dispute evidence:`, err.message)
+          })
+        }
 
         // Clear platform debit if recovered from this payment
         if (platformDebitRecovered > 0) {
@@ -625,6 +648,9 @@ export async function handleAsyncPaymentSucceeded(event: Stripe.Event) {
       stripeChargeId,
     },
   })
+
+  // Invalidate admin revenue cache to ensure fresh dashboard data
+  await invalidateAdminRevenueCache()
 
   // Create activity
   await db.activity.create({

@@ -85,8 +85,14 @@ export function useCheckoutEngine({ profile, isOwner }: CheckoutEngineProps) {
     }, [profile.id, isOwner, isSuccessReturn, recordPageView])
 
     // 4. Payment Verification (Success Return)
+    // Use ref to prevent duplicate toast errors on re-renders
+    const verificationAttemptedRef = useRef(false)
+
     useEffect(() => {
         if (!isSuccessReturn) return
+        // Prevent running verification multiple times
+        if (verificationAttemptedRef.current) return
+        verificationAttemptedRef.current = true
 
         if (stripeSessionId) {
             api.checkout.verifySession(stripeSessionId, profile.username)
@@ -123,10 +129,13 @@ export function useCheckoutEngine({ profile, isOwner }: CheckoutEngineProps) {
                     toast.error('Could not verify payment')
                 })
         } else {
+            // No valid session ID - silently go back to idle state
+            // This can happen if user navigates directly to ?success=true without valid params
             setStatus('idle')
             toast.error('Invalid payment session')
         }
-    }, [isSuccessReturn, stripeSessionId, paystackRef, profile.username, updatePageView, toast])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isSuccessReturn, stripeSessionId, paystackRef, profile.username])
 
     // Handlers
     const handlePayment = async () => {

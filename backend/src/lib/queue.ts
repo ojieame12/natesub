@@ -52,6 +52,10 @@ export const webhookQueue: QueueLike = useBullMQ
   ? new Queue('webhook-queue', { connection: connection!, defaultJobOptions })
   : new InMemoryQueue('webhook-queue')
 
+export const updateEmailQueue: QueueLike = useBullMQ
+  ? new Queue('update-email-queue', { connection: connection!, defaultJobOptions })
+  : new InMemoryQueue('update-email-queue')
+
 // Worker Factory Helper
 export function createWorker<T>(
   queueName: string,
@@ -87,5 +91,6 @@ export async function closeQueues() {
     emailQueue.close(),
     billingQueue.close(),
     webhookQueue.close(),
+    updateEmailQueue.close(),
   ])
 }

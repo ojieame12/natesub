@@ -359,7 +359,8 @@ describe('checkout flow', () => {
       // Verify split fee fields in Paystack call
       // ₦50,000 base + 4% = ₦52,000 gross
       const callArgs = mockInitializePaystackCheckout.mock.calls[0][0]
-      expect(callArgs.totalAmount).toBe(5200000) // ₦52,000 in kobo
+      expect(callArgs.amount).toBe(5200000) // ₦52,000 in kobo (subscriber pays gross)
+      expect(callArgs.subaccountCode).toBe('ACCT_123') // Subaccount for auto-split
       expect(callArgs.metadata).toMatchObject({
         feeModel: 'split_v1',
         subscriberFee: 200000,  // 4% of ₦50,000

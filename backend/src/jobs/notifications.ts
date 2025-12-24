@@ -18,123 +18,26 @@ interface NotificationResult {
 }
 
 /**
- * Send renewal reminders for subscriptions expiring in ~3 days
- * Run daily, ideally in the morning
+ * DEPRECATED: Legacy renewal reminders (single 3-day notification)
+ *
+ * Replaced by scheduleSubscriptionRenewalReminders() in jobs/reminders.ts
+ * which schedules 7/3/1-day reminders at invoice.paid time for better
+ * Visa VAMP compliance and chargeback prevention.
+ *
+ * This function now returns early to avoid duplicate reminders.
+ * Keep exported for API backwards compatibility until jobs.ts route is updated.
+ *
+ * @deprecated Use scheduleSubscriptionRenewalReminders from jobs/reminders.ts
  */
 export async function sendRenewalReminders(): Promise<NotificationResult> {
-  const result: NotificationResult = {
+  // DISABLED: New scheduled reminder system handles this
+  // See: scheduleSubscriptionRenewalReminders() in jobs/reminders.ts
+  console.log('[notifications] sendRenewalReminders DEPRECATED - using scheduled reminders instead')
+  return {
     processed: 0,
     sent: 0,
     errors: [],
   }
-
-  const now = new Date()
-  const threeDaysFromNow = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000)
-  const fourDaysFromNow = new Date(now.getTime() + 4 * 24 * 60 * 60 * 1000)
-
-  // Find active subscriptions expiring in 3-4 days
-  const subscriptions = await db.subscription.findMany({
-    where: {
-      status: 'active',
-      interval: 'month',
-      currentPeriodEnd: {
-        gte: threeDaysFromNow,
-        lt: fourDaysFromNow,
-      },
-    },
-    include: {
-      subscriber: true,
-      creator: {
-        include: {
-          profile: {
-            select: {
-              displayName: true,
-              feeMode: true,
-              purpose: true,
-            },
-          },
-        },
-      },
-    },
-  })
-
-  console.log(`[notifications] Found ${subscriptions.length} subscriptions for renewal reminders`)
-
-  for (const sub of subscriptions) {
-    result.processed++
-
-    if (!sub.subscriber.email || !sub.creator?.profile?.displayName) {
-      continue
-    }
-
-    // Per-cycle idempotency key - includes the period end date to allow one reminder per billing cycle
-    const periodKey = sub.currentPeriodEnd!.toISOString().slice(0, 10) // YYYY-MM-DD
-    const idempotencyType = `renewal_reminder_${periodKey}`
-
-    // Acquire lock to prevent race conditions between workers
-    const lockKey = `notification:${sub.id}:${idempotencyType}`
-    const lockToken = await acquireLock(lockKey, 30000) // 30 second TTL
-
-    if (!lockToken) {
-      console.log(`[notifications] Skipping sub ${sub.id} - locked by another worker`)
-      continue
-    }
-
-    try {
-      // Idempotency check - skip if already sent this period
-      const existingLog = await db.notificationLog.findFirst({
-        where: {
-          subscriptionId: sub.id,
-          type: idempotencyType,
-        },
-      })
-
-      if (existingLog) {
-        console.log(`[notifications] Skipping sub ${sub.id} - reminder already sent for period ${periodKey}`)
-        await releaseLock(lockKey, lockToken)
-        continue
-      }
-
-      // Calculate what the subscriber will actually pay
-      // Uses subscription's feeModel to determine calculation method:
-      // - split_v1: subscriber pays base + 4%
-      // - legacy: respects profile's feeMode (absorb = no extra, pass_to_subscriber = +8%)
-      const feeMode = (sub.creator.profile?.feeMode ?? 'split') as FeeMode
-      const feeCalc = (sub as any).feeModel === 'split_v1'
-        ? calculateServiceFee(sub.amount, sub.currency, sub.creator.profile?.purpose)
-        : calculateLegacyServiceFee(sub.amount, sub.currency, sub.creator.profile?.purpose, feeMode)
-      const subscriberAmount = feeCalc.grossCents
-
-      await sendRenewalReminderEmail(
-        sub.subscriber.email,
-        sub.creator.profile.displayName,
-        subscriberAmount,
-        sub.currency,
-        sub.currentPeriodEnd!
-      )
-
-      // Log the send for idempotency - use period-specific type
-      await db.notificationLog.create({
-        data: {
-          subscriptionId: sub.id,
-          type: idempotencyType,
-        },
-      })
-
-      result.sent++
-      console.log(`[notifications] Sent renewal reminder for sub ${sub.id}`)
-    } catch (error: any) {
-      result.errors.push({
-        subscriptionId: sub.id,
-        error: error.message || 'Unknown error',
-      })
-      console.error(`[notifications] Failed to send reminder for sub ${sub.id}:`, error.message)
-    } finally {
-      await releaseLock(lockKey, lockToken)
-    }
-  }
-
-  return result
 }
 
 /**

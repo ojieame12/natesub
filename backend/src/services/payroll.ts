@@ -159,7 +159,7 @@ const MAX_PAYMENT_LINE_ITEMS = 100
  * Uses DB-side aggregation for totals (scalable for high-volume creators)
  * Only loads capped line-items for display
  */
-async function aggregatePayments(
+export async function aggregatePayments(
   userId: string,
   periodStart: Date,
   periodEnd: Date,
@@ -175,57 +175,56 @@ async function aggregatePayments(
 }> {
   // Use DB-side aggregation for totals (avoids loading all rows into memory)
   // This is critical for high-volume creators with 1000+ payments per period
-  const currencyFilter = currency ? db.$queryRaw`AND "currency" = ${currency}` : db.$queryRaw``
+  // Note: We use conditional queries because Prisma's $queryRaw doesn't support
+  // conditional SQL fragments via template embedding
 
-  const totals = await db.$queryRaw<Array<{
+  type TotalsRow = {
     gross_cents: bigint | null
     fee_cents: bigint | null
     net_cents: bigint | null
     payment_count: bigint
     refunds_cents: bigint | null
     chargebacks_cents: bigint | null
-  }>>`
-    SELECT
-      -- Successful payments: base price = netCents + COALESCE(creatorFeeCents, 0)
-      SUM(CASE
-        WHEN "status" = 'succeeded' AND "type" IN ('one_time', 'recurring')
-        THEN "netCents" + COALESCE("creatorFeeCents", 0)
-        ELSE 0
-      END) as gross_cents,
-      -- Creator fee portion (4% in split model, or full feeCents for legacy)
-      SUM(CASE
-        WHEN "status" = 'succeeded' AND "type" IN ('one_time', 'recurring')
-        THEN COALESCE("creatorFeeCents", "feeCents")
-        ELSE 0
-      END) as fee_cents,
-      -- Net earnings
-      SUM(CASE
-        WHEN "status" = 'succeeded' AND "type" IN ('one_time', 'recurring')
-        THEN "netCents"
-        ELSE 0
-      END) as net_cents,
-      -- Payment count
-      COUNT(*) FILTER (
-        WHERE "status" = 'succeeded' AND "type" IN ('one_time', 'recurring')
-      ) as payment_count,
-      -- Refunds: use base price for consistency
-      SUM(CASE
-        WHEN "status" = 'refunded' AND "type" IN ('one_time', 'recurring', 'refund')
-        THEN ABS("netCents" + COALESCE("creatorFeeCents", 0))
-        ELSE 0
-      END) as refunds_cents,
-      -- Chargebacks
-      SUM(CASE
-        WHEN "status" IN ('dispute_lost', 'disputed') AND "type" IN ('one_time', 'recurring')
-        THEN ABS("netCents" + COALESCE("creatorFeeCents", 0))
-        ELSE 0
-      END) as chargebacks_cents
-    FROM "payments"
-    WHERE "creatorId" = ${userId}
-      AND "occurredAt" >= ${periodStart}
-      AND "occurredAt" <= ${periodEnd}
-      ${currencyFilter}
-  `
+  }
+
+  const totals = currency
+    ? await db.$queryRaw<Array<TotalsRow>>`
+        SELECT
+          SUM(CASE WHEN "status" = 'succeeded' AND "type" IN ('one_time', 'recurring')
+            THEN "netCents" + COALESCE("creatorFeeCents", 0) ELSE 0 END) as gross_cents,
+          SUM(CASE WHEN "status" = 'succeeded' AND "type" IN ('one_time', 'recurring')
+            THEN COALESCE("creatorFeeCents", "feeCents") ELSE 0 END) as fee_cents,
+          SUM(CASE WHEN "status" = 'succeeded' AND "type" IN ('one_time', 'recurring')
+            THEN "netCents" ELSE 0 END) as net_cents,
+          COUNT(*) FILTER (WHERE "status" = 'succeeded' AND "type" IN ('one_time', 'recurring')) as payment_count,
+          SUM(CASE WHEN "status" = 'refunded' AND "type" IN ('one_time', 'recurring', 'refund')
+            THEN ABS("netCents" + COALESCE("creatorFeeCents", 0)) ELSE 0 END) as refunds_cents,
+          SUM(CASE WHEN "status" IN ('dispute_lost', 'disputed') AND "type" IN ('one_time', 'recurring')
+            THEN ABS("netCents" + COALESCE("creatorFeeCents", 0)) ELSE 0 END) as chargebacks_cents
+        FROM "payments"
+        WHERE "creatorId" = ${userId}
+          AND "occurredAt" >= ${periodStart}
+          AND "occurredAt" <= ${periodEnd}
+          AND "currency" = ${currency}
+      `
+    : await db.$queryRaw<Array<TotalsRow>>`
+        SELECT
+          SUM(CASE WHEN "status" = 'succeeded' AND "type" IN ('one_time', 'recurring')
+            THEN "netCents" + COALESCE("creatorFeeCents", 0) ELSE 0 END) as gross_cents,
+          SUM(CASE WHEN "status" = 'succeeded' AND "type" IN ('one_time', 'recurring')
+            THEN COALESCE("creatorFeeCents", "feeCents") ELSE 0 END) as fee_cents,
+          SUM(CASE WHEN "status" = 'succeeded' AND "type" IN ('one_time', 'recurring')
+            THEN "netCents" ELSE 0 END) as net_cents,
+          COUNT(*) FILTER (WHERE "status" = 'succeeded' AND "type" IN ('one_time', 'recurring')) as payment_count,
+          SUM(CASE WHEN "status" = 'refunded' AND "type" IN ('one_time', 'recurring', 'refund')
+            THEN ABS("netCents" + COALESCE("creatorFeeCents", 0)) ELSE 0 END) as refunds_cents,
+          SUM(CASE WHEN "status" IN ('dispute_lost', 'disputed') AND "type" IN ('one_time', 'recurring')
+            THEN ABS("netCents" + COALESCE("creatorFeeCents", 0)) ELSE 0 END) as chargebacks_cents
+        FROM "payments"
+        WHERE "creatorId" = ${userId}
+          AND "occurredAt" >= ${periodStart}
+          AND "occurredAt" <= ${periodEnd}
+      `
 
   const row = totals[0]
   const grossCents = Number(row?.gross_cents || 0)

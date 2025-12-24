@@ -2,7 +2,8 @@
  * Users - User management page
  */
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { useAdminUsers, useAdminUserBlock, useAdminUserUnblock, useAdminUserDelete, useExportUsers, downloadCSV } from '../api'
 import { formatCurrency, formatDate } from '../utils/format'
 import FilterBar from '../components/FilterBar'
@@ -13,6 +14,7 @@ type SortField = 'email' | 'revenue' | 'subscribers' | 'created'
 type SortOrder = 'asc' | 'desc'
 
 export default function Users() {
+  const location = useLocation()
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('active')
   const [page, setPage] = useState(1)
@@ -31,6 +33,24 @@ export default function Users() {
     page,
     limit,
   })
+
+  // Allow deep-linking into the users table (e.g. from Stripe detail view)
+  useEffect(() => {
+    const params = new URLSearchParams(location.search)
+    const nextSearch = (params.get('search') || '').trim()
+    const nextStatus = (params.get('status') || '').trim()
+
+    if (nextSearch && nextSearch !== search) {
+      setSearch(nextSearch)
+      setPage(1)
+    }
+
+    if (nextStatus && nextStatus !== status) {
+      setStatus(nextStatus)
+      setPage(1)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.search])
 
   const blockMutation = useAdminUserBlock()
   const unblockMutation = useAdminUserUnblock()

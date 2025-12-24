@@ -2,7 +2,7 @@
 
 import { Capacitor } from '@capacitor/core'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
+export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
 
 // Debug: Log API URL at module load (remove after E2E testing)
 console.log('[api/client] API_URL =', API_URL)
@@ -1008,7 +1008,7 @@ const mapPayPeriod = (backend: BackendPayPeriod): PayPeriod => ({
   endDate: backend.periodEnd,
   currency: backend.currency || 'USD',
   grossAmount: backend.grossCents, // Keep in cents, frontend divides by 100
-  platformFee: backend.platformFeeCents || Math.round(backend.grossCents * 0.08),
+  platformFee: backend.platformFeeCents ?? Math.round(backend.grossCents * 0.08),
   netAmount: backend.netCents,
   status: backend.status,
   payoutDate: backend.payoutDate,

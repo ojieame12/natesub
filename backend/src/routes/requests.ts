@@ -9,6 +9,7 @@ import { requireAuth } from '../middleware/auth.js'
 import { publicRateLimit } from '../middleware/rateLimit.js'
 import { sendRequestEmail } from '../services/email.js'
 import { createCheckoutSession, stripe } from '../services/stripe.js'
+import { initializePaystackCheckout, generateReference } from '../services/paystack.js'
 import { scheduleRequestReminders, scheduleRequestUnpaidReminder } from '../jobs/reminders.js'
 import { calculateServiceFee, type FeeMode } from '../services/fees.js'
 import { encrypt } from '../utils/encryption.js'
@@ -142,18 +143,27 @@ requests.post(
       return c.json({ error: 'This request has already been responded to' }, 410)
     }
 
-    if (!request.creator.profile?.stripeAccountId) {
+    const profile = request.creator.profile
+    const hasStripe = !!profile?.stripeAccountId
+    const hasPaystack = !!profile?.paystackSubaccountCode
+
+    // Check if creator has any payment method set up
+    if (!hasStripe && !hasPaystack) {
       return c.json({ error: 'This service provider has not set up payments yet' }, 400)
     }
 
-    // Enforce platform debit cap for service providers ($30 max = 6 months)
+    // Determine which provider to use based on profile setting
+    // If profile has paymentProvider set, use that; otherwise prefer Stripe if available
+    const usePaystack = profile?.paymentProvider === 'paystack' && hasPaystack
+
+    // Enforce platform debit cap for service providers ($30 max = 6 months) - Stripe only
     const PLATFORM_DEBIT_CAP_CENTS = 3000
-    if (request.creator.profile?.purpose === 'service' &&
-      (request.creator.profile.platformDebitCents || 0) >= PLATFORM_DEBIT_CAP_CENTS) {
+    if (!usePaystack && profile?.purpose === 'service' &&
+      (profile.platformDebitCents || 0) >= PLATFORM_DEBIT_CAP_CENTS) {
       return c.json({
         error: 'Outstanding platform balance must be cleared before accepting new payments.',
         code: 'PLATFORM_DEBIT_CAP_REACHED',
-        debitCents: request.creator.profile.platformDebitCents,
+        debitCents: profile.platformDebitCents,
       }, 402)
     }
 
@@ -165,73 +175,107 @@ requests.post(
     }
 
     try {
-      // IDEMPOTENCY: Check for existing valid checkout session
-      // If we have an active session, return it instead of creating a new one
-      if (request.stripeCheckoutSessionId) {
-        try {
-          const existingSession = await stripe.checkout.sessions.retrieve(request.stripeCheckoutSessionId)
-
-          // Session is still usable if it's open and not expired
-          if (existingSession.status === 'open' && existingSession.url) {
-            console.log(`[requests] Returning existing checkout session for request ${request.id}`)
-            return c.json({
-              success: true,
-              checkoutUrl: existingSession.url,
-              cached: true,
-            })
-          }
-          // If session is expired or complete, we'll create a new one below
-        } catch (sessionErr: any) {
-          // Session not found or error retrieving - create a new one
-          console.log(`[requests] Existing session invalid for request ${request.id}, creating new`)
-        }
-      }
-
       // Calculate service fee based on creator's fee mode setting
       const feeCalc = calculateServiceFee(
         request.amountCents,
         request.currency,
-        request.creator.profile?.purpose,
-        request.creator.profile?.feeMode as FeeMode
+        profile?.purpose,
+        profile?.feeMode as FeeMode
       )
 
-      // Create checkout session with request tracking
-      const session = await createCheckoutSession({
-        creatorId: request.creatorId,
-        requestId: request.id,  // Track which request this checkout is for
-        grossAmount: feeCalc.grossCents,  // What subscriber pays
-        netAmount: feeCalc.netCents,      // What creator receives
-        serviceFee: feeCalc.feeCents,
-        currency: request.currency,
-        interval: request.isRecurring ? 'month' : 'one_time',
-        successUrl: `${env.APP_URL}/r/${token}/success`,
-        cancelUrl: `${env.APP_URL}/r/${token}?canceled=true`,
-        subscriberEmail: email,
-        feeMetadata: {
-          feeModel: feeCalc.feeModel,
-          feeMode: feeCalc.feeMode,
-          feeEffectiveRate: feeCalc.effectiveRate,
-        },
-      })
+      // Route to appropriate payment provider
+      if (usePaystack) {
+        // === PAYSTACK CHECKOUT ===
+        const reference = generateReference('REQ')
 
-      // Update request to pending_payment status
-      // Status will be set to 'accepted' by webhook when payment succeeds
-      await db.request.update({
-        where: { id: request.id },
-        data: {
-          status: 'pending_payment',
-          stripeCheckoutSessionId: session.id,
-          // Don't set respondedAt yet - that happens on actual acceptance
-        },
-      })
+        const result = await initializePaystackCheckout({
+          email,
+          amount: feeCalc.grossCents, // What subscriber pays
+          currency: request.currency,
+          subaccountCode: profile.paystackSubaccountCode!,
+          callbackUrl: `${env.APP_URL}/r/${token}/success?provider=paystack`,
+          reference,
+          metadata: {
+            creatorId: request.creatorId,
+            interval: request.isRecurring ? 'month' : 'one_time',
+            creatorAmount: feeCalc.netCents,
+            serviceFee: feeCalc.feeCents,
+            feeModel: feeCalc.feeModel,
+            feeMode: feeCalc.feeMode,
+            feeEffectiveRate: feeCalc.effectiveRate,
+          },
+        })
 
-      // NOTE: Activity is NOT logged here - it will be logged by the webhook
-      // when checkout.session.completed fires, to avoid false accepts
+        // Update request to pending_payment status
+        await db.request.update({
+          where: { id: request.id },
+          data: {
+            status: 'pending_payment',
+            paystackTransactionRef: reference,
+          },
+        })
 
-      return c.json({
-        success: true,
-        checkoutUrl: session.url,
-      })
+        return c.json({
+          success: true,
+          checkoutUrl: result.authorization_url,
+          provider: 'paystack',
+        })
+      } else {
+        // === STRIPE CHECKOUT ===
+        // IDEMPOTENCY: Check for existing valid checkout session
+        if (request.stripeCheckoutSessionId) {
+          try {
+            const existingSession = await stripe.checkout.sessions.retrieve(request.stripeCheckoutSessionId)
+
+            // Session is still usable if it's open and not expired
+            if (existingSession.status === 'open' && existingSession.url) {
+              console.log(`[requests] Returning existing checkout session for request ${request.id}`)
+              return c.json({
+                success: true,
+                checkoutUrl: existingSession.url,
+                cached: true,
+                provider: 'stripe',
+              })
+            }
+          } catch (sessionErr: any) {
+            console.log(`[requests] Existing session invalid for request ${request.id}, creating new`)
+          }
+        }
+
+        // Create checkout session with request tracking
+        const session = await createCheckoutSession({
+          creatorId: request.creatorId,
+          requestId: request.id,
+          grossAmount: feeCalc.grossCents,
+          netAmount: feeCalc.netCents,
+          serviceFee: feeCalc.feeCents,
+          currency: request.currency,
+          interval: request.isRecurring ? 'month' : 'one_time',
+          successUrl: `${env.APP_URL}/r/${token}/success`,
+          cancelUrl: `${env.APP_URL}/r/${token}?canceled=true`,
+          subscriberEmail: email,
+          feeMetadata: {
+            feeModel: feeCalc.feeModel,
+            feeMode: feeCalc.feeMode,
+            feeEffectiveRate: feeCalc.effectiveRate,
+          },
+        })
+
+        // Update request to pending_payment status
+        await db.request.update({
+          where: { id: request.id },
+          data: {
+            status: 'pending_payment',
+            stripeCheckoutSessionId: session.id,
+          },
+        })
+
+        return c.json({
+          success: true,
+          checkoutUrl: session.url,
+          provider: 'stripe',
+        })
+      }
     } catch (error) {
       console.error('Accept request error:', error)
       return c.json({ error: 'Failed to create checkout' }, 500)

@@ -9,6 +9,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getAuthToken } from '../api/client'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
+const ADMIN_FETCH_TIMEOUT_MS = 20_000
 
 // Admin-specific fetch wrapper
 // Uses the user's session/token - backend verifies the user is an admin
@@ -27,11 +28,25 @@ async function adminFetch<T>(path: string, options: RequestInit = {}): Promise<T
     headers['Authorization'] = `Bearer ${token}`
   }
 
-  const response = await fetch(url, {
-    ...options,
-    credentials: 'include', // Include cookies for session auth
-    headers,
-  })
+  const controller = new AbortController()
+  const timeoutId = window.setTimeout(() => controller.abort(), ADMIN_FETCH_TIMEOUT_MS)
+
+  let response: Response
+  try {
+    response = await fetch(url, {
+      ...options,
+      credentials: 'include', // Include cookies for session auth
+      headers,
+      signal: options.signal ?? controller.signal,
+    })
+  } catch (err: any) {
+    if (err?.name === 'AbortError') {
+      throw new Error('Request timed out')
+    }
+    throw err
+  } finally {
+    window.clearTimeout(timeoutId)
+  }
 
   const data = await response.json().catch(() => ({ error: 'Invalid response' }))
 
@@ -325,7 +340,10 @@ export function useAdminRefundsStats(period: string = 'month') {
 // USERS
 // ============================================
 
-export function useAdminUsers(params: { search?: string; status?: string; page?: number; limit?: number } = {}) {
+export function useAdminUsers(
+  params: { search?: string; status?: string; page?: number; limit?: number } = {},
+  options: { enabled?: boolean } = {}
+) {
   const searchParams = new URLSearchParams()
   if (params.search) searchParams.set('search', params.search)
   if (params.status) searchParams.set('status', params.status)
@@ -337,6 +355,7 @@ export function useAdminUsers(params: { search?: string; status?: string; page?:
     queryKey: ['admin', 'users', params],
     queryFn: () => adminFetch<{ users: AdminUser[]; total: number; page: number; totalPages: number }>(`/admin/users${query ? `?${query}` : ''}`),
     staleTime: 30 * 1000,
+    enabled: options.enabled ?? true,
   })
 }
 
@@ -1211,7 +1230,7 @@ export interface AdminAuditLog {
   createdAt: string
 }
 
-export function useAdminAuditLog(limit: number = 50) {
+export function useAdminAuditLog(limit: number = 50, options: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: ['admin', 'admins', 'audit', limit],
     queryFn: () => adminFetch<{
@@ -1219,5 +1238,6 @@ export function useAdminAuditLog(limit: number = 50) {
       pagination: { total: number; limit: number; offset: number; hasMore: boolean }
     }>(`/admin/admins/audit?limit=${limit}`),
     staleTime: 60 * 1000,
+    enabled: options.enabled ?? true,
   })
 }

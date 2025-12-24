@@ -1,4 +1,5 @@
 import { db } from '../../../db/client.js'
+import { invalidateAdminRevenueCache } from '../../../utils/cache.js'
 
 // Handle Paystack refund.processed - refund completed successfully
 export async function handlePaystackRefundProcessed(data: any, eventId: string) {
@@ -87,6 +88,9 @@ export async function handlePaystackRefundProcessed(data: any, eventId: string) 
       feeModel: originalPayment.feeModel,
     },
   })
+
+  // Invalidate admin revenue cache after refund creation
+  await invalidateAdminRevenueCache()
 
   // Decrement LTV if subscription exists
   if (originalPayment.subscriptionId) {

@@ -5,6 +5,7 @@
 import { useAdminDashboard, useAdminRevenueOverview, useAdminActivity } from '../api'
 import { formatCurrency, formatNumber } from '../utils/format'
 import StatCard from '../components/StatCard'
+import { Link } from 'react-router-dom'
 
 function timeAgo(date: string): string {
   const seconds = Math.floor((Date.now() - new Date(date).getTime()) / 1000)
@@ -134,12 +135,12 @@ export default function Overview() {
       <div className="admin-section">
         <h2 className="admin-section-title">Quick Actions</h2>
         <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-          <a href="/admin/users" className="admin-btn admin-btn-secondary">Manage Users</a>
-          <a href="/admin/payments" className="admin-btn admin-btn-secondary">View Payments</a>
-          <a href="/admin/subscriptions" className="admin-btn admin-btn-secondary">Subscriptions</a>
-          <a href="/admin/revenue" className="admin-btn admin-btn-secondary">Revenue Details</a>
-          <a href="/admin/stripe" className="admin-btn admin-btn-secondary">Stripe Connect</a>
-          <a href="/admin/operations" className="admin-btn admin-btn-secondary">Operations</a>
+          <Link to="/admin/users" className="admin-btn admin-btn-secondary">Manage Users</Link>
+          <Link to="/admin/payments" className="admin-btn admin-btn-secondary">View Payments</Link>
+          <Link to="/admin/subscriptions" className="admin-btn admin-btn-secondary">Subscriptions</Link>
+          <Link to="/admin/revenue" className="admin-btn admin-btn-secondary">Revenue Details</Link>
+          <Link to="/admin/stripe" className="admin-btn admin-btn-secondary">Stripe Connect</Link>
+          <Link to="/admin/ops" className="admin-btn admin-btn-secondary">Operations</Link>
         </div>
       </div>
 
@@ -147,7 +148,7 @@ export default function Overview() {
       <div className="admin-section">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <h2 className="admin-section-title" style={{ margin: 0 }}>Recent Admin Activity</h2>
-          <a href="/admin/logs" style={{ fontSize: 13, color: 'var(--accent-primary)' }}>View all logs →</a>
+          <Link to="/admin/logs" style={{ fontSize: 13, color: 'var(--accent-primary)' }}>View all logs →</Link>
         </div>
         {activityLoading ? (
           <div className="admin-activity-list">
