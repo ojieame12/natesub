@@ -68,6 +68,10 @@ const getActivityIcon = (type: string) => {
     case 'cancelled': return <UserX size={18} />
     case 'request_sent': return <Send size={18} />
     case 'request_accepted': return <Check size={18} />
+    // Payout lifecycle
+    case 'payout_initiated': return <Clock size={18} />
+    case 'payout_completed': return <Check size={18} />
+    case 'payout_failed': return <UserX size={18} />
     default: return <DollarSign size={18} />
   }
 }
@@ -83,6 +87,10 @@ const getActivityTitle = (type: string) => {
     case 'cancelled': return 'Cancelled'
     case 'request_sent': return 'Request Sent'
     case 'request_accepted': return 'Request Accepted'
+    // Payout lifecycle
+    case 'payout_initiated': return 'Payout Initiated'
+    case 'payout_completed': return 'Payout Received'
+    case 'payout_failed': return 'Payout Failed'
     default: return 'Activity'
   }
 }
@@ -576,13 +584,22 @@ export default function Dashboard() {
                 </div>
               </section>
             ) : (
-              <section className="stats-card" style={{ height: '220px', padding: '24px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+              <section className="stats-card" style={{ height: 'auto', minHeight: '220px', padding: '24px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '16px' }}>
               <div className="stats-primary">
                 <span className="stats-label" style={{ marginBottom: '0', opacity: 0.8, lineHeight: '1.2' }}>Monthly Recurring Revenue</span>
                 <span className="stats-mrr" style={{ lineHeight: '1', marginTop: '2px' }}>
                   <AnimatedNumber value={metrics?.mrr ?? 0} duration={600} format={(n) => formatCompactAmount(n, currencyCode)} />
                 </span>
               </div>
+              {/* Pending Balance - only show if there's pending funds */}
+              {(metrics?.balance?.pending ?? 0) > 0 && (
+                <div className="stats-pending" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px', color: 'var(--text-secondary)', padding: '8px 12px', background: 'rgba(var(--primary-rgb), 0.08)', borderRadius: 'var(--radius-md)' }}>
+                  <Clock size={14} />
+                  <span>
+                    {formatCompactAmount(centsToDisplayAmount(metrics?.balance?.pending ?? 0, metrics?.balance?.currency || currencyCode), metrics?.balance?.currency || currencyCode)} pending payout
+                  </span>
+                </div>
+              )}
               <div className="stats-secondary-row">
                 <div className="stats-metric">
                   <div className="stats-metric-value" style={{ lineHeight: '1' }}>

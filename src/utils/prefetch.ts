@@ -5,6 +5,10 @@
  * 1. Dynamic imports on touchstart/mouseenter to preload JS chunks
  * 2. React Query prefetches to warm the data cache
  *
+ * IMPORTANT: Only prefetch simple queries, not infinite queries.
+ * Infinite queries (activity, subscriptions, requests) have a different
+ * data structure and using prefetchQuery would cause cache mismatches.
+ *
  * Result: Navigation feels instant - both code AND data are ready
  */
 
@@ -31,36 +35,25 @@ const routeImports: Record<string, () => Promise<unknown>> = {
   '/new-request': () => import('../request/SelectRecipient'),
 }
 
-// Map route paths to their data prefetch functions
-// Each returns a promise that prefetches relevant data for that route
+/**
+ * Data prefetch functions for each route
+ *
+ * Only prefetch simple queries that:
+ * - Are in the persistence whitelist (profile, metrics, settings, etc.)
+ * - Use useQuery (not useInfiniteQuery)
+ *
+ * Infinite queries (activity, subscriptions, requests) are NOT prefetched
+ * because prefetchQuery writes a different data shape than useInfiniteQuery expects.
+ */
 const routeDataPrefetch: Record<string, () => Promise<void>> = {
   '/dashboard': async () => {
-    // Dashboard needs profile, recent activity, and metrics
+    // Dashboard needs profile and metrics (both are simple queries)
+    // Note: Activity is NOT prefetched because it uses useInfiniteQuery
     await Promise.all([
       queryClient.prefetchQuery({
         queryKey: ['profile'],
         queryFn: () => api.profile.get(),
-        staleTime: 5 * 60 * 1000, // 5 min - profile rarely changes
-      }),
-      queryClient.prefetchQuery({
-        queryKey: ['activity'],
-        queryFn: () => api.activity.list(undefined, 5),
-        staleTime: 30 * 1000, // 30s - activity changes often
-      }),
-      queryClient.prefetchQuery({
-        queryKey: ['metrics'],
-        queryFn: () => api.activity.getMetrics(),
-        staleTime: 60 * 1000, // 1 min
-      }),
-    ])
-  },
-
-  '/activity': async () => {
-    await Promise.all([
-      queryClient.prefetchQuery({
-        queryKey: ['activity'],
-        queryFn: () => api.activity.list(undefined, 20),
-        staleTime: 30 * 1000,
+        staleTime: 5 * 60 * 1000,
       }),
       queryClient.prefetchQuery({
         queryKey: ['metrics'],
@@ -70,12 +63,19 @@ const routeDataPrefetch: Record<string, () => Promise<void>> = {
     ])
   },
 
-  '/subscribers': async () => {
+  '/activity': async () => {
+    // Only prefetch metrics (simple query)
+    // Activity list uses useInfiniteQuery - not prefetched
     await queryClient.prefetchQuery({
-      queryKey: ['subscriptions', 'all'],
-      queryFn: () => api.subscriptions.list({ status: 'all' }),
+      queryKey: ['metrics'],
+      queryFn: () => api.activity.getMetrics(),
       staleTime: 60 * 1000,
     })
+  },
+
+  '/subscribers': async () => {
+    // Subscriptions uses useInfiniteQuery - nothing to prefetch here
+    // The JS chunk prefetch is still valuable
   },
 
   '/profile': async () => {
@@ -94,11 +94,18 @@ const routeDataPrefetch: Record<string, () => Promise<void>> = {
   },
 
   '/settings': async () => {
-    await queryClient.prefetchQuery({
-      queryKey: ['profile'],
-      queryFn: () => api.profile.get(),
-      staleTime: 5 * 60 * 1000,
-    })
+    await Promise.all([
+      queryClient.prefetchQuery({
+        queryKey: ['profile'],
+        queryFn: () => api.profile.get(),
+        staleTime: 5 * 60 * 1000,
+      }),
+      queryClient.prefetchQuery({
+        queryKey: ['settings'],
+        queryFn: () => api.profile.getSettings(),
+        staleTime: 5 * 60 * 1000,
+      }),
+    ])
   },
 
   '/settings/payments': async () => {
@@ -117,6 +124,7 @@ const routeDataPrefetch: Record<string, () => Promise<void>> = {
   },
 
   '/updates': async () => {
+    // Updates list is a simple query, safe to prefetch
     await queryClient.prefetchQuery({
       queryKey: ['updates'],
       queryFn: () => api.updates.list(),
@@ -125,11 +133,7 @@ const routeDataPrefetch: Record<string, () => Promise<void>> = {
   },
 
   '/requests': async () => {
-    await queryClient.prefetchQuery({
-      queryKey: ['requests', 'all'],
-      queryFn: () => api.requests.list({ status: 'all' }),
-      staleTime: 60 * 1000,
-    })
+    // Requests uses useInfiniteQuery - nothing to prefetch here
   },
 }
 
@@ -174,7 +178,7 @@ export function prefetchRoute(path: string): void {
 }
 
 /**
- * Prefetch a route's data
+ * Prefetch a route's data (simple queries only)
  * Safe to call multiple times - will only fetch once per session
  */
 export function prefetchRouteData(path: string): void {
@@ -242,17 +246,19 @@ export function prefetchRoutes(paths: string[]): void {
 /**
  * Prefetch core app data after auth is confirmed
  * Call this once after login/app start
+ *
+ * Only prefetches whitelisted, simple queries that persist to localStorage
  */
 export function prefetchCoreData(): void {
   const doPrefetch = () => {
-    // Profile - most commonly needed
+    // Profile - most commonly needed, persisted
     queryClient.prefetchQuery({
       queryKey: ['profile'],
       queryFn: () => api.profile.get(),
       staleTime: 5 * 60 * 1000,
     }).catch(() => {})
 
-    // Metrics - shown on dashboard and profile
+    // Metrics - shown on dashboard and profile, persisted
     queryClient.prefetchQuery({
       queryKey: ['metrics'],
       queryFn: () => api.activity.getMetrics(),

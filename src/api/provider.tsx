@@ -3,6 +3,31 @@ import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client
 import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persister'
 import type { ReactNode } from 'react'
 
+// Cache version - increment when schema changes to invalidate old persisted data
+const CACHE_VERSION = 1
+const CACHE_KEY = `natepay-query-cache-v${CACHE_VERSION}`
+
+// Keys that are safe to persist (small, non-sensitive, user-specific)
+const PERSIST_WHITELIST = new Set([
+  'profile',
+  'metrics',
+  'settings',
+  'stripeStatus',
+  'paystackStatus',
+])
+
+/**
+ * Check if a query key should be persisted
+ * Only persist whitelisted keys to avoid:
+ * - Bloating localStorage with large lists
+ * - Persisting sensitive admin/support data
+ * - Storing infinite query data (which has different structure)
+ */
+function shouldPersistQuery(queryKey: readonly unknown[]): boolean {
+  const rootKey = queryKey[0]
+  return typeof rootKey === 'string' && PERSIST_WHITELIST.has(rootKey)
+}
+
 // Create a client with optimized caching for native-app feel
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -25,35 +50,80 @@ const queryClient = new QueryClient({
   },
 })
 
-// Persist cache to localStorage - survives page refresh and app restart
-const persister = createSyncStoragePersister({
-  storage: window.localStorage,
-  key: 'natepay-query-cache',
-  // Throttle writes to localStorage (don't write on every cache update)
-  throttleTime: 1000,
-  // Serialize/deserialize with error handling
-  serialize: (data) => JSON.stringify(data),
-  deserialize: (data) => JSON.parse(data),
-})
+/**
+ * Safe localStorage wrapper that handles:
+ * - Private browsing mode (localStorage throws)
+ * - Quota exceeded errors
+ * - Missing localStorage (SSR, some browsers)
+ */
+function createSafeStorage(): Storage | undefined {
+  try {
+    // Test if localStorage is available and working
+    const testKey = '__storage_test__'
+    window.localStorage.setItem(testKey, testKey)
+    window.localStorage.removeItem(testKey)
+    return window.localStorage
+  } catch {
+    // localStorage not available - cache will be in-memory only
+    console.warn('[Cache] localStorage not available, using in-memory cache only')
+    return undefined
+  }
+}
+
+const safeStorage = createSafeStorage()
+
+// Only create persister if localStorage is available
+const persister = safeStorage
+  ? createSyncStoragePersister({
+      storage: safeStorage,
+      key: CACHE_KEY,
+      // Throttle writes to localStorage (don't write on every cache update)
+      throttleTime: 1000,
+      // Serialize with error handling
+      serialize: (data) => {
+        try {
+          return JSON.stringify(data)
+        } catch (e) {
+          console.warn('[Cache] Failed to serialize cache:', e)
+          return '{}'
+        }
+      },
+      deserialize: (data) => {
+        try {
+          return JSON.parse(data)
+        } catch (e) {
+          console.warn('[Cache] Failed to deserialize cache:', e)
+          return { mutations: [], queries: [] }
+        }
+      },
+    })
+  : undefined
 
 interface ApiProviderProps {
   children: ReactNode
 }
 
 export function ApiProvider({ children }: ApiProviderProps) {
+  // If no persister (localStorage unavailable), use regular QueryClientProvider
+  if (!persister) {
+    const { QueryClientProvider } = require('@tanstack/react-query')
+    return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  }
+
   return (
     <PersistQueryClientProvider
       client={queryClient}
       persistOptions={{
         persister,
         // Max age of persisted cache: 24 hours
-        // After this, cache is considered stale and will be refetched
         maxAge: 24 * 60 * 60 * 1000,
-        // Don't persist error states - only successful queries
+        // Only persist whitelisted, successful queries
         dehydrateOptions: {
           shouldDehydrateQuery: (query) => {
-            // Only persist successful queries
-            return query.state.status === 'success'
+            // Must be successful
+            if (query.state.status !== 'success') return false
+            // Must be in whitelist
+            return shouldPersistQuery(query.queryKey)
           },
         },
       }}
@@ -63,4 +133,19 @@ export function ApiProvider({ children }: ApiProviderProps) {
   )
 }
 
-export { queryClient }
+/**
+ * Clear persisted cache from localStorage
+ * Call this on logout to prevent cross-user data leakage
+ */
+export function clearPersistedCache(): void {
+  try {
+    // Clear current version
+    window.localStorage.removeItem(CACHE_KEY)
+    // Also clear any old versions (migration cleanup)
+    window.localStorage.removeItem('natepay-query-cache')
+  } catch {
+    // Ignore errors - localStorage might not be available
+  }
+}
+
+export { queryClient, CACHE_KEY }

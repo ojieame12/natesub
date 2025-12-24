@@ -157,6 +157,12 @@ export interface Metrics {
   totalRevenueCents: number
   totalRevenue: number
   tierBreakdown: Record<string, number>
+  balance?: {
+    available: number
+    pending: number
+    currency: string
+    lastSyncedAt: string | null
+  }
 }
 
 export interface Request {

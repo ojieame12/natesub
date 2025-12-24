@@ -5,6 +5,7 @@ import { db } from '../db/client.js'
 import { requireAuth } from '../middleware/auth.js'
 import { centsToDisplayAmount } from '../utils/currency.js'
 import { getUSDRate, convertLocalCentsToUSD, convertUSDCentsToLocal } from '../services/fx.js'
+import { syncCreatorBalance, isBalanceStale } from '../services/balanceSync.js'
 
 const activity = new Hono()
 
@@ -55,10 +56,18 @@ activity.get('/metrics', requireAuth, async (c) => {
     totalRevenueResult,
     tierBreakdown,
   ] = await Promise.all([
-    // Currency for display conversion (handles zero-decimal currencies correctly)
+    // Profile for currency and cached balance
     db.profile.findUnique({
       where: { userId },
-      select: { currency: true },
+      select: {
+        currency: true,
+        stripeAccountId: true,
+        paymentProvider: true,
+        balanceAvailableCents: true,
+        balancePendingCents: true,
+        balanceCurrency: true,
+        balanceLastSyncedAt: true,
+      },
     }),
 
     // Count active subscribers
@@ -147,6 +156,11 @@ activity.get('/metrics', requireAuth, async (c) => {
   const mrrCents = await normalizeToProfile(mrrResult, 'amount')
   const totalRevenueCents = await normalizeToProfile(totalRevenueResult, 'netCents')
 
+  // If balance is stale (>5 min), trigger background refresh
+  if (profile?.stripeAccountId && isBalanceStale(profile.balanceLastSyncedAt)) {
+    syncCreatorBalance(userId).catch(() => {}) // Fire-and-forget
+  }
+
   return c.json({
     metrics: {
       subscriberCount,
@@ -156,8 +170,27 @@ activity.get('/metrics', requireAuth, async (c) => {
       totalRevenue: centsToDisplayAmount(totalRevenueCents, profileCurrency),
       currency: profileCurrency,
       tierBreakdown: tierBreakdownRecord,
+      // Balance breakdown (from cached Stripe balance)
+      balance: {
+        available: profile?.balanceAvailableCents || 0,
+        pending: profile?.balancePendingCents || 0,
+        currency: profile?.balanceCurrency || profileCurrency,
+        lastSyncedAt: profile?.balanceLastSyncedAt || null,
+      },
     },
   })
+})
+
+// Force-refresh balance from Stripe
+activity.post('/balance/refresh', requireAuth, async (c) => {
+  const userId = c.get('userId')
+
+  const balance = await syncCreatorBalance(userId)
+  if (!balance) {
+    return c.json({ error: 'Failed to sync balance or no payment provider configured' }, 400)
+  }
+
+  return c.json({ balance })
 })
 
 // Get single activity (must be after /metrics to avoid route conflict)

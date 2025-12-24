@@ -118,7 +118,10 @@ export function useLogout() {
   return useMutation({
     mutationFn: api.auth.logout,
     onSuccess: () => {
+      // Clear in-memory cache
       queryClient.clear()
+      // Clear persisted cache to prevent cross-user data leakage
+      import('./provider').then(({ clearPersistedCache }) => clearPersistedCache())
     },
   })
 }
@@ -129,7 +132,10 @@ export function useDeleteAccount() {
   return useMutation({
     mutationFn: api.auth.deleteAccount,
     onSuccess: () => {
+      // Clear in-memory cache
       queryClient.clear()
+      // Clear persisted cache to prevent cross-user data leakage
+      import('./provider').then(({ clearPersistedCache }) => clearPersistedCache())
     },
   })
 }
@@ -395,7 +401,8 @@ export function useMySubscriptions(status: 'all' | 'active' | 'canceled' = 'acti
 
 export function useActivity(limit = 20) {
   return useInfiniteQuery({
-    queryKey: ['activity'],
+    // Include limit in key to prevent cache collisions between different page sizes
+    queryKey: ['activity', { limit }],
     queryFn: ({ pageParam }) => api.activity.list(pageParam, limit),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor || undefined,
