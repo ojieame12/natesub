@@ -1,13 +1,12 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { CheckCircle, AlertCircle, Loader2, Building2, Calendar, Copy, Share2, ExternalLink, ArrowRight, ArrowLeft } from 'lucide-react'
+import { CheckCircle, AlertCircle, Loader2, Building2, Calendar, ExternalLink, ArrowLeft } from 'lucide-react'
 import { api } from './api'
 import { useProfile } from './api/hooks'
 import { useOnboardingStore } from './onboarding/store'
 import { setPaymentConfirmed } from './utils/paymentConfirmed'
 import { Pressable, LoadingButton } from './components'
-import { getShareableLink } from './utils/constants'
 import './StripeComplete.css'
 
 // Format Stripe requirement keys into readable text
@@ -70,7 +69,6 @@ export default function StripeComplete() {
 
   const [status, setStatus] = useState<'loading' | 'success' | 'pending' | 'restricted' | 'network_error'>('loading')
   const [details, setDetails] = useState<StripeDetails | null>(null)
-  const [copied, setCopied] = useState(false)
   const [isNavigating, setIsNavigating] = useState(false)
   const [isRetrying, setIsRetrying] = useState(false)
   const [retryError, setRetryError] = useState<string | null>(null)
@@ -247,30 +245,6 @@ export default function StripeComplete() {
     }
   }, [status])
 
-  const shareUrl = profile?.username ? getShareableLink(profile.username) : null
-  const fullShareUrl = shareUrl ? `https://${shareUrl}` : null
-
-  const handleCopy = async () => {
-    if (fullShareUrl) {
-      await navigator.clipboard.writeText(fullShareUrl)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 3000) // 3 seconds for better visibility
-    }
-  }
-
-  const handleShare = async () => {
-    if (fullShareUrl && navigator.share) {
-      try {
-        await navigator.share({
-          title: `Support ${profile?.displayName || 'me'} on NatePay`,
-          url: fullShareUrl,
-        })
-      } catch (err) {
-        // User cancelled or error
-      }
-    }
-  }
-
   // Manual continue - trust the optimistic update, don't refetch
   const handleContinue = useCallback(() => {
     setIsNavigating(true)
@@ -295,14 +269,18 @@ export default function StripeComplete() {
 
   // Auto-continue after success for a smoother flow (especially on mobile).
   // Only do this when user came from a known flow, so manual visits don't instantly redirect away.
+  // Onboarding flow gets instant redirect (no delay), settings gets brief delay to show success.
   useEffect(() => {
     if (status !== 'success') return
     if (source === 'unknown') return
     if (isNavigating) return
 
+    // Instant redirect for onboarding, brief delay for settings
+    const delay = source === 'onboarding' ? 300 : 1200
+
     const timer = window.setTimeout(() => {
       handleContinue()
-    }, 1200)
+    }, delay)
 
     return () => window.clearTimeout(timer)
   }, [status, source, isNavigating, handleContinue])
@@ -379,115 +357,70 @@ export default function StripeComplete() {
 
         {status === 'success' && (
           <>
-            {/* Success Header */}
+            {/* Success Header - simplified for onboarding */}
             <div className="status-content">
               <div className="status-icon success success-bounce">
                 <CheckCircle size={32} />
               </div>
-              <h2>You're ready to get paid!</h2>
-              <p>Your payment account is now active</p>
+              <h2>{source === 'onboarding' ? 'Connected!' : "You're ready to get paid!"}</h2>
+              <p>{source === 'onboarding' ? 'Redirecting...' : 'Your payment account is now active'}</p>
             </div>
 
-            {/* What's Connected */}
-            <div className="connected-details">
-              <div className="detail-item">
-                <div className="detail-icon">
-                  <Building2 size={18} />
-                </div>
-                <div className="detail-info">
-                  <span className="detail-label">Bank Account</span>
-                  <span className="detail-value">Connected via Stripe</span>
-                </div>
-                <CheckCircle size={16} className="detail-check" />
-              </div>
-
-              <div className="detail-item">
-                <div className="detail-icon">
-                  <Calendar size={18} />
-                </div>
-                <div className="detail-info">
-                  <span className="detail-label">Payouts</span>
-                  <span className="detail-value">Daily automatic deposits</span>
-                </div>
-                <CheckCircle size={16} className="detail-check" />
-              </div>
-            </div>
-
-            {/* Fee Breakdown - only show if from onboarding (first time) */}
-            {source === 'onboarding' && (() => {
-              // Split model: 4% subscriber + 4% creator = 8% total
-              const examplePrice = 10
-              const subscriberFee = examplePrice * 0.04  // 4%
-              const creatorFee = examplePrice * 0.04     // 4%
-              const subscriberPays = examplePrice + subscriberFee
-              const creatorReceives = examplePrice - creatorFee
-              return (
-                <div className="fee-breakdown">
-                  <div className="fee-header">How pricing works</div>
-                  <div className="fee-flow">
-                    <div className="fee-step highlight">
-                      <span className="fee-amount">${examplePrice}</span>
-                      <span className="fee-label">You set</span>
+            {/* Only show details for non-onboarding (settings) flow */}
+            {source !== 'onboarding' && (
+              <>
+                {/* What's Connected */}
+                <div className="connected-details">
+                  <div className="detail-item">
+                    <div className="detail-icon">
+                      <Building2 size={18} />
                     </div>
-                    <ArrowRight size={16} className="fee-arrow" />
-                    <div className="fee-step">
-                      <span className="fee-amount">${subscriberPays.toFixed(2).replace(/\.00$/, '')}</span>
-                      <span className="fee-label">Subscriber pays</span>
+                    <div className="detail-info">
+                      <span className="detail-label">Bank Account</span>
+                      <span className="detail-value">Connected via Stripe</span>
                     </div>
-                    <ArrowRight size={16} className="fee-arrow" />
-                    <div className="fee-step">
-                      <span className="fee-amount">${creatorReceives.toFixed(2).replace(/\.00$/, '')}</span>
-                      <span className="fee-label">You receive</span>
-                    </div>
+                    <CheckCircle size={16} className="detail-check" />
                   </div>
-                  <p className="fee-note">Secure payment (4%) + Instant payout (4%) = 8% total</p>
-                </div>
-              )
-            })()}
 
-            {/* Share Your Page - only show if from onboarding */}
-            {source === 'onboarding' && shareUrl && (
-              <div className="share-section">
-                <div className="share-header">Share your page</div>
-                <div className="share-url-box">
-                  <span className="share-url">{shareUrl}</span>
-                  <div className="share-actions">
-                    <Pressable className="share-btn" onClick={handleCopy}>
-                      {copied ? <CheckCircle size={18} /> : <Copy size={18} />}
-                    </Pressable>
-                    <Pressable className="share-btn primary" onClick={handleShare}>
-                      <Share2 size={18} />
-                    </Pressable>
+                  <div className="detail-item">
+                    <div className="detail-icon">
+                      <Calendar size={18} />
+                    </div>
+                    <div className="detail-info">
+                      <span className="detail-label">Payouts</span>
+                      <span className="detail-value">Daily automatic deposits</span>
+                    </div>
+                    <CheckCircle size={16} className="detail-check" />
                   </div>
                 </div>
-              </div>
+
+                {/* CTAs for settings flow */}
+                <div className="cta-section">
+                  <LoadingButton
+                    className="btn-primary"
+                    onClick={handleContinue}
+                    loading={isNavigating}
+                    fullWidth
+                  >
+                    Continue to {destinationText}
+                  </LoadingButton>
+                  <Pressable
+                    className="btn-secondary"
+                    onClick={async () => {
+                      try {
+                        const result = await api.stripe.getDashboardLink()
+                        if (result.url) window.open(result.url, '_blank', 'noopener,noreferrer')
+                      } catch (err) {
+                        if (import.meta.env.DEV) console.debug('[stripe] open dashboard failed', err)
+                      }
+                    }}
+                  >
+                    <span>Stripe Dashboard</span>
+                    <ExternalLink size={16} />
+                  </Pressable>
+                </div>
+              </>
             )}
-
-            {/* CTAs - NO auto-redirect, user must click */}
-            <div className="cta-section">
-              <LoadingButton
-                className="btn-primary"
-                onClick={handleContinue}
-                loading={isNavigating}
-                fullWidth
-              >
-                Continue to {destinationText}
-              </LoadingButton>
-              <Pressable
-                className="btn-secondary"
-                onClick={async () => {
-                  try {
-                    const result = await api.stripe.getDashboardLink()
-                    if (result.url) window.open(result.url, '_blank', 'noopener,noreferrer')
-                  } catch (err) {
-                    if (import.meta.env.DEV) console.debug('[stripe] open dashboard failed', err)
-                  }
-                }}
-              >
-                <span>Stripe Dashboard</span>
-                <ExternalLink size={16} />
-              </Pressable>
-            </div>
           </>
         )}
 

@@ -4,7 +4,6 @@ import { ChevronLeft, CreditCard, Check, Loader2, AlertCircle } from 'lucide-rea
 import { useOnboardingStore, type PaymentProvider } from './store'
 import { Button, Pressable } from './components'
 import { api } from '../api'
-import { getPricing } from '../utils/pricing'
 import { getMinimumAmount, getCurrencySymbol, getSuggestedAmounts } from '../utils/currency'
 import '../Dashboard.css'
 import './onboarding.css'
@@ -73,11 +72,6 @@ export default function PaymentMethodStep() {
     const store = useOnboardingStore()
     const { countryCode, country, setCurrency, branch, paymentProvider, setPaymentProvider, prevStep, reset, nextStep, currentStep } = store
     const [selectedMethod, setSelectedMethod] = useState<string | null>(paymentProvider)
-
-    // Get pricing based on branch (service vs personal)
-    const pricing = getPricing(branch === 'service' ? 'service' : undefined)
-    const feeLabel = pricing.transactionFeeLabel
-    // const [stripeCountryCodes, setStripeCountryCodes] = useState<string[]>([]) // Removed: Stripe enabled globally
     const [saving, setSaving] = useState(false)
     const [error, setError] = useState<string | null>(null)
 
@@ -264,7 +258,7 @@ export default function PaymentMethodStep() {
             <div className="onboarding-content">
                 <div className="step-header">
                     <h1>Connect payments</h1>
-                    <p>Choose how you want to receive your money. {feeLabel} fee per transaction{branch !== 'service' && ', no monthly fee'}.</p>
+                    <p>Choose how you want to receive your money.</p>
                 </div>
 
                 <div className="step-body">

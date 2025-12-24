@@ -1,10 +1,10 @@
 import { useState, useRef } from 'react'
-import { ChevronLeft, ChevronDown, Check, Loader2, AlertCircle, Camera } from 'lucide-react'
+import { ChevronLeft, ChevronDown, Check, Loader2, AlertCircle, Camera, RefreshCw } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useOnboardingStore } from './store'
 import { Button, Pressable } from './components'
 import { getShareableLink } from '../utils/constants'
-import { getCurrencySymbol } from '../utils/currency'
+import { getCurrencySymbol, getSuggestedAmounts } from '../utils/currency'
 import { api } from '../api'
 import { uploadFile } from '../api/hooks'
 import './onboarding.css'
@@ -21,6 +21,23 @@ const PURPOSE_OPTIONS: { value: Purpose; label: string }[] = [
     { value: 'other', label: 'Other' },
 ]
 
+// Currency options for cross-border creators
+const CROSS_BORDER_CURRENCIES = [
+    { code: 'USD', symbol: '$', label: 'USD' },
+    { code: 'GBP', symbol: '£', label: 'GBP' },
+    { code: 'EUR', symbol: '€', label: 'EUR' },
+]
+
+// Countries that receive payouts in local currency via Stripe cross-border
+const CROSS_BORDER_COUNTRIES = ['NG', 'GH', 'KE']
+
+// Local currency names for cross-border countries
+const LOCAL_CURRENCY_NAMES: Record<string, string> = {
+    'NG': 'Naira (NGN)',
+    'GH': 'Cedis (GHS)',
+    'KE': 'Shillings (KES)',
+}
+
 export default function PersonalReviewStep() {
     const navigate = useNavigate()
     const fileInputRef = useRef<HTMLInputElement>(null)
@@ -28,6 +45,7 @@ export default function PersonalReviewStep() {
     const [isUploading, setIsUploading] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [showPurposeDrawer, setShowPurposeDrawer] = useState(false)
+    const [showCurrencyDrawer, setShowCurrencyDrawer] = useState(false)
 
     const {
         firstName,
@@ -41,6 +59,7 @@ export default function PersonalReviewStep() {
         country,
         countryCode,
         currency,
+        setCurrency,
         avatarUrl,
         paymentProvider,
         address,
@@ -56,6 +75,10 @@ export default function PersonalReviewStep() {
         reset
     } = useOnboardingStore()
 
+    // Determine if user is a cross-border creator using Stripe
+    const isCrossBorderStripe = paymentProvider === 'stripe' && CROSS_BORDER_COUNTRIES.includes(countryCode?.toUpperCase() || '')
+    const localCurrencyName = LOCAL_CURRENCY_NAMES[countryCode?.toUpperCase() || ''] || 'local currency'
+
     // Construct display name from first/last name
     const displayName = `${firstName} ${lastName}`.trim()
 
@@ -64,6 +87,17 @@ export default function PersonalReviewStep() {
 
     // Price input as string for free editing
     const [priceInput, setPriceInput] = useState(String(singleAmount || 10))
+
+    // Handle currency change - adjust price to sensible default for new currency
+    const handleCurrencyChange = (newCurrency: string) => {
+        setCurrency(newCurrency)
+        // Set a sensible default price for the new currency
+        const suggestedAmounts = getSuggestedAmounts(newCurrency, branch === 'service' ? 'service' : 'personal')
+        const newPrice = suggestedAmounts[0] || 10
+        setPriceInput(String(newPrice))
+        setPricing('single', tiers, newPrice)
+        setShowCurrencyDrawer(false)
+    }
 
     // Format number with commas for display
     const formatWithCommas = (val: string): string => {
@@ -148,6 +182,11 @@ export default function PersonalReviewStep() {
     const handleLaunch = async () => {
         if (!displayName || !username) {
             setError('Please fill in all fields.')
+            return
+        }
+
+        if (!avatarUrl) {
+            setError('Please add a profile photo.')
             return
         }
 
@@ -279,7 +318,18 @@ export default function PersonalReviewStep() {
 
                     {/* Pricing Card */}
                     <div className="setup-price-card">
-                        <span className="setup-price-currency" style={{ fontSize: Math.max(16, getPriceFontSize(priceInput) / 2) }}>{currencySymbol}</span>
+                        {isCrossBorderStripe ? (
+                            <Pressable
+                                className="setup-price-currency-btn"
+                                onClick={() => setShowCurrencyDrawer(true)}
+                                style={{ fontSize: Math.max(16, getPriceFontSize(priceInput) / 2) }}
+                            >
+                                {currencySymbol}
+                                <ChevronDown size={14} style={{ marginLeft: 2, opacity: 0.5 }} />
+                            </Pressable>
+                        ) : (
+                            <span className="setup-price-currency" style={{ fontSize: Math.max(16, getPriceFontSize(priceInput) / 2) }}>{currencySymbol}</span>
+                        )}
                         <input
                             type="text"
                             inputMode="decimal"
@@ -291,6 +341,14 @@ export default function PersonalReviewStep() {
                         />
                         <span className="setup-price-period">/month</span>
                     </div>
+
+                    {/* Conversion note for cross-border creators */}
+                    {isCrossBorderStripe && (
+                        <div className="setup-conversion-note">
+                            <RefreshCw size={14} />
+                            <span>Payouts convert to {localCurrencyName} at market rate</span>
+                        </div>
+                    )}
                 </div>
 
                 {error && (
@@ -342,6 +400,37 @@ export default function PersonalReviewStep() {
                                 >
                                     <span className="country-option-name">{option.label}</span>
                                     {resolvedPurpose === option.value && (
+                                        <Check size={20} className="country-option-check" />
+                                    )}
+                                </Pressable>
+                            ))}
+                        </div>
+                    </div>
+                </>
+            )}
+
+            {/* Currency Drawer - for cross-border creators */}
+            {showCurrencyDrawer && (
+                <>
+                    <div
+                        className="drawer-overlay"
+                        onClick={() => setShowCurrencyDrawer(false)}
+                    />
+                    <div className="country-drawer">
+                        <div className="drawer-handle" />
+                        <h3 className="drawer-title">Choose currency</h3>
+                        <p style={{ fontSize: 13, color: 'var(--text-secondary)', textAlign: 'center', marginBottom: 16 }}>
+                            Payouts will be converted to {localCurrencyName}
+                        </p>
+                        <div className="country-list">
+                            {CROSS_BORDER_CURRENCIES.map((curr) => (
+                                <Pressable
+                                    key={curr.code}
+                                    className={`country-option ${currency === curr.code ? 'selected' : ''}`}
+                                    onClick={() => handleCurrencyChange(curr.code)}
+                                >
+                                    <span className="country-option-name">{curr.symbol} {curr.label}</span>
+                                    {currency === curr.code && (
                                         <Check size={20} className="country-option-check" />
                                     )}
                                 </Pressable>

@@ -2991,13 +2991,26 @@ button.btn .spinning {
 
 .setup-name-row {
     display: flex;
-    gap: var(--space-sm);
+    gap: 0;
     width: 100%;
+    justify-content: center;
 }
 
 .setup-name-row .setup-name-input {
-    flex: 1;
+    flex: 0 1 auto;
     min-width: 0;
+    max-width: 50%;
+}
+
+/* First name: right-aligned, last name: left-aligned for natural flow */
+.setup-name-row .setup-name-input:first-child {
+    text-align: right;
+    padding-right: 4px;
+}
+
+.setup-name-row .setup-name-input:last-child {
+    text-align: left;
+    padding-left: 4px;
 }
 
 .setup-name-input {
@@ -3068,6 +3081,42 @@ button.btn .spinning {
     font-size: 24px;
     font-weight: 600;
     color: var(--text-secondary);
+}
+
+.setup-price-currency-btn {
+    display: flex;
+    align-items: center;
+    font-size: 24px;
+    font-weight: 600;
+    color: var(--primary);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px 8px;
+    margin: -4px -8px;
+    border-radius: var(--radius-sm);
+    transition: background-color 0.15s ease;
+}
+
+.setup-price-currency-btn:hover {
+    background: var(--bg-hover);
+}
+
+.setup-price-currency-btn:active {
+    background: var(--bg-active);
+}
+
+.setup-conversion-note {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--text-tertiary);
+    margin-top: 12px;
+    padding: 8px 12px;
+    background: var(--bg-subtle);
+    border-radius: var(--radius-md);
 }
 
 .setup-price-input {
