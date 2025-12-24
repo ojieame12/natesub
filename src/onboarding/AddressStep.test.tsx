@@ -18,11 +18,13 @@ describe('AddressStep', () => {
     mockSaveProgress.mockResolvedValue({ success: true })
 
     // Setup minimal state
+    // Reset _lastNavTime to 0 to bypass the 300ms navigation cooldown in tests
     useOnboardingStore.setState({
       country: 'United States',
       countryCode: 'US',
       currentStep: 4,
-    })
+      _lastNavTime: 0,
+    } as any)
   })
 
   describe('validation', () => {
@@ -84,7 +86,7 @@ describe('AddressStep', () => {
 
   describe('saving progress', () => {
     it('calls saveProgress with address data and currentStep + 1', async () => {
-      useOnboardingStore.setState({ currentStep: 4 })
+      useOnboardingStore.setState({ currentStep: 4, _lastNavTime: 0 } as any)
 
       renderWithProviders(<AddressStep />)
       const user = userEvent.setup()
@@ -111,7 +113,7 @@ describe('AddressStep', () => {
     })
 
     it('advances to next step after saving', async () => {
-      useOnboardingStore.setState({ currentStep: 4 })
+      useOnboardingStore.setState({ currentStep: 4, _lastNavTime: 0 } as any)
 
       renderWithProviders(<AddressStep />)
       const user = userEvent.setup()
@@ -130,7 +132,7 @@ describe('AddressStep', () => {
       mockSaveProgress.mockRejectedValueOnce(new Error('Network error'))
       vi.spyOn(console, 'warn').mockImplementation(() => {})
 
-      useOnboardingStore.setState({ currentStep: 4 })
+      useOnboardingStore.setState({ currentStep: 4, _lastNavTime: 0 } as any)
 
       renderWithProviders(<AddressStep />)
       const user = userEvent.setup()
@@ -157,7 +159,7 @@ describe('AddressStep', () => {
     })
 
     it('has back button that goes to previous step', async () => {
-      useOnboardingStore.setState({ currentStep: 4 })
+      useOnboardingStore.setState({ currentStep: 4, _lastNavTime: 0 } as any)
 
       renderWithProviders(<AddressStep />)
 

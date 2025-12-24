@@ -21,6 +21,9 @@ describe('onboarding/AIGeneratingStep', () => {
   beforeEach(() => {
     mocks.generate.mockReset()
     mocks.blobToBase64.mockReset()
+    // Reset store and clear navigation cooldown for tests
+    useOnboardingStore.getState().reset()
+    useOnboardingStore.setState({ _lastNavTime: 0 } as any)
   })
 
   it('fetches recorded audio, converts to base64 with correct mimeType, and calls generate', async () => {
