@@ -99,13 +99,40 @@ export async function createExpressAccount(
     const disabledReason = account.requirements?.disabled_reason || null
     const needsUpdate = currentlyDue.length > 0 || Boolean(disabledReason)
 
-    if (needsOnboarding) {
-      const accountLink = await createAccountLink(profile.stripeAccountId, { type: 'account_onboarding' })
-      return { accountId: profile.stripeAccountId, accountLink }
-    }
+    if (needsOnboarding || needsUpdate) {
+      // Update account with current user info for prefill
+      const nameParts = displayName?.trim().split(' ') || []
+      const firstName = nameParts[0] || undefined
+      const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : undefined
 
-    if (needsUpdate) {
-      const accountLink = await createAccountLink(profile.stripeAccountId, { type: 'account_update' })
+      const updateData: Stripe.AccountUpdateParams = {
+        email,
+        individual: {
+          email,
+          first_name: firstName,
+          last_name: lastName,
+        },
+      }
+
+      // Add address if available
+      if (address && (address.line1 || address.city)) {
+        updateData.individual!.address = {
+          line1: address.line1,
+          city: address.city,
+          state: address.state,
+          postal_code: address.postal_code,
+        }
+      }
+
+      try {
+        await stripe.accounts.update(profile.stripeAccountId, updateData)
+      } catch (err) {
+        // Non-fatal: prefill is nice-to-have, don't block onboarding
+        console.warn('[stripe] Failed to update account for prefill:', err)
+      }
+
+      const linkType = needsOnboarding ? 'account_onboarding' : 'account_update'
+      const accountLink = await createAccountLink(profile.stripeAccountId, { type: linkType })
       return { accountId: profile.stripeAccountId, accountLink }
     }
 
