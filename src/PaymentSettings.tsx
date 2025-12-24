@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Building2, Check, CreditCard, ExternalLink, Loader2, RefreshCw, TriangleAlert } from 'lucide-react'
-import { InlineError, Pressable, Skeleton } from './components'
+import { InlineError, Pressable, Skeleton, SwiftCodeLookup } from './components'
 import { api } from './api'
 import type { PaystackConnectionStatus } from './api/client'
 import { useProfile } from './api/hooks'
 import { formatCurrencyFromCents } from './utils/currency'
+import { needsSwiftCodeHelp } from './utils/swiftCodes'
 import './PaymentSettings.css'
 
 type StripeStatus = Awaited<ReturnType<typeof api.stripe.getStatus>>
@@ -61,6 +62,7 @@ export default function PaymentSettings() {
 
   const profileCurrency = profileData?.profile?.currency || 'USD'
   const defaultProvider = profileData?.profile?.paymentProvider || null
+  const userCountryCode = profileData?.profile?.countryCode || null
 
   const returnTo = useMemo(() => getLocationReturnTo(location.state), [location.state])
 
@@ -78,6 +80,8 @@ export default function PaymentSettings() {
   const [stripeFixing, setStripeFixing] = useState(false)
   const [stripeRefreshing, setStripeRefreshing] = useState(false)
   const [stripeOpeningDashboard, setStripeOpeningDashboard] = useState(false)
+  const [showSwiftLookup, setShowSwiftLookup] = useState(false)
+  const [pendingStripeUrl, setPendingStripeUrl] = useState<string | null>(null)
 
   useEffect(() => {
     isMountedRef.current = true
@@ -204,6 +208,14 @@ export default function PaymentSettings() {
         sessionStorage.setItem('stripe_return_to', returnTo || '/settings/payments')
         sessionStorage.setItem('stripe_onboarding_source', 'settings')
         sessionStorage.setItem('stripe_onboarding_started_at', Date.now().toString())
+
+        // For cross-border countries, show SWIFT code helper first
+        if (needsSwiftCodeHelp(userCountryCode)) {
+          setPendingStripeUrl(result.onboardingUrl)
+          setShowSwiftLookup(true)
+          return
+        }
+
         window.location.href = result.onboardingUrl
         return
       }
@@ -219,7 +231,19 @@ export default function PaymentSettings() {
     } finally {
       if (isMountedRef.current) setStripeConnecting(false)
     }
-  }, [loadPaymentData, returnTo])
+  }, [loadPaymentData, returnTo, userCountryCode])
+
+  const handleSwiftLookupContinue = useCallback(() => {
+    if (pendingStripeUrl) {
+      window.location.href = pendingStripeUrl
+    }
+  }, [pendingStripeUrl])
+
+  const handleSwiftLookupClose = useCallback(() => {
+    setShowSwiftLookup(false)
+    setPendingStripeUrl(null)
+    setStripeConnecting(false)
+  }, [])
 
   const handleFixStripe = useCallback(async () => {
     setStripeFixing(true)
@@ -232,6 +256,14 @@ export default function PaymentSettings() {
         if (returnTo) sessionStorage.setItem('stripe_return_to', returnTo)
         sessionStorage.setItem('stripe_onboarding_source', 'settings')
         sessionStorage.setItem('stripe_onboarding_started_at', Date.now().toString())
+
+        // For cross-border countries, show SWIFT code helper first
+        if (needsSwiftCodeHelp(userCountryCode)) {
+          setPendingStripeUrl(result.onboardingUrl)
+          setShowSwiftLookup(true)
+          return
+        }
+
         window.location.href = result.onboardingUrl
       } else {
         setStripeError('Unable to get onboarding link. Please try again.')
@@ -241,7 +273,7 @@ export default function PaymentSettings() {
     } finally {
       if (isMountedRef.current) setStripeFixing(false)
     }
-  }, [returnTo])
+  }, [returnTo, userCountryCode])
 
   const handleRefreshStripeStatus = useCallback(async () => {
     setStripeRefreshing(true)
@@ -545,6 +577,15 @@ export default function PaymentSettings() {
           </div>
         </section>
       </div>
+
+      {/* SWIFT Code Lookup Modal for cross-border countries */}
+      {showSwiftLookup && userCountryCode && (
+        <SwiftCodeLookup
+          countryCode={userCountryCode}
+          onContinue={handleSwiftLookupContinue}
+          onClose={handleSwiftLookupClose}
+        />
+      )}
     </div>
   )
 }

@@ -1,0 +1,185 @@
+/* ===========================================
+   SWIFT CODE LOOKUP MODAL
+   Pre-Stripe onboarding helper for cross-border users
+   =========================================== */
+
+.swift-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 100;
+  animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.swift-modal {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--bg-card);
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  padding: var(--space-lg);
+  padding-bottom: calc(env(safe-area-inset-bottom, 20px) + var(--space-lg));
+  z-index: 101;
+  animation: slideUp 0.3s ease-out;
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+.swift-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: var(--space-md);
+}
+
+.swift-header-content {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.swift-header-icon {
+  color: var(--accent-blue);
+}
+
+.swift-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.swift-close {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+}
+
+.swift-close.pressed {
+  background: var(--neutral-100);
+}
+
+.swift-description {
+  font-size: 15px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 0 0 var(--space-lg);
+}
+
+.swift-select-wrapper {
+  margin-bottom: var(--space-lg);
+}
+
+.swift-select {
+  width: 100%;
+  padding: var(--space-md);
+  font-size: 16px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  background: var(--bg-base);
+  color: var(--text-primary);
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right var(--space-md) center;
+  cursor: pointer;
+}
+
+.swift-select:focus {
+  outline: none;
+  border-color: var(--neutral-400);
+}
+
+.swift-result {
+  background: var(--neutral-50);
+  border-radius: var(--radius-lg);
+  padding: var(--space-md);
+  margin-bottom: var(--space-lg);
+  animation: fadeIn 0.2s ease-out;
+}
+
+.swift-result-label {
+  font-size: 13px;
+  color: var(--text-tertiary);
+  margin-bottom: var(--space-xs);
+}
+
+.swift-result-code {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+
+.swift-code-text {
+  font-size: 24px;
+  font-weight: 700;
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+  color: var(--text-primary);
+  letter-spacing: 1px;
+}
+
+.swift-copy-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--neutral-900);
+  color: white;
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  font-weight: 500;
+  transition: transform 0.1s ease;
+}
+
+.swift-copy-btn.pressed {
+  transform: scale(0.96);
+  opacity: 0.9;
+}
+
+.swift-actions {
+  margin-bottom: var(--space-md);
+}
+
+.swift-continue-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  background: var(--neutral-900);
+  color: white;
+  border-radius: var(--radius-lg);
+  font-size: 16px;
+  font-weight: 600;
+  transition: transform 0.1s ease;
+}
+
+.swift-continue-btn.pressed {
+  transform: scale(0.98);
+  opacity: 0.9;
+}
+
+.swift-footer {
+  font-size: 13px;
+  color: var(--text-tertiary);
+  text-align: center;
+  margin: 0;
+  line-height: 1.4;
+}
