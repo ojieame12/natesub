@@ -511,6 +511,8 @@ export async function createCheckoutSession(params: {
 }
 
 // Get account balance
+// Returns balance for primary currency only (first in available array)
+// Multi-currency accounts: only sums amounts matching primary currency to avoid mixing
 export async function getAccountBalance(stripeAccountId: string) {
   const balance = await stripe.balance.retrieve({
     stripeAccount: stripeAccountId,
@@ -518,12 +520,22 @@ export async function getAccountBalance(stripeAccountId: string) {
 
   // Get the primary currency from the first available balance entry
   // For cross-border accounts (NG, KE, GH, ZA), this will be USD
-  const currency = balance.available[0]?.currency?.toUpperCase() || 'USD'
+  const primaryCurrency = balance.available[0]?.currency?.toLowerCase() || 'usd'
+
+  // Only sum balances matching primary currency to avoid mixing currencies
+  // (e.g., 100 USD + 50000 NGN would incorrectly show 50100 if we sum blindly)
+  const available = balance.available
+    .filter(b => b.currency === primaryCurrency)
+    .reduce((sum, b) => sum + b.amount, 0)
+
+  const pending = balance.pending
+    .filter(b => b.currency === primaryCurrency)
+    .reduce((sum, b) => sum + b.amount, 0)
 
   return {
-    available: balance.available.reduce((sum, b) => sum + b.amount, 0),
-    pending: balance.pending.reduce((sum, b) => sum + b.amount, 0),
-    currency,
+    available,
+    pending,
+    currency: primaryCurrency.toUpperCase(),
   }
 }
 

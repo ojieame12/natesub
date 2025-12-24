@@ -83,12 +83,16 @@ export default function ActivityDetail() {
     const currencySymbol = getCurrencySymbol(currencyCode)
 
     // Map API data to UI format
+    // Safely extract name - handle null, undefined, and empty strings
+    const rawName = payload.subscriberName || payload.recipientName || payload.subscriberEmail || ''
+    const displayName = rawName && rawName.trim() ? rawName.trim() : 'Unknown'
+
     const activity = activityData ? {
         id: activityData.id,
         type: activityData.type,
-        name: payload.subscriberName || payload.recipientName || 'Unknown',
+        name: displayName,
         email: payload.subscriberEmail || payload.recipientEmail || '',
-        amount: centsToDisplayAmount(payload.amount || 0, currencyCode),
+        amount: centsToDisplayAmount(payload.amount ?? 0, currencyCode),
         time: formatTime(activityData.createdAt),
         tier: payload.tierName || (isService ? 'Client' : 'Supporter'),
         date: formatDate(activityData.createdAt),
@@ -197,7 +201,7 @@ export default function ActivityDetail() {
                 <div className="detail-card">
                     <div className="detail-card-title">{isService ? 'Client' : 'Customer'}</div>
                     <div className="customer-row">
-                        <div className="customer-avatar">{activity.name[0]}</div>
+                        <div className="customer-avatar">{activity.name?.[0] || '?'}</div>
                         <div className="customer-info">
                             <div className="customer-name">{activity.name}</div>
                             <div className="customer-email">{activity.email}</div>

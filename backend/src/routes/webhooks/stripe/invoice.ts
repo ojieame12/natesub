@@ -567,13 +567,16 @@ export async function handleInvoicePaid(event: Stripe.Event) {
     }
 
     // Create activity event
+    // IMPORTANT: Show NET amount (what creator receives), not gross
     await db.activity.create({
       data: {
         userId: subscription.creatorId,
         type: 'payment_received',
         payload: {
           subscriptionId: subscription.id,
-          amount: invoice.amount_paid,
+          amount: netCents,              // NET - what creator receives after fees
+          grossAmount: invoice.amount_paid, // GROSS - what subscriber paid
+          feeCents,                      // Platform fee taken
           currency: invoice.currency,
         },
       },

@@ -8,6 +8,7 @@ import { monitorStuckTransfers } from '../jobs/transfers.js'
 import { reconcilePaystackTransactions } from '../jobs/reconciliation.js'
 import { processDueReminders, scanAndScheduleMissedReminders } from '../jobs/reminders.js'
 import { cleanupOldPageViews } from '../jobs/cleanup.js'
+import { syncAllActiveBalances } from '../services/balanceSync.js'
 import {
   monitorDisputeRatio,
   monitorFirstPaymentDisputes,
@@ -407,11 +408,34 @@ jobs.post('/dispute-monitoring', async (c) => {
   }
 })
 
+// Sync creator balances from Stripe/Paystack (run every 15-30 minutes)
+// This keeps dashboard balance data fresh even for inactive users
+jobs.post('/sync-balances', async (c) => {
+  console.log('[jobs] Starting balance sync for all active creators...')
+  const startTime = Date.now()
+
+  try {
+    const result = await syncAllActiveBalances()
+    const durationMs = Date.now() - startTime
+
+    console.log(`[jobs] Balance sync complete: synced=${result.synced}, failed=${result.failed}, skipped=${result.skipped}, duration=${durationMs}ms`)
+
+    return c.json({
+      success: true,
+      ...result,
+      durationMs,
+    })
+  } catch (error: any) {
+    console.error('[jobs] Balance sync job failed:', error.message)
+    return c.json({ error: 'Balance sync job failed', message: error.message }, 500)
+  }
+})
+
 // Health check for job system
 jobs.get('/health', async (c) => {
   return c.json({
     status: 'ok',
-    jobs: ['billing', 'retries', 'payroll', 'reminders', 'dunning', 'cancellations', 'notifications', 'transfers', 'reconciliation', 'scheduled-reminders', 'scan-missed-reminders', 'cleanup-sessions', 'cleanup-otps', 'cleanup-auth', 'cleanup-pageviews', 'stats-aggregate', 'stats-backfill', 'dispute-monitoring'],
+    jobs: ['billing', 'retries', 'payroll', 'reminders', 'dunning', 'cancellations', 'notifications', 'transfers', 'reconciliation', 'scheduled-reminders', 'scan-missed-reminders', 'cleanup-sessions', 'cleanup-otps', 'cleanup-auth', 'cleanup-pageviews', 'stats-aggregate', 'stats-backfill', 'dispute-monitoring', 'sync-balances'],
     timestamp: new Date().toISOString(),
   })
 })

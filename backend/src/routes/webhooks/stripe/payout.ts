@@ -2,7 +2,7 @@ import Stripe from 'stripe'
 import { db } from '../../../db/client.js'
 import { notifyPayoutFailed } from '../../../services/notifications.js'
 import { alertPayoutFailed } from '../../../services/slack.js'
-import { syncCreatorBalance } from '../../../services/balanceSync.js'
+import { syncCreatorBalance, PAYOUT_STATUS } from '../../../services/balanceSync.js'
 
 // Handle payout.created - when Stripe initiates a payout to connected account
 // This creates visibility into "money on the way" state
@@ -32,7 +32,7 @@ export async function handlePayoutCreated(event: Stripe.Event) {
     data: {
       lastPayoutAmountCents: payout.amount,
       lastPayoutAt: new Date(payout.created * 1000),
-      lastPayoutStatus: 'pending',
+      lastPayoutStatus: PAYOUT_STATUS.PENDING,
     },
   })
 
@@ -51,8 +51,8 @@ export async function handlePayoutCreated(event: Stripe.Event) {
     },
   })
 
-  // Sync balance to reflect the pending payout
-  await syncCreatorBalance(profile.userId).catch(err =>
+  // Sync balance to reflect the pending payout (force = true bypasses cooldown)
+  await syncCreatorBalance(profile.userId, true).catch(err =>
     console.error(`[payout.created] Balance sync failed:`, err)
   )
 
@@ -116,14 +116,14 @@ export async function handlePayoutPaid(event: Stripe.Event) {
     where: { id: profile.id },
     data: {
       payoutStatus: 'active',
-      lastPayoutStatus: 'paid',
+      lastPayoutStatus: PAYOUT_STATUS.PAID,
       lastPayoutAmountCents: payout.amount,
       lastPayoutAt: payout.arrival_date ? new Date(payout.arrival_date * 1000) : new Date(),
     },
   })
 
-  // Sync balance to reflect completed payout (pending decreases, available may decrease)
-  await syncCreatorBalance(profile.userId).catch(err =>
+  // Sync balance to reflect completed payout (force = true bypasses cooldown)
+  await syncCreatorBalance(profile.userId, true).catch(err =>
     console.error(`[payout.paid] Balance sync failed:`, err)
   )
 
@@ -192,7 +192,7 @@ export async function handlePayoutFailed(event: Stripe.Event) {
     where: { id: profile.id },
     data: {
       payoutStatus: 'restricted',
-      lastPayoutStatus: 'failed',
+      lastPayoutStatus: PAYOUT_STATUS.FAILED,
     },
   })
 

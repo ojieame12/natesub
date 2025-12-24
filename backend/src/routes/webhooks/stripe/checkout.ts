@@ -357,6 +357,7 @@ export async function handleCheckoutCompleted(event: Stripe.Event) {
       }
 
       // Create activity event
+      // IMPORTANT: Show NET amount (what creator receives), not gross
       await tx.activity.create({
         data: {
           userId: creatorId,
@@ -366,7 +367,9 @@ export async function handleCheckoutCompleted(event: Stripe.Event) {
             subscriberEmail,
             subscriberName,
             tierName,
-            amount: session.amount_total,
+            amount: netCents,           // NET - what creator receives after fees
+            grossAmount: grossCents,    // GROSS - what subscriber paid (for reference)
+            feeCents,                   // Platform fee taken
             currency: session.currency,
           },
         },
@@ -653,6 +656,7 @@ export async function handleAsyncPaymentSucceeded(event: Stripe.Event) {
   await invalidateAdminRevenueCache()
 
   // Create activity
+  // IMPORTANT: Show NET amount (what creator receives), not gross
   await db.activity.create({
     data: {
       userId: creatorId,
@@ -661,7 +665,9 @@ export async function handleAsyncPaymentSucceeded(event: Stripe.Event) {
         subscriptionId: subscription.id,
         subscriberEmail,
         tierName,
-        amount: session.amount_total,
+        amount: netCents,            // NET - what creator receives after fees
+        grossAmount: grossCents,     // GROSS - what subscriber paid (for reference)
+        feeCents,                    // Platform fee taken
         currency: session.currency,
         asyncPayment: true,
       },
