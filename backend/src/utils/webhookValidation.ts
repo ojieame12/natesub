@@ -33,6 +33,10 @@ export const stripeCheckoutMetadataSchema = z.object({
   baseAmountCents: z.string().regex(/^\d+$/, 'baseAmountCents must be numeric string').optional(),
   // Platform debit recovery (for service providers with lapsed platform subscription)
   platformDebitRecovered: z.string().regex(/^\d+$/, 'platformDebitRecovered must be numeric string').optional(),
+  // Dispute evidence (for chargeback defense)
+  checkoutIp: z.string().optional(),
+  checkoutUserAgent: z.string().optional(),
+  checkoutAcceptLanguage: z.string().optional(),
 })
 
 /**
@@ -73,23 +77,41 @@ export function validateCheckoutMetadata(metadata: Record<string, string> | null
 
 /**
  * Paystack transaction metadata schema
+ * NOTE: Paystack stores all metadata values as strings, so we coerce them
  */
+const coerceNumber = z.preprocess(
+  (val) => (typeof val === 'string' ? parseInt(val, 10) : val),
+  z.number().int().min(0)
+)
+const coerceFloat = z.preprocess(
+  (val) => (typeof val === 'string' ? parseFloat(val) : val),
+  z.number().min(0).max(100)
+)
+const coerceBoolean = z.preprocess(
+  (val) => (val === 'true' ? true : val === 'false' ? false : val),
+  z.boolean()
+)
+
 export const paystackTransactionMetadataSchema = z.object({
   creatorId: z.string().uuid('Invalid creatorId format'),
   tierId: z.string().optional(),
   interval: z.enum(['month', 'one_time']),
   viewId: z.string().optional(),
-  // Fee tracking
-  creatorAmount: z.number().int().min(0).optional(),
-  serviceFee: z.number().int().min(0).optional(),
+  // Fee tracking - coerce strings to numbers (Paystack stores as strings)
+  creatorAmount: coerceNumber.optional(),
+  serviceFee: coerceNumber.optional(),
   feeModel: z.string().optional(),
   feeMode: z.enum(['absorb', 'pass_to_subscriber', 'split']).optional(),
-  feeEffectiveRate: z.number().min(0).max(100).optional(),
-  feeWasCapped: z.boolean().optional(),
+  feeEffectiveRate: coerceFloat.optional(),
+  feeWasCapped: coerceBoolean.optional(),
   // Split fee fields (v2 model)
-  baseAmount: z.number().int().min(0).optional(),
-  subscriberFee: z.number().int().min(0).optional(),
-  creatorFee: z.number().int().min(0).optional(),
+  baseAmount: coerceNumber.optional(),
+  subscriberFee: coerceNumber.optional(),
+  creatorFee: coerceNumber.optional(),
+  // Dispute evidence (for chargeback defense)
+  checkoutIp: z.string().optional(),
+  checkoutUserAgent: z.string().optional(),
+  checkoutAcceptLanguage: z.string().optional(),
 })
 
 /**

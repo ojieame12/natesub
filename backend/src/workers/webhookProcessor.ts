@@ -10,7 +10,8 @@ import { handleSubscriptionUpdated, handleSubscriptionDeleted } from '../routes/
 import { handleAccountUpdated } from '../routes/webhooks/stripe/connect.js'
 import { handleChargeRefunded, handlePaymentIntentFailed } from '../routes/webhooks/stripe/payment.js'
 import { handleDisputeCreated, handleDisputeClosed } from '../routes/webhooks/stripe/dispute.js'
-import { handlePayoutFailed } from '../routes/webhooks/stripe/payout.js'
+import { handlePayoutPaid, handlePayoutFailed } from '../routes/webhooks/stripe/payout.js'
+import { handleEarlyFraudWarning } from '../routes/webhooks/stripe/early-fraud-warning.js'
 
 // Paystack Handlers
 import { handlePaystackChargeSuccess, handlePaystackChargeFailed } from '../routes/webhooks/paystack/charge.js'
@@ -161,11 +162,17 @@ async function processStripeEvent(event: any) {
     case 'checkout.session.expired':
       await handleCheckoutExpired(event)
       break
+    case 'payout.paid':
+      await handlePayoutPaid(event)
+      break
     case 'payout.failed':
       await handlePayoutFailed(event)
       break
     case 'payment_intent.payment_failed':
       await handlePaymentIntentFailed(event)
+      break
+    case 'radar.early_fraud_warning.created':
+      await handleEarlyFraudWarning(event)
       break
     default:
       console.log(`[worker] Unhandled Stripe event type: ${event.type}`)

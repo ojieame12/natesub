@@ -8,6 +8,13 @@ import { monitorStuckTransfers } from '../jobs/transfers.js'
 import { reconcilePaystackTransactions } from '../jobs/reconciliation.js'
 import { processDueReminders, scanAndScheduleMissedReminders } from '../jobs/reminders.js'
 import { cleanupOldPageViews } from '../jobs/cleanup.js'
+import {
+  monitorDisputeRatio,
+  monitorFirstPaymentDisputes,
+  monitorRefundRate,
+  monitorFraudRate,
+  monitorCreatorDisputeRates,
+} from '../jobs/dispute-monitoring.js'
 
 const jobs = new Hono()
 
@@ -370,11 +377,41 @@ jobs.post('/stats-backfill', async (c) => {
   }
 })
 
+// Monitor dispute rates for Visa VAMP compliance (run daily)
+// Tracks: platform dispute ratio, first-payment disputes, refund rate, fraud rate, per-creator rates
+jobs.post('/dispute-monitoring', async (c) => {
+  console.log('[jobs] Starting dispute monitoring job')
+
+  try {
+    const [disputeRatio, firstPayment, refundRate, fraudRate, creatorRates] = await Promise.all([
+      monitorDisputeRatio(),
+      monitorFirstPaymentDisputes(),
+      monitorRefundRate(),
+      monitorFraudRate(),
+      monitorCreatorDisputeRates(),
+    ])
+
+    console.log(`[jobs] Dispute monitoring complete: ${disputeRatio.disputeRatio.toFixed(4)}% dispute rate, ${fraudRate.fraudRate.toFixed(4)}% fraud rate`)
+
+    return c.json({
+      success: true,
+      disputeRatio,
+      firstPayment,
+      refundRate,
+      fraudRate,
+      creatorRates,
+    })
+  } catch (error: any) {
+    console.error('[jobs] Dispute monitoring job failed:', error.message)
+    return c.json({ error: 'Dispute monitoring job failed', message: error.message }, 500)
+  }
+})
+
 // Health check for job system
 jobs.get('/health', async (c) => {
   return c.json({
     status: 'ok',
-    jobs: ['billing', 'retries', 'payroll', 'reminders', 'dunning', 'cancellations', 'notifications', 'transfers', 'reconciliation', 'scheduled-reminders', 'scan-missed-reminders', 'cleanup-sessions', 'cleanup-otps', 'cleanup-auth', 'cleanup-pageviews', 'stats-aggregate', 'stats-backfill'],
+    jobs: ['billing', 'retries', 'payroll', 'reminders', 'dunning', 'cancellations', 'notifications', 'transfers', 'reconciliation', 'scheduled-reminders', 'scan-missed-reminders', 'cleanup-sessions', 'cleanup-otps', 'cleanup-auth', 'cleanup-pageviews', 'stats-aggregate', 'stats-backfill', 'dispute-monitoring'],
     timestamp: new Date().toISOString(),
   })
 })

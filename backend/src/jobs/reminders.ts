@@ -20,6 +20,8 @@ import {
   sendRenewalReminderEmail,
   sendPaymentFailedEmail,
 } from '../services/email.js'
+import { calculateServiceFee, calculateLegacyServiceFee, type FeeMode } from '../services/fees.js'
+import { isStripeCrossBorderSupported } from '../utils/constants.js'
 import {
   isSmsEnabled,
   shouldUseSms,
@@ -33,6 +35,7 @@ import {
 import { decrypt, decryptAccountNumber } from '../utils/encryption.js'
 import { acquireLock, releaseLock } from '../services/lock.js'
 import { logReminderSent, logReminderFailed } from '../services/systemLog.js'
+import { generateCancelUrl } from '../utils/cancelToken.js'
 
 // ============================================
 // HELPERS
@@ -473,6 +476,11 @@ export async function scheduleSubscriptionRenewalReminders(subscriptionId: strin
   await cancelReminder({
     entityType: 'subscription',
     entityId: subscriptionId,
+    type: 'subscription_renewal_7d',
+  })
+  await cancelReminder({
+    entityType: 'subscription',
+    entityId: subscriptionId,
     type: 'subscription_renewal_3d',
   })
   await cancelReminder({
@@ -480,6 +488,18 @@ export async function scheduleSubscriptionRenewalReminders(subscriptionId: strin
     entityId: subscriptionId,
     type: 'subscription_renewal_1d',
   })
+
+  // 7 days before renewal (Visa-compliant: "at least 7 days before")
+  const sevenDaysBefore = new Date(renewalDate.getTime() - 7 * 24 * 60 * 60 * 1000)
+  if (sevenDaysBefore > new Date()) {
+    await scheduleReminder({
+      userId: subscription.subscriberId,
+      entityType: 'subscription',
+      entityId: subscriptionId,
+      type: 'subscription_renewal_7d',
+      scheduledFor: sevenDaysBefore,
+    })
+  }
 
   // 3 days before renewal
   const threeDaysBefore = new Date(renewalDate.getTime() - 3 * 24 * 60 * 60 * 1000)
@@ -718,12 +738,21 @@ const SUBSCRIBER_ALERT_TYPES: ReminderType[] = [
 ]
 
 // System/onboarding types that always send (critical for platform function)
+// Includes subscription renewal reminders - these are REQUIRED for Visa VAMP compliance
+// Pre-billing notifications must be sent; cannot be opted out of
 const SYSTEM_ALERT_TYPES: ReminderType[] = [
   'onboarding_incomplete_24h',
   'onboarding_incomplete_72h',
   'bank_setup_incomplete',
   'no_subscribers_7d',
   'payroll_ready',
+  // Visa VAMP compliance: pre-billing notifications are legally required
+  // Subscribers cannot opt out of these (FTC Negative Option Rule compliance)
+  'subscription_renewal_7d',
+  'subscription_renewal_3d',
+  'subscription_renewal_1d',
+  'subscription_payment_failed',
+  'subscription_past_due',
 ]
 
 /**
@@ -839,6 +868,9 @@ async function processReminder(reminder: {
       return await processNoSubscribersReminder(entityId)
 
     // Subscription renewal reminders
+    case 'subscription_renewal_7d':
+      return await processSubscriptionRenewalReminder(entityId, 7)
+
     case 'subscription_renewal_3d':
       return await processSubscriptionRenewalReminder(entityId, 3)
 
@@ -1357,7 +1389,17 @@ async function processSubscriptionRenewalReminder(
     where: { id: subscriptionId },
     include: {
       subscriber: true,
-      creator: { include: { profile: true } },
+      creator: {
+        include: {
+          profile: {
+            select: {
+              displayName: true,
+              purpose: true,
+              countryCode: true, // Needed for cross-border fee calculation
+            },
+          },
+        },
+      },
     },
   })
 
@@ -1374,12 +1416,49 @@ async function processSubscriptionRenewalReminder(
   const providerName = subscription.creator.profile?.displayName || 'a creator'
   const renewalDate = subscription.currentPeriodEnd || new Date()
 
+  // Calculate the fee-inclusive amount the subscriber actually pays
+  // subscription.amount is the BASE amount - we need to add subscriber fees
+  const baseAmount = subscription.amount
+  let chargeAmount: number
+
+  // Check cross-border status for correct fee buffer (NG/GH/KE have higher Stripe fees)
+  const countryCode = subscription.creator?.profile?.countryCode
+  const isCrossBorder = countryCode ? isStripeCrossBorderSupported(countryCode) : false
+
+  if (subscription.feeModel === 'split_v1') {
+    // Split model: subscriber pays base + 4% (or more for cross-border)
+    const feeCalc = calculateServiceFee(
+      baseAmount,
+      subscription.currency,
+      subscription.creator.profile?.purpose,
+      undefined, // feeMode - not used for split_v1
+      isCrossBorder
+    )
+    chargeAmount = feeCalc.grossCents
+  } else if (subscription.feeModel && subscription.feeMode === 'pass_to_subscriber') {
+    // Legacy pass_to_subscriber: subscriber pays base + 8%
+    const legacyFee = calculateLegacyServiceFee(
+      baseAmount,
+      subscription.currency,
+      subscription.creator.profile?.purpose as 'personal' | 'service' | null
+    )
+    chargeAmount = legacyFee.grossCents
+  } else {
+    // Legacy absorb or no feeModel: subscriber pays base only
+    chargeAmount = baseAmount
+  }
+
+  // Generate signed cancel URL for 1-click cancellation without login
+  // This is Visa-compliant: subscriber can easily cancel before being charged
+  const cancelUrl = generateCancelUrl(subscriptionId)
+
   await sendRenewalReminderEmail(
     subscription.subscriber.email,
     providerName,
-    subscription.amount,
+    chargeAmount,
     subscription.currency,
-    renewalDate
+    renewalDate,
+    cancelUrl
   )
 
   return true
@@ -1392,7 +1471,17 @@ async function processSubscriptionPaymentFailedReminder(
     where: { id: subscriptionId },
     include: {
       subscriber: true,
-      creator: { include: { profile: true } },
+      creator: {
+        include: {
+          profile: {
+            select: {
+              displayName: true,
+              purpose: true,
+              countryCode: true, // Needed for cross-border fee calculation
+            },
+          },
+        },
+      },
     },
   })
 
@@ -1405,10 +1494,38 @@ async function processSubscriptionPaymentFailedReminder(
     ? new Date(Date.now() + 24 * 60 * 60 * 1000)
     : null
 
+  // Calculate the fee-inclusive amount (same logic as renewal reminder)
+  const baseAmount = subscription.amount
+  let chargeAmount: number
+
+  // Check cross-border status for correct fee buffer (NG/GH/KE have higher Stripe fees)
+  const countryCode = subscription.creator?.profile?.countryCode
+  const isCrossBorder = countryCode ? isStripeCrossBorderSupported(countryCode) : false
+
+  if (subscription.feeModel === 'split_v1') {
+    const feeCalc = calculateServiceFee(
+      baseAmount,
+      subscription.currency,
+      subscription.creator.profile?.purpose,
+      undefined, // feeMode - not used for split_v1
+      isCrossBorder
+    )
+    chargeAmount = feeCalc.grossCents
+  } else if (subscription.feeModel && subscription.feeMode === 'pass_to_subscriber') {
+    const legacyFee = calculateLegacyServiceFee(
+      baseAmount,
+      subscription.currency,
+      subscription.creator.profile?.purpose as 'personal' | 'service' | null
+    )
+    chargeAmount = legacyFee.grossCents
+  } else {
+    chargeAmount = baseAmount
+  }
+
   await sendPaymentFailedEmail(
     subscription.subscriber.email,
     providerName,
-    subscription.amount,
+    chargeAmount,
     subscription.currency,
     retryDate
   )
@@ -1423,7 +1540,17 @@ async function processSubscriptionPastDueReminder(
     where: { id: subscriptionId },
     include: {
       subscriber: true,
-      creator: { include: { profile: true } },
+      creator: {
+        include: {
+          profile: {
+            select: {
+              displayName: true,
+              purpose: true,
+              countryCode: true, // Needed for cross-border fee calculation
+            },
+          },
+        },
+      },
     },
   })
 
@@ -1433,11 +1560,39 @@ async function processSubscriptionPastDueReminder(
 
   const providerName = subscription.creator.profile?.displayName || 'a creator'
 
+  // Calculate the fee-inclusive amount (same logic as renewal reminder)
+  const baseAmount = subscription.amount
+  let chargeAmount: number
+
+  // Check cross-border status for correct fee buffer (NG/GH/KE have higher Stripe fees)
+  const countryCode = subscription.creator?.profile?.countryCode
+  const isCrossBorder = countryCode ? isStripeCrossBorderSupported(countryCode) : false
+
+  if (subscription.feeModel === 'split_v1') {
+    const feeCalc = calculateServiceFee(
+      baseAmount,
+      subscription.currency,
+      subscription.creator.profile?.purpose,
+      undefined, // feeMode - not used for split_v1
+      isCrossBorder
+    )
+    chargeAmount = feeCalc.grossCents
+  } else if (subscription.feeModel && subscription.feeMode === 'pass_to_subscriber') {
+    const legacyFee = calculateLegacyServiceFee(
+      baseAmount,
+      subscription.currency,
+      subscription.creator.profile?.purpose as 'personal' | 'service' | null
+    )
+    chargeAmount = legacyFee.grossCents
+  } else {
+    chargeAmount = baseAmount
+  }
+
   // Send payment failed with no retry date (indicating it's past due)
   await sendPaymentFailedEmail(
     subscription.subscriber.email,
     providerName,
-    subscription.amount,
+    chargeAmount,
     subscription.currency,
     null // No more retries
   )

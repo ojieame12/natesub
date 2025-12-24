@@ -1,12 +1,11 @@
 import { db } from '../../../db/client.js'
-import { sendNewSubscriberEmail, sendSubscriptionConfirmationEmail, sendPlatformDebitRecoveredNotification } from '../../../services/email.js'
+import { sendNewSubscriberEmail, sendSubscriptionConfirmationEmail } from '../../../services/email.js'
 import { validatePaystackMetadata, sanitizeForLog } from '../../../utils/webhookValidation.js'
 import { calculateLegacyFee } from '../../../services/fees.js'
 import { withLock } from '../../../services/lock.js'
-import { encryptAuthorizationCode, decryptAccountNumber } from '../../../utils/encryption.js'
+import { encryptAuthorizationCode } from '../../../utils/encryption.js'
 import { addOneMonth, normalizeEmailAddress } from '../utils.js'
-import { getUSDRate, convertUSDCentsToLocal, convertLocalCentsToUSD, isLocalCurrency } from '../../../services/fx.js'
-import { initiateTransfer, createTransferRecipient } from '../../../services/paystack.js'
+import { invalidateAdminRevenueCache } from '../../../utils/cache.js'
 
 // Handle Paystack charge.success
 export async function handlePaystackChargeSuccess(data: any, eventId: string) {
@@ -60,6 +59,11 @@ export async function handlePaystackChargeSuccess(data: any, eventId: string) {
   const subscriberFeeMeta = validatedMeta.subscriberFee || 0
   const creatorFeeMeta = validatedMeta.creatorFee || 0
   const baseAmountMeta = validatedMeta.baseAmount || 0
+
+  // Checkout evidence for chargeback defense
+  const checkoutIp = validatedMeta.checkoutIp
+  const checkoutUserAgent = validatedMeta.checkoutUserAgent
+  const checkoutAcceptLanguage = validatedMeta.checkoutAcceptLanguage
 
   console.log(`[paystack] Processing charge ${reference} for creator ${sanitizeForLog(creatorId)}`)
 
@@ -223,7 +227,7 @@ export async function handlePaystackChargeSuccess(data: any, eventId: string) {
       })
 
       // Create payment record with idempotency key
-      await tx.payment.create({
+      const paystackPayment = await tx.payment.create({
         data: {
           subscriptionId: newSubscription.id,
           creatorId,
@@ -245,6 +249,24 @@ export async function handlePaystackChargeSuccess(data: any, eventId: string) {
           paystackTransactionRef: reference,
         },
       })
+
+      // Create dispute evidence record for chargeback defense
+      // Only create if we have at least some evidence from checkout
+      if (checkoutIp || checkoutUserAgent) {
+        await tx.disputeEvidence.create({
+          data: {
+            paymentId: paystackPayment.id,
+            checkoutIp,
+            checkoutUserAgent,
+            checkoutAcceptLanguage,
+            checkoutTimestamp: occurredAt,
+            confirmationEmailSent: true, // We send confirmation email below
+          },
+        }).catch((err: any) => {
+          // Non-fatal - don't fail the payment if evidence can't be saved
+          console.warn(`[paystack] Could not save dispute evidence for payment ${paystackPayment.id}:`, err.message)
+        })
+      }
 
       // Create activity event
       await tx.activity.create({
@@ -272,212 +294,16 @@ export async function handlePaystackChargeSuccess(data: any, eventId: string) {
     return
   }
 
-  // For new fee model: Platform received full payment, now transfer to creator
-  // This is done AFTER the transaction to ensure we don't transfer if DB write fails
-  // Supports both 'flat' and 'progressive' fee models
-  if (feeModel && creatorProfile?.paystackBankCode && creatorProfile?.paystackAccountNumber) {
-    // Lock to prevent duplicate payout processing on webhook retry
-    const payoutReference = `PAYOUT-${reference}`
-    const payoutLockKey = `payout:${payoutReference}`
+  // Invalidate admin revenue cache after payment creation
+  await invalidateAdminRevenueCache()
 
-    await withLock(payoutLockKey, 30000, async () => {
-      // Idempotency check: ensure we don't double-transfer on webhook retry
-      const existingPayout = await db.payment.findFirst({
-        where: {
-          paystackTransactionRef: payoutReference,
-          type: 'payout',
-        },
-      })
+  // Note: Creator payout is handled automatically by Paystack subaccount split
+  // Platform fee is deducted based on subaccount's percentage_charge
+  // Creator receives the rest directly from Paystack on T+1 settlement
+  // No manual transfer needed
 
-      if (existingPayout) {
-        console.log(`[paystack] Payout ${payoutReference} already exists, skipping transfer`)
-        return
-      }
-
-      // PLATFORM DEBIT RECOVERY for Paystack
-      // When a service provider's platform subscription fails, we accumulate debit (in USD cents)
-      // and recover it by reducing their transfer amount (in local currency)
-      // IMPORTANT: Must convert USD debit to local currency before subtracting
-      let platformDebitRecoveredLocal = 0  // Amount in local currency (NGN kobo, KES cents, etc.)
-      let platformDebitRecoveredUSD = 0    // Amount in USD cents (for decrementing platformDebitCents)
-
-      if (creatorProfile?.purpose === 'service' && (creatorProfile.platformDebitCents || 0) > 0) {
-        const localCurrency = currency?.toUpperCase() || 'NGN'
-
-        // Only convert if it's actually a local currency (NGN, KES, ZAR, GHS)
-        if (isLocalCurrency(localCurrency)) {
-          // Get current FX rate
-          const fxRate = await getUSDRate(localCurrency)
-
-          // Convert USD debit cap ($30 = 3000 cents) to local currency
-          const debitCapLocal = convertUSDCentsToLocal(3000, fxRate)
-
-          // Convert creator's USD debit to local currency
-          const debitInLocal = convertUSDCentsToLocal(creatorProfile.platformDebitCents || 0, fxRate)
-
-          // Cap recovery at: debit amount, $30 equivalent, or net transfer amount
-          const maxRecoveryLocal = Math.min(debitInLocal, debitCapLocal, netCents)
-          platformDebitRecoveredLocal = maxRecoveryLocal
-
-          // Convert back to USD for decrementing platformDebitCents
-          platformDebitRecoveredUSD = convertLocalCentsToUSD(maxRecoveryLocal, fxRate)
-
-          console.log(`[paystack] FX debit recovery: ${platformDebitRecoveredUSD} USD cents = ${platformDebitRecoveredLocal} ${localCurrency} (rate: ${fxRate})`)
-        } else {
-          // USD or other non-local currency - direct subtraction (shouldn't happen for Paystack)
-          const maxRecovery = Math.min(creatorProfile.platformDebitCents || 0, 3000, netCents)
-          platformDebitRecoveredLocal = maxRecovery
-          platformDebitRecoveredUSD = maxRecovery
-        }
-      }
-
-      // Calculate final transfer amount after debit recovery (in local currency)
-      const finalTransferAmount = netCents - platformDebitRecoveredLocal
-
-      try {
-        // Decrypt the stored account number
-        const accountNumber = decryptAccountNumber(creatorProfile.paystackAccountNumber)
-        const bankCode = creatorProfile.paystackBankCode
-
-        if (!accountNumber || !bankCode) {
-          console.error(`[paystack] Could not decrypt account number for creator ${creatorId}`)
-          // Record failed payout for manual intervention
-          await db.payment.create({
-            data: {
-              subscriptionId: subscription.id,
-              creatorId,
-              subscriberId: subscriber.id,
-              amountCents: finalTransferAmount,
-              currency: currency?.toUpperCase() || 'NGN',
-              feeCents: 0,
-              netCents: finalTransferAmount,
-              feeModel: feeModel || null,
-              feeEffectiveRate,
-              feeWasCapped,
-              platformDebitRecoveredCents: platformDebitRecoveredLocal,
-              type: 'payout',
-              status: 'failed',
-              paystackTransactionRef: payoutReference,
-            },
-          })
-        } else {
-          // Create payout record FIRST (before transfer attempt)
-          // This ensures we track all payout attempts for retry/audit
-          const payoutRecord = await db.payment.create({
-            data: {
-              subscriptionId: subscription.id,
-              creatorId,
-              subscriberId: subscriber.id,
-              amountCents: finalTransferAmount,
-              currency: currency?.toUpperCase() || 'NGN',
-              feeCents: 0,
-              netCents: finalTransferAmount,
-              feeModel: feeModel || null,
-              feeEffectiveRate,
-              feeWasCapped,
-              platformDebitRecoveredCents: platformDebitRecoveredLocal,
-              type: 'payout',
-              status: 'pending', // Will be updated by transfer.success/failed webhook
-              paystackTransactionRef: payoutReference,
-            },
-          })
-
-          try {
-            // Create transfer recipient if not exists (cached by Paystack)
-            const { recipientCode } = await createTransferRecipient({
-              name: creatorProfile.displayName,
-              accountNumber,
-              bankCode,
-              currency: currency?.toUpperCase() || 'NGN',
-            })
-
-            // Initiate transfer to creator (reduced by debit recovery)
-            const transferResult = await initiateTransfer({
-              amount: finalTransferAmount,
-              recipientCode,
-              reason: `Payment from ${customer?.email || 'subscriber'}`,
-              reference: payoutReference,
-            })
-
-            // Store transfer code and handle OTP requirement
-            const transferStatus = transferResult.status === 'otp' ? 'otp_pending' : 'pending'
-            await db.payment.update({
-              where: { id: payoutRecord.id },
-              data: {
-                paystackTransferCode: transferResult.transferCode,
-                status: transferStatus as any,
-              },
-            })
-
-            // Clear platform debit if recovered (decrement in USD cents)
-            if (platformDebitRecoveredUSD > 0) {
-              const remainingDebit = (creatorProfile.platformDebitCents || 0) - platformDebitRecoveredUSD
-
-              await db.profile.update({
-                where: { userId: creatorId },
-                data: {
-                  platformDebitCents: { decrement: platformDebitRecoveredUSD },
-                },
-              })
-
-              // Create activity for audit trail
-              await db.activity.create({
-                data: {
-                  userId: creatorId,
-                  type: 'platform_debit_recovered',
-                  payload: {
-                    amountUSDCents: platformDebitRecoveredUSD,
-                    amountLocalCents: platformDebitRecoveredLocal,
-                    localCurrency: currency?.toUpperCase() || 'NGN',
-                    source: 'paystack_payment',
-                    transactionRef: reference,
-                    originalNetCents: netCents,
-                    finalTransferAmount,
-                  },
-                },
-              })
-
-              // Send recovery notification email
-              const creatorUser = await db.user.findUnique({
-                where: { id: creatorId },
-                select: { email: true },
-              })
-              if (creatorUser) {
-                try {
-                  await sendPlatformDebitRecoveredNotification(
-                    creatorUser.email,
-                    creatorProfile.displayName || 'there',
-                    platformDebitRecoveredUSD, // Send USD amount for email display
-                    Math.max(0, remainingDebit)
-                  )
-                } catch (emailErr) {
-                  console.error(`[paystack] Failed to send debit recovery email:`, emailErr)
-                }
-              }
-
-              console.log(`[paystack] Recovered $${(platformDebitRecoveredUSD / 100).toFixed(2)} USD (${platformDebitRecoveredLocal} local) platform debit, transferring ${finalTransferAmount} to creator ${creatorId}`)
-            }
-
-            if (transferResult.status === 'otp') {
-              console.log(`[paystack] Transfer ${payoutReference} requires OTP finalization`)
-            } else {
-              console.log(`[paystack] Initiated transfer of ${finalTransferAmount} to creator ${creatorId}`)
-            }
-          } catch (transferErr) {
-            // Transfer failed - update payout record for manual retry
-            console.error(`[paystack] Transfer failed for creator ${creatorId}:`, transferErr)
-            await db.payment.update({
-              where: { id: payoutRecord.id },
-              data: { status: 'failed' },
-            })
-          }
-        }
-      } catch (err) {
-        // Outer catch for unexpected errors (e.g., DB issues)
-        console.error(`[paystack] Failed to process payout for creator ${creatorId}:`, err)
-      }
-    }) // End withLock for payout
-  }
+  // TODO: Platform debit recovery for Paystack needs alternative approach with subaccounts
+  // Options: 1) Separate invoice, 2) Adjust pricing, 3) Post-settlement recovery
 
   // Send notification email to creator
   const creator = await db.user.findUnique({

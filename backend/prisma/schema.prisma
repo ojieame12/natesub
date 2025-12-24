@@ -3,8 +3,11 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  // Use DIRECT_URL for migrations (non-pooled connection)
+  // DATABASE_URL should be the pooled URL for runtime queries
+  directUrl = env("DIRECT_DATABASE_URL")
 }
 
 // ============================================
@@ -385,6 +388,9 @@ model Payment {
   occurredAt DateTime @default(now())
   createdAt  DateTime @default(now())
 
+  // Dispute evidence (for chargeback defense)
+  disputeEvidence DisputeEvidence?
+
   @@index([creatorId])
   @@index([stripeEventId])
   @@index([paystackEventId])
@@ -713,6 +719,7 @@ enum ReminderType {
   no_subscribers_7d       // No subscribers after 7 days
 
   // Subscription renewal reminders (subscribers)
+  subscription_renewal_7d   // Subscription renews in 7 days (Visa-compliant)
   subscription_renewal_3d   // Subscription renews in 3 days
   subscription_renewal_1d   // Subscription renews tomorrow
   subscription_payment_failed // Payment failed, will retry
@@ -932,6 +939,62 @@ model AdminApiKey {
   @@index([createdById])
   @@index([scope])
   @@map("admin_api_keys")
+}
+
+// ============================================
+// FRAUD WARNINGS (TC40/SAFE Reports)
+// ============================================
+
+// Stripe Radar Early Fraud Warnings - TC40/SAFE reports from card networks
+// These count toward Visa VAMP ratio even without a dispute
+model FraudWarning {
+  id               String   @id @default(uuid())
+  stripeWarningId  String   @unique  // efw_xxx ID from Stripe
+  chargeId         String               // ch_xxx charge ID
+  fraudType        String               // 'card_never_received', 'fraudulent_card_application', etc.
+  actionable       Boolean              // Whether we can act on this (refund, etc.)
+
+  // Track linked payment if found
+  paymentId        String?              // Link to our Payment record
+  creatorId        String?              // Creator who received the payment
+
+  createdAt        DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([creatorId, createdAt])
+  @@map("fraud_warnings")
+}
+
+// ============================================
+// DISPUTE EVIDENCE (Auto-collection)
+// ============================================
+
+// Evidence collected at checkout for potential dispute defense
+// Auto-populated when payment is created, used when dispute filed
+model DisputeEvidence {
+  id              String   @id @default(uuid())
+  paymentId       String   @unique
+  payment         Payment  @relation(fields: [paymentId], references: [id])
+
+  // Checkout evidence (captured at payment time)
+  checkoutIp      String?              // Client IP address
+  checkoutUserAgent String?            // Browser user agent
+  checkoutAcceptLanguage String?       // Accept-Language header
+  checkoutTimestamp DateTime?          // When checkout completed
+
+  // Access evidence (updated on login/content access)
+  lastLoginAt     DateTime?            // Most recent login
+  loginCount      Int      @default(0) // Total logins by subscriber
+  contentAccessCount Int   @default(0) // Content views/downloads
+
+  // Communication evidence
+  confirmationEmailSent Boolean @default(false)
+  confirmationEmailId   String?         // Resend message ID
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("dispute_evidence")
 }
 
 // ============================================

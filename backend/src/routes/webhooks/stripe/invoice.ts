@@ -11,6 +11,8 @@ import {
   sanitizeForLog,
 } from '../../../utils/webhookValidation.js'
 import { normalizeEmailAddress } from '../utils.js'
+import { invalidateAdminRevenueCache } from '../../../utils/cache.js'
+import { scheduleSubscriptionRenewalReminders } from '../../../jobs/reminders.js'
 
 async function resolveStripeInvoiceCustomerEmail(invoice: Stripe.Invoice, context: string): Promise<string> {
   const anyInvoice = invoice as any
@@ -72,12 +74,40 @@ export async function handleInvoiceCreated(event: Stripe.Event) {
     return
   }
 
+  // Generate statement descriptor for ALL subscriptions (new and legacy)
+  // Format: "NATEPAY* CREATORNAME" - helps prevent "I don't recognize this charge" disputes
+  // Stripe limits: 22 chars max, uppercase, alphanumeric + some special chars
+  let statementDescriptor: string | undefined
+  const creatorName = subscription.creator?.profile?.displayName
+  if (creatorName) {
+    // Clean the name: remove special chars, uppercase, truncate
+    const cleanName = creatorName
+      .toUpperCase()
+      .replace(/[^A-Z0-9 ]/g, '')
+      .trim()
+      .substring(0, 12) // Leave room for "NATEPAY* " prefix (9 chars)
+    if (cleanName.length > 0) {
+      statementDescriptor = `NATEPAY* ${cleanName}`
+    }
+  }
+
   // Check if this subscription uses a tracked fee model
   // Both 'flat' and 'progressive' models need fee applied on invoices
   // because Stripe subscription_data doesn't support fixed application_fee_amount
   if (!subscription.feeModel) {
-    // Legacy subscriptions without feeModel - no action needed
-    console.log(`[invoice.created] Skipping legacy subscription ${subscription.id} (no feeModel)`)
+    // Legacy subscriptions without feeModel - only update statement descriptor if available
+    if (statementDescriptor) {
+      try {
+        await stripe.invoices.update(invoice.id, {
+          statement_descriptor: statementDescriptor,
+        })
+        console.log(`[invoice.created] Set statement descriptor "${statementDescriptor}" for legacy subscription ${subscription.id}`)
+      } catch (err) {
+        console.error(`[invoice.created] Failed to set statement descriptor for legacy invoice ${invoice.id}:`, err)
+      }
+    } else {
+      console.log(`[invoice.created] Skipping legacy subscription ${subscription.id} (no feeModel, no displayName)`)
+    }
     return
   }
 
@@ -101,14 +131,16 @@ export async function handleInvoiceCreated(event: Stripe.Event) {
     isCrossBorder
   )
 
-  // Update the invoice with the application fee
+  // Update the invoice with the application fee and statement descriptor
   // This must be done before the invoice is finalized
   try {
     await stripe.invoices.update(invoice.id, {
       application_fee_amount: feeCalc.feeCents,
+      // Statement descriptor for bank statement clarity - reduces chargebacks
+      ...(statementDescriptor && { statement_descriptor: statementDescriptor }),
     })
 
-    console.log(`[invoice.created] Applied fee ${feeCalc.feeCents} (${(feeCalc.effectiveRate * 100).toFixed(2)}%) on creator amount ${creatorAmount} to invoice ${invoice.id}`)
+    console.log(`[invoice.created] Applied fee ${feeCalc.feeCents} (${(feeCalc.effectiveRate * 100).toFixed(2)}%) on creator amount ${creatorAmount} to invoice ${invoice.id}${statementDescriptor ? ` with descriptor "${statementDescriptor}"` : ''}`)
   } catch (err) {
     // If we can't update (e.g., invoice already finalized), log but don't fail
     console.error(`[invoice.created] Failed to apply fee to invoice ${invoice.id}:`, err)
@@ -300,6 +332,21 @@ export async function handleInvoicePaid(event: Stripe.Event) {
 
     if (!subscription) return true // Nothing to process
 
+    // Retrieve Stripe subscription metadata for checkout evidence
+    // Evidence was captured at initial checkout and stored in subscription metadata
+    let checkoutIp: string | undefined
+    let checkoutUserAgent: string | undefined
+    let checkoutAcceptLanguage: string | undefined
+    try {
+      const stripeSubscription = await stripe.subscriptions.retrieve(subscriptionId)
+      const metadata = stripeSubscription.metadata || {}
+      checkoutIp = metadata.checkoutIp
+      checkoutUserAgent = metadata.checkoutUserAgent
+      checkoutAcceptLanguage = metadata.checkoutAcceptLanguage
+    } catch (err) {
+      console.warn(`[invoice.paid] Could not retrieve Stripe subscription metadata for ${subscriptionId}:`, err)
+    }
+
     // Get actual fee from Stripe invoice (more reliable than recalculating)
     const invoiceAny = invoice as any
     const stripeActualFee = invoiceAny.application_fee_amount || 0
@@ -420,7 +467,7 @@ export async function handleInvoicePaid(event: Stripe.Event) {
       ? new Date(invoiceAny.status_transitions.paid_at * 1000)
       : new Date()
 
-    await db.payment.create({
+    const recurringPayment = await db.payment.create({
       data: {
         subscriptionId: subscription.id,
         creatorId: subscription.creatorId,
@@ -443,6 +490,27 @@ export async function handleInvoicePaid(event: Stripe.Event) {
         stripeChargeId: invoiceAny.charge as string || null,
       },
     })
+
+    // Create dispute evidence record for chargeback defense
+    // Only create if we have at least some evidence from checkout
+    if (checkoutIp || checkoutUserAgent) {
+      await db.disputeEvidence.create({
+        data: {
+          paymentId: recurringPayment.id,
+          checkoutIp,
+          checkoutUserAgent,
+          checkoutAcceptLanguage,
+          checkoutTimestamp: subscription.createdAt, // Original subscription creation time
+          confirmationEmailSent: true, // Renewal confirmation was sent
+        },
+      }).catch((err: any) => {
+        // Non-fatal - don't fail the payment if evidence can't be saved
+        console.warn(`[invoice.paid] Could not save dispute evidence for payment ${recurringPayment.id}:`, err.message)
+      })
+    }
+
+    // Invalidate admin revenue cache to ensure fresh dashboard data
+    await invalidateAdminRevenueCache()
 
     // ASYNC PAYMENT FOLLOW-UP: Complete conversion tracking and request acceptance
     // These were deferred in checkout.session.completed when payment_status !== 'paid'
@@ -510,6 +578,16 @@ export async function handleInvoicePaid(event: Stripe.Event) {
         },
       },
     })
+
+    // Schedule 7/3/1-day renewal reminder emails for chargeback prevention
+    // Visa VAMP compliance: pre-billing notifications reduce friendly fraud
+    try {
+      await scheduleSubscriptionRenewalReminders(subscription.id)
+      console.log(`[invoice.paid] Scheduled renewal reminders for subscription ${subscription.id}`)
+    } catch (reminderErr) {
+      // Don't fail the webhook if reminder scheduling fails
+      console.error(`[invoice.paid] Failed to schedule renewal reminders for ${subscription.id}:`, reminderErr)
+    }
 
     // PLATFORM DEBIT RECOVERY for subscription renewals
     // When a service provider's platform subscription fails, we accumulate debit

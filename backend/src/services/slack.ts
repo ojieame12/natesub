@@ -10,6 +10,8 @@
  * Configure SLACK_WEBHOOK_URL in environment variables.
  */
 
+import type Stripe from 'stripe'
+
 const SLACK_WEBHOOK_URL = process.env.SLACK_WEBHOOK_URL
 
 interface SlackMessage {
@@ -395,5 +397,204 @@ export async function alertSystemError(params: {
 export async function alertSimple(message: string, emoji = 'ℹ️'): Promise<void> {
   await sendSlackMessage({
     text: `${emoji} ${message}`,
+  })
+}
+
+/**
+ * Alert: Platform Liability on Express Account
+ * Critical alert when a dispute creates platform liability due to negative balance
+ * on a creator's Express account. Platform must cover the shortfall.
+ */
+export async function alertPlatformLiability(params: {
+  creatorId: string
+  creatorEmail: string
+  disputeAmount: number
+  accountBalance: number
+  platformLiability: number
+  disputeId: string
+}): Promise<void> {
+  const disputeFormatted = formatCurrency(params.disputeAmount, 'USD')
+  const balanceFormatted = formatCurrency(params.accountBalance, 'USD')
+  const liabilityFormatted = formatCurrency(params.platformLiability, 'USD')
+
+  await sendSlackMessage({
+    blocks: [
+      {
+        type: 'header',
+        text: {
+          type: 'plain_text',
+          text: '💰 Platform Liability Alert',
+        },
+      },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `*Creator's Express account cannot cover dispute amount. Platform is liable for the shortfall.*`,
+        },
+      },
+      {
+        type: 'section',
+        fields: [
+          { type: 'mrkdwn', text: `*Dispute Amount:*\n${disputeFormatted}` },
+          { type: 'mrkdwn', text: `*Account Balance:*\n${balanceFormatted}` },
+          { type: 'mrkdwn', text: `*Platform Liability:*\n${liabilityFormatted}` },
+          { type: 'mrkdwn', text: `*Creator:*\n${params.creatorEmail}` },
+        ],
+      },
+      {
+        type: 'context',
+        elements: [
+          {
+            type: 'mrkdwn',
+            text: `Creator ID: \`${params.creatorId}\` | Dispute ID: \`${params.disputeId}\``,
+          },
+        ],
+      },
+    ],
+    attachments: [
+      {
+        color: '#dc2626', // Red - critical
+        footer: 'NatePay Express Account Alert',
+        ts: Math.floor(Date.now() / 1000),
+      },
+    ],
+  })
+}
+
+/**
+ * Alert: Early Fraud Warning (TC40/SAFE)
+ * Triggered when Stripe Radar detects fraud on a charge
+ * These count toward Visa VAMP ratio even without a dispute
+ */
+export async function alertEarlyFraudWarning(params: {
+  warningId: string
+  chargeId: string | Stripe.Charge
+  fraudType: string
+  actionable: boolean
+}): Promise<void> {
+  const chargeIdStr = typeof params.chargeId === 'string' ? params.chargeId : params.chargeId.id
+
+  await sendSlackMessage({
+    blocks: [
+      {
+        type: 'header',
+        text: {
+          type: 'plain_text',
+          text: '⚠️ Early Fraud Warning (TC40)',
+        },
+      },
+      {
+        type: 'section',
+        fields: [
+          { type: 'mrkdwn', text: `*Fraud Type:*\n${params.fraudType}` },
+          { type: 'mrkdwn', text: `*Actionable:*\n${params.actionable ? 'Yes' : 'No'}` },
+        ],
+      },
+      {
+        type: 'context',
+        elements: [
+          {
+            type: 'mrkdwn',
+            text: `Warning ID: \`${params.warningId}\` | Charge: \`${chargeIdStr}\``,
+          },
+        ],
+      },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: params.actionable
+            ? '⚡ *Consider proactive refund to prevent chargeback*'
+            : '_No action required - informational only_',
+        },
+      },
+    ],
+    attachments: [
+      {
+        color: params.actionable ? '#f59e0b' : '#6b7280', // Amber if actionable, gray if not
+        footer: 'NatePay Fraud Monitoring',
+        ts: Math.floor(Date.now() / 1000),
+      },
+    ],
+  })
+}
+
+/**
+ * Alert: Dispute Ratio Warning
+ * Triggered when 30-day rolling dispute ratio approaches Visa VAMP thresholds
+ * - 0.4%: Early warning
+ * - 0.6%: Elevated (approaching 0.65% Visa early warning)
+ * - 0.8%: Critical (approaching 0.9% Visa standard threshold)
+ */
+export async function alertDisputeRatioWarning(params: {
+  currentRatio: number       // As decimal (e.g., 0.004 for 0.4%)
+  threshold: 'early' | 'elevated' | 'critical'
+  disputeCount: number       // Total disputes in 30-day window
+  transactionCount: number   // Total successful transactions in 30-day window
+  topOffenders?: Array<{     // Top creators by dispute count
+    creatorEmail: string
+    displayName: string
+    disputeCount: number
+  }>
+}): Promise<void> {
+  const ratioPercent = (params.currentRatio * 100).toFixed(2)
+
+  const thresholdConfig = {
+    early: { emoji: '⚠️', label: 'Early Warning (0.4%)', color: '#f59e0b', visaThreshold: '0.65%' },
+    elevated: { emoji: '🚨', label: 'Elevated (0.6%)', color: '#ea580c', visaThreshold: '0.65%' },
+    critical: { emoji: '🔴', label: 'CRITICAL (0.8%)', color: '#dc2626', visaThreshold: '0.9%' },
+  }
+
+  const config = thresholdConfig[params.threshold]
+
+  const offendersList = params.topOffenders?.length
+    ? params.topOffenders.slice(0, 5)
+        .map((o) => `• ${o.displayName} (${o.creatorEmail}): ${o.disputeCount} disputes`)
+        .join('\n')
+    : 'None'
+
+  await sendSlackMessage({
+    blocks: [
+      {
+        type: 'header',
+        text: {
+          type: 'plain_text',
+          text: `${config.emoji} Dispute Ratio ${config.label}`,
+        },
+      },
+      {
+        type: 'section',
+        fields: [
+          { type: 'mrkdwn', text: `*Current Ratio:*\n${ratioPercent}%` },
+          { type: 'mrkdwn', text: `*Visa Threshold:*\n${config.visaThreshold}` },
+          { type: 'mrkdwn', text: `*Disputes (30d):*\n${params.disputeCount}` },
+          { type: 'mrkdwn', text: `*Transactions (30d):*\n${params.transactionCount}` },
+        ],
+      },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `*Top creators by disputes:*\n${offendersList}`,
+        },
+      },
+      {
+        type: 'context',
+        elements: [
+          {
+            type: 'mrkdwn',
+            text: `Visa VAMP thresholds: 0.65% early warning, 0.9% standard, 1.8% excessive`,
+          },
+        ],
+      },
+    ],
+    attachments: [
+      {
+        color: config.color,
+        footer: 'NatePay Dispute Monitoring',
+        ts: Math.floor(Date.now() / 1000),
+      },
+    ],
   })
 }

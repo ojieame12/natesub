@@ -1,9 +1,9 @@
 import Stripe from 'stripe'
 import { db } from '../../../db/client.js'
-import { stripe } from '../../../services/stripe.js'
+import { stripe, getAccountBalance } from '../../../services/stripe.js'
 import { cancelSubscription } from '../../../services/stripe.js'
 import { sendDisputeCreatedEmail, sendDisputeResolvedEmail } from '../../../services/email.js'
-import { alertDisputeCreated, alertDisputeResolved } from '../../../services/slack.js'
+import { alertDisputeCreated, alertDisputeResolved, alertPlatformLiability } from '../../../services/slack.js'
 
 // Handle dispute/chargeback created
 export async function handleDisputeCreated(event: Stripe.Event) {
@@ -69,6 +69,50 @@ export async function handleDisputeCreated(event: Stripe.Event) {
       stripeEventId: event.id,
     },
   })
+
+  // ===========================================
+  // EXPRESS ACCOUNT NEGATIVE BALANCE PROTECTION
+  // ===========================================
+  // When a dispute occurs on an Express account, check if the creator's balance
+  // can cover it. If not, the platform is liable for the shortfall.
+  const creatorProfile = await db.profile.findUnique({
+    where: { userId: subscription.creatorId },
+    select: { stripeAccountId: true, platformDebitCents: true },
+  })
+
+  // Track platform liability for alerting later (after creator is fetched)
+  let platformLiabilityInfo: {
+    shortfall: number
+    totalBalance: number
+  } | null = null
+
+  if (creatorProfile?.stripeAccountId) {
+    try {
+      const balance = await getAccountBalance(creatorProfile.stripeAccountId)
+      const totalBalance = balance.available + balance.pending
+
+      if (totalBalance < dispute.amount) {
+        // Creator can't cover - platform is liable for the difference
+        const shortfall = dispute.amount - Math.max(0, totalBalance)
+
+        // Track platform liability as platformDebitCents
+        await db.profile.update({
+          where: { userId: subscription.creatorId },
+          data: {
+            platformDebitCents: { increment: shortfall },
+          },
+        })
+
+        // Store for alerting later (after creator email is fetched)
+        platformLiabilityInfo = { shortfall, totalBalance }
+
+        console.log(`[dispute] Platform liable for ${shortfall} cents on dispute ${dispute.id} (creator balance: ${totalBalance}, dispute: ${dispute.amount})`)
+      }
+    } catch (err) {
+      // Don't fail the webhook if balance check fails - log and continue
+      console.error(`[dispute] Failed to check Express account balance:`, err)
+    }
+  }
 
   // Decrement LTV when dispute is opened (funds are held)
   // This will be restored if dispute is won in handleDisputeClosed
@@ -148,6 +192,18 @@ export async function handleDisputeCreated(event: Stripe.Event) {
     reason: dispute.reason || 'Unknown',
     stripeDisputeId: dispute.id,
   }).catch((err) => console.error('[slack] Failed to send dispute alert:', err))
+
+  // Send platform liability alert if applicable (now we have creator email)
+  if (platformLiabilityInfo) {
+    alertPlatformLiability({
+      creatorId: subscription.creatorId,
+      creatorEmail: creator?.email || 'unknown',
+      disputeAmount: dispute.amount,
+      accountBalance: platformLiabilityInfo.totalBalance,
+      platformLiability: platformLiabilityInfo.shortfall,
+      disputeId: dispute.id,
+    }).catch((err) => console.error('[slack] Failed to send platform liability alert:', err))
+  }
 }
 
 // Handle dispute closed (won or lost)

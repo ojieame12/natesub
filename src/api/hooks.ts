@@ -833,6 +833,19 @@ export function usePayrollVerify(code: string) {
   })
 }
 
+export function usePayrollSubscribers() {
+  return useQuery({
+    queryKey: ['payroll', 'subscribers'],
+    queryFn: () => api.payroll.getSubscribers(),
+  })
+}
+
+export function useCustomStatement() {
+  return useMutation({
+    mutationFn: api.payroll.generateCustomStatement,
+  })
+}
+
 // ============================================
 // ANALYTICS HOOKS
 // ============================================

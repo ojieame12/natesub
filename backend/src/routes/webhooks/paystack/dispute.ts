@@ -8,6 +8,7 @@
 import { db } from '../../../db/client.js'
 import { sendDisputeCreatedEmail, sendDisputeResolvedEmail } from '../../../services/email.js'
 import { alertDisputeCreated, alertDisputeResolved } from '../../../services/slack.js'
+import { invalidateAdminRevenueCache } from '../../../utils/cache.js'
 
 interface PaystackDisputeData {
   id: number | string
@@ -97,6 +98,9 @@ export async function handlePaystackDisputeCreated(data: PaystackDisputeData, ev
       paystackTransactionRef: reference,
     },
   })
+
+  // Invalidate admin revenue cache after dispute creation
+  await invalidateAdminRevenueCache()
 
   // Decrement LTV when dispute is opened (funds are held)
   const currentLtv = subscription.ltvCents || 0
@@ -218,6 +222,9 @@ export async function handlePaystackDisputeResolved(data: PaystackDisputeData, e
     where: { id: disputePayment.id },
     data: { status: newStatus },
   })
+
+  // Invalidate admin revenue cache after dispute resolution
+  await invalidateAdminRevenueCache()
 
   // If won, restore the LTV
   if (won && disputePayment.subscriptionId) {

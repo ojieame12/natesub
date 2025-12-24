@@ -52,6 +52,7 @@ const PublicRequestPage = lazy(() => import('./request/PublicRequestPage'))
 const Terms = lazy(() => import('./legal/Terms'))
 const Privacy = lazy(() => import('./legal/Privacy'))
 const Unsubscribe = lazy(() => import('./Unsubscribe'))
+const CancelSubscription = lazy(() => import('./CancelSubscription'))
 const MySubscriptions = lazy(() => import('./MySubscriptions'))
 const Analytics = lazy(() => import('./Analytics'))
 const NotFound = lazy(() => import('./NotFound'))
@@ -496,6 +497,8 @@ function AppShell() {
 
           {/* Email management */}
           <Route path="/unsubscribe" element={<Unsubscribe />} />
+          {/* 1-click subscription cancellation via signed token (Visa VAMP compliance) */}
+          <Route path="/unsubscribe/:token" element={<CancelSubscription />} />
           <Route path="/my-subscriptions" element={<RequireAuth><MySubscriptions /></RequireAuth>} />
 
           {/* Public Request Pages - for payment/subscription requests */}

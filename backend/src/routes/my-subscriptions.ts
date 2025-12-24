@@ -7,9 +7,12 @@ import { z } from 'zod'
 import { SubscriptionStatus } from '@prisma/client'
 import { db } from '../db/client.js'
 import { requireAuth } from '../middleware/auth.js'
+import { publicRateLimit } from '../middleware/rateLimit.js'
 import { createSubscriberPortalSession, cancelSubscription, reactivateSubscription } from '../services/stripe.js'
+import { sendCancellationConfirmationEmail } from '../services/email.js'
 import { env } from '../config/env.js'
 import { centsToDisplayAmount } from '../utils/currency.js'
+import { validateCancelToken } from '../utils/cancelToken.js'
 
 const mySubscriptions = new Hono()
 
@@ -234,6 +237,18 @@ mySubscriptions.post(
         id,
         subscriberId: userId,
       },
+      include: {
+        subscriber: {
+          select: { email: true },
+        },
+        creator: {
+          select: {
+            profile: {
+              select: { displayName: true, username: true },
+            },
+          },
+        },
+      },
     })
 
     if (!subscription) {
@@ -242,6 +257,24 @@ mySubscriptions.post(
 
     if (subscription.status === 'canceled') {
       return c.json({ error: 'Subscription is already canceled' }, 400)
+    }
+
+    // Helper to send confirmation email after successful cancel
+    const sendConfirmation = async () => {
+      if (subscription.subscriber?.email && subscription.creator.profile?.displayName) {
+        const accessUntil = subscription.currentPeriodEnd || new Date()
+        const resubscribeUrl = subscription.creator.profile.username
+          ? `${env.APP_URL}/${subscription.creator.profile.username}`
+          : env.APP_URL
+
+        sendCancellationConfirmationEmail(
+          subscription.subscriber.email,
+          subscription.subscriber.email.split('@')[0], // Use email prefix as name
+          subscription.creator.profile.displayName,
+          accessUntil,
+          resubscribeUrl
+        ).catch((err) => console.error('[my-subscriptions] Failed to send cancel confirmation:', err))
+      }
     }
 
     // Cancel in Stripe if it's a Stripe subscription
@@ -257,6 +290,9 @@ mySubscriptions.post(
             canceledAt: result.canceledAt,
           },
         })
+
+        // Send confirmation email (non-blocking)
+        await sendConfirmation()
 
         return c.json({
           success: true,
@@ -282,6 +318,9 @@ mySubscriptions.post(
         canceledAt: immediate ? new Date() : null,
       },
     })
+
+    // Send confirmation email (non-blocking)
+    await sendConfirmation()
 
     return c.json({
       success: true,
@@ -367,6 +406,256 @@ mySubscriptions.post(
         cancelAtPeriodEnd: false,
       },
     })
+  }
+)
+
+// ============================================
+// PUBLIC CANCEL ENDPOINT (No Auth Required)
+// ============================================
+// Visa-compliant 1-click cancellation via signed token
+// Used in pre-billing reminder emails
+
+// GET /unsubscribe/:token - Display cancel confirmation page info
+mySubscriptions.get(
+  '/unsubscribe/:token',
+  publicRateLimit,
+  async (c) => {
+    const { token } = c.req.param()
+
+    const decoded = validateCancelToken(token)
+    if (!decoded) {
+      return c.json({
+        error: 'Invalid or expired cancellation link',
+        code: 'INVALID_TOKEN',
+      }, 400)
+    }
+
+    // Find the subscription
+    const subscription = await db.subscription.findUnique({
+      where: { id: decoded.subscriptionId },
+      include: {
+        creator: {
+          select: {
+            profile: {
+              select: {
+                displayName: true,
+                username: true,
+              },
+            },
+          },
+        },
+      },
+    })
+
+    if (!subscription) {
+      return c.json({
+        error: 'Subscription not found',
+        code: 'NOT_FOUND',
+      }, 404)
+    }
+
+    // Return subscription info for confirmation page
+    return c.json({
+      subscription: {
+        id: subscription.id,
+        providerName: subscription.creator.profile?.displayName || 'Unknown',
+        providerUsername: subscription.creator.profile?.username,
+        amount: centsToDisplayAmount(subscription.amount, subscription.currency),
+        currency: subscription.currency,
+        interval: subscription.interval,
+        status: subscription.status,
+        currentPeriodEnd: subscription.currentPeriodEnd,
+        cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
+        alreadyCanceled: subscription.status === 'canceled' || subscription.cancelAtPeriodEnd,
+      },
+    })
+  }
+)
+
+// POST /unsubscribe/:token - Execute the cancellation
+mySubscriptions.post(
+  '/unsubscribe/:token',
+  publicRateLimit,
+  async (c) => {
+    const { token } = c.req.param()
+
+    const decoded = validateCancelToken(token)
+    if (!decoded) {
+      return c.json({
+        error: 'Invalid or expired cancellation link',
+        code: 'INVALID_TOKEN',
+      }, 400)
+    }
+
+    // Find the subscription with subscriber info for confirmation email
+    const subscription = await db.subscription.findUnique({
+      where: { id: decoded.subscriptionId },
+      include: {
+        subscriber: {
+          select: { email: true },
+        },
+        creator: {
+          select: {
+            profile: {
+              select: {
+                displayName: true,
+                username: true,
+              },
+            },
+          },
+        },
+      },
+    })
+
+    if (!subscription) {
+      return c.json({
+        error: 'Subscription not found',
+        code: 'NOT_FOUND',
+      }, 404)
+    }
+
+    // Already canceled?
+    if (subscription.status === 'canceled') {
+      return c.json({
+        success: true,
+        alreadyCanceled: true,
+        message: 'This subscription was already canceled.',
+        subscription: {
+          id: subscription.id,
+          status: 'canceled',
+          canceledAt: subscription.canceledAt?.toISOString() || null,
+        },
+      })
+    }
+
+    // Already set to cancel at period end?
+    if (subscription.cancelAtPeriodEnd) {
+      return c.json({
+        success: true,
+        alreadyCanceled: true,
+        message: `Your subscription will end on ${subscription.currentPeriodEnd?.toLocaleDateString() || 'the end of the billing period'}.`,
+        subscription: {
+          id: subscription.id,
+          status: subscription.status,
+          cancelAtPeriodEnd: true,
+          currentPeriodEnd: subscription.currentPeriodEnd?.toISOString() || null,
+        },
+      })
+    }
+
+    try {
+      // Cancel at period end (not immediate) - Visa-compliant
+      // Subscriber keeps access until current period ends
+      if (subscription.stripeSubscriptionId) {
+        const result = await cancelSubscription(subscription.stripeSubscriptionId, true)
+
+        await db.subscription.update({
+          where: { id: subscription.id },
+          data: {
+            status: result.status === 'canceled' ? 'canceled' : subscription.status,
+            cancelAtPeriodEnd: result.cancelAtPeriodEnd,
+            canceledAt: result.canceledAt,
+          },
+        })
+
+        // Log the cancellation source
+        await db.activity.create({
+          data: {
+            userId: subscription.creatorId,
+            type: 'subscription_canceled_via_email',
+            payload: {
+              subscriptionId: subscription.id,
+              subscriberId: subscription.subscriberId,
+              source: 'email_link',
+              cancelAtPeriodEnd: true,
+            },
+          },
+        })
+
+        // Send cancellation confirmation email (non-blocking)
+        if (subscription.subscriber?.email && subscription.creator.profile?.displayName) {
+          const accessUntil = subscription.currentPeriodEnd || new Date()
+          const resubscribeUrl = subscription.creator.profile.username
+            ? `${env.APP_URL}/${subscription.creator.profile.username}`
+            : env.APP_URL
+
+          sendCancellationConfirmationEmail(
+            subscription.subscriber.email,
+            subscription.subscriber.email.split('@')[0],
+            subscription.creator.profile.displayName,
+            accessUntil,
+            resubscribeUrl
+          ).catch((err) => console.error('[my-subscriptions] Failed to send cancel confirmation:', err))
+        }
+
+        return c.json({
+          success: true,
+          message: `Your subscription to ${subscription.creator.profile?.displayName || 'this creator'} has been canceled. You'll have access until ${subscription.currentPeriodEnd?.toLocaleDateString() || 'the end of your billing period'}.`,
+          subscription: {
+            id: subscription.id,
+            status: result.status,
+            cancelAtPeriodEnd: result.cancelAtPeriodEnd,
+            currentPeriodEnd: subscription.currentPeriodEnd?.toISOString() || null,
+          },
+        })
+      }
+
+      // For non-Stripe subscriptions (Paystack)
+      await db.subscription.update({
+        where: { id: subscription.id },
+        data: {
+          cancelAtPeriodEnd: true,
+          canceledAt: new Date(),
+        },
+      })
+
+      // Log the cancellation
+      await db.activity.create({
+        data: {
+          userId: subscription.creatorId,
+          type: 'subscription_canceled_via_email',
+          payload: {
+            subscriptionId: subscription.id,
+            subscriberId: subscription.subscriberId,
+            source: 'email_link',
+            cancelAtPeriodEnd: true,
+          },
+        },
+      })
+
+      // Send cancellation confirmation email (non-blocking)
+      if (subscription.subscriber?.email && subscription.creator.profile?.displayName) {
+        const accessUntil = subscription.currentPeriodEnd || new Date()
+        const resubscribeUrl = subscription.creator.profile.username
+          ? `${env.APP_URL}/${subscription.creator.profile.username}`
+          : env.APP_URL
+
+        sendCancellationConfirmationEmail(
+          subscription.subscriber.email,
+          subscription.subscriber.email.split('@')[0],
+          subscription.creator.profile.displayName,
+          accessUntil,
+          resubscribeUrl
+        ).catch((err) => console.error('[my-subscriptions] Failed to send cancel confirmation:', err))
+      }
+
+      return c.json({
+        success: true,
+        message: `Your subscription to ${subscription.creator.profile?.displayName || 'this creator'} has been canceled. You'll have access until ${subscription.currentPeriodEnd?.toLocaleDateString() || 'the end of your billing period'}.`,
+        subscription: {
+          id: subscription.id,
+          status: subscription.status,
+          cancelAtPeriodEnd: true,
+          currentPeriodEnd: subscription.currentPeriodEnd?.toISOString() || null,
+        },
+      })
+    } catch (err: any) {
+      console.error(`[my-subscriptions] Public cancel failed:`, err)
+      return c.json({
+        error: 'Failed to cancel subscription. Please try again or contact support.',
+        code: 'CANCEL_FAILED',
+      }, 500)
+    }
   }
 )
 

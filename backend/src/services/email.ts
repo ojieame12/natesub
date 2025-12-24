@@ -746,7 +746,8 @@ export async function sendRenewalReminderEmail(
   providerName: string,
   amount: number,
   currency: string,
-  renewalDate: Date
+  renewalDate: Date,
+  cancelUrl?: string // Direct cancel link for 1-click cancellation
 ): Promise<EmailResult> {
   const formattedAmount = formatAmountForEmail(amount, currency)
   const safeProviderName = escapeHtml(providerName)
@@ -756,20 +757,37 @@ export async function sendRenewalReminderEmail(
     year: 'numeric',
   })
 
+  // Visa-compliant: clearly show amount, date, and easy cancel option
+  const cancelSection = cancelUrl
+    ? `
+          <p style="margin: 16px 0 0 0; font-size: 14px;">
+            <a href="${escapeHtml(cancelUrl)}" style="color: #888888; text-decoration: underline;">Cancel subscription</a>
+          </p>
+        `
+    : `
+          <p style="margin: 16px 0 0 0; font-size: 14px; color: #888888;">
+            To cancel, visit <a href="${env.APP_URL}/my-subscriptions" style="color: #888888; text-decoration: underline;">your subscriptions</a>.
+          </p>
+        `
+
   return sendEmail({
     from: env.EMAIL_FROM,
     to,
-    subject: sanitizeEmailSubject(`Subscription renewal reminder - ${providerName}`),
+    subject: sanitizeEmailSubject(`Upcoming charge: ${formattedAmount} on ${formattedDate}`),
     html: baseTemplate({
-      preheader: `Your subscription to ${providerName} renews on ${formattedDate}.`,
-      headline: 'Your subscription renews soon',
+      preheader: `Your subscription to ${providerName} renews on ${formattedDate} for ${formattedAmount}.`,
+      headline: 'Upcoming subscription renewal',
       body: `
           <p style="margin: 0 0 16px 0;">
-            Your subscription to <strong>${safeProviderName}</strong> will renew on <strong>${escapeHtml(formattedDate)}</strong> for <strong>${escapeHtml(formattedAmount)}</strong>.
+            Your subscription to <strong>${safeProviderName}</strong> will automatically renew on <strong>${escapeHtml(formattedDate)}</strong>.
+          </p>
+          <p style="margin: 0 0 16px 0; font-size: 18px; font-weight: bold;">
+            Amount: ${escapeHtml(formattedAmount)}
           </p>
           <p style="margin: 0; font-size: 14px; color: #888888;">
-            No action needed if you'd like to continue. To update your payment method or cancel, visit your account settings.
+            No action needed if you'd like to continue. Your payment method will be charged automatically.
           </p>
+          ${cancelSection}
         `,
       ctaText: 'Manage Subscription',
       ctaUrl: `${env.APP_URL}/my-subscriptions`,
@@ -851,6 +869,66 @@ export async function sendSubscriptionCanceledEmail(
         `,
       ctaText: 'Resubscribe',
       ctaUrl: env.APP_URL,
+    }),
+  })
+}
+
+/**
+ * Send cancellation confirmation to subscriber
+ * Visa-compliant confirmation that subscription will end at period end
+ */
+export async function sendCancellationConfirmationEmail(
+  to: string,
+  subscriberName: string,
+  providerName: string,
+  accessUntil: Date,
+  resubscribeUrl: string
+): Promise<EmailResult> {
+  const safeSubscriberName = escapeHtml(subscriberName.split(' ')[0] || 'there')
+  const safeProviderName = escapeHtml(providerName)
+  const formattedDate = accessUntil.toLocaleDateString('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  })
+
+  return sendEmail({
+    from: env.EMAIL_FROM,
+    to,
+    subject: sanitizeEmailSubject(`Subscription canceled: ${providerName}`),
+    html: baseTemplate({
+      preheader: `Your subscription to ${providerName} has been canceled. Access until ${formattedDate}.`,
+      headline: 'Subscription Canceled',
+      body: `
+          <p style="margin: 0 0 16px 0;">
+            Hey ${safeSubscriberName}, your subscription to <strong>${safeProviderName}</strong> has been canceled as requested.
+          </p>
+
+          <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin: 20px 0;">
+            <tr>
+              <td style="background-color: #FEF3C7; border-radius: 12px; padding: 20px; text-align: center; border-left: 4px solid #F59E0B;">
+                <p style="margin: 0 0 8px 0; font-size: 14px; color: #92400E;">You'll have access until:</p>
+                <p style="margin: 0; font-size: 24px; font-weight: 700; color: #78350F;">${escapeHtml(formattedDate)}</p>
+              </td>
+            </tr>
+          </table>
+
+          <p style="margin: 0 0 16px 0; font-size: 14px; color: #4a4a4a;">
+            <strong>What happens next:</strong>
+          </p>
+          <ul style="margin: 0 0 20px 0; padding-left: 20px; color: #4a4a4a; font-size: 14px;">
+            <li style="margin-bottom: 6px;">You won't be charged again</li>
+            <li style="margin-bottom: 6px;">Access continues until ${escapeHtml(formattedDate)}</li>
+            <li style="margin-bottom: 6px;">You can resubscribe anytime</li>
+          </ul>
+
+          <p style="margin: 0; font-size: 14px; color: #888888;">
+            Changed your mind? Click below to resubscribe.
+          </p>
+        `,
+      ctaText: 'Resubscribe',
+      ctaUrl: resubscribeUrl,
+      footerText: 'Thank you for your support.',
     }),
   })
 }
@@ -1748,6 +1826,226 @@ export async function sendCreatorAccountCreatedEmail(
     logEmailSent({ to, subject, template: 'creator_account_created', messageId: result.messageId })
   } else {
     logEmailFailed({ to, subject, template: 'creator_account_created', error: result.error || 'Unknown error' })
+  }
+
+  return result
+}
+
+// ============================================
+// DISPUTE ENFORCEMENT EMAILS
+// ============================================
+
+/**
+ * Email sent when creator's payouts are paused due to high dispute rate
+ * Threshold: >2% with minimum 5 disputes
+ */
+export async function sendPayoutsPausedEmail(
+  to: string,
+  displayName: string,
+  disputeRate: number,
+  disputeCount: number,
+  transactionCount: number
+): Promise<EmailResult> {
+  const safeName = escapeHtml(displayName)
+  const ratePercent = (disputeRate * 100).toFixed(2)
+  const subject = `Action Required: Payouts Paused Due to Disputes`
+
+  const result = await sendEmail({
+    from: env.EMAIL_FROM,
+    to,
+    subject: sanitizeEmailSubject(subject),
+    html: baseTemplate({
+      preheader: `Your dispute rate of ${ratePercent}% has triggered a payout pause.`,
+      headline: `Payouts Paused`,
+      body: `
+        <p style="color: #374151; font-size: 16px; line-height: 1.6;">
+          Hi ${safeName},
+        </p>
+
+        <p style="color: #374151; font-size: 16px; line-height: 1.6;">
+          Your account's dispute rate has exceeded our safety threshold, so we've temporarily paused payouts to your bank account.
+        </p>
+
+        <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin: 24px 0;">
+          <tr>
+            <td style="background-color: #FEF2F2; border-radius: 12px; padding: 20px; border-left: 4px solid #EF4444;">
+              <p style="margin: 0 0 12px 0; font-size: 14px; color: #991B1B; font-weight: 600;">Current Status</p>
+              <p style="margin: 0; font-size: 14px; color: #7F1D1D;">
+                Dispute Rate: <strong>${ratePercent}%</strong> (${disputeCount} disputes / ${transactionCount} transactions)<br>
+                Threshold: 2.0%
+              </p>
+            </td>
+          </tr>
+        </table>
+
+        <p style="color: #374151; font-size: 16px; line-height: 1.6;">
+          <strong>What this means:</strong>
+        </p>
+        <ul style="color: #374151; font-size: 16px; line-height: 1.6; padding-left: 20px;">
+          <li>Your subscribers can still pay you</li>
+          <li>Funds are held safely in your account</li>
+          <li>Payouts will resume once your dispute rate drops below 2%</li>
+        </ul>
+
+        <p style="color: #374151; font-size: 16px; line-height: 1.6;">
+          <strong>What you can do:</strong>
+        </p>
+        <ul style="color: #374151; font-size: 16px; line-height: 1.6; padding-left: 20px;">
+          <li>Review your recent disputes in your dashboard</li>
+          <li>Ensure your billing descriptor is clear to subscribers</li>
+          <li>Make cancellation easy to find</li>
+          <li>Respond to dispute evidence requests promptly</li>
+        </ul>
+
+        <p style="color: #6B7280; font-size: 14px; margin-top: 24px;">
+          High dispute rates can result in penalties from payment networks. We're pausing payouts to protect both you and our platform.
+        </p>
+      `,
+      ctaText: 'View Disputes',
+      ctaUrl: `${env.APP_URL}/dashboard/disputes`,
+      footerText: 'If you believe this is an error, please contact support.',
+    }),
+  })
+
+  if (result.success) {
+    logEmailSent({ to, subject, template: 'payouts_paused', messageId: result.messageId })
+  } else {
+    logEmailFailed({ to, subject, template: 'payouts_paused', error: result.error || 'Unknown error' })
+  }
+
+  return result
+}
+
+/**
+ * Email sent when creator's account is suspended due to critical dispute rate
+ * Threshold: >3% dispute rate
+ */
+export async function sendAccountSuspendedEmail(
+  to: string,
+  displayName: string,
+  disputeRate: number,
+  disputeCount: number
+): Promise<EmailResult> {
+  const safeName = escapeHtml(displayName)
+  const ratePercent = (disputeRate * 100).toFixed(2)
+  const subject = `Account Suspended: Dispute Rate Critical`
+
+  const result = await sendEmail({
+    from: env.EMAIL_FROM,
+    to,
+    subject: sanitizeEmailSubject(subject),
+    html: baseTemplate({
+      preheader: `Your account has been suspended due to a ${ratePercent}% dispute rate.`,
+      headline: `Account Suspended`,
+      body: `
+        <p style="color: #374151; font-size: 16px; line-height: 1.6;">
+          Hi ${safeName},
+        </p>
+
+        <p style="color: #374151; font-size: 16px; line-height: 1.6;">
+          Due to an excessive dispute rate, we've had to suspend your account. This means:
+        </p>
+
+        <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin: 24px 0;">
+          <tr>
+            <td style="background-color: #FEF2F2; border-radius: 12px; padding: 20px; border-left: 4px solid #DC2626;">
+              <p style="margin: 0 0 12px 0; font-size: 14px; color: #991B1B; font-weight: 600;">Account Status: Suspended</p>
+              <p style="margin: 0; font-size: 14px; color: #7F1D1D;">
+                Dispute Rate: <strong>${ratePercent}%</strong> (${disputeCount} disputes)<br>
+                Critical Threshold: 3.0%
+              </p>
+            </td>
+          </tr>
+        </table>
+
+        <ul style="color: #374151; font-size: 16px; line-height: 1.6; padding-left: 20px;">
+          <li><strong>Your payment page is disabled</strong> — new subscribers cannot sign up</li>
+          <li><strong>Payouts are paused</strong> — funds are held pending review</li>
+          <li><strong>Existing subscriptions</strong> — will not be renewed</li>
+        </ul>
+
+        <p style="color: #374151; font-size: 16px; line-height: 1.6;">
+          <strong>To appeal this suspension:</strong>
+        </p>
+        <p style="color: #374151; font-size: 16px; line-height: 1.6;">
+          Please contact our support team with documentation showing how you'll prevent future disputes. Include any evidence that disputes were filed in error.
+        </p>
+
+        <p style="color: #6B7280; font-size: 14px; margin-top: 24px;">
+          Payment networks impose significant penalties on platforms with high dispute rates. To protect our ability to serve all creators, we must enforce these limits.
+        </p>
+      `,
+      ctaText: 'Contact Support',
+      ctaUrl: `${env.APP_URL}/support?reason=dispute_suspension`,
+      footerText: 'This action was taken automatically based on dispute rate thresholds.',
+    }),
+  })
+
+  if (result.success) {
+    logEmailSent({ to, subject, template: 'account_suspended', messageId: result.messageId })
+  } else {
+    logEmailFailed({ to, subject, template: 'account_suspended', error: result.error || 'Unknown error' })
+  }
+
+  return result
+}
+
+/**
+ * Email sent when creator's payouts are resumed after dispute rate improves
+ */
+export async function sendPayoutsResumedEmail(
+  to: string,
+  displayName: string,
+  newDisputeRate: number
+): Promise<EmailResult> {
+  const safeName = escapeHtml(displayName)
+  const ratePercent = (newDisputeRate * 100).toFixed(2)
+  const subject = `Good News: Payouts Resumed`
+
+  const result = await sendEmail({
+    from: env.EMAIL_FROM,
+    to,
+    subject: sanitizeEmailSubject(subject),
+    html: baseTemplate({
+      preheader: `Your dispute rate has improved and payouts are now active.`,
+      headline: `Payouts Resumed!`,
+      body: `
+        <p style="color: #374151; font-size: 16px; line-height: 1.6;">
+          Hi ${safeName},
+        </p>
+
+        <p style="color: #374151; font-size: 16px; line-height: 1.6;">
+          Great news! Your dispute rate has dropped to ${ratePercent}%, which is below our 2% threshold. We've resumed payouts to your bank account.
+        </p>
+
+        <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin: 24px 0;">
+          <tr>
+            <td style="background-color: #F0FDF4; border-radius: 12px; padding: 20px; border-left: 4px solid #22C55E;">
+              <p style="margin: 0; font-size: 14px; color: #166534;">
+                ✓ Payouts are now active<br>
+                ✓ Current dispute rate: ${ratePercent}%
+              </p>
+            </td>
+          </tr>
+        </table>
+
+        <p style="color: #374151; font-size: 16px; line-height: 1.6;">
+          Any pending payouts will be processed on the next payout cycle. Thank you for addressing the dispute issues.
+        </p>
+
+        <p style="color: #6B7280; font-size: 14px; margin-top: 24px;">
+          To keep your dispute rate low, ensure your billing descriptor is clear and cancellation is easy to find.
+        </p>
+      `,
+      ctaText: 'View Dashboard',
+      ctaUrl: `${env.APP_URL}/dashboard`,
+    }),
+  })
+
+  if (result.success) {
+    logEmailSent({ to, subject, template: 'payouts_resumed', messageId: result.messageId })
+  } else {
+    logEmailFailed({ to, subject, template: 'payouts_resumed', error: result.error || 'Unknown error' })
   }
 
   return result
