@@ -153,9 +153,9 @@ function AuthErrorHandler() {
 function RootRedirect() {
   const { status, isFullySetUp, needsPaymentSetup, refetch } = useAuthState()
 
-  // Still checking - render nothing (splash screen handles this)
+  // Still checking - show skeleton (splash may be suppressed for returning users)
   if (status === 'unknown' || status === 'checking') {
-    return null
+    return <PageSkeleton />
   }
 
   // Network/server error - show retry UI instead of redirecting
