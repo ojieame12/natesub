@@ -308,27 +308,19 @@ export default function PaymentSettings() {
     setStripeError(null)
 
     try {
-      // Fetch URL first, then open - cleaner than blank tab workaround
       const result = await api.stripe.getDashboardLink()
       if (!result?.url) {
         throw new Error('No dashboard URL returned')
       }
-      // Open in new tab - if blocked, fall back to same tab
-      const opened = window.open(result.url, '_blank', 'noopener,noreferrer')
-      if (!opened) {
-        // Popup blocked - navigate in same window
-        window.location.href = result.url
-        return // Don't update state, we're navigating away
-      }
+      // Navigate in same window - Stripe requires 2FA verification anyway
+      window.location.href = result.url
     } catch (err) {
       if (isMountedRef.current) {
         setStripeError(getErrorMessage(err))
-      }
-    } finally {
-      if (isMountedRef.current) {
         setStripeOpeningDashboard(false)
       }
     }
+    // Don't reset loading state - we're navigating away
   }, [])
 
   const stripeIsConnected = stripeStatus?.connected === true
