@@ -28,14 +28,6 @@ vi.mock('./SubscribeBoundary', () => ({
   ),
 }))
 
-vi.mock('./SubscribeMidnight', () => ({
-  default: ({ profile }: { profile: { displayName: string } }) => (
-    <div data-testid="subscribe-midnight">
-      <span>{profile.displayName}</span>
-    </div>
-  ),
-}))
-
 vi.mock('./AlreadySubscribed', () => ({
   default: ({ profile }: { profile: { displayName: string } }) => (
     <div data-testid="already-subscribed">
@@ -288,27 +280,6 @@ describe('UserPage', () => {
       expect(screen.getByText("You're subscribed!")).toBeInTheDocument()
     })
 
-    it('uses midnight template when specified', () => {
-      mockUsePublicProfile.mockReturnValue({
-        data: {
-          profile: { ...mockProfile, template: 'midnight' },
-          isOwner: false,
-          viewerSubscription: null,
-        },
-        isLoading: false,
-        error: null,
-        refetch: vi.fn(),
-      } as any)
-
-      renderWithProviders(<UserPage />, {
-        route: '/testuser',
-        routePath: '/:username',
-      })
-
-      // Midnight template should render
-      expect(screen.getByTestId('subscribe-midnight')).toBeInTheDocument()
-      expect(screen.getByText('Test User')).toBeInTheDocument()
-    })
   })
 
   describe('Query params', () => {

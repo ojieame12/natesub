@@ -32,7 +32,7 @@ type TemplateId = z.infer<typeof templateSchema>
 
 function normalizeTemplate(template: TemplateId | null | undefined): Exclude<TemplateId, 'liquid'> | null {
   if (!template) return null
-  if (template === 'liquid') return 'midnight'
+  if (template === 'liquid') return 'boundary'
   return template
 }
 
@@ -265,7 +265,7 @@ profile.patch(
     if (data.state !== undefined) updateData.state = data.state || null
     if (data.zip !== undefined) updateData.zip = data.zip || null
 
-    // Template (normalize legacy 'liquid' -> 'midnight')
+    // Template (normalize legacy 'liquid' -> 'boundary')
     if (data.template !== undefined) {
       updateData.template = normalizeTemplate(data.template) || 'boundary'
     }

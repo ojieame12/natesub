@@ -121,13 +121,6 @@
     background: linear-gradient(135deg, #fff8f0 0%, #ffffff 65%);
 }
 
-.template-preview-midnight {
-    background:
-        radial-gradient(circle at 30% 25%, rgba(163, 84, 255, 0.35), transparent 55%),
-        radial-gradient(circle at 70% 60%, rgba(88, 181, 255, 0.22), transparent 60%),
-        linear-gradient(135deg, #0b0b0f 0%, #161622 100%);
-}
-
 .template-preview-minimal {
     background: linear-gradient(135deg, #f4f4f5 0%, #ffffff 70%);
 }
@@ -149,20 +142,10 @@
     gap: 10px;
 }
 
-.template-preview-midnight .template-mini-frame {
-    border: 1px solid rgba(255, 255, 255, 0.16);
-    background: rgba(0, 0, 0, 0.28);
-    box-shadow: 0 14px 34px rgba(0, 0, 0, 0.34);
-}
-
 .template-mini-top {
     height: 10px;
     border-radius: 999px;
     background: rgba(0, 0, 0, 0.12);
-}
-
-.template-preview-midnight .template-mini-top {
-    background: rgba(255, 255, 255, 0.18);
 }
 
 .template-mini-body {
@@ -171,19 +154,10 @@
     background: rgba(0, 0, 0, 0.06);
 }
 
-.template-preview-midnight .template-mini-body {
-    background: rgba(255, 255, 255, 0.12);
-}
-
 .template-mini-cta {
     height: 34px;
     border-radius: 12px;
     background: rgba(0, 0, 0, 0.78);
-}
-
-.template-preview-midnight .template-mini-cta {
-    background:
-        linear-gradient(90deg, rgba(163, 84, 255, 0.9), rgba(88, 181, 255, 0.8));
 }
 
 .template-selected-badge {

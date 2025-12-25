@@ -6,7 +6,7 @@ import { useProfile, useUpdateProfile } from './api/hooks'
 import './Templates.css'
 
 interface Template {
-  id: 'boundary' | 'midnight' | 'minimal' | 'editorial'
+  id: 'boundary' | 'minimal' | 'editorial'
   name: string
   description: string
   preview: string
@@ -19,13 +19,6 @@ const templates: Template[] = [
     name: 'Boundary',
     description: 'Modern card with swipeable content views',
     preview: '/templates/boundary-preview.png',
-    available: true,
-  },
-  {
-    id: 'midnight',
-    name: 'Midnight',
-    description: 'Dark mode with purple accents and shimmer',
-    preview: '/templates/midnight-preview.png',
     available: true,
   },
   {
@@ -52,8 +45,8 @@ export default function Templates() {
   const profile = profileData?.profile
 
   // Get saved template from profile or default to boundary
-  const savedTemplate = (profile?.template || 'boundary') as 'boundary' | 'midnight' | 'minimal' | 'editorial'
-  const [selectedTemplate, setSelectedTemplate] = useState<'boundary' | 'midnight' | 'minimal' | 'editorial'>(savedTemplate)
+  const savedTemplate = (profile?.template || 'boundary') as 'boundary' | 'minimal' | 'editorial'
+  const [selectedTemplate, setSelectedTemplate] = useState<'boundary' | 'minimal' | 'editorial'>(savedTemplate)
 
   // Sync selected template when profile loads
   useEffect(() => {

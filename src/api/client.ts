@@ -106,7 +106,7 @@ export interface Profile {
   paymentProvider: string | null
   payoutStatus: 'pending' | 'active' | 'restricted'
   shareUrl: string | null
-  template?: 'boundary' | 'midnight' | 'minimal' | 'editorial' // Subscribe page template
+  template?: 'boundary' | 'minimal' | 'editorial' // Subscribe page template
   paymentsReady?: boolean // For public profiles - indicates if checkout will work
   feeMode?: 'absorb' | 'pass_to_subscriber' | 'split' // Fee model (split = 4%/4%)
   crossBorder?: boolean // True if Stripe cross-border account (payments in USD, payouts in local currency)

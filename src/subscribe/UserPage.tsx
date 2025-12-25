@@ -9,7 +9,6 @@ import { Pressable } from '../components'
 // It checks if the username is valid and renders the subscribe page
 
 import SubscribeBoundary from './SubscribeBoundary'
-import SubscribeMidnight from './SubscribeMidnight'
 import SubscriptionSuccess from './SubscriptionSuccess'
 import AlreadySubscribed from './AlreadySubscribed'
 
@@ -112,16 +111,9 @@ export default function UserPage() {
   const templateToUse = data.profile.template || 'boundary' // Restored
 
   // Determine template component
-  // 'minimal' and 'editorial' are not yet implemented, so we fall back to 'boundary'
-  const renderTemplate = (tpl: string | null, isOwnerMode: boolean = false) => {
-    // Normalize logic
-    const t = tpl || 'boundary'
-
-    if (t === 'midnight') {
-      return <SubscribeMidnight profile={data.profile} canceled={isCanceled} isOwner={isOwnerMode} />
-    }
-
-    // Fallback for 'boundary', 'minimal', 'editorial' (until implemented)
+  // Only 'boundary' is currently implemented - 'minimal' and 'editorial' coming soon
+  const renderTemplate = (_tpl: string | null, isOwnerMode: boolean = false) => {
+    // All templates currently use Boundary until others are implemented
     return <SubscribeBoundary profile={data.profile} canceled={isCanceled} isOwner={isOwnerMode} />
   }
 

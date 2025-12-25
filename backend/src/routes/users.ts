@@ -161,8 +161,8 @@ users.get(
       currency: displayCurrency, // Use checkout currency (USD for cross-border)
       shareUrl: profile.shareUrl,
       paymentProvider: inferredPaymentProvider,
-      // Normalize legacy 'liquid' template to 'midnight' for frontend consistency
-      template: (profile.template === 'liquid' ? 'midnight' : profile.template) || 'boundary',
+      // Normalize legacy 'liquid' template to 'boundary'
+      template: (profile.template === 'liquid' ? 'boundary' : profile.template) || 'boundary',
       feeMode: 'split' as const, // Always split model - 4% subscriber + 4% creator
       paymentsReady,
       crossBorder: isCrossBorder, // Flag for frontend to show cross-border info

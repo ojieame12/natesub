@@ -244,12 +244,12 @@ describe('E2E Flows', () => {
 
       const res = await authRequest('/profile', cookie, {
         method: 'PATCH',
-        body: JSON.stringify({ template: 'midnight' }),
+        body: JSON.stringify({ template: 'minimal' }),
       })
 
       expect(res.status).toBe(200)
       const body = await res.json()
-      expect(body.profile.template).toBe('midnight')
+      expect(body.profile.template).toBe('minimal')
     })
 
     it('rejects patch without existing profile', async () => {

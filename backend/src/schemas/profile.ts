@@ -37,7 +37,7 @@ const httpsUrl = z.string().refine(
   { message: 'Must be a valid HTTP(S) URL' }
 )
 
-export const templateSchema = z.enum(['boundary', 'midnight', 'liquid', 'minimal', 'editorial'])
+export const templateSchema = z.enum(['boundary', 'liquid', 'minimal', 'editorial'])
 
 // E.164 phone number validation (e.g., +2348012345678)
 const e164Phone = z.string().refine(
