@@ -454,24 +454,16 @@ function AppShell() {
     }
   }, [bypassSplash, minTimeElapsed, splashExiting])
 
-  // DEBUG: Log state BEFORE splash check
-  console.log('[AppShell] PRE-CHECK: showSplash:', showSplash, 'bypassSplash:', bypassSplash, 'isReady:', isReady, 'status:', status, 'minTimeElapsed:', minTimeElapsed)
-
   // Show splash while checking auth (except for public routes after min time)
-  if (showSplash && !bypassSplash) {
-    console.log('[AppShell] Showing SplashScreen, exiting:', splashExiting)
-    return <SplashScreen exiting={splashExiting} />
-  }
-
-  // DEBUG: Visible marker to confirm AppShell renders
-  console.log('[AppShell] Rendering, showSplash:', showSplash, 'isReady:', isReady, 'status:', status)
+  // When splash is exiting, render content underneath so exit animation overlays it
+  const showSplashOverlay = showSplash && !bypassSplash && !splashExiting
 
   return (
     <>
-      {/* DEBUG: Visible element to confirm render */}
-      <div style={{ position: 'fixed', top: 10, left: 10, zIndex: 99999, background: 'red', color: 'white', padding: '8px 16px', borderRadius: 8, fontSize: 14, fontWeight: 'bold' }}>
-        DEBUG: status={status}, splash={String(showSplash)}
-      </div>
+      {/* Splash overlay - shown during auth check, fades out when ready */}
+      {showSplashOverlay && <SplashScreen />}
+      {showSplash && splashExiting && <SplashScreen exiting />}
+
       {/* Global "Liquid Glass" Atmosphere - persists across all routes */}
       <AmbientBackground />
       <ScrollRestoration />
@@ -583,19 +575,10 @@ function App() {
   // Conditionally render router based on platform
   const RouterComponent = isNative ? HashRouter : BrowserRouter
 
-  // DEBUG: Absolutely first thing - prove React is mounting
-  console.log('[App] Component rendering')
-
   return (
-    <>
-      {/* DEBUG: Very first element - should always show if React mounts */}
-      <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 999999, background: '#ff0000', color: 'white', padding: 16, textAlign: 'center', fontSize: 18, fontWeight: 'bold' }}>
-        🔴 DEBUG: App is rendering - React mounted successfully
-      </div>
-      <RouterComponent>
-        <AppShell />
-      </RouterComponent>
-    </>
+    <RouterComponent>
+      <AppShell />
+    </RouterComponent>
   )
 }
 
