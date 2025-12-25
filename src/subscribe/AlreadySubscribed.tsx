@@ -1,6 +1,8 @@
+import { useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Heart, Calendar, ChevronLeft } from 'lucide-react'
 import { Pressable } from '../components'
+import { useRecordPageView } from '../api/hooks'
 import type { Profile, ViewerSubscription } from '../api/client'
 import { formatAmountWithSeparators } from '../utils/currency'
 import './template-one.css'
@@ -12,6 +14,19 @@ interface AlreadySubscribedProps {
 
 export default function AlreadySubscribed({ profile, subscription }: AlreadySubscribedProps) {
     const navigate = useNavigate()
+    const { mutateAsync: recordPageView } = useRecordPageView()
+    const viewRecorded = useRef(false)
+
+    // Record page view for analytics (subscribers still count as views)
+    useEffect(() => {
+        if (profile.id && !viewRecorded.current) {
+            viewRecorded.current = true
+            recordPageView({
+                profileId: profile.id,
+                referrer: document.referrer || undefined,
+            }).catch(() => { }) // Silent fail - analytics shouldn't break the page
+        }
+    }, [profile.id, recordPageView])
 
     // Only show back button when this page was reached via in-app navigation.
     // `history.length` is unreliable on shared links (it can be > 1 even on a direct entry).

@@ -190,7 +190,7 @@ export default function Analytics() {
                   <Eye size={18} />
                 </div>
                 <div className="analytics-stat-info">
-                  <span className="analytics-stat-label">This Week</span>
+                  <span className="analytics-stat-label">Last 7 Days</span>
                   <span className="analytics-stat-value">{formatNumber(data.views.week)}</span>
                   <span className="analytics-stat-sub">{data.uniqueVisitors.week} unique</span>
                 </div>
@@ -201,7 +201,7 @@ export default function Analytics() {
                   <Eye size={18} />
                 </div>
                 <div className="analytics-stat-info">
-                  <span className="analytics-stat-label">This Month</span>
+                  <span className="analytics-stat-label">Last 30 Days</span>
                   <span className="analytics-stat-value">{formatNumber(data.views.month)}</span>
                   <span className="analytics-stat-sub">{data.uniqueVisitors.month} unique</span>
                 </div>
