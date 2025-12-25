@@ -78,7 +78,7 @@ export async function stripeWebhookHandler(c: Context) {
       status: 'received',
       // Store full event payload for DLQ retry capability
       // The processor needs event.data.object which minimal payloads lack
-      payload: event as unknown as Record<string, unknown>,
+      payload: JSON.parse(JSON.stringify(event)),
     },
     update: {
       retryCount: { increment: 1 },

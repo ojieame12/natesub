@@ -95,7 +95,7 @@ export async function paystackWebhookHandler(c: Context) {
       status: 'received',
       // Store full payload for DLQ retry capability
       // The processor needs the complete event structure
-      payload: payload as unknown as Record<string, unknown>,
+      payload: JSON.parse(JSON.stringify(payload)),
     },
     update: {
       retryCount: { increment: 1 },
