@@ -1,17 +1,10 @@
 /**
  * Revenue - Revenue analytics page with charts
+ * Uses /admin/revenue/all endpoint for single-request data fetching (7 calls → 1)
  */
 
 import { useState } from 'react'
-import {
-  useAdminRevenueOverview,
-  useAdminRevenueByProvider,
-  useAdminRevenueByCurrency,
-  useAdminRevenueDaily,
-  useAdminRevenueMonthly,
-  useAdminTopCreators,
-  useAdminRefundsStats,
-} from '../api'
+import { useAdminRevenueAll } from '../api'
 import { formatCurrency, formatNumber, formatDateTime } from '../utils/format'
 import StatCard from '../components/StatCard'
 import { AdminLineChart, AdminBarChart, AdminPieChart } from '../components/AdminChart'
@@ -28,13 +21,17 @@ function formatCompactCurrency(cents: number): string {
 export default function Revenue() {
   const [period, setPeriod] = useState<Period>('month')
 
-  const { data: overview, isLoading: overviewLoading } = useAdminRevenueOverview()
-  const { data: byProvider, isLoading: providerLoading } = useAdminRevenueByProvider(period)
-  const { data: byCurrency, isLoading: currencyLoading } = useAdminRevenueByCurrency(period)
-  const { data: daily, isLoading: dailyLoading } = useAdminRevenueDaily(30)
-  const { data: monthly, isLoading: monthlyLoading } = useAdminRevenueMonthly(12)
-  const { data: topCreators, isLoading: creatorsLoading } = useAdminTopCreators(period, 10)
-  const { data: refunds, isLoading: refundsLoading } = useAdminRefundsStats(period)
+  // Single API call for all revenue data
+  const { data, isLoading, error, refetch } = useAdminRevenueAll(period, 30, 12, 10)
+
+  // Extract data from combined response
+  const overview = data?.overview
+  const byProvider = data?.byProvider
+  const byCurrency = data?.byCurrency
+  const daily = data?.daily
+  const monthly = data?.monthly
+  const topCreators = data?.topCreators
+  const refunds = data?.refunds
 
   // Format daily data for chart
   const dailyChartData = daily?.days?.map((d) => ({
@@ -55,6 +52,23 @@ export default function Revenue() {
   ].filter(d => d.value > 0) : []
 
   const freshness = overview?.freshness
+
+  // Error state
+  if (error) {
+    return (
+      <div>
+        <h1 className="admin-page-title">Revenue Analytics</h1>
+        <div className="admin-error-card">
+          <p style={{ color: 'var(--error)', marginBottom: '12px' }}>
+            Failed to load revenue data: {error.message}
+          </p>
+          <button className="admin-btn admin-btn-primary" onClick={() => refetch()}>
+            Retry
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div>
@@ -85,25 +99,25 @@ export default function Revenue() {
           value={overview ? formatCurrency(overview.allTime.platformFeeCents) : '---'}
           subtext={overview ? `${formatNumber(overview.allTime.paymentCount)} payments` : undefined}
           variant="success"
-          loading={overviewLoading}
+          loading={isLoading}
         />
         <StatCard
           label="This Month"
           value={overview ? formatCurrency(overview.thisMonth.platformFeeCents) : '---'}
           subtext={overview ? `${formatNumber(overview.thisMonth.paymentCount)} payments` : undefined}
-          loading={overviewLoading}
+          loading={isLoading}
         />
         <StatCard
           label="Last Month"
           value={overview ? formatCurrency(overview.lastMonth.platformFeeCents) : '---'}
           subtext={overview ? `${formatNumber(overview.lastMonth.paymentCount)} payments` : undefined}
-          loading={overviewLoading}
+          loading={isLoading}
         />
         <StatCard
           label="Today"
           value={overview ? formatCurrency(overview.today.platformFeeCents) : '---'}
           subtext={overview ? `${formatNumber(overview.today.paymentCount)} payments` : undefined}
-          loading={overviewLoading}
+          loading={isLoading}
         />
       </div>
 
@@ -112,13 +126,13 @@ export default function Revenue() {
         <AdminLineChart
           title="Daily Revenue (Last 30 Days)"
           data={dailyChartData}
-          loading={dailyLoading}
+          loading={isLoading}
           formatValue={formatCompactCurrency}
         />
         <AdminBarChart
           title="Monthly Revenue (Last 12 Months)"
           data={monthlyChartData}
-          loading={monthlyLoading}
+          loading={isLoading}
           formatValue={formatCompactCurrency}
         />
       </div>
@@ -130,7 +144,7 @@ export default function Revenue() {
           <AdminPieChart
             title="Revenue by Provider"
             data={providerChartData}
-            loading={providerLoading}
+            loading={isLoading}
             formatValue={formatCompactCurrency}
           />
           <div className="admin-table-container">
@@ -144,7 +158,7 @@ export default function Revenue() {
                 </tr>
               </thead>
               <tbody>
-                {providerLoading ? (
+                {isLoading ? (
                   <tr><td colSpan={4} style={{ textAlign: 'center' }}>Loading...</td></tr>
                 ) : (
                   <>
@@ -183,7 +197,7 @@ export default function Revenue() {
               </tr>
             </thead>
             <tbody>
-              {currencyLoading ? (
+              {isLoading ? (
                 <tr><td colSpan={5} style={{ textAlign: 'center' }}>Loading...</td></tr>
               ) : byCurrency?.currencies?.length ? (
                 byCurrency.currencies.map((c) => (
@@ -219,7 +233,7 @@ export default function Revenue() {
               </tr>
             </thead>
             <tbody>
-              {creatorsLoading ? (
+              {isLoading ? (
                 <tr><td colSpan={6} style={{ textAlign: 'center' }}>Loading...</td></tr>
               ) : topCreators?.creators?.length ? (
                 topCreators.creators.map((c) => (
@@ -249,21 +263,21 @@ export default function Revenue() {
             value={refunds ? formatCurrency(refunds.refunds.totalCents) : '---'}
             subtext={refunds ? `${formatNumber(refunds.refunds.count)} refunds` : undefined}
             variant="warning"
-            loading={refundsLoading}
+            loading={isLoading}
           />
           <StatCard
             label="Disputes"
             value={refunds ? formatCurrency(refunds.disputes.totalCents) : '---'}
             subtext={refunds ? `${formatNumber(refunds.disputes.count)} disputes` : undefined}
             variant="warning"
-            loading={refundsLoading}
+            loading={isLoading}
           />
           <StatCard
             label="Chargebacks"
             value={refunds ? formatCurrency(refunds.chargebacks.totalCents) : '---'}
             subtext={refunds ? `${formatNumber(refunds.chargebacks.count)} chargebacks` : undefined}
             variant="error"
-            loading={refundsLoading}
+            loading={isLoading}
           />
         </div>
       </div>

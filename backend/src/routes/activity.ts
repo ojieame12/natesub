@@ -180,6 +180,18 @@ activity.get('/metrics', requireAuth, async (c) => {
     syncCreatorBalance(userId).catch(() => {}) // Fire-and-forget
   }
 
+  // Get FX rate if balance currency differs from profile currency
+  const balanceCurrency = profile?.balanceCurrency || profileCurrency
+  let fxRate: number | null = null
+  if (balanceCurrency !== profileCurrency) {
+    // Get rate: 1 USD = X local
+    // We need profile→balance conversion for display toggle
+    const profileToUsdRate = profileCurrency === 'USD' ? 1 : await getUSDRate(profileCurrency)
+    const balanceToUsdRate = balanceCurrency === 'USD' ? 1 : await getUSDRate(balanceCurrency)
+    // fxRate: 1 profile currency = X balance currency
+    fxRate = balanceToUsdRate / profileToUsdRate
+  }
+
   return c.json({
     metrics: {
       subscriberCount,
@@ -193,9 +205,11 @@ activity.get('/metrics', requireAuth, async (c) => {
       balance: {
         available: profile?.balanceAvailableCents || 0,
         pending: profile?.balancePendingCents || 0,
-        currency: profile?.balanceCurrency || profileCurrency,
+        currency: balanceCurrency,
         lastSyncedAt: profile?.balanceLastSyncedAt || null,
       },
+      // FX rate for currency toggle: 1 profileCurrency = fxRate balanceCurrency
+      fxRate,
     },
   })
 })

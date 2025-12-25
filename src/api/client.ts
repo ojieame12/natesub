@@ -226,6 +226,7 @@ export interface Metrics {
   mrr: number
   totalRevenueCents: number
   totalRevenue: number
+  currency: string
   tierBreakdown: Record<string, number>
   balance?: {
     available: number
@@ -233,6 +234,8 @@ export interface Metrics {
     currency: string
     lastSyncedAt: string | null
   }
+  // FX rate for currency toggle: 1 profileCurrency = fxRate balanceCurrency
+  fxRate: number | null
 }
 
 export interface Request {

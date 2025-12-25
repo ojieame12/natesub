@@ -126,6 +126,8 @@ export default function Dashboard() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [copied, setCopied] = useState(false)
+  // Currency toggle: 'profile' shows MRR/Revenue in profile currency, 'payout' shows in payout currency
+  const [currencyView, setCurrencyView] = useState<'profile' | 'payout'>('profile')
 
   // Real API hooks
   const { data: currentUser } = useCurrentUser()
@@ -140,6 +142,23 @@ export default function Dashboard() {
   const currencyCode = (profile?.currency || currentUser?.profile?.currency || 'USD').toUpperCase()
   // Avoid "Clients ↔ Subscribers" flicker while /profile loads by using the already-loaded /auth/me profile.
   const isService = (profile?.purpose || currentUser?.profile?.purpose) === 'service'
+
+  // Currency conversion helpers
+  const payoutCurrency = metrics?.balance?.currency || currencyCode
+  const fxRate = metrics?.fxRate || null
+  const hasDualCurrency = payoutCurrency !== currencyCode && fxRate !== null
+
+  // Get display values based on currency toggle
+  const displayCurrency = currencyView === 'payout' && hasDualCurrency ? payoutCurrency : currencyCode
+  const displayMrr = currencyView === 'payout' && hasDualCurrency && fxRate
+    ? (metrics?.mrr ?? 0) * fxRate
+    : (metrics?.mrr ?? 0)
+  const displayTotalRevenue = currencyView === 'payout' && hasDualCurrency && fxRate
+    ? (metrics?.totalRevenue ?? 0) * fxRate
+    : (metrics?.totalRevenue ?? 0)
+  const displayPending = currencyView === 'profile' && hasDualCurrency && fxRate
+    ? centsToDisplayAmount(metrics?.balance?.pending ?? 0, payoutCurrency) / fxRate
+    : centsToDisplayAmount(metrics?.balance?.pending ?? 0, payoutCurrency)
 
   // Build menu items based on service vs personal
   const menuItems = useMemo(() => getMenuItems(isService), [isService])
@@ -590,11 +609,33 @@ export default function Dashboard() {
               </section>
             ) : (
               <section className="stats-card">
+              {/* Currency Toggle - only show if dual currency */}
+              {hasDualCurrency ? (
+                <Pressable
+                  className="currency-toggle"
+                  onClick={() => setCurrencyView(v => v === 'profile' ? 'payout' : 'profile')}
+                >
+                  <span className={`currency-toggle-option ${currencyView === 'profile' ? 'active' : ''}`}>
+                    {getCurrencySymbol(currencyCode)}
+                  </span>
+                  <span className={`currency-toggle-option ${currencyView === 'payout' ? 'active' : ''}`}>
+                    {getCurrencySymbol(payoutCurrency)}
+                  </span>
+                </Pressable>
+              ) : null}
+
               <div className="stats-primary">
                 <span className="stats-label">Monthly Recurring Revenue</span>
                 <span className="stats-mrr">
-                  <AnimatedNumber value={metrics?.mrr ?? 0} duration={600} format={(n) => formatCompactAmount(n, currencyCode)} />
+                  <AnimatedNumber value={displayMrr} duration={600} format={(n) => formatCompactAmount(n, displayCurrency)} />
                 </span>
+                {/* Pending Balance - under MRR */}
+                {(metrics?.balance?.pending ?? 0) > 0 && (
+                  <div className="stats-pending">
+                    <Clock size={12} />
+                    <span>{formatCompactAmount(displayPending, displayCurrency)} pending</span>
+                  </div>
+                )}
               </div>
               <div className="stats-secondary-row">
                 <div className="stats-metric">
@@ -609,25 +650,11 @@ export default function Dashboard() {
                 </div>
                 <div className="stats-metric">
                   <div className="stats-metric-value">
-                    <AnimatedNumber value={metrics?.totalRevenue ?? 0} duration={600} format={(n) => formatCompactAmount(n, currencyCode)} />
+                    <AnimatedNumber value={displayTotalRevenue} duration={600} format={(n) => formatCompactAmount(n, displayCurrency)} />
                   </div>
                   <span className="stats-label">Total Revenue</span>
                 </div>
               </div>
-              {/* Pending Balance - subtle footer, uses profile currency */}
-              {(metrics?.balance?.pending ?? 0) > 0 && (
-                <div className="stats-pending">
-                  <Clock size={12} />
-                  <span>
-                    {formatCompactAmount(centsToDisplayAmount(metrics?.balance?.pending ?? 0, currencyCode), currencyCode)} pending
-                  </span>
-                </div>
-              )}
-              <img
-                src="/wink.png"
-                alt=""
-                className="stats-mascot"
-              />
               </section>
             )}
 

@@ -51,13 +51,18 @@ const PROVIDER_CONFIG = {
 import type { PayoutInfoResponse } from './api/client'
 
 // Payout status steps for timeline
+// Matches Stripe's actual lifecycle: charge → transfer → payout
 const PAYOUT_STEPS = [
-    { key: 'paid', label: 'Paid' },
-    { key: 'processing', label: 'Processing' },
-    { key: 'deposited', label: 'Deposited' },
+    { key: 'initiated', label: 'Initiated' },    // Payment received, payout queued
+    { key: 'in_transit', label: 'In Transit' },  // Payout on the way to bank
+    { key: 'deposited', label: 'Deposited' },    // Funds in bank
 ]
 
 // Get payout status - use real data when available, estimate otherwise
+// Maps Stripe's payout lifecycle to our 3-step timeline:
+// Step 0 (Initiated): Payment received, payout queued - Stripe status: 'pending'
+// Step 1 (In Transit): Payout sent to bank - Stripe status: 'in_transit'
+// Step 2 (Deposited): Funds in bank - Stripe status: 'paid'
 const getPayoutInfo = (
     provider: string | undefined,
     createdAt: string,
@@ -67,13 +72,13 @@ const getPayoutInfo = (
     if (realPayoutInfo?.status) {
         switch (realPayoutInfo.status) {
             case 'paid':
-                return { status: 'completed', step: 2, label: 'In your bank', icon: CheckCircle }
+                return { status: 'completed', step: 2, label: 'Deposited to your bank', icon: CheckCircle }
             case 'in_transit':
-                return { status: 'in_transit', step: 1, label: 'On the way', icon: Building2 }
+                return { status: 'in_transit', step: 1, label: 'On the way to your bank', icon: Building2 }
             case 'pending':
-                return { status: 'processing', step: 0, label: 'Processing', icon: Clock }
+                return { status: 'initiated', step: 0, label: 'Payout initiated', icon: Clock }
             case 'failed':
-                return { status: 'failed', step: -1, label: 'Failed', icon: XCircle }
+                return { status: 'failed', step: -1, label: 'Payout failed', icon: XCircle }
             default:
                 break
         }
@@ -97,12 +102,15 @@ const getPayoutInfo = (
     }
 
     // Determine status from estimate
+    // After estimated date: likely deposited
+    // More than 1 day old: likely in transit
+    // Less than 1 day: just initiated
     if (now >= estimatedDate) {
-        return { status: 'completed', step: 2, label: 'In your bank', icon: CheckCircle }
+        return { status: 'completed', step: 2, label: 'Deposited to your bank', icon: CheckCircle }
     } else if (now.getTime() - paymentDate.getTime() > 24 * 60 * 60 * 1000) {
-        return { status: 'in_transit', step: 1, label: 'On the way', icon: Building2 }
+        return { status: 'in_transit', step: 1, label: 'On the way to your bank', icon: Building2 }
     } else {
-        return { status: 'processing', step: 0, label: 'Processing', icon: Clock }
+        return { status: 'initiated', step: 0, label: 'Payout initiated', icon: Clock }
     }
 }
 
@@ -235,9 +243,11 @@ export default function ActivityDetail() {
     const payload = activityData?.payload || {}
 
     // Auto-refresh when FX data is pending (backfill in progress)
-    // Retry at 2.5s and 7.5s to handle varying transfer delays
+    // Cross-border transfers can take 5-30 minutes for balance transaction to finalize
+    // Retry schedule: 2.5s, 7.5s, 15s, 30s, 60s (5 retries over ~2 minutes)
     const retryCount = useRef(0)
     const lastActivityId = useRef(id)
+    const FX_RETRY_DELAYS = [2500, 7500, 15000, 30000, 60000]
 
     useEffect(() => {
         // Reset retry count when activity ID changes
@@ -252,10 +262,10 @@ export default function ActivityDetail() {
             return
         }
 
-        // Max 2 retries: 2.5s then 7.5s
-        if (retryCount.current >= 2) return
+        // Max 5 retries with increasing delays
+        if (retryCount.current >= FX_RETRY_DELAYS.length) return
 
-        const delay = retryCount.current === 0 ? 2500 : 7500
+        const delay = FX_RETRY_DELAYS[retryCount.current]
         const timer = setTimeout(() => {
             retryCount.current++
             refetch()
@@ -549,8 +559,11 @@ export default function ActivityDetail() {
                         <div className="receipt-card-label">CONVERSION</div>
                         <div className="fx-pending-content">
                             <Loader2 size={16} className="spin" />
-                            <span>Fetching exchange rate...</span>
+                            <span>Loading exchange rate</span>
                         </div>
+                        <p className="fx-pending-hint">
+                            Cross-border rates are confirmed when Stripe processes the transfer, usually within a few minutes.
+                        </p>
                     </div>
                 )}
 

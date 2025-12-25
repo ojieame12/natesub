@@ -105,7 +105,7 @@ describe('ActivityDetail FX Pending UI', () => {
 
     renderActivityDetail('act_123')
 
-    expect(screen.getByText('Fetching exchange rate...')).toBeInTheDocument()
+    expect(screen.getByText('Loading exchange rate')).toBeInTheDocument()
     expect(screen.getByText('CONVERSION')).toBeInTheDocument()
   })
 

@@ -162,16 +162,30 @@ export default function Stripe() {
   const [triggerPayoutModal, setTriggerPayoutModal] = useState<StripeAccount | null>(null)
 
   // Queries
-  const { data: accountsData, isLoading: accountsLoading, refetch: refetchAccounts } = useAdminStripeAccounts({
+  const { data: accountsData, isLoading: accountsLoading, error: accountsError, refetch: refetchAccounts } = useAdminStripeAccounts({
     status: status !== 'all' ? status : undefined,
     page,
     limit,
   }, { enabled: activeTab === 'accounts' })
 
-  const { data: balanceData, isLoading: balanceLoading } = useAdminStripeBalance({ enabled: activeTab === 'balance' })
-  const { data: transfersData, isLoading: transfersLoading } = useAdminStripeTransfers({ limit: 50 }, { enabled: activeTab === 'transfers' })
-  const { data: eventsData, isLoading: eventsLoading } = useAdminStripeEvents({ limit: 50 }, { enabled: activeTab === 'events' })
+  const { data: balanceData, isLoading: balanceLoading, error: balanceError, refetch: refetchBalance } = useAdminStripeBalance({ enabled: activeTab === 'balance' })
+  const { data: transfersData, isLoading: transfersLoading, error: transfersError, refetch: refetchTransfers } = useAdminStripeTransfers({ limit: 50 }, { enabled: activeTab === 'transfers' })
+  const { data: eventsData, isLoading: eventsLoading, error: eventsError, refetch: refetchEvents } = useAdminStripeEvents({ limit: 50 }, { enabled: activeTab === 'events' })
   const { data: accountDetail, isLoading: detailLoading } = useAdminStripeAccountDetail(selectedAccountId || '')
+
+  // Current tab error
+  const currentError = activeTab === 'accounts' ? accountsError
+    : activeTab === 'balance' ? balanceError
+    : activeTab === 'transfers' ? transfersError
+    : activeTab === 'events' ? eventsError
+    : null
+
+  const handleRetry = () => {
+    if (activeTab === 'accounts') refetchAccounts()
+    else if (activeTab === 'balance') refetchBalance()
+    else if (activeTab === 'transfers') refetchTransfers()
+    else if (activeTab === 'events') refetchEvents()
+  }
 
   // Mutations
   const disablePayoutsMutation = useAdminStripeDisablePayouts()
@@ -268,6 +282,18 @@ export default function Stripe() {
           Webhook Events
         </button>
       </div>
+
+      {/* Error Banner */}
+      {currentError && (
+        <div className="admin-error-card" style={{ marginBottom: '16px' }}>
+          <p style={{ color: 'var(--error)', marginBottom: '12px' }}>
+            Failed to load data: {currentError.message}
+          </p>
+          <button className="admin-btn admin-btn-primary" onClick={handleRetry}>
+            Retry
+          </button>
+        </div>
+      )}
 
       {/* Balance Tab */}
       {activeTab === 'balance' && (
