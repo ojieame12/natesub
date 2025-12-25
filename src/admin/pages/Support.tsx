@@ -15,8 +15,14 @@ const ADMIN_FETCH_TIMEOUT_MS = 20_000
 
 async function adminFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
+    'Accept': 'application/json',
     ...(options.headers as Record<string, string>),
+  }
+
+  // Only set Content-Type when there's a body (avoids CORS preflight on GETs)
+  const hasBody = options.body !== undefined && options.body !== null
+  if (hasBody) {
+    headers['Content-Type'] = 'application/json'
   }
 
   const token = getAuthToken()

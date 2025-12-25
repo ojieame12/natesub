@@ -144,6 +144,17 @@ export interface RefundsStats {
   chargebacks: { totalCents: number; count: number }
 }
 
+/** Combined revenue data from /admin/revenue/all - reduces 7 API calls to 1 */
+export interface RevenueAll {
+  overview: RevenueOverview
+  byProvider: RevenueByProvider
+  byCurrency: RevenueByCurrency
+  daily: DailyRevenue
+  monthly: MonthlyRevenue
+  topCreators: { period: string; creators: TopCreator[] }
+  refunds: RefundsStats
+}
+
 export interface AdminUser {
   id: string
   email: string
@@ -338,6 +349,18 @@ export function useAdminRefundsStats(period: string = 'month') {
     queryKey: ['admin', 'revenue', 'refunds', period],
     queryFn: () => adminFetch<RefundsStats>(`/admin/revenue/refunds?period=${period}`),
     staleTime: 5 * 60 * 1000,
+  })
+}
+
+/**
+ * Combined revenue hook - fetches all revenue data in a single API call
+ * Reduces 7 round trips to 1 for the Revenue dashboard
+ */
+export function useAdminRevenueAll(period: string = 'month', days: number = 30, months: number = 12, topCreatorsLimit: number = 10) {
+  return useQuery({
+    queryKey: ['admin', 'revenue', 'all', period, days, months, topCreatorsLimit],
+    queryFn: () => adminFetch<RevenueAll>(`/admin/revenue/all?period=${period}&days=${days}&months=${months}&topCreatorsLimit=${topCreatorsLimit}`),
+    staleTime: 60 * 1000, // 1 minute cache
   })
 }
 

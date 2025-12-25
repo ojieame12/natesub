@@ -76,8 +76,9 @@ export async function stripeWebhookHandler(c: Context) {
       eventId: event.id,
       eventType: event.type,
       status: 'received',
-      // Store minimal payload to save space (exclude large objects)
-      payload: { id: event.id, type: event.type, created: event.created },
+      // Store full event payload for DLQ retry capability
+      // The processor needs event.data.object which minimal payloads lack
+      payload: event as unknown as Record<string, unknown>,
     },
     update: {
       retryCount: { increment: 1 },

@@ -589,49 +589,44 @@ export default function Dashboard() {
                 </div>
               </section>
             ) : (
-              <section className="stats-card" style={{ height: 'auto', minHeight: '220px', padding: '24px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '16px' }}>
+              <section className="stats-card">
               <div className="stats-primary">
-                <span className="stats-label" style={{ marginBottom: '0', opacity: 0.8, lineHeight: '1.2' }}>Monthly Recurring Revenue</span>
-                <span className="stats-mrr" style={{ lineHeight: '1', marginTop: '2px' }}>
+                <span className="stats-label">Monthly Recurring Revenue</span>
+                <span className="stats-mrr">
                   <AnimatedNumber value={metrics?.mrr ?? 0} duration={600} format={(n) => formatCompactAmount(n, currencyCode)} />
                 </span>
               </div>
-              {/* Pending Balance - only show if there's pending funds */}
+              <div className="stats-secondary-row">
+                <div className="stats-metric">
+                  <div className="stats-metric-value">
+                    <AnimatedNumber value={metrics?.subscriberCount ?? 0} duration={500} format={(n) => formatCompactNumber(n)} />
+                  </div>
+                  <span className="stats-label">
+                    {(metrics?.subscriberCount ?? 0) === 1
+                      ? (isService ? 'Client' : 'Subscriber')
+                      : (isService ? 'Clients' : 'Subscribers')}
+                  </span>
+                </div>
+                <div className="stats-metric">
+                  <div className="stats-metric-value">
+                    <AnimatedNumber value={metrics?.totalRevenue ?? 0} duration={600} format={(n) => formatCompactAmount(n, currencyCode)} />
+                  </div>
+                  <span className="stats-label">Total Revenue</span>
+                </div>
+              </div>
+              {/* Pending Balance - subtle footer, uses profile currency */}
               {(metrics?.balance?.pending ?? 0) > 0 && (
-                <div className="stats-pending" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px', color: 'var(--text-secondary)', padding: '8px 12px', background: 'rgba(var(--primary-rgb), 0.08)', borderRadius: 'var(--radius-md)' }}>
-                  <Clock size={14} />
+                <div className="stats-pending">
+                  <Clock size={12} />
                   <span>
-                    {formatCompactAmount(centsToDisplayAmount(metrics?.balance?.pending ?? 0, metrics?.balance?.currency || currencyCode), metrics?.balance?.currency || currencyCode)} pending payout
+                    {formatCompactAmount(centsToDisplayAmount(metrics?.balance?.pending ?? 0, currencyCode), currencyCode)} pending
                   </span>
                 </div>
               )}
-              <div className="stats-secondary-row">
-                <div className="stats-metric">
-                  <div className="stats-metric-value" style={{ lineHeight: '1' }}>
-                    <AnimatedNumber value={metrics?.subscriberCount ?? 0} duration={500} format={(n) => formatCompactNumber(n)} />
-                  </div>
-                  <span className="stats-label" style={{ marginTop: '2px', opacity: 0.8, lineHeight: '1.2' }}>{isService ? 'Clients' : 'Subscribers'}</span>
-                </div>
-                <div className="stats-metric">
-                  <div className="stats-metric-value" style={{ lineHeight: '1' }}>
-                    <AnimatedNumber value={metrics?.totalRevenue ?? 0} duration={600} format={(n) => formatCompactAmount(n, currencyCode)} />
-                  </div>
-                  <span className="stats-label" style={{ marginTop: '2px', opacity: 0.8, lineHeight: '1.2' }}>Total Revenue</span>
-                </div>
-              </div>
               <img
                 src="/wink.png"
                 alt=""
-                style={{
-                  position: 'absolute',
-                  top: '16px',
-                  right: '16px',
-                  width: '60px',
-                  height: '60px',
-                  transform: 'rotate(5deg)',
-                  pointerEvents: 'none',
-                  opacity: 0.9
-                }}
+                className="stats-mascot"
               />
               </section>
             )}

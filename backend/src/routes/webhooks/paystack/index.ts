@@ -93,7 +93,9 @@ export async function paystackWebhookHandler(c: Context) {
       eventId: webhookEventId!,
       eventType: event,
       status: 'received',
-      payload: { event, reference: data.reference, id: data.id },
+      // Store full payload for DLQ retry capability
+      // The processor needs the complete event structure
+      payload: payload as unknown as Record<string, unknown>,
     },
     update: {
       retryCount: { increment: 1 },
