@@ -174,7 +174,6 @@ button {
   background: none;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation; /* Disable double-tap-to-zoom, eliminates 300ms delay */
 }
 
 input {
@@ -182,7 +181,6 @@ input {
   border: none;
   outline: none;
   background: none;
-  touch-action: manipulation;
 }
 
 /* === FOCUS VISIBILITY ===
@@ -232,7 +230,6 @@ button:focus-visible,
 .pressable {
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation; /* Disable double-tap-to-zoom, eliminates 300ms delay */
   transition: transform var(--duration-fast) var(--ease-spring),
     background var(--duration-fast) ease,
     opacity var(--duration-fast) ease;

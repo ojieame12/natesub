@@ -134,8 +134,7 @@ export default function PageSetupWizard() {
         <div className="onboarding-input-group" style={{ marginTop: 32 }}>
           <label className="onboarding-label">Monthly Price ($)</label>
           <input
-            type="text"
-            inputMode="decimal"
+            type="number"
             className="onboarding-input"
             value={priceInput}
             onChange={(e) => setPriceInput(e.target.value)}
