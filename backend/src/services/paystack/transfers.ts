@@ -1,4 +1,21 @@
 // Paystack Transfers - Creator Payouts
+//
+// ⚠️  IMPORTANT: These transfer functions are NOT used in normal operation!
+//
+// NatePay uses SUBACCOUNT SPLITS for creator payouts, not manual transfers.
+// When a subscriber pays:
+// 1. Payment goes to Paystack with subaccount parameter
+// 2. Paystack automatically splits: 8% → NatePay, 92% → Creator
+// 3. Creator receives funds via T+1 automatic settlement
+// 4. NO manual transfers, NO OTP required
+//
+// These transfer functions exist only for:
+// - Manual refunds/corrections by admin
+// - Edge cases where subaccount split failed
+// - Future features that might need direct transfers
+//
+// The OTP functions (finalizeTransfer, resendTransferOtp) are kept for
+// completeness but are NOT a blocker - they're rarely if ever used.
 
 import { paystackFetch } from './client.js'
 

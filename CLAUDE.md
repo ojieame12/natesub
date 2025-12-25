@@ -35,6 +35,25 @@ Nigerian creators CAN use Stripe Express. This is proven and working.
 - Constants: `backend/src/utils/constants.ts`
 - Checkout: `backend/src/routes/checkout.ts`
 
+## Paystack OTP - NOT A BLOCKER
+
+Paystack OTP for transfers is NOT needed. Here's why:
+
+### How Creator Payouts Work:
+1. Subscriber pays via Paystack checkout with `subaccount` parameter
+2. Paystack automatically splits the payment (8% → NatePay, 92% → Creator)
+3. Creator receives funds via **automatic T+1 settlement** to their bank
+4. **No manual transfers, no OTP required**
+
+### Why Transfer/OTP Code Exists:
+The `transfers.ts` module has `finalizeTransfer` and `resendTransferOtp` functions for:
+- Manual admin corrections (rare)
+- Edge cases where subaccount split failed (very rare)
+- API completeness
+
+**DO NOT** flag Paystack OTP as a blocker or try to implement OTP flows.
+The subaccount model handles everything automatically.
+
 ## Testing
 - Backend: `cd backend && npm test`
 - Frontend: `npm run test:run`
