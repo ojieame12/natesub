@@ -336,13 +336,12 @@ export default function CreateCreator() {
                 </span>
                 <input
                   id="amount"
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
                   value={formData.amount}
                   onChange={e => setFormData({ ...formData, amount: e.target.value })}
                   placeholder="500"
                   required
-                  min="1"
-                  step="any"
                   style={{ paddingLeft: 36 }}
                 />
               </div>

@@ -176,7 +176,8 @@ export default function PersonalPricingStep() {
                                 <div className="single-amount-input-group">
                                     <span className="single-amount-currency">{currencySymbol}</span>
                                     <input
-                                        type="number"
+                                        type="text"
+                                        inputMode="decimal"
                                         className="single-amount-input"
                                         placeholder="0"
                                         value={inputValue}
