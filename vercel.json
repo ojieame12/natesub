@@ -48,6 +48,10 @@
     {
       "path": "/api/cron/cleanup-pageviews",
       "schedule": "0 5 * * 0"
+    },
+    {
+      "path": "/api/cron/sync-balances",
+      "schedule": "*/15 * * * *"
     }
   ]
 }
