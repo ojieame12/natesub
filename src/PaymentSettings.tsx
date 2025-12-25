@@ -70,7 +70,13 @@ export default function PaymentSettings() {
   const [stripeStatus, setStripeStatus] = useState<StripeStatus | null>(null)
   const [paystackStatus, setPaystackStatus] = useState<PaystackConnectionStatus | null>(null)
 
-  const [stripeBalance, setStripeBalance] = useState<{ available: number; pending: number; currency?: string } | null>(null)
+  const [stripeBalance, setStripeBalance] = useState<{
+    available: number;
+    pending: number;
+    currency?: string;
+    nextPayoutDate?: string | null;
+    nextPayoutAmount?: number | null;
+  } | null>(null)
   const [stripeBalanceLoading, setStripeBalanceLoading] = useState(false)
 
   const [stripeError, setStripeError] = useState<string | null>(null)
@@ -388,6 +394,19 @@ export default function PaymentSettings() {
                 </div>
               </div>
             </div>
+
+            {/* Next payout estimate */}
+            {stripeBalance?.nextPayoutDate && stripeBalance?.pending > 0 && (
+              <div className="payout-estimate">
+                <span className="payout-estimate-label">Next payout</span>
+                <span className="payout-estimate-date">
+                  {new Date(stripeBalance.nextPayoutDate).toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                  })}
+                </span>
+              </div>
+            )}
 
             <Pressable
               className="cashout-btn"

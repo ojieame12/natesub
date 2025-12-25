@@ -105,6 +105,26 @@
     opacity: 0.6;
 }
 
+.payout-estimate {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--space-sm) var(--space-md);
+    margin-bottom: var(--space-md);
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: var(--radius-md);
+    font-size: 13px;
+}
+
+.payout-estimate-label {
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.payout-estimate-date {
+    color: white;
+    font-weight: 500;
+}
+
 .cashout-btn {
     width: 100%;
     padding: var(--space-md);

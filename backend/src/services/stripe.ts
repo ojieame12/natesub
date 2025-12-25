@@ -510,13 +510,18 @@ export async function createCheckoutSession(params: {
   return session
 }
 
-// Get account balance
+// Get account balance with upcoming payout estimate
 // Returns balance for primary currency only (first in available array)
 // Multi-currency accounts: only sums amounts matching primary currency to avoid mixing
 export async function getAccountBalance(stripeAccountId: string) {
-  const balance = await stripe.balance.retrieve({
-    stripeAccount: stripeAccountId,
-  })
+  const [balance, upcomingPayouts] = await Promise.all([
+    stripe.balance.retrieve({ stripeAccount: stripeAccountId }),
+    // Get pending/in_transit payouts to show upcoming payout date
+    stripe.payouts.list(
+      { limit: 1, status: 'pending' },
+      { stripeAccount: stripeAccountId }
+    ).catch(() => ({ data: [] })), // Ignore errors - not critical
+  ])
 
   // Get the primary currency from the first available balance entry
   // For cross-border accounts (NG, KE, GH, ZA), this will be USD
@@ -532,10 +537,19 @@ export async function getAccountBalance(stripeAccountId: string) {
     .filter(b => b.currency === primaryCurrency)
     .reduce((sum, b) => sum + b.amount, 0)
 
+  // Get upcoming payout info if there's a pending payout
+  const upcomingPayout = upcomingPayouts.data[0]
+  const nextPayoutDate = upcomingPayout?.arrival_date
+    ? new Date(upcomingPayout.arrival_date * 1000)
+    : null
+  const nextPayoutAmount = upcomingPayout?.amount || null
+
   return {
     available,
     pending,
     currency: primaryCurrency.toUpperCase(),
+    nextPayoutDate,
+    nextPayoutAmount,
   }
 }
 
