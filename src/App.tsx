@@ -401,9 +401,6 @@ function AppShell() {
       const url = new URL(event.url)
       const path = url.pathname + url.search
 
-      console.log('[DeepLink] Received URL:', event.url)
-      console.log('[DeepLink] Navigating to:', path)
-
       // Navigate to the path
       if (path && path !== '/') {
         navigate(path, { replace: true })
@@ -523,6 +520,9 @@ function AppShell() {
           {/* Legal pages */}
           <Route path="/terms" element={<Terms />} />
           <Route path="/privacy" element={<Privacy />} />
+          {/* Legacy redirects for old static HTML links */}
+          <Route path="/terms.html" element={<Navigate to="/terms" replace />} />
+          <Route path="/privacy.html" element={<Navigate to="/privacy" replace />} />
 
           {/* Email management */}
           <Route path="/unsubscribe" element={<Unsubscribe />} />

@@ -251,6 +251,7 @@ describe('admin operations', () => {
         eventType: 'invoice.paid',
         status: 'failed',
         retryCount: 0,
+        payload: { id: 'evt_retry_1', type: 'invoice.paid', data: { object: {} } },
       },
     })
 

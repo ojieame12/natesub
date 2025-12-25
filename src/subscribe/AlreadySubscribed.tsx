@@ -5,7 +5,7 @@ import { Pressable } from '../components'
 import { useRecordPageView } from '../api/hooks'
 import type { Profile, ViewerSubscription } from '../api/client'
 import { formatAmountWithSeparators } from '../utils/currency'
-import './template-one.css'
+import './subscribe.css'
 
 interface AlreadySubscribedProps {
     profile: Profile

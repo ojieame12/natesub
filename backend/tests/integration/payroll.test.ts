@@ -15,6 +15,7 @@ vi.mock('../../src/services/payroll.js', () => ({
   setPdfUrl: vi.fn(),
   getPeriodBoundaries: vi.fn(),
   generateCustomStatement: vi.fn(),
+  aggregatePayments: vi.fn(),
 }))
 
 // Mock PDF service
@@ -33,6 +34,7 @@ import {
   setPdfUrl,
   getPeriodBoundaries,
   generateCustomStatement,
+  aggregatePayments,
 } from '../../src/services/payroll.js'
 import {
   generateAndUploadPayStatement,
@@ -48,6 +50,7 @@ const mockVerifyDocument = vi.mocked(verifyDocument)
 const mockSetPdfUrl = vi.mocked(setPdfUrl)
 const mockGetPeriodBoundaries = vi.mocked(getPeriodBoundaries)
 const mockGenerateCustomStatement = vi.mocked(generateCustomStatement)
+const mockAggregatePayments = vi.mocked(aggregatePayments)
 const mockGenerateAndUploadPayStatement = vi.mocked(generateAndUploadPayStatement)
 const mockGetPayStatementSignedUrl = vi.mocked(getPayStatementSignedUrl)
 const mockGenerateVerificationPdf = vi.mocked(generateVerificationPdf)
@@ -218,15 +221,6 @@ describe('payroll routes', () => {
     it('returns empty list when no periods exist', async () => {
       const { user, rawToken } = await createServiceProviderWithSession()
 
-      // Mock period boundaries for incremental generation
-      const now = new Date()
-      const lastPeriodStart = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
-      const lastPeriodEnd = new Date(now.getTime() - 16 * 24 * 60 * 60 * 1000)
-      mockGetPeriodBoundaries.mockImplementation((date: Date) => ({
-        start: date < now ? lastPeriodStart : now,
-        end: date < now ? lastPeriodEnd : new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000),
-      }))
-      mockGeneratePayrollPeriodsForAllCurrencies.mockResolvedValue(0)
       mockGetPayrollPeriods.mockResolvedValue([])
 
       const res = await authRequest('/payroll/periods', { method: 'GET' }, rawToken)
@@ -237,8 +231,8 @@ describe('payroll routes', () => {
       expect(body.ytdByCurrency).toEqual({})
       expect(body.total).toBe(0)
 
-      // Now uses incremental generation (last period only) instead of full backfill
-      expect(mockGeneratePayrollPeriodsForAllCurrencies).toHaveBeenCalled()
+      // Period generation now happens via cron job or manual trigger, not inline
+      expect(mockGetPayrollPeriods).toHaveBeenCalled()
     })
 
     it('returns list of periods with correct status', async () => {
@@ -260,14 +254,6 @@ describe('payroll routes', () => {
         periodEnd: new Date(now.getTime() + 86400000), // Tomorrow
       })
 
-      // Mock period boundaries for incremental generation
-      const lastPeriodStart = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
-      const lastPeriodEnd = new Date(now.getTime() - 16 * 24 * 60 * 60 * 1000)
-      mockGetPeriodBoundaries.mockImplementation((date: Date) => ({
-        start: date < now ? lastPeriodStart : now,
-        end: date < now ? lastPeriodEnd : new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000),
-      }))
-      mockGeneratePayrollPeriodsForAllCurrencies.mockResolvedValue(0)
       mockGetPayrollPeriods.mockResolvedValue([currentPeriod, pendingPeriod, pastPeriod])
 
       const res = await authRequest('/payroll/periods', { method: 'GET' }, rawToken)
@@ -289,8 +275,7 @@ describe('payroll routes', () => {
     it('calculates YTD total correctly', async () => {
       const { rawToken } = await createServiceProviderWithSession()
 
-      const now = new Date()
-      const currentYear = now.getFullYear()
+      const currentYear = new Date().getFullYear()
       const periods = [
         createMockPeriod({
           id: 'period-1',
@@ -309,14 +294,6 @@ describe('payroll routes', () => {
         }),
       ]
 
-      // Mock period boundaries for incremental generation
-      const lastPeriodStart = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
-      const lastPeriodEnd = new Date(now.getTime() - 16 * 24 * 60 * 60 * 1000)
-      mockGetPeriodBoundaries.mockImplementation((date: Date) => ({
-        start: date < now ? lastPeriodStart : now,
-        end: date < now ? lastPeriodEnd : new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000),
-      }))
-      mockGeneratePayrollPeriodsForAllCurrencies.mockResolvedValue(0)
       mockGetPayrollPeriods.mockResolvedValue(periods)
 
       const res = await authRequest('/payroll/periods', { method: 'GET' }, rawToken)
@@ -469,19 +446,15 @@ describe('payroll routes', () => {
 
       mockGetPeriodBoundaries.mockReturnValue({ start, end })
 
-      // Create test payments
-      await db.payment.create({
-        data: {
-          profileId: profile.id,
-          creatorId: user.id,
-          amountCents: 10000,
-          feeCents: 1000,
-          netCents: 9000,
-          currency: 'USD',
-          status: 'succeeded',
-          type: 'recurring',
-          occurredAt: new Date(),
-        },
+      // Mock aggregatePayments to return expected values
+      mockAggregatePayments.mockResolvedValue({
+        grossCents: 10000,
+        refundsCents: 0,
+        chargebacksCents: 0,
+        totalFeeCents: 1000,
+        totalNetCents: 9000,
+        paymentCount: 1,
+        payments: [],
       })
 
       const res = await authRequest('/payroll/current', { method: 'GET' }, rawToken)

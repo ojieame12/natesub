@@ -14,6 +14,129 @@ const tax = new Hono()
 // All tax routes require super_admin
 tax.use('*', requireRole('super_admin'))
 
+// Allowed currency codes for validation
+const VALID_CURRENCIES = ['USD', 'NGN', 'GHS', 'KES', 'GBP', 'EUR', 'CAD', 'AUD'] as const
+type ValidCurrency = (typeof VALID_CURRENCIES)[number]
+
+function isValidCurrency(currency: string): currency is ValidCurrency {
+  return VALID_CURRENCIES.includes(currency as ValidCurrency)
+}
+
+// Type for creator earnings query result
+type CreatorEarningsRow = {
+  creator_id: string
+  total_earnings: bigint
+  platform_fees: bigint
+  net_earnings: bigint
+  payment_count: bigint
+  currency: string
+}
+
+/**
+ * Get creator earnings with optional currency filter
+ * Uses separate queries to avoid SQL injection from dynamic fragments
+ */
+async function getCreatorEarnings(
+  yearStart: Date,
+  yearEnd: Date,
+  minAmount: number,
+  limit: number,
+  offset: number,
+  currency?: ValidCurrency
+): Promise<CreatorEarningsRow[]> {
+  if (currency) {
+    return db.$queryRaw<CreatorEarningsRow[]>`
+      SELECT
+        s."creatorId" as creator_id,
+        SUM(COALESCE(p."grossCents", p."amountCents"))::bigint as total_earnings,
+        SUM(COALESCE(p."feeCents", 0))::bigint as platform_fees,
+        SUM(p."netCents")::bigint as net_earnings,
+        COUNT(*)::bigint as payment_count,
+        p.currency
+      FROM "payments" p
+      JOIN "subscriptions" s ON p."subscriptionId" = s.id
+      WHERE p.status = 'succeeded'
+        AND p."createdAt" >= ${yearStart}
+        AND p."createdAt" < ${yearEnd}
+        AND p.currency = ${currency}
+      GROUP BY s."creatorId", p.currency
+      HAVING SUM(p."netCents") >= ${minAmount}
+      ORDER BY net_earnings DESC
+      LIMIT ${limit}
+      OFFSET ${offset}
+    `
+  }
+
+  return db.$queryRaw<CreatorEarningsRow[]>`
+    SELECT
+      s."creatorId" as creator_id,
+      SUM(COALESCE(p."grossCents", p."amountCents"))::bigint as total_earnings,
+      SUM(COALESCE(p."feeCents", 0))::bigint as platform_fees,
+      SUM(p."netCents")::bigint as net_earnings,
+      COUNT(*)::bigint as payment_count,
+      p.currency
+    FROM "payments" p
+    JOIN "subscriptions" s ON p."subscriptionId" = s.id
+    WHERE p.status = 'succeeded'
+      AND p."createdAt" >= ${yearStart}
+      AND p."createdAt" < ${yearEnd}
+    GROUP BY s."creatorId", p.currency
+    HAVING SUM(p."netCents") >= ${minAmount}
+    ORDER BY net_earnings DESC
+    LIMIT ${limit}
+    OFFSET ${offset}
+  `
+}
+
+/**
+ * Get creator earnings for 1099 export (no pagination)
+ */
+async function getCreatorEarningsForExport(
+  yearStart: Date,
+  yearEnd: Date,
+  minAmount: number,
+  currency?: ValidCurrency
+): Promise<CreatorEarningsRow[]> {
+  if (currency) {
+    return db.$queryRaw<CreatorEarningsRow[]>`
+      SELECT
+        s."creatorId" as creator_id,
+        SUM(COALESCE(p."grossCents", p."amountCents"))::bigint as total_earnings,
+        SUM(COALESCE(p."feeCents", 0))::bigint as platform_fees,
+        SUM(p."netCents")::bigint as net_earnings,
+        COUNT(*)::bigint as payment_count,
+        p.currency
+      FROM "payments" p
+      JOIN "subscriptions" s ON p."subscriptionId" = s.id
+      WHERE p.status = 'succeeded'
+        AND p."createdAt" >= ${yearStart}
+        AND p."createdAt" < ${yearEnd}
+        AND p.currency = ${currency}
+      GROUP BY s."creatorId", p.currency
+      HAVING SUM(p."netCents") >= ${minAmount}
+      ORDER BY net_earnings DESC
+    `
+  }
+
+  return db.$queryRaw<CreatorEarningsRow[]>`
+    SELECT
+      s."creatorId" as creator_id,
+      SUM(COALESCE(p."grossCents", p."amountCents"))::bigint as total_earnings,
+      SUM(COALESCE(p."feeCents", 0))::bigint as platform_fees,
+      SUM(p."netCents")::bigint as net_earnings,
+      COUNT(*)::bigint as payment_count,
+      p.currency
+    FROM "payments" p
+    JOIN "subscriptions" s ON p."subscriptionId" = s.id
+    WHERE p.status = 'succeeded'
+      AND p."createdAt" >= ${yearStart}
+      AND p."createdAt" < ${yearEnd}
+    GROUP BY s."creatorId", p.currency
+    HAVING SUM(p."netCents") >= ${minAmount}
+    ORDER BY net_earnings DESC
+  `
+}
+
 /**
  * GET /admin/tax/summary/:year
  * Annual platform tax summary
@@ -138,37 +261,24 @@ tax.get('/creator-earnings/:year', async (c) => {
     currency: z.string().optional(),
   }).parse(c.req.query())
 
+  // Validate currency if provided
+  const currency = query.currency && isValidCurrency(query.currency) ? query.currency : undefined
+  if (query.currency && !currency) {
+    return c.json({ error: `Invalid currency. Allowed: ${VALID_CURRENCIES.join(', ')}` }, 400)
+  }
+
   const yearStart = new Date(year, 0, 1)
   const yearEnd = new Date(year + 1, 0, 1)
 
-  // Get creator earnings aggregated
-  const creatorEarnings = await db.$queryRaw<Array<{
-    creator_id: string
-    total_earnings: bigint
-    platform_fees: bigint
-    net_earnings: bigint
-    payment_count: bigint
-    currency: string
-  }>>`
-    SELECT
-      s."creatorId" as creator_id,
-      SUM(COALESCE(p."grossCents", p."amountCents"))::bigint as total_earnings,
-      SUM(COALESCE(p."feeCents", 0))::bigint as platform_fees,
-      SUM(p."netCents")::bigint as net_earnings,
-      COUNT(*)::bigint as payment_count,
-      p.currency
-    FROM "payments" p
-    JOIN "subscriptions" s ON p."subscriptionId" = s.id
-    WHERE p.status = 'succeeded'
-      AND p."createdAt" >= ${yearStart}
-      AND p."createdAt" < ${yearEnd}
-      ${query.currency ? db.$queryRaw`AND p.currency = ${query.currency}` : db.$queryRaw``}
-    GROUP BY s."creatorId", p.currency
-    HAVING SUM(p."netCents") >= ${query.minAmount}
-    ORDER BY net_earnings DESC
-    LIMIT ${query.limit}
-    OFFSET ${query.offset}
-  `
+  // Get creator earnings using safe parameterized query
+  const creatorEarnings = await getCreatorEarnings(
+    yearStart,
+    yearEnd,
+    query.minAmount,
+    query.limit,
+    query.offset,
+    currency
+  )
 
   // Get creator details
   const creatorIds = creatorEarnings.map(e => e.creator_id)
@@ -253,36 +363,23 @@ tax.post('/export-1099', async (c) => {
     currency: z.string().optional(),
   }).parse(await c.req.json())
 
+  // Validate currency if provided
+  const currency = body.currency && isValidCurrency(body.currency) ? body.currency : undefined
+  if (body.currency && !currency) {
+    return c.json({ error: `Invalid currency. Allowed: ${VALID_CURRENCIES.join(', ')}` }, 400)
+  }
+
   const yearStart = new Date(body.year, 0, 1)
   const yearEnd = new Date(body.year + 1, 0, 1)
   const minAmount = body.minAmount || (body.year >= 2024 ? 60000 : 2000000)
 
-  // Get creator earnings aggregated
-  const creatorEarnings = await db.$queryRaw<Array<{
-    creator_id: string
-    total_earnings: bigint
-    platform_fees: bigint
-    net_earnings: bigint
-    payment_count: bigint
-    currency: string
-  }>>`
-    SELECT
-      s."creatorId" as creator_id,
-      SUM(COALESCE(p."grossCents", p."amountCents"))::bigint as total_earnings,
-      SUM(COALESCE(p."feeCents", 0))::bigint as platform_fees,
-      SUM(p."netCents")::bigint as net_earnings,
-      COUNT(*)::bigint as payment_count,
-      p.currency
-    FROM "payments" p
-    JOIN "subscriptions" s ON p."subscriptionId" = s.id
-    WHERE p.status = 'succeeded'
-      AND p."createdAt" >= ${yearStart}
-      AND p."createdAt" < ${yearEnd}
-      ${body.currency ? db.$queryRaw`AND p.currency = ${body.currency}` : db.$queryRaw``}
-    GROUP BY s."creatorId", p.currency
-    HAVING SUM(p."netCents") >= ${minAmount}
-    ORDER BY net_earnings DESC
-  `
+  // Get creator earnings using safe parameterized query
+  const creatorEarnings = await getCreatorEarningsForExport(
+    yearStart,
+    yearEnd,
+    minAmount,
+    currency
+  )
 
   // Get creator details
   const creatorIds = creatorEarnings.map(e => e.creator_id)

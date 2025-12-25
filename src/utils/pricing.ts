@@ -1,6 +1,12 @@
 // Pricing configuration for Personal vs Service branches
 // Using split model: 4% subscriber + 4% creator = 8% total
 
+// Fee constants - single source of truth for frontend
+// These MUST match backend/src/constants/fees.ts
+export const PLATFORM_FEE_RATE = 0.08     // 8% total
+export const SPLIT_RATE = 0.04            // 4% each party
+export const CROSS_BORDER_BUFFER = 0.015  // 1.5%
+
 export const PRICING = {
   personal: {
     subscription: 0, // Free
@@ -57,13 +63,9 @@ export function calculateFeePreview(
   creatorFee: number     // Creator's portion (4%)
   feePercent: number
 } {
-  // Split model: 4% each side = 8% total
-  const subscriberFeeRate = 0.04
-  const creatorFeeRate = 0.04
-  const totalFeeRate = subscriberFeeRate + creatorFeeRate
-
-  const subscriberFee = Math.round(amountCents * subscriberFeeRate)
-  const creatorFee = Math.round(amountCents * creatorFeeRate)
+  // Split model: 4% each side = 8% total (uses exported constants)
+  const subscriberFee = Math.round(amountCents * SPLIT_RATE)
+  const creatorFee = Math.round(amountCents * SPLIT_RATE)
   const feeAmount = subscriberFee + creatorFee
 
   return {
@@ -72,6 +74,6 @@ export function calculateFeePreview(
     feeAmount,
     subscriberFee,
     creatorFee,
-    feePercent: totalFeeRate * 100,
+    feePercent: PLATFORM_FEE_RATE * 100,
   }
 }

@@ -1,11 +1,9 @@
 // API Client for Nate Backend
 
 import { Capacitor } from '@capacitor/core'
+import { createFetchClient } from './fetchJson'
 
 export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
-
-// Debug: Log API URL at module load (remove after E2E testing)
-console.log('[api/client] API_URL =', API_URL)
 
 const AUTH_TOKEN_KEY = 'nate_auth_token'
 const AUTH_SESSION_KEY = 'nate_has_session'
@@ -283,113 +281,42 @@ function normalizeEmail(email: string): string {
 // Default timeout for API requests (8 seconds - reduced from 15s)
 const API_TIMEOUT_MS = 8000
 
-// Base fetch wrapper
+// Public endpoints where 401 doesn't mean "session expired"
+const PUBLIC_ENDPOINTS = ['/users/', '/public/', '/profile/check-username']
+
+// Create configured fetch client using shared layer
+const fetchClient = createFetchClient({
+  baseUrl: API_URL,
+  defaultTimeout: API_TIMEOUT_MS,
+  getAuthToken,
+  onUnauthorized: (path) => {
+    // Smart 401 handling: only clear auth for protected endpoints
+    const isPublicEndpoint = PUBLIC_ENDPOINTS.some(ep => path.startsWith(ep))
+    const hadAuth = !!getAuthToken() || hasAuthSession()
+
+    if (!isPublicEndpoint && hadAuth) {
+      clearAuthToken()
+      clearAuthSession()
+      dispatchAuthError()
+    }
+  },
+})
+
+// Base fetch wrapper - delegates to shared fetchClient
+// Maintains ApiError type for backward compatibility
 async function apiFetch<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const url = `${API_URL}${path}`
-
-  // Create abort controller for timeout
-  const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT_MS)
-
-  // Use caller's signal if provided (for React Query cancellation), otherwise use timeout controller
-  const signal = options.signal ?? controller.signal
-
-  // Build headers with optional Authorization token
-  const headers: Record<string, string> = {
-    ...(options.headers as Record<string, string>),
-  }
-
-  // Avoid triggering CORS preflights on simple GETs by only sending Content-Type when needed.
-  // (Authorization and non-simple Content-Type values will still preflight when present.)
-  if (!('Accept' in headers)) {
-    headers['Accept'] = 'application/json'
-  }
-
-  const hasBody = options.body !== undefined && options.body !== null
-  const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData
-  if (hasBody && !isFormData && !('Content-Type' in headers)) {
-    headers['Content-Type'] = 'application/json'
-  }
-
-  // Add Bearer token if available (for mobile apps)
-  const token = getAuthToken()
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`
-  }
-
-  let response: Response
   try {
-    response = await fetch(url, {
-      ...options,
-      credentials: 'include', // Still include cookies for web
-      headers,
-      signal,
-    })
-  } catch (networkError: any) {
-    clearTimeout(timeoutId)
-    // Check if it was a timeout abort
-    if (networkError?.name === 'AbortError') {
-      throw {
-        error: 'Request timed out. Please try again.',
-        status: 0,
-      } as ApiError
-    }
-    // Network error (offline, CORS, DNS failure) - don't clear auth
+    return await fetchClient<T>(path, options)
+  } catch (err: any) {
+    // Re-throw as ApiError format for backward compatibility
     throw {
-      error: 'Network error. Please check your connection.',
-      status: 0,
+      error: err.message || err.error || 'Request failed',
+      status: err.status ?? 0,
     } as ApiError
   }
-
-  clearTimeout(timeoutId)
-
-  let data: any
-  try {
-    data = await response.json()
-  } catch {
-    data = { error: 'Invalid response from server' }
-  }
-
-  if (!response.ok) {
-    // Handle 401 - session expired or unauthorized
-    // Dispatch auth error for protected endpoints to trigger global re-auth flow
-    // Public endpoints (where 401 just means "viewer not logged in") are excluded
-    if (response.status === 401) {
-      const publicEndpoints = ['/users/', '/public/', '/profile/check-username']
-      const isPublicEndpoint = publicEndpoints.some(ep => path.startsWith(ep))
-
-      // Only clear auth and dispatch error if user actually had a session
-      // This prevents unnecessary clearing on public endpoints where user isn't logged in
-      const hadAuth = !!getAuthToken() || hasAuthSession()
-      if (!isPublicEndpoint && hadAuth) {
-        // Any 401 on protected endpoint = session expired, trigger re-auth
-        clearAuthToken()
-        clearAuthSession()
-        dispatchAuthError()
-      }
-    }
-
-    // Ensure error is always a string (backend might return Zod error object)
-    let errorMessage = 'Request failed'
-    if (typeof data.error === 'string') {
-      errorMessage = data.error
-    } else if (data.error?.message) {
-      errorMessage = data.error.message
-    } else if (data.message) {
-      errorMessage = data.message
-    }
-
-    const error: ApiError = {
-      error: errorMessage,
-      status: response.status,
-    }
-    throw error
-  }
-
-  return data
 }
 
 // ============================================

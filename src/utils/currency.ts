@@ -444,9 +444,8 @@ export function isReasonableAmount(amount: number, currencyCode: string): boolea
 // Split Fee Model (v2): 4% subscriber + 4% creator = 8% total
 // ============================================
 
-// Split rate: each party pays 4%
-const SPLIT_RATE = 0.04
-const CROSS_BORDER_BUFFER = 0.015 // 1.5%
+// Import fee constants from pricing.ts (single source of truth for frontend)
+import { SPLIT_RATE, CROSS_BORDER_BUFFER } from './pricing'
 
 export interface FeePreview {
     creatorReceives: number      // What creator gets (in dollars)

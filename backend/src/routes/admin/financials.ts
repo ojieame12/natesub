@@ -13,6 +13,7 @@ import { getBalance as getPaystackBalance } from '../../services/paystack.js'
 import { requireRole } from '../../middleware/adminAuth.js'
 import { todayStart, thisMonthStart, lastNDays } from '../../utils/timezone.js'
 import { env } from '../../config/env.js'
+import { PLATFORM_FEE_RATE } from '../../constants/fees.js'
 
 const financials = new Hono()
 
@@ -237,8 +238,8 @@ financials.get('/fee-audit', async (c) => {
     const purpose = payment.subscription?.creator?.profile?.purpose
     const paymentAmount = payment.grossCents || payment.amountCents
 
-    // Expected fee rate: personal = 10%, service = 8%
-    const expectedRate = purpose === 'service' ? 0.08 : 0.10
+    // Expected fee rate: 8% for all users (split model: 4% + 4%)
+    const expectedRate = PLATFORM_FEE_RATE
     const expectedFee = Math.round(paymentAmount * expectedRate)
 
     const actualFee = payment.feeCents || 0

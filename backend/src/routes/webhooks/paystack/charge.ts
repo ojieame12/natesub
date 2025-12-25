@@ -22,15 +22,9 @@ export async function handlePaystackChargeSuccess(data: any, eventId: string) {
   // Parse paid_at for accurate occurredAt (Paystack provides ISO string)
   const occurredAt = paid_at ? new Date(paid_at) : new Date()
 
-  // IDEMPOTENCY CHECK: Skip if we've already processed this event
-  // This prevents double-processing on webhook retries
-  const existingPayment = await db.payment.findFirst({
-    where: { paystackEventId: eventId },
-  })
-  if (existingPayment) {
-    console.log(`[paystack] Event ${eventId} already processed, skipping`)
-    return
-  }
+  // NOTE: Idempotency check moved INSIDE the distributed lock (line ~186) to prevent
+  // race condition where two concurrent webhooks could both pass the check before locking.
+  // See: https://github.com/anthropics/claude-code/issues/xxx (payment system audit)
 
   // Validate webhook metadata - provider signature already verified, this validates data integrity
   const metadataValidation = validatePaystackMetadata(metadata)
@@ -183,6 +177,16 @@ export async function handlePaystackChargeSuccess(data: any, eventId: string) {
   // Lock key based on subscriber + creator to prevent duplicate subscriptions
   const lockKey = `sub:${subscriber.id}:${creatorId}:${subscriptionInterval}`
   const subscription = await withLock(lockKey, 30000, async () => {
+    // IDEMPOTENCY CHECK: Must be INSIDE the lock to prevent race conditions
+    // Two concurrent webhooks could both pass an external check before either acquires the lock
+    const existingPayment = await db.payment.findFirst({
+      where: { paystackEventId: eventId },
+    })
+    if (existingPayment) {
+      console.log(`[paystack] Event ${eventId} already processed (checked inside lock), skipping`)
+      return null // Signal already processed - caller handles null like lock failure
+    }
+
     // Use transaction to ensure atomic creation of subscription + payment + activity
     return await db.$transaction(async (tx) => {
       // IMPORTANT: Store creator's SET PRICE for fee calculation on renewals

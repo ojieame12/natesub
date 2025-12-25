@@ -231,11 +231,6 @@ export default function Billing() {
                             <p className="billing-plan-desc">
                                 Professional tools for service providers
                             </p>
-                            <div className="billing-plan-fee">
-                                <span>Transaction fee</span>
-                                <span>8%</span>
-                            </div>
-                            <p className="billing-fee-note">Simple flat rate, no hidden fees</p>
                         </div>
 
                         {/* What's Included - Service */}
@@ -257,10 +252,6 @@ export default function Billing() {
                                 <div className="plan-feature">
                                     <Check size={16} />
                                     <span>Professional client management</span>
-                                </div>
-                                <div className="plan-feature">
-                                    <Check size={16} />
-                                    <span>Lower 8% transaction fees</span>
                                 </div>
                             </div>
                         </section>
@@ -308,10 +299,6 @@ export default function Billing() {
                             <p className="billing-plan-desc">
                                 No monthly fee. Pay only when you earn.
                             </p>
-                            <div className="billing-plan-fee">
-                                <span>Transaction fee</span>
-                                <span>8%</span>
-                            </div>
                         </div>
 
                         {/* What's Included - Personal */}
@@ -336,10 +323,6 @@ export default function Billing() {
                                 </div>
                             </div>
                         </section>
-
-                        <p className="billing-footer-note">
-                            You keep 90% of every payment. No monthly commitment.
-                        </p>
                     </>
                 )}
             </div>

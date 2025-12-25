@@ -12,6 +12,7 @@ import {
   hashToken,
   generateToken,
   computeOnboardingState,
+  rotateSessionToken,
 } from '../services/auth.js'
 import { requireAuth } from '../middleware/auth.js'
 import { authVerifyRateLimit, authMagicLinkRateLimit } from '../middleware/rateLimit.js'
@@ -151,6 +152,49 @@ auth.post('/logout', async (c) => {
   deleteCookie(c, 'session', { path: '/' })
 
   return c.json({ success: true })
+})
+
+/**
+ * Rotate session token for security hardening.
+ * Call after sensitive operations like:
+ * - Connecting payment accounts (Stripe/Paystack)
+ * - Changing bank details
+ * - Modifying payout settings
+ *
+ * Returns new token which client should use for subsequent requests.
+ * Mobile apps receive token in response body, web apps get updated cookie.
+ */
+auth.post('/rotate-token', requireAuth, async (c) => {
+  const cookieToken = getCookie(c, 'session')
+  const authHeader = c.req.header('Authorization')
+  const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : undefined
+
+  const currentToken = cookieToken || bearerToken
+
+  if (!currentToken) {
+    return c.json({ error: 'No session token found' }, 401)
+  }
+
+  const newToken = await rotateSessionToken(currentToken)
+
+  if (!newToken) {
+    return c.json({ error: 'Session expired or invalid' }, 401)
+  }
+
+  // Set new cookie for web clients
+  setCookie(c, 'session', newToken, {
+    httpOnly: true,
+    secure: env.NODE_ENV === 'production',
+    sameSite: 'Lax',
+    path: '/',
+    maxAge: 7 * 24 * 60 * 60, // 7 days
+  })
+
+  // Return new token in body for mobile clients using Bearer auth
+  return c.json({
+    success: true,
+    token: newToken,
+  })
 })
 
 // Get current user with onboarding state

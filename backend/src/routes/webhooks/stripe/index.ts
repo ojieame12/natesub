@@ -114,6 +114,21 @@ export async function stripeWebhookHandler(c: Context) {
     return c.json({ received: true })
   } catch (error: any) {
     console.error(`[stripe] Failed to queue webhook ${event.id}:`, error)
-    return c.json({ error: 'Internal server error' }, 500)
+
+    // Queue dispatch failed - mark for manual retry and return 200 to prevent Stripe retry storm
+    // The webhook event is already persisted (line 72-92) so we won't lose it
+    await db.webhookEvent.update({
+      where: { id: webhookEvent.id },
+      data: {
+        status: 'pending_retry',
+        error: `Queue dispatch failed: ${error.message || 'Unknown error'}`,
+      },
+    }).catch((dbErr: any) => {
+      console.error(`[stripe] Failed to update webhook status for ${event.id}:`, dbErr)
+    })
+
+    // Return 200 to acknowledge receipt - Stripe will not retry
+    // DLQ job will pick up pending_retry events for reprocessing
+    return c.json({ received: true, status: 'queued_for_retry' })
   }
 }

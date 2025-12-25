@@ -22,16 +22,11 @@ const faqs = [
   },
   {
     id: 3,
-    question: 'What are the fees?',
-    answer: 'NatePay uses a split fee model: 4% is added to the subscriber\'s payment, and 4% is deducted from your payout. This totals 8% and covers payment processing and platform costs. For international payments, a small currency conversion fee may apply.',
-  },
-  {
-    id: 4,
     question: 'How do I cancel a subscription?',
     answer: 'Subscribers can cancel their own subscriptions at any time. As a creator, you can also remove subscribers from your Subscribers page.',
   },
   {
-    id: 5,
+    id: 4,
     question: 'Can I offer different tiers?',
     answer: 'Yes! Go to Edit My Page to create multiple subscription tiers with different prices and perks.',
   },

@@ -426,6 +426,54 @@ export async function logout(sessionToken: string): Promise<void> {
   }
 }
 
+/**
+ * Rotate session token for security-sensitive operations.
+ * Returns new token on success, null if session invalid/expired.
+ *
+ * SECURITY: Call after sensitive actions like:
+ * - Connecting payment accounts (Stripe/Paystack)
+ * - Changing bank details
+ * - Modifying payout settings
+ *
+ * This limits the window of opportunity for token replay attacks.
+ */
+export async function rotateSessionToken(oldToken: string): Promise<string | null> {
+  const oldHash = hashToken(oldToken)
+
+  const session = await db.session.findUnique({
+    where: { token: oldHash },
+    select: { id: true, userId: true, expiresAt: true },
+  })
+
+  if (!session) return null
+
+  // Check expiration
+  if (session.expiresAt < new Date()) {
+    await db.session.delete({ where: { id: session.id } })
+    return null
+  }
+
+  // Generate new token
+  const newToken = generateToken()
+  const newHash = hashToken(newToken)
+
+  // Update session with new token and reset expiry (sliding window)
+  await db.session.update({
+    where: { id: session.id },
+    data: {
+      token: newHash,
+      expiresAt: new Date(Date.now() + SESSION_EXPIRES_MS),
+    },
+  })
+
+  // Invalidate old token cache
+  if (process.env.NODE_ENV !== 'test') {
+    redis.del(`session:details:${oldHash}`).catch(() => { })
+  }
+
+  return newToken
+}
+
 // Get current user with onboarding state
 export async function getCurrentUser(userId: string) {
   const user = await db.user.findUnique({

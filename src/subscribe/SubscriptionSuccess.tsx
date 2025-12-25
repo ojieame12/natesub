@@ -5,7 +5,7 @@ import { CheckCircle, Heart, Loader2 } from 'lucide-react'
 import { Pressable } from '../components'
 import { api } from '../api'
 import type { Profile } from '../api/client'
-import './template-one.css'
+import './subscribe.css'
 
 interface SubscriptionSuccessProps {
     profile: Profile

@@ -3,7 +3,7 @@ import { env } from '../config/env.js'
 import { db } from '../db/client.js'
 import { billingQueue } from '../lib/queue.js'
 import { generatePayrollPeriods } from '../jobs/payroll.js'
-import { sendRenewalReminders, sendDunningEmails, sendCancellationEmails } from '../jobs/notifications.js'
+import { sendDunningEmails, sendCancellationEmails } from '../jobs/notifications.js'
 import { monitorStuckTransfers } from '../jobs/transfers.js'
 import { reconcilePaystackTransactions } from '../jobs/reconciliation.js'
 import { processDueReminders, scanAndScheduleMissedReminders } from '../jobs/reminders.js'
@@ -85,24 +85,9 @@ jobs.post('/payroll', async (c) => {
   }
 })
 
-// Send renewal reminders (run daily, morning)
-jobs.post('/reminders', async (c) => {
-  console.log('[jobs] Starting renewal reminders job')
-
-  try {
-    const result = await sendRenewalReminders()
-
-    console.log(`[jobs] Reminders complete: ${result.sent}/${result.processed} sent`)
-
-    return c.json({
-      success: true,
-      ...result,
-    })
-  } catch (error: any) {
-    console.error('[jobs] Reminders job failed:', error.message)
-    return c.json({ error: 'Reminders job failed', message: error.message }, 500)
-  }
-})
+// NOTE: Legacy /reminders endpoint removed - renewal reminders are now scheduled
+// per-subscription via scheduleSubscriptionRenewalReminders() in jobs/reminders.ts
+// Use /scheduled-reminders to process due reminders
 
 // Send dunning emails for failed payments (run daily, after billing)
 jobs.post('/dunning', async (c) => {
@@ -143,19 +128,18 @@ jobs.post('/cancellations', async (c) => {
 })
 
 // Run all notification jobs (convenience endpoint)
+// NOTE: renewal reminders removed - now handled via scheduled-reminders
 jobs.post('/notifications', async (c) => {
   console.log('[jobs] Starting all notification jobs')
 
   try {
-    const [reminders, dunning, cancellations] = await Promise.all([
-      sendRenewalReminders(),
+    const [dunning, cancellations] = await Promise.all([
       sendDunningEmails(),
       sendCancellationEmails(),
     ])
 
     return c.json({
       success: true,
-      reminders,
       dunning,
       cancellations,
     })
@@ -435,7 +419,7 @@ jobs.post('/sync-balances', async (c) => {
 jobs.get('/health', async (c) => {
   return c.json({
     status: 'ok',
-    jobs: ['billing', 'retries', 'payroll', 'reminders', 'dunning', 'cancellations', 'notifications', 'transfers', 'reconciliation', 'scheduled-reminders', 'scan-missed-reminders', 'cleanup-sessions', 'cleanup-otps', 'cleanup-auth', 'cleanup-pageviews', 'stats-aggregate', 'stats-backfill', 'dispute-monitoring', 'sync-balances'],
+    jobs: ['billing', 'retries', 'payroll', 'dunning', 'cancellations', 'notifications', 'transfers', 'reconciliation', 'scheduled-reminders', 'scan-missed-reminders', 'cleanup-sessions', 'cleanup-otps', 'cleanup-auth', 'cleanup-pageviews', 'stats-aggregate', 'stats-backfill', 'dispute-monitoring', 'sync-balances'],
     timestamp: new Date().toISOString(),
   })
 })

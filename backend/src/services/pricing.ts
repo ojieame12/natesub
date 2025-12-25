@@ -1,5 +1,5 @@
 // Pricing Service - Centralized fee calculation based on user purpose
-// Personal: Free plan, 10% transaction fee
+// Personal: Free plan, 8% transaction fee
 // Service: $5/mo subscription, 8% transaction fee
 
 export type UserPurpose = 'personal' | 'service'
@@ -21,11 +21,11 @@ export const PLATFORM_SUBSCRIPTION_PRICE_CENTS = 500 // $5.00/month
 /**
  * Get the platform fee percentage for a user based on their purpose
  * @param purpose - 'personal' or 'service'
- * @returns Platform fee percentage (8 or 10)
+ * @returns Platform fee percentage (8%)
  */
 export function getPlatformFeePercent(purpose: UserPurpose | null | undefined): number {
   if (!purpose || !PLATFORM_FEES[purpose]) {
-    return PLATFORM_FEES.personal // Default to personal (10%)
+    return PLATFORM_FEES.personal // Default to personal (8%)
   }
   return PLATFORM_FEES[purpose]
 }
@@ -41,7 +41,7 @@ export function getProcessingFeePercent(): number {
 /**
  * Get total fee percentage (platform fee only, processing is included)
  * @param purpose - 'personal' or 'service'
- * @returns Total fee percentage (10% for personal, 8% for service)
+ * @returns Total fee percentage (8% for all users)
  */
 export function getTotalFeePercent(purpose: UserPurpose | null | undefined): number {
   return getPlatformFeePercent(purpose) + PROCESSING_FEE_PERCENT

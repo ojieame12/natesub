@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
+import { getCookie, setCookie } from 'hono/cookie'
 import { db } from '../db/client.js'
 import { redis } from '../db/redis.js'
 import { requireAuth } from '../middleware/auth.js'
@@ -13,6 +14,7 @@ import {
   getPayoutHistory,
   createExpressDashboardLink,
 } from '../services/stripe.js'
+import { rotateSessionToken } from '../services/auth.js'
 import { isStripeSupported, isStripeCrossBorderSupported, getStripeSupportedCountries } from '../utils/constants.js'
 import { env } from '../config/env.js'
 
@@ -20,6 +22,34 @@ import { env } from '../config/env.js'
 const CONNECT_LOCK_TTL_SECONDS = 30
 
 const stripeRoutes = new Hono()
+
+/**
+ * Rotate session token after sensitive payment operation.
+ * Returns the new token (for mobile clients) and sets cookie (for web clients).
+ */
+async function rotateTokenOnSuccess(c: any): Promise<string | null> {
+  const cookieToken = getCookie(c, 'session')
+  const authHeader = c.req.header('Authorization')
+  const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : undefined
+  const currentToken = cookieToken || bearerToken
+
+  if (!currentToken) return null
+
+  const newToken = await rotateSessionToken(currentToken)
+
+  if (newToken) {
+    // Set new cookie for web clients
+    setCookie(c, 'session', newToken, {
+      httpOnly: true,
+      secure: env.NODE_ENV === 'production',
+      sameSite: 'Lax',
+      path: '/',
+      maxAge: 7 * 24 * 60 * 60, // 7 days
+    })
+  }
+
+  return newToken
+}
 
 // Get supported countries for Stripe Connect
 stripeRoutes.get('/supported-countries', async (c) => {
@@ -31,7 +61,7 @@ stripeRoutes.get('/supported-countries', async (c) => {
 })
 
 // Stub mode handler - extracted for clarity and testability
-async function handleStubMode(userId: string) {
+async function handleStubMode(userId: string, newToken: string | null) {
   const stubAccountId = `stub_acct_${Date.now()}`
 
   await db.profile.update({
@@ -49,6 +79,8 @@ async function handleStubMode(userId: string) {
     success: true,
     alreadyOnboarded: true,
     message: 'Payments connected (stub mode)',
+    // Return rotated token for mobile clients (security hardening)
+    ...(newToken && { token: newToken }),
   }
 }
 
@@ -95,7 +127,9 @@ stripeRoutes.post('/connect', requireAuth, paymentRateLimit, async (c) => {
     // STUB MODE: Skip actual Stripe onboarding for E2E tests
     // This is controlled by PAYMENTS_MODE env var - never set to 'stub' in production
     if (env.PAYMENTS_MODE === 'stub') {
-      return c.json(await handleStubMode(userId))
+      // SECURITY: Rotate session token after connecting payment account
+      const newToken = await rotateTokenOnSuccess(c)
+      return c.json(await handleStubMode(userId, newToken))
     }
 
     // Build address info for Stripe KYC prefill (reduces onboarding screens)
@@ -216,6 +250,9 @@ stripeRoutes.get('/connect/status', requireAuth, async (c) => {
       }
     }
 
+    // Track if status is transitioning to active (first time activation)
+    const isNewlyActive = profile.payoutStatus !== 'active' && payoutStatus === 'active'
+
     if (profile.payoutStatus !== payoutStatus) {
       await db.profile.update({
         where: { userId },
@@ -223,10 +260,19 @@ stripeRoutes.get('/connect/status', requireAuth, async (c) => {
       })
     }
 
+    // SECURITY: Rotate session token when payment account becomes active
+    // This protects against session hijacking after completing payment onboarding
+    let newToken: string | null = null
+    if (isNewlyActive) {
+      newToken = await rotateTokenOnSuccess(c)
+    }
+
     return c.json({
       connected: true,
       status: payoutStatus,
       details: status,
+      // Return rotated token for mobile clients (only on first activation)
+      ...(newToken && { token: newToken }),
     })
   } catch (error) {
     console.error('Status check error:', error)

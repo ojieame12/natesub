@@ -15,10 +15,12 @@ vi.mock('react-router-dom', async () => {
 
 const mockPayrollPeriods = vi.fn()
 const mockCurrentUser = vi.fn()
+const mockCustomStatement = vi.fn()
 
 vi.mock('../api/hooks', () => ({
     usePayrollPeriods: () => mockPayrollPeriods(),
     useCurrentUser: () => mockCurrentUser(),
+    useCustomStatement: () => mockCustomStatement(),
 }))
 
 // Sample data
@@ -55,6 +57,17 @@ describe('PayrollHistory', () => {
     beforeEach(() => {
         vi.clearAllMocks()
         mockCurrentUser.mockReturnValue({ data: mockUserData })
+        // Mock useCustomStatement mutation hook
+        mockCustomStatement.mockReturnValue({
+            mutate: vi.fn(),
+            mutateAsync: vi.fn(),
+            isPending: false,
+            isError: false,
+            isSuccess: false,
+            data: null,
+            error: null,
+            reset: vi.fn(),
+        })
     })
 
     afterEach(() => {

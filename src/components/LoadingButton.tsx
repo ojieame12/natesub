@@ -1,5 +1,6 @@
 import { useState, type ReactNode, type CSSProperties } from 'react'
 import Spinner from './Spinner'
+import { triggerImpact, type ImpactStyle } from '../utils/haptics'
 
 interface LoadingButtonProps {
     children: ReactNode
@@ -9,38 +10,11 @@ interface LoadingButtonProps {
     loading?: boolean
     style?: CSSProperties
     /** Haptic feedback intensity */
-    haptic?: 'light' | 'medium' | 'heavy' | 'none'
+    haptic?: ImpactStyle | 'none'
     /** Button variant for styling */
     variant?: 'primary' | 'secondary' | 'ghost'
     /** Full width */
     fullWidth?: boolean
-}
-
-// Check if running in native Capacitor environment
-const isNative = typeof window !== 'undefined' &&
-    window.Capacitor?.isNativePlatform?.() === true
-
-// Lazy-loaded haptics module
-let hapticsModule: typeof import('@capacitor/haptics') | null = null
-
-// Trigger haptic feedback (only on native)
-const triggerHaptic = async (style: 'light' | 'medium' | 'heavy') => {
-    if (!isNative) return
-
-    try {
-        if (!hapticsModule) {
-            hapticsModule = await import('@capacitor/haptics')
-        }
-        const { Haptics, ImpactStyle } = hapticsModule
-        const impactStyle = {
-            light: ImpactStyle.Light,
-            medium: ImpactStyle.Medium,
-            heavy: ImpactStyle.Heavy,
-        }[style]
-        await Haptics.impact({ style: impactStyle })
-    } catch {
-        // Haptics not available
-    }
 }
 
 /**
@@ -88,7 +62,7 @@ export function LoadingButton({
         if (!isDisabled) {
             setIsPressed(true)
             if (haptic !== 'none') {
-                triggerHaptic(haptic)
+                triggerImpact(haptic)
             }
         }
     }

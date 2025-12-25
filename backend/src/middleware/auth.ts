@@ -56,3 +56,27 @@ export async function optionalAuth(c: Context, next: Next) {
 
   await next()
 }
+
+// Import db for purpose check
+import { db } from '../db/client.js'
+
+// Require service purpose - restricts access to service providers only
+// Used for payroll routes which are only relevant to service providers
+export async function requireServicePurpose(c: Context, next: Next) {
+  const userId = c.get('userId')
+
+  if (!userId) {
+    return c.json({ error: 'Unauthorized' }, 401)
+  }
+
+  const profile = await db.profile.findUnique({
+    where: { userId },
+    select: { purpose: true },
+  })
+
+  if (!profile || profile.purpose !== 'service') {
+    return c.json({ error: 'This feature is only available for service providers' }, 403)
+  }
+
+  await next()
+}

@@ -12,7 +12,7 @@ import { ArrowLeft, CheckCircle, XCircle, Loader2, DollarSign } from 'lucide-rea
 import { Pressable, useToast, Skeleton, AmbientBackground } from '../components'
 import { usePublicRequest, useAcceptRequest, useDeclineRequest } from '../api/hooks'
 import { formatCurrencyFromCents } from '../utils/currency'
-import '../subscribe/template-one.css'
+import '../subscribe/subscribe.css'
 
 export default function PublicRequestPage() {
   const { token } = useParams<{ token: string }>()

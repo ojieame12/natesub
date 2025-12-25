@@ -3,63 +3,27 @@
  *
  * React Query hooks for admin endpoints.
  * Uses the user's session for authentication (backend checks admin whitelist).
+ * Admin fetch uses shared fetchJson layer with longer timeout (20s vs 8s).
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getAuthToken } from '../api/client'
+import { createFetchClient } from '../api/fetchJson'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
 const ADMIN_FETCH_TIMEOUT_MS = 20_000
 
-// Admin-specific fetch wrapper
-// Uses the user's session/token - backend verifies the user is an admin
+// Create admin fetch client with longer timeout
+// No onUnauthorized - admin pages handle auth separately via AdminRoute
+const adminFetchClient = createFetchClient({
+  baseUrl: API_URL,
+  defaultTimeout: ADMIN_FETCH_TIMEOUT_MS,
+  getAuthToken,
+})
+
+// Admin-specific fetch wrapper - delegates to shared layer
 async function adminFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const url = `${API_URL}${path}`
-
-  const headers: Record<string, string> = {
-    'Accept': 'application/json',
-    ...(options.headers as Record<string, string>),
-  }
-
-  // Only set Content-Type when there's a body (avoids CORS preflight on GETs)
-  const hasBody = options.body !== undefined && options.body !== null
-  if (hasBody) {
-    headers['Content-Type'] = 'application/json'
-  }
-
-  // Send auth token for user identification
-  const token = getAuthToken()
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`
-  }
-
-  const controller = new AbortController()
-  const timeoutId = window.setTimeout(() => controller.abort(), ADMIN_FETCH_TIMEOUT_MS)
-
-  let response: Response
-  try {
-    response = await fetch(url, {
-      ...options,
-      credentials: 'include', // Include cookies for session auth
-      headers,
-      signal: options.signal ?? controller.signal,
-    })
-  } catch (err: any) {
-    if (err?.name === 'AbortError') {
-      throw new Error('Request timed out')
-    }
-    throw err
-  } finally {
-    window.clearTimeout(timeoutId)
-  }
-
-  const data = await response.json().catch(() => ({ error: 'Invalid response' }))
-
-  if (!response.ok) {
-    throw new Error(data.error || data.message || 'Request failed')
-  }
-
-  return data
+  return adminFetchClient<T>(path, options)
 }
 
 // ============================================
@@ -158,6 +122,7 @@ export interface RevenueAll {
 export interface AdminUser {
   id: string
   email: string
+  role?: 'user' | 'admin' | 'super_admin'
   profile: {
     username: string | null
     displayName: string | null
@@ -1194,7 +1159,9 @@ export function useAdminMRRTrend(months: number = 12) {
 // ADMIN MANAGEMENT
 // ============================================
 
-export interface AdminUser {
+// Note: AdminUser (for platform users) is defined at line ~158
+// This interface is for admin team members with elevated privileges
+export interface AdminTeamMember {
   id: string
   email: string
   role: 'admin' | 'super_admin'
@@ -1207,7 +1174,7 @@ export interface AdminUser {
 }
 
 export interface AdminsListResponse {
-  admins: AdminUser[]
+  admins: AdminTeamMember[]
   total: number
   superAdminCount: number
   adminCount: number

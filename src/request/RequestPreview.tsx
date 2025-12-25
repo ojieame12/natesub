@@ -3,35 +3,11 @@ import { useNavigate } from 'react-router-dom'
 import { ChevronLeft, MessageSquare, Mail, Link2, Check, Mic, Plus, Calendar, CreditCard } from 'lucide-react'
 import { useRequestStore, getRelationshipLabel, type RelationshipType } from './store'
 import { useCreateRequest, useSendRequest, useCurrentUser } from '../api/hooks'
-import { getCurrencySymbol, formatCompactNumber, displayAmountToCents, calculateFeePreview, formatAmountWithSeparators } from '../utils/currency'
+import { getCurrencySymbol, formatCompactNumber, displayAmountToCents } from '../utils/currency'
 import { Pressable } from '../components'
 import './request.css'
 
 type SendMethod = 'sms' | 'email' | 'link'
-
-// Inline fee breakdown component for request preview
-// Uses split model: 4% subscriber + 4% creator = 8% total
-function RequestFeeBreakdown({ amount, currency, isRecurring }: { amount: number; currency: string; isRecurring: boolean }) {
-    const preview = calculateFeePreview(amount, currency)
-    const suffix = isRecurring ? '/mo' : ''
-
-    return (
-        <div className="request-fee-breakdown">
-            <div className="request-fee-row">
-                <span className="request-fee-label">They pay</span>
-                <span className="request-fee-value">{formatAmountWithSeparators(preview.subscriberPays, currency)}{suffix}</span>
-            </div>
-            <div className="request-fee-row request-fee-deduction">
-                <span className="request-fee-label">Platform + processing (8%)</span>
-                <span className="request-fee-value">-{formatAmountWithSeparators(preview.totalFee, currency)}</span>
-            </div>
-            <div className="request-fee-row request-fee-total">
-                <span className="request-fee-label">You receive</span>
-                <span className="request-fee-value">{formatAmountWithSeparators(preview.creatorReceives, currency)}{suffix}</span>
-            </div>
-        </div>
-    )
-}
 
 // Map detailed frontend relationship types to backend coarse types
 function mapRelationshipToBackend(relationship: RelationshipType | null): string {
@@ -404,11 +380,6 @@ export default function RequestPreview() {
                         <span className="request-summary-value">{currencySymbol}{formatCompactNumber(Number(amount) || 0)}{isRecurring ? '/month' : ' one-time'}</span>
                     </div>
                 </div>
-
-                {/* Fee Breakdown - show what creator will receive */}
-                {Number(amount) >= 1 && (
-                    <RequestFeeBreakdown amount={Number(amount)} currency={currency} isRecurring={isRecurring} />
-                )}
             </div>
 
             {/* Error Display */}

@@ -263,21 +263,30 @@ checkout.post(
         }
 
         // Deduplication: Check for existing pending checkout
-        // FIXED: Include interval in dedupe key to distinguish between one-time and recurring
-        const dedupeKey = `checkout:paystack:${subscriberEmail}:${profile.userId}:${tierId || amount}:${interval}`
+        // SECURITY: Include subaccount code in key to prevent cache poisoning attacks
+        // where cached checkout URL could point to wrong creator's payment account
+        const dedupeKey = `checkout:paystack:${subscriberEmail}:${profile.userId}:${profile.paystackSubaccountCode}:${tierId || amount}:${interval}`
         const existingCheckout = await redis.get(dedupeKey)
 
         if (existingCheckout) {
           const cached = JSON.parse(existingCheckout)
-          // Log with masked email to prevent PII exposure
-          console.log(`[checkout] Returning cached Paystack checkout for ${maskEmail(subscriberEmail)}:${profile.userId}`)
-          return c.json({
-            provider: 'paystack',
-            url: cached.url,
-            reference: cached.reference,
-            breakdown: cached.breakdown,
-            cached: true,
-          })
+          // Validate cached checkout still belongs to correct creator's subaccount
+          // This guards against edge cases where profile was updated between cache set and get
+          if (cached.subaccountCode && cached.subaccountCode !== profile.paystackSubaccountCode) {
+            console.log(`[checkout] Cached subaccount mismatch, invalidating cache for ${profile.userId}`)
+            await redis.del(dedupeKey)
+            // Fall through to create new checkout
+          } else {
+            // Log with masked email to prevent PII exposure
+            console.log(`[checkout] Returning cached Paystack checkout for ${maskEmail(subscriberEmail)}:${profile.userId}`)
+            return c.json({
+              provider: 'paystack',
+              url: cached.url,
+              reference: cached.reference,
+              breakdown: cached.breakdown,
+              cached: true,
+            })
+          }
         }
 
         const reference = generateReference('SUB')
@@ -314,10 +323,12 @@ checkout.post(
         const breakdown = buildBreakdown(feeCalc, profile.currency)
 
         // Cache the checkout URL to prevent duplicates
+        // Include subaccountCode for validation on cache hit (prevents cache poisoning)
         await redis.setex(dedupeKey, CHECKOUT_DEDUPE_TTL, JSON.stringify({
           url: result.authorization_url,
           reference: result.reference,
           breakdown,
+          subaccountCode: profile.paystackSubaccountCode,
         }))
 
         return c.json({

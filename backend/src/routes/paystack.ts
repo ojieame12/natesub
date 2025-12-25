@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
+import { getCookie, setCookie } from 'hono/cookie'
 import { db } from '../db/client.js'
 import { requireAuth } from '../middleware/auth.js'
 import { paymentRateLimit, publicRateLimit } from '../middleware/rateLimit.js'
@@ -14,10 +15,40 @@ import {
   PAYSTACK_COUNTRIES,
   type PaystackCountry,
 } from '../services/paystack.js'
+import { rotateSessionToken } from '../services/auth.js'
 import { maskAccountNumber } from '../utils/pii.js'
 import { decryptAccountNumber, encryptAccountNumber } from '../utils/encryption.js'
+import { env } from '../config/env.js'
 
 const paystackRoutes = new Hono()
+
+/**
+ * Rotate session token after sensitive payment operation.
+ * Returns the new token (for mobile clients) and sets cookie (for web clients).
+ */
+async function rotateTokenOnSuccess(c: any): Promise<string | null> {
+  const cookieToken = getCookie(c, 'session')
+  const authHeader = c.req.header('Authorization')
+  const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : undefined
+  const currentToken = cookieToken || bearerToken
+
+  if (!currentToken) return null
+
+  const newToken = await rotateSessionToken(currentToken)
+
+  if (newToken) {
+    // Set new cookie for web clients
+    setCookie(c, 'session', newToken, {
+      httpOnly: true,
+      secure: env.NODE_ENV === 'production',
+      sameSite: 'Lax',
+      path: '/',
+      maxAge: 7 * 24 * 60 * 60, // 7 days
+    })
+  }
+
+  return newToken
+}
 
 // Country to currency mapping
 const PAYSTACK_CURRENCIES: Record<PaystackCountry, string> = {
@@ -237,10 +268,15 @@ paystackRoutes.post(
         },
       })
 
+      // SECURITY: Rotate session token after connecting payment account
+      const newToken = await rotateTokenOnSuccess(c)
+
       return c.json({
         success: true,
         subaccountCode: result.subaccountCode,
         message: 'Payment account connected successfully',
+        // Return rotated token for mobile clients (security hardening)
+        ...(newToken && { token: newToken }),
       })
     } catch (error: any) {
       console.error('Paystack Connect error:', error)
@@ -315,9 +351,14 @@ paystackRoutes.post('/disconnect', requireAuth, async (c) => {
       },
     })
 
+    // SECURITY: Rotate session token after disconnecting payment account
+    const newToken = await rotateTokenOnSuccess(c)
+
     return c.json({
       success: true,
       message: 'Paystack account disconnected',
+      // Return rotated token for mobile clients (security hardening)
+      ...(newToken && { token: newToken }),
     })
   } catch (error) {
     console.error('Disconnect error:', error)

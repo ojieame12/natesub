@@ -4,7 +4,7 @@
 
 import { db } from '../db/client.js'
 import { env } from '../config/env.js'
-import type { ReminderType, ReminderStatus, ReminderChannel } from '@prisma/client'
+import type { ReminderType, ReminderChannel } from '@prisma/client'
 import {
   sendRequestUnopenedEmail,
   sendRequestUnpaidEmail,
@@ -20,7 +20,7 @@ import {
   sendRenewalReminderEmail,
   sendPaymentFailedEmail,
 } from '../services/email.js'
-import { calculateServiceFee, calculateLegacyServiceFee, type FeeMode } from '../services/fees.js'
+import { calculateServiceFee, calculateLegacyServiceFee } from '../services/fees.js'
 import { isStripeCrossBorderSupported } from '../utils/constants.js'
 import {
   isSmsEnabled,

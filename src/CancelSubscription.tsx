@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { CheckCircle, XCircle, Loader2, AlertCircle, Calendar, DollarSign } from 'lucide-react'
 import { Pressable, AmbientBackground } from './components'
 import { API_URL } from './api/client'
-import './subscribe/template-one.css'
+import './subscribe/subscribe.css'
 
 const FETCH_TIMEOUT_MS = 15_000
 

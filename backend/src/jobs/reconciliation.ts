@@ -4,7 +4,7 @@
 
 import { db } from '../db/client.js'
 import { stripe } from '../services/stripe.js'
-import { getBalance as getPaystackBalance, listAllTransactions, type PaystackTransaction } from '../services/paystack.js'
+import { getBalance as getPaystackBalance, listAllTransactions } from '../services/paystack.js'
 import { sendReconciliationAlert } from '../services/alerts.js'
 
 interface ReconciliationResult {

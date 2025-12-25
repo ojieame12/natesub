@@ -81,50 +81,52 @@ export interface VerificationResult {
 /**
  * Get the bi-weekly period boundaries for a given date
  * Periods: 1st-15th and 16th-end of month
+ * IMPORTANT: Uses UTC for consistency with the payroll job
  */
 export function getPeriodBoundaries(date: Date): { start: Date; end: Date } {
-  const year = date.getFullYear()
-  const month = date.getMonth()
-  const day = date.getDate()
+  const year = date.getUTCFullYear()
+  const month = date.getUTCMonth()
+  const day = date.getUTCDate()
 
   if (day <= 15) {
     // First half: 1st to 15th
     return {
-      start: new Date(year, month, 1, 0, 0, 0, 0),
-      end: new Date(year, month, 15, 23, 59, 59, 999),
+      start: new Date(Date.UTC(year, month, 1, 0, 0, 0, 0)),
+      end: new Date(Date.UTC(year, month, 15, 23, 59, 59, 999)),
     }
   } else {
     // Second half: 16th to last day
-    const lastDay = new Date(year, month + 1, 0).getDate()
+    const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate()
     return {
-      start: new Date(year, month, 16, 0, 0, 0, 0),
-      end: new Date(year, month, lastDay, 23, 59, 59, 999),
+      start: new Date(Date.UTC(year, month, 16, 0, 0, 0, 0)),
+      end: new Date(Date.UTC(year, month, lastDay, 23, 59, 59, 999)),
     }
   }
 }
 
 /**
  * Get all period boundaries for a year up to a given date
+ * IMPORTANT: Uses UTC for consistency with the payroll job
  */
 export function getPeriodsForYear(year: number, upToDate: Date): Array<{ start: Date; end: Date }> {
   const periods: Array<{ start: Date; end: Date }> = []
 
   for (let month = 0; month < 12; month++) {
     // First half
-    const firstHalfEnd = new Date(year, month, 15, 23, 59, 59, 999)
+    const firstHalfEnd = new Date(Date.UTC(year, month, 15, 23, 59, 59, 999))
     if (firstHalfEnd <= upToDate) {
       periods.push({
-        start: new Date(year, month, 1, 0, 0, 0, 0),
+        start: new Date(Date.UTC(year, month, 1, 0, 0, 0, 0)),
         end: firstHalfEnd,
       })
     }
 
     // Second half
-    const lastDay = new Date(year, month + 1, 0).getDate()
-    const secondHalfEnd = new Date(year, month, lastDay, 23, 59, 59, 999)
+    const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate()
+    const secondHalfEnd = new Date(Date.UTC(year, month, lastDay, 23, 59, 59, 999))
     if (secondHalfEnd <= upToDate) {
       periods.push({
-        start: new Date(year, month, 16, 0, 0, 0, 0),
+        start: new Date(Date.UTC(year, month, 16, 0, 0, 0, 0)),
         end: secondHalfEnd,
       })
     }
@@ -313,13 +315,14 @@ export async function aggregatePayments(
  * Uses actual recorded netCents from payment records, not recomputed approximations
  * IMPORTANT: YTD must be per-currency to be mathematically valid
  * IMPORTANT: Must account for refunds and chargebacks to be accurate
+ * IMPORTANT: Uses UTC for consistency with period boundaries
  */
 async function calculateYTD(
   userId: string,
   asOfDate: Date,
   currency: string
 ): Promise<{ grossCents: number; netCents: number }> {
-  const yearStart = new Date(asOfDate.getFullYear(), 0, 1, 0, 0, 0, 0)
+  const yearStart = new Date(Date.UTC(asOfDate.getUTCFullYear(), 0, 1, 0, 0, 0, 0))
 
   // Use raw SQL to compute base price in the database
   // This avoids loading all payments into memory for high-volume creators
@@ -339,8 +342,9 @@ async function calculateYTD(
         ("status" = 'succeeded' AND "type" IN ('one_time', 'recurring'))
         -- Refunds (negative values subtract automatically)
         OR ("status" = 'refunded' AND "type" IN ('one_time', 'recurring', 'refund'))
-        -- Chargebacks (negative values subtract automatically)
-        OR ("status" IN ('dispute_lost', 'disputed') AND "type" IN ('one_time', 'recurring'))
+        -- Chargebacks - only count 'dispute_lost' (finalized losses)
+        -- Open disputes ('disputed') are excluded for consistency with period totals
+        OR ("status" = 'dispute_lost' AND "type" IN ('one_time', 'recurring'))
       )
   `
 
@@ -546,7 +550,7 @@ async function findPayoutForPeriod(
 /**
  * Generate a payroll period for a user for a specific currency
  * This aggregates all payments in the period and creates a snapshot
- * Fee rates are based on the creator's purpose (personal: 10%, service: 8%)
+ * Fee rate is 8% for all users (split: 4% subscriber + 4% creator)
  */
 export async function generatePayrollPeriod(
   userId: string,
@@ -997,10 +1001,12 @@ export async function generateCustomStatement(
   })
 
   // Get chargebacks (same currency)
+  // Only count 'dispute_lost' (finalized losses) for consistency with period totals
+  // Open disputes ('disputed') are excluded to avoid overstating losses
   const chargebacks = await db.payment.findMany({
     where: {
       creatorId: userId,
-      status: { in: ['dispute_lost', 'disputed'] },
+      status: 'dispute_lost',
       type: { in: ['one_time', 'recurring'] },
       currency: statementCurrency,
       occurredAt: {

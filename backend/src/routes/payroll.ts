@@ -1,7 +1,7 @@
 // Payroll Routes - Pay statement generation and verification
 
 import { Hono } from 'hono'
-import { requireAuth } from '../middleware/auth.js'
+import { requireAuth, requireServicePurpose } from '../middleware/auth.js'
 import { publicStrictRateLimit } from '../middleware/rateLimit.js'
 import { db } from '../db/client.js'
 import { env } from '../config/env.js'
@@ -29,7 +29,7 @@ const payroll = new Hono()
 // ============================================
 
 // GET /payroll/periods - List all payroll periods for current user
-payroll.get('/periods', requireAuth, async (c) => {
+payroll.get('/periods', requireAuth, requireServicePurpose, async (c) => {
   const userId = c.get('userId')
   const now = new Date()
 
@@ -102,7 +102,7 @@ payroll.get('/periods', requireAuth, async (c) => {
 
 // POST /payroll/generate - Manually trigger period generation (non-blocking)
 // This backfills any missing periods without blocking the list endpoint
-payroll.post('/generate', requireAuth, async (c) => {
+payroll.post('/generate', requireAuth, requireServicePurpose, async (c) => {
   const userId = c.get('userId')
 
   // Import dynamically to avoid circular deps
@@ -121,7 +121,7 @@ payroll.post('/generate', requireAuth, async (c) => {
 })
 
 // GET /payroll/periods/:id - Get single period with payment details
-payroll.get('/periods/:id', requireAuth, async (c) => {
+payroll.get('/periods/:id', requireAuth, requireServicePurpose, async (c) => {
   const userId = c.get('userId')
   const periodId = c.req.param('id')
 
@@ -177,7 +177,7 @@ payroll.get('/periods/:id', requireAuth, async (c) => {
 })
 
 // POST /payroll/periods/:id/pdf - Generate PDF for a period
-payroll.post('/periods/:id/pdf', requireAuth, async (c) => {
+payroll.post('/periods/:id/pdf', requireAuth, requireServicePurpose, async (c) => {
   const userId = c.get('userId')
   const periodId = c.req.param('id')
 
@@ -303,7 +303,7 @@ payroll.post('/periods/:id/pdf', requireAuth, async (c) => {
 })
 
 // GET /payroll/current - Get current period info (even if incomplete)
-payroll.get('/current', requireAuth, async (c) => {
+payroll.get('/current', requireAuth, requireServicePurpose, async (c) => {
   const userId = c.get('userId')
 
   const now = new Date()
@@ -334,7 +334,7 @@ payroll.get('/current', requireAuth, async (c) => {
 })
 
 // GET /payroll/summary - Get overall payroll summary
-payroll.get('/summary', requireAuth, async (c) => {
+payroll.get('/summary', requireAuth, requireServicePurpose, async (c) => {
   const userId = c.get('userId')
 
   // Get all completed periods
@@ -382,7 +382,7 @@ payroll.get('/summary', requireAuth, async (c) => {
 })
 
 // GET /payroll/subscribers - List unique subscribers for filter selection
-payroll.get('/subscribers', requireAuth, async (c) => {
+payroll.get('/subscribers', requireAuth, requireServicePurpose, async (c) => {
   const userId = c.get('userId')
 
   // Get unique subscribers from payments
@@ -440,7 +440,7 @@ payroll.get('/subscribers', requireAuth, async (c) => {
 })
 
 // POST /payroll/custom-statement - Generate custom statement with filters
-payroll.post('/custom-statement', requireAuth, async (c) => {
+payroll.post('/custom-statement', requireAuth, requireServicePurpose, async (c) => {
   const userId = c.get('userId')
 
   // Parse JSON body with error handling

@@ -480,7 +480,7 @@ export const useOnboardingStore = create<OnboardingStore>()(
                     const hasNotAuthenticated = state.currentStep < 3 // Before OTP verification
 
                     if (isStale && hasNotAuthenticated) {
-                        console.log('[onboarding] Resetting stale state (>24h, not authenticated)')
+                        if (import.meta.env.DEV) console.log('[onboarding] Resetting stale state (>24h, not authenticated)')
                         try {
                             localStorage.removeItem('natepay-onboarding')
                         } catch (e) {

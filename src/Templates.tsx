@@ -6,11 +6,10 @@ import { useProfile, useUpdateProfile } from './api/hooks'
 import './Templates.css'
 
 interface Template {
-  id: 'boundary' | 'minimal' | 'editorial'
+  id: 'boundary'
   name: string
   description: string
   preview: string
-  available: boolean
 }
 
 const templates: Template[] = [
@@ -19,21 +18,6 @@ const templates: Template[] = [
     name: 'Boundary',
     description: 'Modern card with swipeable content views',
     preview: '/templates/boundary-preview.png',
-    available: true,
-  },
-  {
-    id: 'minimal',
-    name: 'Minimal',
-    description: 'Clean and simple single-page layout',
-    preview: '/templates/minimal-preview.png',
-    available: false,
-  },
-  {
-    id: 'editorial',
-    name: 'Editorial',
-    description: 'Luxury serif typography with 3D effects',
-    preview: '/templates/editorial-preview.png',
-    available: false,
   },
 ]
 
@@ -45,8 +29,8 @@ export default function Templates() {
   const profile = profileData?.profile
 
   // Get saved template from profile or default to boundary
-  const savedTemplate = (profile?.template || 'boundary') as 'boundary' | 'minimal' | 'editorial'
-  const [selectedTemplate, setSelectedTemplate] = useState<'boundary' | 'minimal' | 'editorial'>(savedTemplate)
+  const savedTemplate = (profile?.template || 'boundary') as 'boundary'
+  const [selectedTemplate, setSelectedTemplate] = useState<'boundary'>(savedTemplate)
 
   // Sync selected template when profile loads
   useEffect(() => {
@@ -81,9 +65,7 @@ export default function Templates() {
   }
 
   const handleSelectTemplate = (template: Template) => {
-    if (template.available) {
-      setSelectedTemplate(template.id)
-    }
+    setSelectedTemplate(template.id)
   }
 
   if (isLoading) {
@@ -131,9 +113,8 @@ export default function Templates() {
           {templates.map((template) => (
             <Pressable
               key={template.id}
-              className={`template-card ${selectedTemplate === template.id ? 'selected' : ''} ${!template.available ? 'coming-soon' : ''}`}
+              className={`template-card ${selectedTemplate === template.id ? 'selected' : ''}`}
               onClick={() => handleSelectTemplate(template)}
-              disabled={!template.available}
             >
               {/* Preview Image Placeholder */}
               <div className={`template-preview template-preview-${template.id}`}>
@@ -142,14 +123,9 @@ export default function Templates() {
                   <div className="template-mini-body" />
                   <div className="template-mini-cta" />
                 </div>
-                {selectedTemplate === template.id && template.available && (
+                {selectedTemplate === template.id && (
                   <div className="template-selected-badge">
                     <Check size={14} />
-                  </div>
-                )}
-                {!template.available && (
-                  <div className="template-coming-soon-badge">
-                    Coming Soon
                   </div>
                 )}
               </div>

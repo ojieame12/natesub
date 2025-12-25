@@ -240,16 +240,17 @@ describe('E2E Flows', () => {
 
     it('allows creator to update template', async () => {
       const { user, cookie } = await createAuthenticatedUser()
-      await createCreatorProfile(user.id, { template: 'boundary' })
+      // Create profile without template set
+      await createCreatorProfile(user.id, {})
 
       const res = await authRequest('/profile', cookie, {
         method: 'PATCH',
-        body: JSON.stringify({ template: 'minimal' }),
+        body: JSON.stringify({ template: 'boundary' }),
       })
 
       expect(res.status).toBe(200)
       const body = await res.json()
-      expect(body.profile.template).toBe('minimal')
+      expect(body.profile.template).toBe('boundary')
     })
 
     it('rejects patch without existing profile', async () => {

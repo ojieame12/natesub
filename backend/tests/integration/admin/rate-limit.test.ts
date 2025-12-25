@@ -33,6 +33,7 @@ describe('admin rate limiting', () => {
         eventType: 'invoice.paid',
         status: 'failed',
         retryCount: 0,
+        payload: { id: 'evt_rate_limit_1', type: 'invoice.paid', data: { object: {} } },
       },
     })
 

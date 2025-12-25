@@ -320,6 +320,38 @@ export const adminSensitiveRateLimit = rateLimit({
 })
 
 /**
+ * Admin read operations rate limiter - Admin user-based
+ * Prevents data enumeration and excessive API usage
+ * 100 requests per minute per admin
+ */
+export const adminReadRateLimit = rateLimit({
+  windowMs: 60 * 1000,  // 1 minute
+  maxRequests: 100,
+  keyPrefix: 'admin_read_ratelimit',
+  keyGenerator: (c) => {
+    const adminUserId = c.get('adminUserId') as string | undefined
+    return `admin_read_ratelimit:${adminUserId || getClientIdentifier(c)}`
+  },
+  message: 'Too many requests. Please slow down.',
+})
+
+/**
+ * Admin export rate limiter - Admin user-based
+ * Prevents excessive data exports
+ * 10 exports per hour per admin
+ */
+export const adminExportRateLimit = rateLimit({
+  windowMs: 60 * 60 * 1000,  // 1 hour
+  maxRequests: 10,
+  keyPrefix: 'admin_export_ratelimit',
+  keyGenerator: (c) => {
+    const adminUserId = c.get('adminUserId') as string | undefined
+    return `admin_export_ratelimit:${adminUserId || getClientIdentifier(c)}`
+  },
+  message: 'Too many export requests. Please wait before exporting more data.',
+})
+
+/**
  * Support ticket rate limiter - IP-based
  * Prevents ticket spam from unauthenticated users
  * 5 tickets per hour per IP

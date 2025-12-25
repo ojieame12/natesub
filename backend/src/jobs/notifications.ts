@@ -1,10 +1,12 @@
 // Notification Jobs for Subscriptions
-// - Renewal reminders (3 days before)
 // - Dunning emails (payment failed)
+// - Cancellation emails
+//
+// NOTE: Renewal reminders are now handled via scheduleSubscriptionRenewalReminders()
+// in jobs/reminders.ts which schedules 7/3/1-day reminders at invoice.paid time.
 
 import { db } from '../db/client.js'
 import {
-  sendRenewalReminderEmail,
   sendPaymentFailedEmail,
   sendSubscriptionCanceledEmail,
 } from '../services/email.js'
@@ -15,29 +17,6 @@ interface NotificationResult {
   processed: number
   sent: number
   errors: Array<{ subscriptionId: string; error: string }>
-}
-
-/**
- * DEPRECATED: Legacy renewal reminders (single 3-day notification)
- *
- * Replaced by scheduleSubscriptionRenewalReminders() in jobs/reminders.ts
- * which schedules 7/3/1-day reminders at invoice.paid time for better
- * Visa VAMP compliance and chargeback prevention.
- *
- * This function now returns early to avoid duplicate reminders.
- * Keep exported for API backwards compatibility until jobs.ts route is updated.
- *
- * @deprecated Use scheduleSubscriptionRenewalReminders from jobs/reminders.ts
- */
-export async function sendRenewalReminders(): Promise<NotificationResult> {
-  // DISABLED: New scheduled reminder system handles this
-  // See: scheduleSubscriptionRenewalReminders() in jobs/reminders.ts
-  console.log('[notifications] sendRenewalReminders DEPRECATED - using scheduled reminders instead')
-  return {
-    processed: 0,
-    sent: 0,
-    errors: [],
-  }
 }
 
 /**
@@ -275,7 +254,6 @@ export async function sendCancellationEmails(): Promise<NotificationResult> {
 
 // Export for cron/scheduler
 export default {
-  sendRenewalReminders,
   sendDunningEmails,
   sendCancellationEmails,
 }

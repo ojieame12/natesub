@@ -105,8 +105,10 @@ export async function processRecurringBilling(): Promise<BillingResult> {
     result.processed++
 
     // DISTRIBUTED LOCK: Prevent concurrent processing of same subscription
-    // This prevents double-charging if billing job runs while webhook is processing
-    const lockKey = `billing:${sub.id}`
+    // IMPORTANT: Use same lock key pattern as webhook handler to prevent race conditions
+    // where both billing job and webhook could charge the same subscription
+    // Webhook uses: `sub:${subscriberId}:${creatorId}:${interval}`
+    const lockKey = `sub:${sub.subscriberId}:${sub.creatorId}:${sub.interval}`
     const lockToken = await acquireLock(lockKey, 60000) // 60 second TTL
 
     if (!lockToken) {
@@ -394,7 +396,8 @@ export async function processRetries(): Promise<BillingResult> {
     }
 
     // DISTRIBUTED LOCK: Prevent concurrent retry processing
-    const lockKey = `billing:${sub.id}`
+    // Use same lock key pattern as webhook handler to prevent race conditions
+    const lockKey = `sub:${sub.subscriberId}:${sub.creatorId}:${sub.interval}`
     const lockToken = await acquireLock(lockKey, 60000) // 60 second TTL
 
     if (!lockToken) {

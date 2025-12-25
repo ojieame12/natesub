@@ -341,14 +341,35 @@ refunds.post('/:paymentId/process', adminSensitiveRateLimit, requireFreshSession
     throw new HTTPException(500, { message: refundResult.error || 'Refund processing failed' })
   }
 
-  // Update payment status
-  await db.payment.update({
-    where: { id: paymentId },
-    data: { status: 'refunded' },
-  })
+  // Update payment status - critical operation since refund already processed
+  try {
+    await db.payment.update({
+      where: { id: paymentId },
+      data: { status: 'refunded' },
+    })
+  } catch (dbError) {
+    // Critical: Refund succeeded in Stripe but DB update failed
+    // This creates an inconsistent state that needs manual intervention
+    console.error('[CRITICAL] Refund DB update failed after Stripe refund succeeded:', {
+      paymentId,
+      refundId: refundResult.refundId,
+      error: dbError instanceof Error ? dbError.message : String(dbError),
+    })
 
-  // Invalidate admin revenue cache after refund
-  await invalidateAdminRevenueCache()
+    // Still return success since refund was processed, but flag the sync issue
+    // A reconciliation job should detect and fix this
+    await logAdminAction(c, 'Refund DB sync failed', {
+      paymentId,
+      refundId: refundResult.refundId,
+      error: dbError instanceof Error ? dbError.message : String(dbError),
+      severity: 'critical',
+    })
+  }
+
+  // Invalidate admin revenue cache after refund (non-critical)
+  await invalidateAdminRevenueCache().catch((err) => {
+    console.warn('[cache] Failed to invalidate revenue cache after refund:', err)
+  })
 
   // Log successful refund
   await logAdminAction(c, 'Refund processed', {

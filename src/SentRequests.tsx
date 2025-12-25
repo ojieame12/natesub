@@ -109,10 +109,9 @@ export default function SentRequests() {
         }
     }, [allRequests])
 
-    const handleResend = (id: string) => {
+    const handleResend = (_id: string) => {
         // TODO: Implement resend via API - would need to create new draft and send
-        toast.success('Request resent')
-        console.log('Resend request:', id)
+        toast.info('Resend coming soon')
     }
 
     const loadData = () => {

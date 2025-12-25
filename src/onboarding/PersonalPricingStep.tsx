@@ -4,33 +4,8 @@ import { useOnboardingStore } from './store'
 import type { SubscriptionTier } from './store'
 import { Button, Pressable } from './components'
 import { useSaveOnboardingProgress } from '../api/hooks'
-import { getCurrencySymbol, getSuggestedAmounts, calculateFeePreview, formatAmountWithSeparators, getMinimumAmount } from '../utils/currency'
+import { getCurrencySymbol, getSuggestedAmounts, getMinimumAmount } from '../utils/currency'
 import './onboarding.css'
-
-// Inline fee preview component to show what creator will receive
-// Uses split model: 4% subscriber + 4% creator = 8% total
-function FeePreviewBox({ amount, currency }: { amount: number; currency: string }) {
-    const preview = calculateFeePreview(amount, currency)
-
-    return (
-        <div className="fee-preview-box">
-            <div className="fee-preview-row">
-                <span>Subscriber pays</span>
-                <span>{formatAmountWithSeparators(preview.subscriberPays, currency)}/mo</span>
-            </div>
-            <div className="fee-preview-divider" />
-            <div className="fee-preview-row fee-deduction">
-                <span>Platform + processing (8%)</span>
-                <span>-{formatAmountWithSeparators(preview.totalFee, currency)}</span>
-            </div>
-            <div className="fee-preview-divider" />
-            <div className="fee-preview-row fee-total">
-                <span>You receive</span>
-                <span>{formatAmountWithSeparators(preview.creatorReceives, currency)}/mo</span>
-            </div>
-        </div>
-    )
-}
 
 export default function PersonalPricingStep() {
     const {
@@ -198,11 +173,6 @@ export default function PersonalPricingStep() {
                                     </Pressable>
                                 ))}
                             </div>
-
-                            {/* Fee Preview - show what creator will receive */}
-                            {singleAmount && singleAmount >= minAmount && (
-                                <FeePreviewBox amount={singleAmount} currency={currency} />
-                            )}
                         </>
                     ) : (
                         /* Tiers Mode */

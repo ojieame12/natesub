@@ -1,4 +1,5 @@
 import { useState, memo, useCallback, useMemo, type ReactNode, type CSSProperties } from 'react'
+import { triggerImpact, type ImpactStyle } from '../utils/haptics'
 
 interface PressableProps {
     children: ReactNode
@@ -9,46 +10,7 @@ interface PressableProps {
     disabled?: boolean
     style?: CSSProperties
     /** Haptic feedback intensity: 'light' | 'medium' | 'heavy' | 'none' */
-    haptic?: 'light' | 'medium' | 'heavy' | 'none'
-}
-
-// Check if running in native Capacitor environment
-const isNative = typeof window !== 'undefined' &&
-    window.Capacitor?.isNativePlatform?.() === true
-
-// Lazy-loaded haptics module (only loads on native platforms)
-let hapticsModule: typeof import('@capacitor/haptics') | null = null
-
-// Debounce haptics - prevent multiple triggers within 50ms
-let lastHapticTime = 0
-const HAPTIC_DEBOUNCE_MS = 50
-
-// Trigger haptic feedback (works on iOS/Android via Capacitor)
-const triggerHaptic = async (style: 'light' | 'medium' | 'heavy') => {
-    // Skip on web - don't even load the module
-    if (!isNative) return
-
-    // Debounce - prevent rapid haptic triggers
-    const now = Date.now()
-    if (now - lastHapticTime < HAPTIC_DEBOUNCE_MS) return
-    lastHapticTime = now
-
-    try {
-        // Lazy load haptics module on first use
-        if (!hapticsModule) {
-            hapticsModule = await import('@capacitor/haptics')
-        }
-
-        const { Haptics, ImpactStyle } = hapticsModule
-        const impactStyle = {
-            light: ImpactStyle.Light,
-            medium: ImpactStyle.Medium,
-            heavy: ImpactStyle.Heavy,
-        }[style]
-        await Haptics.impact({ style: impactStyle })
-    } catch {
-        // Haptics not available - fail silently
-    }
+    haptic?: ImpactStyle | 'none'
 }
 
 // Base styles - defined outside component to prevent recreation
@@ -93,9 +55,9 @@ const Pressable = memo(function Pressable({
     const handleTouchStart = useCallback(() => {
         if (!disabled) {
             setIsPressed(true)
-            // Trigger haptic feedback on touch (debounced)
+            // Trigger haptic feedback on touch (debounced via shared utility)
             if (haptic !== 'none') {
-                triggerHaptic(haptic)
+                triggerImpact(haptic)
             }
             // Call custom handler if provided
             onTouchStartProp?.()
@@ -119,7 +81,7 @@ const Pressable = memo(function Pressable({
             e.preventDefault()
             setIsPressed(true)
             if (haptic !== 'none') {
-                triggerHaptic(haptic)
+                triggerImpact(haptic)
             }
             onClick?.()
         }

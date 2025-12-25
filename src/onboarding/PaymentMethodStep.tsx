@@ -8,8 +8,7 @@ import { getMinimumAmount, getCurrencySymbol, getSuggestedAmounts } from '../uti
 import '../Dashboard.css'
 import './onboarding.css'
 
-// TEMPORARY: Disable Paystack until live keys are ready
-// Set to true to re-enable Paystack for NG/KE/ZA countries
+// Paystack is enabled for supported African countries
 const PAYSTACK_ENABLED = true
 
 // Paystack supported country codes (primary for Africa)

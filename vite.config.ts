@@ -30,8 +30,6 @@ export default defineConfig(({ mode }) => {
             'vendor-query': ['@tanstack/react-query'],
             // Icons - changes with new features
             'vendor-icons': ['lucide-react'],
-            // Heavy animation lib - load on demand
-            'vendor-lottie': ['lottie-react', 'lottie-web'],
           },
         },
       },

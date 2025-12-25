@@ -88,7 +88,13 @@ vi.mock('../src/db/redis.js', () => {
       get: vi.fn(async (key: string) => store.get(key) ?? null),
       set: vi.fn(async (key: string, value: string) => { store.set(key, value); return 'OK' }),
       setex: vi.fn(async (key: string, _seconds: number, value: string) => { store.set(key, value); return 'OK' }),
-      del: vi.fn(async (key: string) => { store.delete(key); return 1 }),
+      del: vi.fn(async (...keys: string[]) => {
+        let deleted = 0
+        for (const key of keys) {
+          if (store.delete(key)) deleted++
+        }
+        return deleted
+      }),
       incr: vi.fn(async (key: string) => {
         const current = (store.get(key) as number) || 0
         store.set(key, current + 1)
@@ -102,6 +108,19 @@ vi.mock('../src/db/redis.js', () => {
       exists: vi.fn(async (key: string) => (store.has(key) ? 1 : 0)),
       on: vi.fn(),
       quit: vi.fn(),
+      // Scan keys matching a pattern - used by cache invalidation
+      scan: vi.fn(async (cursor: string, ...args: string[]): Promise<[string, string[]]> => {
+        const matchIdx = args.indexOf('MATCH')
+        const pattern = matchIdx >= 0 && matchIdx + 1 < args.length ? args[matchIdx + 1] : '*'
+        // Convert glob pattern to regex
+        const regexPattern = pattern
+          .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+          .replace(/\*/g, '.*')
+          .replace(/\?/g, '.')
+        const regex = new RegExp(`^${regexPattern}$`)
+        const keys = Array.from(store.keys()).filter(k => regex.test(k as string)) as string[]
+        return ['0', keys]
+      }),
     },
     __reset: reset,
   }

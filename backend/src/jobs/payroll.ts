@@ -4,7 +4,6 @@
 import { db } from '../db/client.js'
 import { redis } from '../db/redis.js'
 import {
-  generatePayrollPeriod,
   generatePayrollPeriodsForAllCurrencies,
   getPeriodBoundaries,
   getPayrollPeriod,

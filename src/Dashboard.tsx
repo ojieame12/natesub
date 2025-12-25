@@ -106,11 +106,10 @@ const formatRelativeTime = (date: Date | string) => {
   return then.toLocaleDateString()
 }
 
-// Pre-load subscription page components to avoid serial waterfall
+// Pre-load subscription page component to avoid serial waterfall
 const preloadSubscriptionPage = () => {
-  // These will be cached by the browser after first load
+  // This will be cached by the browser after first load
   import('./subscribe/SubscribeBoundary')
-  import('./subscribe/SubscriptionLiquid')
 }
 
 export default function Dashboard() {
@@ -276,14 +275,14 @@ export default function Dashboard() {
     }
 
     try {
-      console.log('[dashboard] Starting refresh...')
       const results = await Promise.all([
         refetchProfile(),
         refetchMetrics(),
         refetchActivity(),
         refetchAnalytics(),
       ])
-      console.log('[dashboard] Refresh complete:', results.map(r => r.status))
+      // Refresh complete - all queries settled
+      void results
     } catch (err) {
       console.error('[dashboard] refresh failed:', err)
       toast.error('Failed to refresh')
@@ -385,15 +384,12 @@ export default function Dashboard() {
       const pulled = pullOffsetRef.current
       const shouldRefresh = pulled >= PULL_TRIGGER_PX
 
-      console.log('[dashboard] Touch end - pulled:', pulled, 'shouldRefresh:', shouldRefresh)
-
       startYRef.current = null
       startXRef.current = null
       intentDetectedRef.current = null
       isPullingRef.current = false
 
       if (shouldRefresh) {
-        console.log('[dashboard] Triggering pull refresh')
         void refreshDashboard('pull')
         return
       }

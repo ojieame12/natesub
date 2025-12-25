@@ -12,51 +12,27 @@
  * always exceeds estimated processor costs + minimum margin.
  */
 
+import {
+  PLATFORM_FEE_RATE,
+  SPLIT_RATE,
+  CROSS_BORDER_BUFFER,
+  PROCESSOR_FEES,
+  DEFAULT_PROCESSOR_FEE,
+  MIN_MARGIN_CENTS,
+  DEFAULT_MIN_MARGIN,
+} from '../constants/fees.js'
+
 export type UserPurpose = 'personal' | 'service' | 'tips' | 'support' | 'allowance' | 'fan_club' | 'exclusive_content' | 'other'
 
 // Legacy fee mode type (kept for backward compatibility with existing subscriptions)
 export type FeeMode = 'absorb' | 'pass_to_subscriber' | 'split'
 
-// Fixed fee rate: 8% total, split 4%/4%
-const PLATFORM_FEE_RATE = 0.08
-const SPLIT_RATE = 0.04 // Each party pays 4%
-
-// Cross-border buffer for FX/Stripe surcharge
-const CROSS_BORDER_BUFFER = 0.015 // 1.5%
-
-// Processor fee estimates by currency (for margin calculation)
-// These are conservative estimates to ensure we never go negative
-const PROCESSOR_FEES: Record<string, { percentRate: number; fixedCents: number }> = {
-  USD: { percentRate: 0.029, fixedCents: 30 },    // Stripe US: 2.9% + 30¢
-  EUR: { percentRate: 0.029, fixedCents: 25 },    // Stripe EU: 2.9% + €0.25
-  GBP: { percentRate: 0.029, fixedCents: 20 },    // Stripe UK: 2.9% + 20p
-  CAD: { percentRate: 0.029, fixedCents: 30 },    // Stripe CA: 2.9% + 30¢
-  AUD: { percentRate: 0.029, fixedCents: 30 },    // Stripe AU: 2.9% + 30¢
-  ZAR: { percentRate: 0.029, fixedCents: 500 },   // ~R5.00 fixed
-  KES: { percentRate: 0.015, fixedCents: 5000 },  // Paystack: 1.5% + KSh50
-  NGN: { percentRate: 0.015, fixedCents: 10000 }, // Paystack: 1.5% + ₦100
-  GHS: { percentRate: 0.019, fixedCents: 0 },     // Paystack Ghana: 1.9%
+// Re-export constants for backward compatibility
+export {
+  PLATFORM_FEE_RATE,
+  SPLIT_RATE,
+  CROSS_BORDER_BUFFER,
 }
-
-// Default processor fees for unknown currencies
-const DEFAULT_PROCESSOR_FEE = { percentRate: 0.029, fixedCents: 30 }
-
-// Minimum margin we want to keep after processor fees (in smallest currency unit)
-// This ensures we're profitable on every transaction
-const MIN_MARGIN_CENTS: Record<string, number> = {
-  USD: 25,     // $0.25 minimum profit
-  EUR: 25,     // €0.25
-  GBP: 20,     // £0.20
-  CAD: 35,     // $0.35
-  AUD: 35,     // $0.35
-  ZAR: 500,    // R5.00
-  KES: 2500,   // KSh25.00
-  NGN: 25000,  // ₦250.00 (25,000 kobo)
-  GHS: 250,    // ₵2.50
-}
-
-// Default minimum margin for unknown currencies
-const DEFAULT_MIN_MARGIN = 25
 
 export interface FeeCalculation {
   feeCents: number              // Total platform fee (8%)
@@ -145,9 +121,14 @@ export function calculateServiceFee(
     splitRate += CROSS_BORDER_BUFFER / 2 // Split the extra 1.5% evenly
   }
 
-  let subscriberFeeCents = Math.round(amountCents * splitRate)
-  let creatorFeeCents = Math.round(amountCents * splitRate)
-  let totalFeeCents = subscriberFeeCents + creatorFeeCents
+  // Calculate total fee with single rounding to avoid accumulation errors
+  // Each side pays splitRate (e.g., 4%), so total = 2 * splitRate (e.g., 8%)
+  const totalRate = splitRate * 2
+  let totalFeeCents = Math.round(amountCents * totalRate)
+  // Split deterministically: subscriber pays ceiling, creator pays remainder
+  // This ensures total always matches and odd cents go to subscriber (who pays gross)
+  let subscriberFeeCents = Math.ceil(totalFeeCents / 2)
+  let creatorFeeCents = totalFeeCents - subscriberFeeCents
 
   // Calculate gross (what subscriber pays)
   let grossCents = amountCents + subscriberFeeCents

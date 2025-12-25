@@ -9,14 +9,14 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import { db } from '../../db/client.js'
 import { stripe } from '../../services/stripe.js'
-import { createSubaccount, deactivateAuthorizationsBatch, type PaystackCountry } from '../../services/paystack.js'
+import { createSubaccount, type PaystackCountry } from '../../services/paystack.js'
 import { sendCreatorAccountCreatedEmail } from '../../services/email.js'
 import { RESERVED_USERNAMES } from '../../utils/constants.js'
 import { displayAmountToCents } from '../../utils/currency.js'
 import { env } from '../../config/env.js'
 import { adminSensitiveRateLimit } from '../../middleware/rateLimit.js'
 import { requireRole, requireFreshSession, logAdminAction } from '../../middleware/adminAuth.js'
-import { cached, CACHE_TTL } from '../../utils/cache.js'
+import { deleteUser } from '../../services/userDeletion.js'
 
 const users = new Hono()
 
@@ -233,13 +233,10 @@ users.post('/:id/unblock', adminSensitiveRateLimit, requireRole('super_admin'), 
 users.delete('/:id', adminSensitiveRateLimit, requireRole('super_admin'), requireFreshSession, async (c) => {
   const { id } = c.req.param()
   const body = await c.req.json().catch(() => ({}))
-  const adminUserId = c.get('adminUserId')
 
   if (body.confirm !== 'DELETE') {
     return c.json({ error: 'Must confirm with { confirm: "DELETE" }' }, 400)
   }
-
-  const reason = body.reason || 'Deleted by admin'
 
   const user = await db.user.findUnique({
     where: { id },
@@ -250,193 +247,27 @@ users.delete('/:id', adminSensitiveRateLimit, requireRole('super_admin'), requir
     return c.json({ error: 'User not found' }, 404)
   }
 
-  const canceledCounts = {
-    platform: 0,
-    stripeCreator: 0,
-    stripeSubscriber: 0,
-    paystackCreator: 0,
-    paystackSubscriber: 0,
+  const reason = body.reason || 'Deleted by admin'
+  const adminContext = {
+    adminUserId: c.get('adminUserId') as string,
+    adminEmail: c.get('adminEmail') as string,
   }
 
-  // 1. Cancel platform subscription
-  if (user.profile?.platformSubscriptionId) {
-    try {
-      await stripe.subscriptions.cancel(user.profile.platformSubscriptionId)
-      canceledCounts.platform = 1
-    } catch (err: any) {
-      if (err.code !== 'resource_missing') {
-        console.error(`[admin] Failed to cancel platform subscription:`, err.message)
-      }
-    }
-  }
-
-  // 2. Cancel STRIPE subscriptions where user is creator
-  const stripeCreatorSubs = await db.subscription.findMany({
-    where: {
-      creatorId: id,
-      stripeSubscriptionId: { not: null },
-      status: { in: ['active', 'past_due', 'pending'] },
-    },
-    select: { id: true, stripeSubscriptionId: true },
-  })
-
-  for (const sub of stripeCreatorSubs) {
-    if (sub.stripeSubscriptionId) {
-      try {
-        await stripe.subscriptions.cancel(sub.stripeSubscriptionId)
-        await db.subscription.update({
-          where: { id: sub.id },
-          data: { status: 'canceled', canceledAt: new Date() },
-        })
-        canceledCounts.stripeCreator++
-      } catch (err: any) {
-        if (err.code !== 'resource_missing') {
-          console.error(`[admin] Failed to cancel creator subscription:`, err.message)
-        }
-      }
-    }
-  }
-
-  // 3. Cancel STRIPE subscriptions where user is subscriber
-  const stripeSubscriberSubs = await db.subscription.findMany({
-    where: {
-      subscriberId: id,
-      stripeSubscriptionId: { not: null },
-      status: { in: ['active', 'past_due', 'pending'] },
-    },
-    select: { id: true, stripeSubscriptionId: true },
-  })
-
-  for (const sub of stripeSubscriberSubs) {
-    if (sub.stripeSubscriptionId) {
-      try {
-        await stripe.subscriptions.cancel(sub.stripeSubscriptionId)
-        await db.subscription.update({
-          where: { id: sub.id },
-          data: { status: 'canceled', canceledAt: new Date() },
-        })
-        canceledCounts.stripeSubscriber++
-      } catch (err: any) {
-        if (err.code !== 'resource_missing') {
-          console.error(`[admin] Failed to cancel subscriber subscription:`, err.message)
-        }
-      }
-    }
-  }
-
-  // 4. Neutralize PAYSTACK subscriptions (creator)
-  // First, fetch all authorization codes that will be cleared
-  const paystackCreatorSubsToCancel = await db.subscription.findMany({
-    where: {
-      creatorId: id,
-      paystackAuthorizationCode: { not: null },
-      status: { in: ['active', 'past_due', 'pending'] },
-    },
-    select: { paystackAuthorizationCode: true },
-  })
-  const creatorAuthCodes = paystackCreatorSubsToCancel
-    .map(s => s.paystackAuthorizationCode)
-    .filter((code): code is string => code !== null)
-
-  // Revoke authorizations with Paystack BEFORE clearing from DB
-  if (creatorAuthCodes.length > 0) {
-    const revokeResult = await deactivateAuthorizationsBatch(creatorAuthCodes)
-    console.log(`[admin] Revoked ${revokeResult.success}/${creatorAuthCodes.length} Paystack creator authorizations for user ${id}`)
-  }
-
-  // Now update the subscriptions
-  const paystackCreatorSubs = await db.subscription.updateMany({
-    where: {
-      creatorId: id,
-      paystackAuthorizationCode: { not: null },
-      status: { in: ['active', 'past_due', 'pending'] },
-    },
-    data: {
-      status: 'canceled',
-      cancelAtPeriodEnd: true,
-      canceledAt: new Date(),
-      paystackAuthorizationCode: null,
-    },
-  })
-  canceledCounts.paystackCreator = paystackCreatorSubs.count
-
-  // 5. Neutralize PAYSTACK subscriptions (subscriber)
-  // First, fetch all authorization codes that will be cleared
-  const paystackSubscriberSubsToCancel = await db.subscription.findMany({
-    where: {
-      subscriberId: id,
-      paystackAuthorizationCode: { not: null },
-      status: { in: ['active', 'past_due', 'pending'] },
-    },
-    select: { paystackAuthorizationCode: true },
-  })
-  const subscriberAuthCodes = paystackSubscriberSubsToCancel
-    .map(s => s.paystackAuthorizationCode)
-    .filter((code): code is string => code !== null)
-
-  // Revoke authorizations with Paystack BEFORE clearing from DB
-  if (subscriberAuthCodes.length > 0) {
-    const revokeResult = await deactivateAuthorizationsBatch(subscriberAuthCodes)
-    console.log(`[admin] Revoked ${revokeResult.success}/${subscriberAuthCodes.length} Paystack subscriber authorizations for user ${id}`)
-  }
-
-  // Now update the subscriptions
-  const paystackSubscriberSubs = await db.subscription.updateMany({
-    where: {
-      subscriberId: id,
-      paystackAuthorizationCode: { not: null },
-      status: { in: ['active', 'past_due', 'pending'] },
-    },
-    data: {
-      status: 'canceled',
-      cancelAtPeriodEnd: true,
-      canceledAt: new Date(),
-      paystackAuthorizationCode: null,
-    },
-  })
-  canceledCounts.paystackSubscriber = paystackSubscriberSubs.count
-
-  // 6. Log admin activity
-  await db.activity.create({
-    data: {
-      userId: id,
-      type: 'admin_delete',
-      payload: {
-        reason,
-        deletedBy: adminUserId,
-        adminId: c.get('adminUserId'),
-        adminEmail: c.get('adminEmail'),
-        originalEmail: user.email,
-        deletedAt: new Date().toISOString(),
-        canceledSubscriptions: canceledCounts,
-      },
-    },
-  })
-
-  // 7. Anonymize email
-  const anonymizedEmail = `deleted_${id}@deleted.natepay.co`
-  await db.user.update({
-    where: { id },
-    data: {
-      deletedAt: new Date(),
-      email: anonymizedEmail,
-    },
-  })
-
-  // 8. Delete sessions
-  try {
-    await db.session.deleteMany({ where: { userId: id } })
-  } catch {
-    // Session cleanup is not critical
-  }
-
-  // 9. Delete profile
-  await db.profile.deleteMany({ where: { userId: id } })
+  const result = await deleteUser(
+    id,
+    adminContext,
+    reason,
+    user.email,
+    user.profile?.platformSubscriptionId
+  )
 
   return c.json({
-    success: true,
+    success: result.success,
     message: 'User deleted with full cleanup',
-    details: { canceledSubscriptions: canceledCounts },
+    details: {
+      canceledSubscriptions: result.canceledSubscriptions,
+      errors: result.errors.length > 0 ? result.errors : undefined,
+    },
   })
 })
 
@@ -600,20 +431,24 @@ users.post('/create-creator', adminSensitiveRateLimit, requireRole('super_admin'
     return c.json({ error: 'This username is reserved' }, 400)
   }
 
-  const existingUsername = await db.profile.findUnique({ where: { username } })
-  if (existingUsername) {
-    return c.json({ error: 'Username is already taken' }, 400)
-  }
-
-  const existingEmail = await db.user.findUnique({ where: { email: body.email.toLowerCase() } })
-  if (existingEmail) {
-    return c.json({ error: 'An account with this email already exists' }, 400)
-  }
-
   const amountCents = displayAmountToCents(body.amount, countryInfo.currency)
 
   try {
+    // Use transaction with all checks inside to prevent race conditions
+    // The unique constraints on email and username will catch any concurrent conflicts
     const result = await db.$transaction(async (tx) => {
+      // Check username uniqueness inside transaction
+      const existingUsername = await tx.profile.findUnique({ where: { username } })
+      if (existingUsername) {
+        throw new Error('USERNAME_TAKEN')
+      }
+
+      // Check email uniqueness inside transaction
+      const existingEmail = await tx.user.findUnique({ where: { email: body.email.toLowerCase() } })
+      if (existingEmail) {
+        throw new Error('EMAIL_EXISTS')
+      }
+
       const user = await tx.user.create({
         data: {
           email: body.email.toLowerCase(),
@@ -687,8 +522,16 @@ users.post('/create-creator', adminSensitiveRateLimit, requireRole('super_admin'
       message: `Creator account created successfully. Payment link: ${paymentLink}`,
     })
   } catch (err: any) {
+    // Handle custom validation errors from transaction
+    if (err.message === 'USERNAME_TAKEN') {
+      return c.json({ error: 'Username is already taken' }, 400)
+    }
+    if (err.message === 'EMAIL_EXISTS') {
+      return c.json({ error: 'An account with this email already exists' }, 400)
+    }
+
     console.error('[admin] Failed to create creator:', err)
-    return c.json({ error: err.message || 'Failed to create creator account' }, 500)
+    return c.json({ error: 'Failed to create creator account' }, 500)
   }
 })
 
