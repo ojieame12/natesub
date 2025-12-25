@@ -1,8 +1,9 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { FileText, ChevronRight, Calendar, ArrowLeft, AlertTriangle } from 'lucide-react'
+import { FileText, ChevronRight, Calendar, ArrowLeft, AlertTriangle, Filter, X, Loader2 } from 'lucide-react'
 import type { PayPeriod } from '../api/client'
-import { Pressable, Skeleton, ErrorState } from '../components'
-import { usePayrollPeriods, useCurrentUser } from '../api/hooks'
+import { Pressable, Skeleton, ErrorState, useToast } from '../components'
+import { usePayrollPeriods, useCurrentUser, useCustomStatement } from '../api/hooks'
 import { formatCurrencyFromCents } from '../utils/currency'
 import './payroll.css'
 
@@ -31,8 +32,20 @@ const groupByMonth = (periods: PayPeriod[]) => {
     }, {} as Record<string, PayPeriod[]>)
 }
 
+// Get default date range (last 3 months)
+const getDefaultDateRange = () => {
+    const end = new Date()
+    const start = new Date()
+    start.setMonth(start.getMonth() - 3)
+    return {
+        start: start.toISOString().split('T')[0],
+        end: end.toISOString().split('T')[0],
+    }
+}
+
 export default function PayrollHistory() {
     const navigate = useNavigate()
+    const toast = useToast()
     const { data: userData } = useCurrentUser()
     const currencyCode = userData?.profile?.currency || 'USD'
 
@@ -42,6 +55,33 @@ export default function PayrollHistory() {
     const warnings = data?.warnings || []
     const groupedPeriods = groupByMonth(periods)
     const hasAddressWarning = warnings.some(w => w.type === 'missing_address')
+
+    // Custom statement modal state
+    const [showCustomModal, setShowCustomModal] = useState(false)
+    const [customDateRange, setCustomDateRange] = useState(getDefaultDateRange)
+    const [customResult, setCustomResult] = useState<{
+        statement: any
+        warnings: Array<{ type: string; message: string }>
+    } | null>(null)
+    const customStatement = useCustomStatement()
+
+    const handleGenerateCustom = async () => {
+        try {
+            const result = await customStatement.mutateAsync({
+                startDate: customDateRange.start,
+                endDate: customDateRange.end,
+            })
+            setShowCustomModal(false)
+            setCustomResult(result)
+            toast.success('Custom report generated')
+        } catch (err) {
+            toast.error('Failed to generate statement')
+        }
+    }
+
+    const clearCustomResult = () => {
+        setCustomResult(null)
+    }
 
     // Get YTD entries sorted by user's preferred currency first
     const ytdEntries = Object.entries(ytdByCurrency).sort(([a], [b]) => {
@@ -136,6 +176,41 @@ export default function PayrollHistory() {
                             </Pressable>
                         )}
 
+                        {/* Custom Statement Result */}
+                        {customResult && (
+                            <div className="payroll-custom-result">
+                                <div className="payroll-custom-result-header">
+                                    <h3>Custom Report</h3>
+                                    <Pressable className="payroll-custom-result-close" onClick={clearCustomResult}>
+                                        <X size={16} />
+                                    </Pressable>
+                                </div>
+                                <div className="payroll-custom-result-range">
+                                    {formatPeriodRange(customResult.statement.periodStart, customResult.statement.periodEnd)}
+                                </div>
+                                <div className="payroll-custom-result-stats">
+                                    <div className="payroll-custom-result-stat">
+                                        <span className="stat-value">{formatCurrencyFromCents(customResult.statement.grossCents, customResult.statement.currency)}</span>
+                                        <span className="stat-label">Gross</span>
+                                    </div>
+                                    <div className="payroll-custom-result-stat">
+                                        <span className="stat-value">{formatCurrencyFromCents(customResult.statement.totalFeeCents, customResult.statement.currency)}</span>
+                                        <span className="stat-label">Fees</span>
+                                    </div>
+                                    <div className="payroll-custom-result-stat highlight">
+                                        <span className="stat-value">{formatCurrencyFromCents(customResult.statement.netCents, customResult.statement.currency)}</span>
+                                        <span className="stat-label">Net</span>
+                                    </div>
+                                </div>
+                                <div className="payroll-custom-result-meta">
+                                    {customResult.statement.paymentCount} payment{customResult.statement.paymentCount !== 1 ? 's' : ''}
+                                    {!customResult.statement.isVerifiable && (
+                                        <span className="payroll-custom-note"> • Cannot be independently verified</span>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
                         {/* Grouped Periods */}
                         {Object.entries(groupedPeriods).map(([month, monthPeriods]) => (
                             <div key={month} className="payroll-section">
@@ -177,6 +252,19 @@ export default function PayrollHistory() {
                             </div>
                         ))}
 
+                        {/* Custom Report Action */}
+                        <Pressable
+                            className="payroll-custom-action"
+                            onClick={() => setShowCustomModal(true)}
+                        >
+                            <Filter size={18} />
+                            <div className="payroll-custom-action-text">
+                                <span className="payroll-custom-action-title">Custom Report</span>
+                                <span className="payroll-custom-action-desc">Generate a statement for any date range</span>
+                            </div>
+                            <ChevronRight size={18} />
+                        </Pressable>
+
                         {/* Footer Note */}
                         <p className="payroll-footer-note">
                             Pay statements are generated after each payout period. Download PDFs for income verification.
@@ -184,6 +272,72 @@ export default function PayrollHistory() {
                     </>
                 )}
             </div>
+
+            {/* Custom Statement Modal */}
+            {showCustomModal && (
+                <>
+                    <div className="payroll-modal-overlay" onClick={() => setShowCustomModal(false)} />
+                    <div className="payroll-modal">
+                        <div className="payroll-modal-header">
+                            <h2>Custom Report</h2>
+                            <Pressable className="payroll-modal-close" onClick={() => setShowCustomModal(false)}>
+                                <X size={20} />
+                            </Pressable>
+                        </div>
+
+                        <div className="payroll-modal-content">
+                            <p className="payroll-modal-desc">
+                                Generate a custom income statement for any date range. Note: Custom reports cannot be independently verified.
+                            </p>
+
+                            <div className="payroll-date-inputs">
+                                <label className="payroll-date-field">
+                                    <span>Start Date</span>
+                                    <input
+                                        type="date"
+                                        value={customDateRange.start}
+                                        onChange={(e) => setCustomDateRange(prev => ({ ...prev, start: e.target.value }))}
+                                        max={customDateRange.end}
+                                    />
+                                </label>
+                                <label className="payroll-date-field">
+                                    <span>End Date</span>
+                                    <input
+                                        type="date"
+                                        value={customDateRange.end}
+                                        onChange={(e) => setCustomDateRange(prev => ({ ...prev, end: e.target.value }))}
+                                        min={customDateRange.start}
+                                        max={new Date().toISOString().split('T')[0]}
+                                    />
+                                </label>
+                            </div>
+                        </div>
+
+                        <div className="payroll-modal-actions">
+                            <Pressable
+                                className="payroll-modal-btn secondary"
+                                onClick={() => setShowCustomModal(false)}
+                            >
+                                Cancel
+                            </Pressable>
+                            <Pressable
+                                className="payroll-modal-btn primary"
+                                onClick={handleGenerateCustom}
+                                disabled={customStatement.isPending}
+                            >
+                                {customStatement.isPending ? (
+                                    <>
+                                        <Loader2 size={16} className="spin" />
+                                        Generating...
+                                    </>
+                                ) : (
+                                    'Generate Report'
+                                )}
+                            </Pressable>
+                        </div>
+                    </div>
+                </>
+            )}
         </div>
     )
 }
