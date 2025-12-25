@@ -153,6 +153,9 @@ function AuthErrorHandler() {
 function RootRedirect() {
   const { status, isFullySetUp, needsPaymentSetup, refetch } = useAuthState()
 
+  // DEBUG: Log auth status to console
+  console.log('[RootRedirect] status:', status)
+
   // Still checking - show skeleton (splash may be suppressed for returning users)
   if (status === 'unknown' || status === 'checking') {
     return <PageSkeleton />
@@ -298,6 +301,9 @@ function InitialRouteRedirect() {
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { status, needsOnboarding, onboarding, refetch } = useAuthState()
   const location = useLocation()
+
+  // DEBUG: Log auth status to console
+  console.log('[RequireAuth] status:', status, 'path:', location.pathname)
 
   // Still checking - show skeleton to prevent content flash
   if (status === 'unknown' || status === 'checking') {
