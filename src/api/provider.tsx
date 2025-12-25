@@ -1,4 +1,4 @@
-import { QueryClient } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
 import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persister'
 import type { ReactNode } from 'react'
@@ -106,7 +106,6 @@ interface ApiProviderProps {
 export function ApiProvider({ children }: ApiProviderProps) {
   // If no persister (localStorage unavailable), use regular QueryClientProvider
   if (!persister) {
-    const { QueryClientProvider } = require('@tanstack/react-query')
     return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   }
 
