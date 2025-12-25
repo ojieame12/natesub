@@ -127,7 +127,8 @@ export default function Dashboard() {
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [copied, setCopied] = useState(false)
   // Currency toggle: 'profile' shows MRR/Revenue in profile currency, 'payout' shows in payout currency
-  const [currencyView, setCurrencyView] = useState<'profile' | 'payout'>('profile')
+  // Default to 'payout' to show native payout currency first (Option B)
+  const [currencyView, setCurrencyView] = useState<'profile' | 'payout'>('payout')
 
   // Real API hooks
   const { data: currentUser } = useCurrentUser()
@@ -146,29 +147,36 @@ export default function Dashboard() {
   // Currency conversion
   // fxRate = 1 profile currency = X payout currency (e.g., 1 USD = 1600 NGN)
   const payoutCurrency = metrics?.balance?.currency || currencyCode
-  const fxRate = metrics?.fxRate ?? null
+  const backendFxRate = metrics?.fxRate ?? null
   const hasDualCurrency = payoutCurrency !== currencyCode
+
+  // Fallback FX rates when backend doesn't provide them (approximate rates)
+  const FALLBACK_FX_RATES: Record<string, number> = {
+    NGN: 1600,  // 1 USD = ~1600 NGN
+    KES: 155,   // 1 USD = ~155 KES
+    GHS: 15,    // 1 USD = ~15 GHS
+    ZAR: 18,    // 1 USD = ~18 ZAR
+  }
+
+  // Use backend rate if available, otherwise use fallback for payout currency
+  // Assumes profile currency is USD (which is required for cross-border)
+  const fxRate = backendFxRate ?? (hasDualCurrency ? FALLBACK_FX_RATES[payoutCurrency] ?? null : null)
+
+  // Toggle is available when we have dual currencies (we always have fallback rates now)
   const canToggle = hasDualCurrency && fxRate !== null
 
   // Determine which currency to show everything in
-  // When toggled to payout OR when can't convert (no fxRate), show in payout currency
-  const showInPayoutCurrency = canToggle
-    ? currencyView === 'payout'
-    : hasDualCurrency  // Fallback to payout currency when can't convert
+  const showInPayoutCurrency = canToggle && currencyView === 'payout'
   const displayCurrency = showInPayoutCurrency ? payoutCurrency : currencyCode
 
   // MRR and Total Revenue are in profile currency - convert if showing payout
   const displayMrr = showInPayoutCurrency && fxRate
     ? (metrics?.mrr ?? 0) * fxRate
-    : showInPayoutCurrency && !fxRate
-      ? (metrics?.mrr ?? 0)  // Can't convert, show raw (will be wrong but no choice)
-      : (metrics?.mrr ?? 0)
+    : (metrics?.mrr ?? 0)
 
   const displayTotalRevenue = showInPayoutCurrency && fxRate
     ? (metrics?.totalRevenue ?? 0) * fxRate
-    : showInPayoutCurrency && !fxRate
-      ? (metrics?.totalRevenue ?? 0)
-      : (metrics?.totalRevenue ?? 0)
+    : (metrics?.totalRevenue ?? 0)
 
   // Pending is in payout currency - convert to profile if showing profile currency
   const pendingRaw = centsToDisplayAmount(metrics?.balance?.pending ?? 0, payoutCurrency)
@@ -176,7 +184,7 @@ export default function Dashboard() {
     ? pendingRaw  // Native payout currency
     : fxRate
       ? pendingRaw / fxRate  // Convert to profile currency
-      : pendingRaw  // Fallback (shouldn't happen since showInPayoutCurrency would be true)
+      : pendingRaw  // Can't convert, show raw (edge case)
 
   // Build menu items based on service vs personal
   const menuItems = useMemo(() => getMenuItems(isService), [isService])
