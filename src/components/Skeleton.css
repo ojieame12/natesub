@@ -105,7 +105,7 @@
     flex-direction: column;
     min-height: 100vh;
     min-height: 100dvh;
-    background: var(--bg-primary);
+    background: var(--bg-base);
     animation: skeletonFadeIn 0.2s ease-out both;
 }
 
@@ -115,7 +115,7 @@
     justify-content: space-between;
     padding: var(--space-md) var(--space-lg);
     padding-top: calc(var(--safe-area-top, 0px) + var(--space-md));
-    background: var(--bg-primary);
+    background: var(--bg-base);
 }
 
 .page-skeleton-content {
