@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { api } from './api/client'
 import { getShareableLink } from './utils/constants'
@@ -28,21 +28,18 @@ import {
 } from 'lucide-react'
 import { Pressable, useToast, Skeleton, SkeletonList, ErrorState, AnimatedNumber } from './components'
 import { useViewTransition } from './hooks'
-import { useCurrentUser, useMetrics, useActivity, useProfile, useAnalyticsStats } from './api/hooks'
+import { useCurrentUser, useMetrics, useActivity, useProfile, useAnalyticsStats, useNotifications } from './api/hooks'
 import { centsToDisplayAmount, getCurrencySymbol, formatCompactNumber, formatCompactAmount } from './utils/currency'
 import './Dashboard.css'
 
-// Menu items are built dynamically based on service vs personal branch
-const getMenuItems = (isService: boolean) => [
-  { id: 'subscribers', title: isService ? 'Clients' : 'Subscribers', icon: UserPlus, path: '/subscribers' },
+// Menu items - unified account type
+const menuItems = [
+  { id: 'subscribers', title: 'Subscribers', icon: UserPlus, path: '/subscribers' },
   { id: 'my-subs', title: 'Following', icon: Heart, path: '/my-subscriptions' },
   { id: 'analytics', title: 'Analytics', icon: BarChart3, path: '/analytics' },
-  { id: 'new-request', title: isService ? 'New Invoice' : 'New Request', icon: DollarSign, path: '/new-request' },
-  { id: 'sent-requests', title: isService ? 'Sent Invoices' : 'Sent Requests', icon: Clock, path: '/requests' },
-  // Payroll for service, Updates for personal
-  isService
-    ? { id: 'payroll', title: 'Payroll', icon: FileText, path: '/payroll' }
-    : { id: 'updates', title: 'Updates', icon: Send, path: '/updates' },
+  { id: 'new-request', title: 'New Request', icon: DollarSign, path: '/new-request' },
+  { id: 'sent-requests', title: 'Sent Requests', icon: Clock, path: '/requests' },
+  { id: 'payroll', title: 'Payroll', icon: FileText, path: '/payroll' },
   { id: 'edit', title: 'Edit My Page', icon: Pen, path: '/edit-page' },
   { id: 'templates', title: 'Templates', icon: Layout, path: '/templates' },
   { id: 'payment', title: 'Payment Settings', icon: CreditCard, path: '/settings/payments' },
@@ -52,9 +49,6 @@ const menuFooterItems = [
   { id: 'settings', title: 'Settings', icon: Settings, path: '/settings' },
   { id: 'help', title: 'Help and Support', icon: HelpCircle, path: '/settings/help' },
 ]
-
-// Notifications are not implemented yet - will come from a real notifications API
-const notifications: { id: number; type: string; title: string; desc: string; time: string; read: boolean }[] = []
 
 // Activity icon helper
 const getActivityIcon = (type: string) => {
@@ -136,13 +130,12 @@ export default function Dashboard() {
   const { data: metricsData, isLoading: metricsLoading, isError: metricsError, refetch: refetchMetrics } = useMetrics()
   const { data: activityData, isLoading: activityLoading, isError: activityError, refetch: refetchActivity } = useActivity(5)
   const { refetch: refetchAnalytics } = useAnalyticsStats()
+  const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications(10)
 
   const profile = profileData?.profile
   const metrics = metricsData?.metrics
   const activities = activityData?.pages?.[0]?.activities || []
   const currencyCode = (profile?.currency || currentUser?.profile?.currency || 'USD').toUpperCase()
-  // Avoid "Clients ↔ Subscribers" flicker while /profile loads by using the already-loaded /auth/me profile.
-  const isService = (profile?.purpose || currentUser?.profile?.purpose) === 'service'
 
   // Currency conversion
   // fxRate = 1 profile currency = X payout currency (e.g., 1 USD = 1600 NGN)
@@ -185,9 +178,6 @@ export default function Dashboard() {
     : fxRate
       ? pendingRaw / fxRate  // Convert to profile currency
       : pendingRaw  // Can't convert, show raw (edge case)
-
-  // Build menu items based on service vs personal
-  const menuItems = useMemo(() => getMenuItems(isService), [isService])
 
   // Progressive loading: show each section as its data becomes available
   // Instead of blocking all content on any loading state
@@ -500,7 +490,7 @@ export default function Dashboard() {
         <div className="header-right">
           <Pressable className="header-icon-btn" onClick={openNotifications}>
             <Bell size={20} />
-            {notifications.some(n => !n.read) && <span className="notification-dot" />}
+            {unreadCount > 0 && <span className="notification-dot" />}
           </Pressable>
         </div>
       </header>
@@ -585,19 +575,25 @@ export default function Dashboard() {
                 </div>
               ) : (
                 notifications.map((notif) => (
-                  <div key={notif.id} className={`notification-item ${notif.read ? 'read' : ''}`}>
+                  <Pressable
+                    key={notif.id}
+                    className={`notification-item ${notif.read ? 'read' : ''}`}
+                    onClick={() => {
+                      if (!notif.read) markAsRead(notif.id)
+                    }}
+                  >
                     <div className="notification-content">
                       <div className="notification-title">{notif.title}</div>
-                      <div className="notification-desc">{notif.desc}</div>
-                      <div className="notification-time">{notif.time}</div>
+                      <div className="notification-desc">{notif.description}</div>
+                      <div className="notification-time">{formatRelativeTime(notif.time)}</div>
                     </div>
                     {!notif.read && <div className="notification-unread-dot" />}
-                  </div>
+                  </Pressable>
                 ))
               )}
             </div>
-            {notifications.length > 0 && (
-              <Pressable className="notifications-footer">
+            {notifications.length > 0 && unreadCount > 0 && (
+              <Pressable className="notifications-footer" onClick={markAllAsRead}>
                 <span>Mark all as read</span>
               </Pressable>
             )}
@@ -669,9 +665,7 @@ export default function Dashboard() {
                     <AnimatedNumber value={metrics?.subscriberCount ?? 0} duration={500} format={(n) => formatCompactNumber(n)} />
                   </div>
                   <span className="stats-label">
-                    {(metrics?.subscriberCount ?? 0) === 1
-                      ? (isService ? 'Client' : 'Subscriber')
-                      : (isService ? 'Clients' : 'Subscribers')}
+                    {(metrics?.subscriberCount ?? 0) === 1 ? 'Subscriber' : 'Subscribers'}
                   </span>
                 </div>
                 <div className="stats-metric">

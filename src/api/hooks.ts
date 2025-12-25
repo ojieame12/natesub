@@ -448,6 +448,166 @@ export function usePayoutHistory() {
 }
 
 // ============================================
+// NOTIFICATIONS (Derived from Activity)
+// ============================================
+
+// Activity types that should appear as notifications
+const NOTIFICATION_ACTIVITY_TYPES = [
+  'subscription_created',
+  'new_subscriber',
+  'payment_received',
+  'payment',
+  'subscription_canceled',
+  'cancelled',
+  'payout_initiated',
+  'payout_completed',
+  'payout_failed',
+  'request_accepted',
+]
+
+const NOTIFICATIONS_READ_KEY = 'natepay_notifications_read'
+
+// Get read notification IDs from localStorage
+function getReadNotificationIds(): Set<string> {
+  try {
+    const stored = localStorage.getItem(NOTIFICATIONS_READ_KEY)
+    if (stored) {
+      const parsed = JSON.parse(stored)
+      return new Set(Array.isArray(parsed) ? parsed : [])
+    }
+  } catch {
+    // Ignore parse errors
+  }
+  return new Set()
+}
+
+// Save read notification IDs to localStorage
+function saveReadNotificationIds(ids: Set<string>) {
+  try {
+    localStorage.setItem(NOTIFICATIONS_READ_KEY, JSON.stringify([...ids]))
+  } catch {
+    // Ignore storage errors
+  }
+}
+
+export interface Notification {
+  id: string
+  type: string
+  title: string
+  description: string
+  time: Date
+  read: boolean
+  payload?: Record<string, unknown>
+}
+
+// Map activity type to notification title
+function getNotificationTitle(type: string): string {
+  switch (type) {
+    case 'subscription_created':
+    case 'new_subscriber': return 'New Subscriber'
+    case 'payment_received':
+    case 'payment': return 'Payment Received'
+    case 'subscription_canceled':
+    case 'cancelled': return 'Subscription Cancelled'
+    case 'payout_initiated': return 'Payout Started'
+    case 'payout_completed': return 'Payout Received'
+    case 'payout_failed': return 'Payout Failed'
+    case 'request_accepted': return 'Request Accepted'
+    default: return 'Activity'
+  }
+}
+
+// Map activity to notification description
+function getNotificationDescription(type: string, payload: Record<string, unknown>): string {
+  const name = (payload?.subscriberName || payload?.recipientName || '') as string
+  const amount = payload?.amount as number | undefined
+  const currency = (payload?.currency || 'USD') as string
+
+  switch (type) {
+    case 'subscription_created':
+    case 'new_subscriber':
+      return name ? `${name} subscribed to your page` : 'Someone subscribed to your page'
+    case 'payment_received':
+    case 'payment':
+      return name ? `${name} paid ${currency} ${amount ? (amount / 100).toFixed(2) : ''}` : 'Payment received'
+    case 'subscription_canceled':
+    case 'cancelled':
+      return name ? `${name} cancelled their subscription` : 'A subscription was cancelled'
+    case 'payout_initiated':
+      return 'Your payout is being processed'
+    case 'payout_completed':
+      return 'Your payout has arrived'
+    case 'payout_failed':
+      return 'Your payout failed - check payment settings'
+    case 'request_accepted':
+      return name ? `${name} accepted your request` : 'Your request was accepted'
+    default:
+      return ''
+  }
+}
+
+/**
+ * Hook for notifications panel - derives from Activity data
+ * Uses localStorage for read state
+ */
+export function useNotifications(limit = 10) {
+  const queryClient = useQueryClient()
+
+  // Fetch recent activities
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: ['notifications', limit],
+    queryFn: () => api.activity.list(undefined, limit),
+    staleTime: 60 * 1000, // 1 minute
+    refetchInterval: 60 * 1000, // Poll every minute
+    refetchIntervalInBackground: false,
+  })
+
+  // Get read state from localStorage
+  const readIds = getReadNotificationIds()
+
+  // Transform activities to notifications
+  const notifications: Notification[] = (data?.activities || [])
+    .filter((a: { type: string }) => NOTIFICATION_ACTIVITY_TYPES.includes(a.type))
+    .map((a: { id: string; type: string; payload: Record<string, unknown>; createdAt: string }) => ({
+      id: a.id,
+      type: a.type,
+      title: getNotificationTitle(a.type),
+      description: getNotificationDescription(a.type, a.payload || {}),
+      time: new Date(a.createdAt),
+      read: readIds.has(a.id),
+      payload: a.payload,
+    }))
+
+  // Mark single notification as read
+  const markAsRead = (id: string) => {
+    const newReadIds = new Set(readIds)
+    newReadIds.add(id)
+    saveReadNotificationIds(newReadIds)
+    // Invalidate to trigger re-render with new read state
+    queryClient.invalidateQueries({ queryKey: ['notifications'] })
+  }
+
+  // Mark all notifications as read
+  const markAllAsRead = () => {
+    const newReadIds = new Set(readIds)
+    notifications.forEach(n => newReadIds.add(n.id))
+    saveReadNotificationIds(newReadIds)
+    queryClient.invalidateQueries({ queryKey: ['notifications'] })
+  }
+
+  const unreadCount = notifications.filter(n => !n.read).length
+
+  return {
+    notifications,
+    isLoading,
+    unreadCount,
+    markAsRead,
+    markAllAsRead,
+    refetch,
+  }
+}
+
+// ============================================
 // REQUEST HOOKS
 // ============================================
 

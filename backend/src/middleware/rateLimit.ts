@@ -251,11 +251,11 @@ export const checkoutRateLimit = rateLimit({
 /**
  * Public endpoint rate limiter - IP-based
  * Prevents enumeration and DoS on public endpoints
- * 100 requests per hour per IP
+ * 500 requests per hour per IP (increased from 100 to avoid undercounting viral pages)
  */
 export const publicRateLimit = rateLimit({
   windowMs: 60 * 60 * 1000,  // 1 hour
-  maxRequests: 100,
+  maxRequests: 500,
   keyPrefix: 'public_ratelimit',
   keyGenerator: (c) => {
     return `public_ratelimit:${getClientIdentifier(c)}`

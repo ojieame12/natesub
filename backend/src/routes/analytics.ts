@@ -11,7 +11,8 @@ const analytics = new Hono()
 // Validation schemas
 const pageViewSchema = z.object({
   profileId: z.string().uuid(),
-  referrer: z.string().url().max(2000).optional().nullable(),
+  // Allow any string for referrer - apps, mail clients, etc. don't always send valid URLs
+  referrer: z.string().max(2000).optional().nullable(),
   utmSource: z.string().max(100).optional().nullable(),
   utmMedium: z.string().max(100).optional().nullable(),
   utmCampaign: z.string().max(100).optional().nullable(),
@@ -222,17 +223,16 @@ analytics.get('/stats', requireAuth, async (c) => {
       _count: true,
     })
 
-    // Top referrers (last 30 days)
+    // Top referrers (last 30 days) - include null as "Direct"
     const referrerStats = await db.pageView.groupBy({
       by: ['referrer'],
       where: {
         profileId: profile.id,
         createdAt: { gte: thisMonth },
-        referrer: { not: null },
       },
       _count: true,
       orderBy: { _count: { referrer: 'desc' } },
-      take: 5,
+      take: 6, // Take 6 to account for potential "Direct" entry
     })
 
     // Daily views for chart (last 14 days)
@@ -275,10 +275,12 @@ analytics.get('/stats', requireAuth, async (c) => {
         type: d.deviceType || 'unknown',
         count: d._count,
       })),
-      referrers: referrerStats.map(r => ({
-        source: r.referrer || 'direct',
-        count: r._count,
-      })),
+      referrers: referrerStats
+        .map(r => ({
+          source: r.referrer || 'Direct',
+          count: r._count,
+        }))
+        .slice(0, 5), // Return top 5
       dailyViews: dailyViews.map(d => ({
         date: d.date,
         count: d.count,
