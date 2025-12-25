@@ -56,8 +56,30 @@
 </head>
 
 <body>
+  <!-- DEBUG: Static HTML to prove page loads before React -->
+  <div id="debug-static" style="position:fixed;top:0;left:0;right:0;z-index:9999999;background:#00ff00;color:black;padding:20px;text-align:center;font-size:20px;font-weight:bold;">
+    ✅ STATIC HTML LOADED - JavaScript not yet executed
+  </div>
   <div id="root"></div>
   <script type="module" src="/src/main.tsx"></script>
+  <script>
+    // Remove debug banner once React renders anything
+    const observer = new MutationObserver(() => {
+      if (document.getElementById('root')?.children.length > 0) {
+        document.getElementById('debug-static')?.remove();
+        observer.disconnect();
+      }
+    });
+    observer.observe(document.getElementById('root'), { childList: true });
+    // Timeout fallback - if React doesn't render in 5s, show error
+    setTimeout(() => {
+      const debug = document.getElementById('debug-static');
+      if (debug) {
+        debug.style.background = '#ff0000';
+        debug.innerHTML = '❌ REACT FAILED TO MOUNT after 5 seconds - check console';
+      }
+    }, 5000);
+  </script>
 </body>
 
 </html>
