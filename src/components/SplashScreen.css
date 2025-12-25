@@ -62,6 +62,7 @@
 
   .splash-screen.exiting {
     display: none;
+    pointer-events: none;
   }
 
   .splash-loader {
@@ -72,4 +73,9 @@
   .splash-loader-bar {
     animation: none;
   }
+}
+
+/* Ensure exiting splash doesn't block interactions */
+.splash-screen.exiting {
+  pointer-events: none;
 }
