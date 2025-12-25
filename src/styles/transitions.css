@@ -545,3 +545,24 @@
 .loading-btn.loading {
     pointer-events: none;
 }
+/* === REDUCED MOTION FALLBACK === */
+/* When user prefers reduced motion, show content immediately without animation */
+@media (prefers-reduced-motion: reduce) {
+    .stagger-item,
+    .stagger-item-slide,
+    .content-loading,
+    .tooltip-fade,
+    .fade-in,
+    .fade-in-up,
+    .fade-in-down,
+    .fade-in-scale {
+        animation: none !important;
+        opacity: 1 !important;
+        transform: none !important;
+    }
+    
+    .skeleton-wrapper .real-content {
+        opacity: 1;
+        transition: none;
+    }
+}

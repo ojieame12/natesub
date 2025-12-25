@@ -148,3 +148,16 @@
         opacity: 1;
     }
 }
+
+/* === REDUCED MOTION FALLBACK === */
+/* When user prefers reduced motion, skip animations but keep content visible */
+@media (prefers-reduced-motion: reduce) {
+    .skeleton,
+    .skeleton-card,
+    .skeleton-list-item,
+    .page-skeleton,
+    .content-skeleton {
+        animation: none;
+        opacity: 1;
+    }
+}
