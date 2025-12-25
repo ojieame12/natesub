@@ -307,31 +307,25 @@ export default function PaymentSettings() {
     setStripeOpeningDashboard(true)
     setStripeError(null)
 
-    // Track if we're navigating away to avoid state updates after unmount
-    let isNavigating = false
-
-    // Avoid popup blockers: open synchronously, then set URL after fetch.
-    const popup = window.open('', '_blank', 'noopener,noreferrer')
     try {
+      // Fetch URL first, then open - cleaner than blank tab workaround
       const result = await api.stripe.getDashboardLink()
       if (!result?.url) {
         throw new Error('No dashboard URL returned')
       }
-      if (popup) {
-        popup.location.href = result.url
-      } else {
-        // Navigating current window - don't update state after this
-        isNavigating = true
+      // Open in new tab - if blocked, fall back to same tab
+      const opened = window.open(result.url, '_blank', 'noopener,noreferrer')
+      if (!opened) {
+        // Popup blocked - navigate in same window
         window.location.href = result.url
+        return // Don't update state, we're navigating away
       }
     } catch (err) {
-      if (popup) popup.close()
       if (isMountedRef.current) {
         setStripeError(getErrorMessage(err))
       }
     } finally {
-      // Only update state if we're not navigating away and component is still mounted
-      if (!isNavigating && isMountedRef.current) {
+      if (isMountedRef.current) {
         setStripeOpeningDashboard(false)
       }
     }
