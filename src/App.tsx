@@ -459,8 +459,15 @@ function AppShell() {
     return <SplashScreen exiting={splashExiting} />
   }
 
+  // DEBUG: Visible marker to confirm AppShell renders
+  console.log('[AppShell] Rendering, showSplash:', showSplash, 'isReady:', isReady, 'status:', status)
+
   return (
     <>
+      {/* DEBUG: Visible element to confirm render */}
+      <div style={{ position: 'fixed', top: 10, left: 10, zIndex: 99999, background: 'red', color: 'white', padding: '8px 16px', borderRadius: 8, fontSize: 14, fontWeight: 'bold' }}>
+        DEBUG: status={status}, splash={String(showSplash)}
+      </div>
       {/* Global "Liquid Glass" Atmosphere - persists across all routes */}
       <AmbientBackground />
       <ScrollRestoration />
