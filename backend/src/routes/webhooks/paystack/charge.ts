@@ -275,9 +275,12 @@ export async function handlePaystackChargeSuccess(data: any, eventId: string) {
           type: 'subscription_created',
           payload: {
             subscriptionId: newSubscription.id,
+            paymentId: paystackPayment.id, // For exact payment lookup (payout status)
             subscriberEmail: customer?.email,
             tierName,
-            amount: netCents, // Show creator their earnings
+            amount: netCents,           // NET - what creator receives after fees
+            grossAmount: grossCents || amount, // GROSS - what subscriber paid
+            feeCents,                   // Platform fee taken
             currency,
             provider: 'paystack',
           },
@@ -340,15 +343,46 @@ export async function handlePaystackChargeSuccess(data: any, eventId: string) {
 
 // Handle Paystack charge.failed
 export async function handlePaystackChargeFailed(data: any) {
-  const { metadata, reference } = data
+  const { metadata, reference, amount, currency, gateway_response, customer } = data
 
   const subscriptionId = metadata?.subscriptionId
 
   if (subscriptionId) {
-    // This is a failed recurring charge
+    // Fetch subscription with related data
+    const subscription = await db.subscription.findUnique({
+      where: { id: subscriptionId },
+      include: {
+        subscriber: { select: { email: true } },
+      },
+    })
+
+    if (!subscription) {
+      console.log(`Paystack charge failed but subscription ${subscriptionId} not found`)
+      return
+    }
+
+    // Update subscription status
     await db.subscription.update({
       where: { id: subscriptionId },
       data: { status: 'past_due' },
+    })
+
+    // Create activity for failed payment
+    await db.activity.create({
+      data: {
+        userId: subscription.creatorId,
+        type: 'payment_failed',
+        payload: {
+          subscriptionId: subscription.id,
+          subscriberEmail: customer?.email || subscription.subscriber?.email,
+          tierName: subscription.tierName, // Stored directly on subscription
+          amount: amount, // Amount in kobo/cents
+          currency: (currency || 'NGN').toUpperCase(),
+          provider: 'paystack',
+          failureMessage: gateway_response || 'Payment could not be processed',
+          reference,
+        },
+      },
     })
 
     console.log(`Paystack charge failed for subscription ${subscriptionId}, ref: ${reference}`)

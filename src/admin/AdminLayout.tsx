@@ -8,7 +8,7 @@
 import { useState } from 'react'
 import { NavLink, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthState } from '../hooks/useAuthState'
-import { Pressable } from '../components'
+import { Pressable, PageTransition } from '../components'
 import {
   LayoutGrid,
   TrendingUp,
@@ -88,13 +88,11 @@ export default function AdminLayout() {
 
   return (
     <div className="admin-layout">
-      {/* Mobile overlay */}
-      {sidebarOpen && (
-        <div
-          className="admin-sidebar-overlay"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
+      {/* Mobile overlay - always rendered for fade animation */}
+      <div
+        className={`admin-sidebar-overlay ${sidebarOpen ? 'visible' : ''}`}
+        onClick={() => setSidebarOpen(false)}
+      />
 
       {/* Sidebar */}
       <aside className={`admin-sidebar ${sidebarOpen ? 'open' : ''}`}>
@@ -151,23 +149,25 @@ export default function AdminLayout() {
         <div className="admin-content">
           <AdminErrorBoundary>
             <Suspense fallback={<AdminSkeleton />}>
-              <Routes>
-                <Route index element={<Overview />} />
-                <Route path="revenue" element={<Revenue />} />
-                <Route path="users" element={<UsersPage />} />
-                <Route path="create-creator" element={<CreateCreator />} />
-                <Route path="payments" element={<Payments />} />
-                <Route path="subscriptions" element={<Subscriptions />} />
-                <Route path="stripe" element={<Stripe />} />
-                <Route path="emails" element={<Emails />} />
-                <Route path="reminders" element={<Reminders />} />
-                <Route path="logs" element={<Logs />} />
-                <Route path="invoices" element={<Invoices />} />
-                <Route path="ops" element={<Operations />} />
-                <Route path="admins" element={<Admins />} />
-                <Route path="support" element={<Support />} />
-                <Route path="*" element={<Navigate to="/admin" replace />} />
-              </Routes>
+              <PageTransition>
+                <Routes>
+                  <Route index element={<Overview />} />
+                  <Route path="revenue" element={<Revenue />} />
+                  <Route path="users" element={<UsersPage />} />
+                  <Route path="create-creator" element={<CreateCreator />} />
+                  <Route path="payments" element={<Payments />} />
+                  <Route path="subscriptions" element={<Subscriptions />} />
+                  <Route path="stripe" element={<Stripe />} />
+                  <Route path="emails" element={<Emails />} />
+                  <Route path="reminders" element={<Reminders />} />
+                  <Route path="logs" element={<Logs />} />
+                  <Route path="invoices" element={<Invoices />} />
+                  <Route path="ops" element={<Operations />} />
+                  <Route path="admins" element={<Admins />} />
+                  <Route path="support" element={<Support />} />
+                  <Route path="*" element={<Navigate to="/admin" replace />} />
+                </Routes>
+              </PageTransition>
             </Suspense>
           </AdminErrorBoundary>
         </div>

@@ -172,12 +172,17 @@ export const aiAudioRateLimit = rateLimit({
 
 /**
  * Webhook rate limiter - IP-based
- * 100 requests per hour per IP to prevent abuse
- * Stripe/Paystack webhooks should never hit this limit under normal use
+ * 1000 requests per hour per IP to prevent abuse while allowing production scale
+ *
+ * Rationale for 1000/hour:
+ * - Stripe/Paystack IPs can send bursts during retries or billing cycles
+ * - 100 active subscribers × 3-4 webhooks each = 300-400 webhooks per billing run
+ * - Signature verification is the primary security; rate limit is secondary
+ * - 1000/hour is ~17/minute average, generous but not abusable
  */
 export const webhookRateLimit = rateLimit({
   windowMs: 60 * 60 * 1000,  // 1 hour
-  maxRequests: 100,
+  maxRequests: 1000,
   keyPrefix: 'webhook_ratelimit',
   keyGenerator: (c) => {
     // Use IP address for webhook rate limiting (not user ID)
@@ -230,12 +235,12 @@ export const paymentRateLimit = rateLimit({
 
 /**
  * Checkout rate limiter - IP-based
- * Prevents checkout spam
- * 20 requests per hour per IP
+ * Prevents checkout spam while allowing shared IP/NAT scenarios
+ * 50 requests per hour per IP
  */
 export const checkoutRateLimit = rateLimit({
   windowMs: 60 * 60 * 1000,  // 1 hour
-  maxRequests: 20,
+  maxRequests: 50,
   keyPrefix: 'checkout_ratelimit',
   keyGenerator: (c) => {
     return `checkout_ratelimit:${getClientIdentifier(c)}`

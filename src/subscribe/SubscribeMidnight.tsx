@@ -5,6 +5,7 @@ import { Banknote, Briefcase, Pencil, Check, ChevronsRight, ArrowLeft, AlertCirc
 import { useToast } from '../components'
 import { useCreateCheckout, useRecordPageView, useUpdatePageView } from '../api/hooks'
 import * as api from '../api/client'
+import { detectPayerCountry } from '../api/client'
 import type { Profile } from '../api/client'
 import { calculateFeePreview, displayAmountToCents, formatCurrency } from '../utils/currency'
 import { TERMS_URL, PRIVACY_URL } from '../utils/constants'
@@ -195,22 +196,8 @@ export default function SubscribeMidnight({ profile, isOwner }: SubscribeMidnigh
         // Small delay to ensure initial state is painted before animating
         const timer = setTimeout(() => setMount(true), 50)
 
-        // IP Detection for Smart Provider Routing
-        const CACHE_KEY = 'natepay_payer_country'
-        const cached = sessionStorage.getItem(CACHE_KEY)
-        if (cached && /^[A-Z]{2}$/.test(cached)) {
-            setPayerCountry(cached)
-        } else {
-            fetch('https://ipapi.co/country/')
-                .then(r => r.text())
-                .then(code => {
-                    const cleaned = code.trim().toUpperCase()
-                    if (/^[A-Z]{2}$/.test(cleaned)) {
-                        sessionStorage.setItem(CACHE_KEY, cleaned)
-                        setPayerCountry(cleaned)
-                    }
-                }).catch(() => { })
-        }
+        // IP Detection for Smart Provider Routing (server-side geo with CDN headers)
+        detectPayerCountry().then(setPayerCountry).catch(() => {})
 
         const stripeSessionId = searchParams.get('session_id')
         const paystackRef = searchParams.get('reference') || searchParams.get('trxref')

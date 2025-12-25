@@ -36,6 +36,7 @@ const EditPage = lazy(() => import('./EditPage'))
 const PageSetupWizard = lazy(() => import('./wizards/PageSetupWizard'))
 const Templates = lazy(() => import('./Templates'))
 const PaymentSettings = lazy(() => import('./PaymentSettings'))
+const PayoutHistory = lazy(() => import('./PayoutHistory'))
 const Billing = lazy(() => import('./Billing'))
 const HelpSupport = lazy(() => import('./HelpSupport'))
 const UserPage = lazy(() => import('./subscribe/UserPage'))
@@ -500,6 +501,7 @@ function AppShell() {
           <Route path="/settings/payments" element={<RequireAuth><PaymentSettings /></RequireAuth>} />
           <Route path="/settings/payments/complete" element={<RequireAuth><StripeComplete /></RequireAuth>} />
           <Route path="/settings/payments/refresh" element={<RequireAuth><StripeRefresh /></RequireAuth>} />
+          <Route path="/settings/payouts" element={<RequireAuth><PayoutHistory /></RequireAuth>} />
           <Route path="/payment/success" element={<PaystackComplete />} />
           <Route path="/settings/billing" element={<RequireAuth><Billing /></RequireAuth>} />
           <Route path="/settings" element={<RequireAuth><Settings /></RequireAuth>} />

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useCreateCheckout, useRecordPageView, useUpdatePageView } from '../api/hooks'
-import { api } from '../api/client'
+import { api, detectPayerCountry } from '../api/client'
 import { calculateFeePreview } from '../utils/pricing'
 import { useToast } from '../components'
 
@@ -53,31 +53,9 @@ export function useCheckoutEngine({ profile, isOwner }: CheckoutEngineProps) {
         return () => clearTimeout(timer)
     }, [])
 
-    // 2. Smart Provider Detection (IP-based)
+    // 2. Smart Provider Detection (server-side geo with CDN headers)
     useEffect(() => {
-        const CACHE_KEY = 'natepay_payer_country'
-        try {
-            const cached = sessionStorage.getItem(CACHE_KEY)
-            if (cached && /^[A-Z]{2}$/.test(cached)) {
-                setPayerCountry(cached)
-                return
-            }
-        } catch {
-            // Storage blocked - continue to fetch
-        }
-        fetch('https://ipapi.co/country/')
-            .then(r => r.text())
-            .then(code => {
-                const cleaned = code.trim().toUpperCase()
-                if (/^[A-Z]{2}$/.test(cleaned)) {
-                    try {
-                        sessionStorage.setItem(CACHE_KEY, cleaned)
-                    } catch {
-                        // Storage blocked - ignore
-                    }
-                    setPayerCountry(cleaned)
-                }
-            }).catch(() => { })
+        detectPayerCountry().then(setPayerCountry).catch(() => {})
     }, [])
 
     // 3. Page View Tracking

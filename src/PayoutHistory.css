@@ -1,0 +1,325 @@
+/* ===========================================
+   PAYOUT HISTORY PAGE
+   Using Liquid Glass Design System
+   =========================================== */
+
+.payout-history-page {
+    min-height: 100vh;
+    min-height: 100dvh;
+    max-width: 430px;
+    margin: 0 auto;
+    background: var(--bg-base);
+    display: flex;
+    flex-direction: column;
+}
+
+/* === HEADER === */
+.payout-history-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-md) var(--space-lg);
+    padding-top: calc(env(safe-area-inset-top, 12px) + var(--space-md));
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--border-default);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.header-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-full);
+    background: var(--neutral-100);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+    transition: transform 0.1s ease, background 0.15s ease;
+}
+
+.header-btn.pressed {
+    transform: scale(0.92);
+    background: var(--neutral-200);
+}
+
+.header-btn:disabled {
+    opacity: 0.5;
+}
+
+.header-title {
+    font-family: var(--font-primary);
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.header-spacer {
+    width: 36px;
+}
+
+/* === CONTENT === */
+.payout-history-content {
+    flex: 1;
+    padding: var(--space-lg);
+    padding-bottom: calc(var(--space-3xl) + env(safe-area-inset-bottom));
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xl);
+}
+
+/* === ACCOUNT HEALTH CARD === */
+.account-health-card {
+    background: var(--neutral-900);
+    border-radius: var(--radius-xl);
+    padding: var(--space-lg);
+    color: white;
+}
+
+.health-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-md);
+}
+
+.health-title {
+    font-size: 13px;
+    font-weight: 500;
+    opacity: 0.7;
+}
+
+.health-status {
+    font-size: 12px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: var(--radius-full);
+}
+
+.health-status.active {
+    background: rgba(16, 185, 129, 0.2);
+    color: #34D399;
+}
+
+.health-status.pending {
+    background: rgba(251, 191, 36, 0.2);
+    color: #FBBF24;
+}
+
+.health-status.restricted {
+    background: rgba(239, 68, 68, 0.2);
+    color: #F87171;
+}
+
+.health-status.disabled {
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.health-stats {
+    display: flex;
+    gap: var(--space-xl);
+    margin-bottom: var(--space-md);
+}
+
+.health-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.health-stat-value {
+    font-size: 28px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+}
+
+.health-stat.pending .health-stat-value {
+    opacity: 0.6;
+}
+
+.health-stat-label {
+    font-size: 13px;
+    opacity: 0.6;
+}
+
+.health-last-payout {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: var(--space-sm) var(--space-md);
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: var(--radius-md);
+    font-size: 13px;
+    opacity: 0.8;
+}
+
+/* === PAYOUT GROUPS === */
+.payout-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.payout-group-title {
+    font-family: var(--font-primary);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding-left: var(--space-xs);
+}
+
+/* === PAYOUT LIST === */
+.payout-list {
+    background: var(--bg-card);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-xl);
+    overflow: hidden;
+}
+
+.payout-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-lg);
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.payout-item:last-child {
+    border-bottom: none;
+}
+
+/* === PAYOUT STATUS ICON === */
+.payout-status-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-lg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.payout-status-icon.success {
+    background: var(--accent-green-soft);
+    color: var(--accent-green);
+}
+
+.payout-status-icon.pending {
+    background: var(--neutral-100);
+    color: var(--text-secondary);
+}
+
+.payout-status-icon.error {
+    background: var(--accent-red-soft);
+    color: var(--accent-red);
+}
+
+/* === PAYOUT INFO === */
+.payout-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.payout-amount {
+    font-family: var(--font-primary);
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.payout-date {
+    font-family: var(--font-primary);
+    font-size: 13px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* === PAYOUT BADGE === */
+.payout-badge {
+    font-size: 12px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: var(--radius-full);
+    flex-shrink: 0;
+}
+
+.payout-badge.success {
+    background: var(--accent-green-soft);
+    color: var(--accent-green);
+}
+
+.payout-badge.pending {
+    background: var(--neutral-100);
+    color: var(--text-secondary);
+}
+
+.payout-badge.error {
+    background: var(--accent-red-soft);
+    color: var(--accent-red);
+}
+
+/* === EMPTY STATE === */
+.payout-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-3xl) var(--space-xl);
+    text-align: center;
+}
+
+.payout-empty-icon {
+    width: 80px;
+    height: 80px;
+    border-radius: var(--radius-xl);
+    background: var(--neutral-100);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-tertiary);
+    margin-bottom: var(--space-lg);
+}
+
+.payout-empty-title {
+    font-family: var(--font-primary);
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: var(--space-sm);
+}
+
+.payout-empty-desc {
+    font-family: var(--font-primary);
+    font-size: 14px;
+    color: var(--text-secondary);
+    max-width: 280px;
+    line-height: 1.5;
+}
+
+/* === ANIMATIONS === */
+.spin {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+/* === REDUCED MOTION === */
+@media (prefers-reduced-motion: reduce) {
+    .spin {
+        animation: none;
+    }
+}

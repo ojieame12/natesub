@@ -118,6 +118,7 @@ export async function handlePaystackRefundProcessed(data: any, eventId: string) 
         amount: refundAmount,
         currency: currency?.toUpperCase() || originalPayment.currency,
         reason: data.refund_reason || 'Customer requested refund',
+        provider: 'paystack',
       },
     },
   })
@@ -164,6 +165,7 @@ export async function handlePaystackRefundFailed(data: any, eventId: string) {
           transactionRef,
           reason: reason || 'Refund processing failed',
           eventId,
+          provider: 'paystack',
         },
       },
     })

@@ -6,6 +6,8 @@
  */
 
 import { db } from '../db/client.js'
+import { webhookQueue } from '../lib/queue.js'
+import type { WebhookJobData } from '../workers/webhookProcessor.js'
 
 const MAX_RETRIES = 5
 const RETRY_DELAYS = [
@@ -130,6 +132,7 @@ export async function getDeadLetterWebhooks(): Promise<{
 
 /**
  * Retry a specific webhook event (for manual intervention)
+ * Actually re-enqueues the job to BullMQ for processing
  */
 export async function retryWebhook(id: string): Promise<{ success: boolean; error?: string }> {
   const event = await db.webhookEvent.findUnique({
@@ -144,7 +147,11 @@ export async function retryWebhook(id: string): Promise<{ success: boolean; erro
     return { success: false, error: 'Event already processed' }
   }
 
-  // Reset status to allow reprocessing
+  if (!event.payload) {
+    return { success: false, error: 'Event has no payload to retry' }
+  }
+
+  // Update status and increment retry count
   await db.webhookEvent.update({
     where: { id },
     data: {
@@ -152,6 +159,15 @@ export async function retryWebhook(id: string): Promise<{ success: boolean; erro
       retryCount: event.retryCount + 1,
     },
   })
+
+  // Actually enqueue the job for reprocessing
+  const jobData: WebhookJobData = {
+    provider: event.provider as 'stripe' | 'paystack',
+    event: event.payload,
+    webhookEventId: event.id,
+  }
+
+  await webhookQueue.add('webhook-retry', jobData)
 
   return { success: true }
 }

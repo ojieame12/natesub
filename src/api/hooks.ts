@@ -402,7 +402,7 @@ export function useMySubscriptions(status: 'all' | 'active' | 'canceled' = 'acti
 type ActivityPage = Awaited<ReturnType<typeof api.activity.list>>
 type ActivityInfiniteData = { pages: ActivityPage[]; pageParams: (string | undefined)[] }
 
-export function useActivity(limit = 20, options?: { seedFromLimit?: number }) {
+export function useActivity(limit = 20, options?: { seedFromLimit?: number; polling?: boolean }) {
   const queryClient = useQueryClient()
 
   return useInfiniteQuery({
@@ -412,6 +412,9 @@ export function useActivity(limit = 20, options?: { seedFromLimit?: number }) {
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor || undefined,
     staleTime: 2 * 60 * 1000, // 2 minutes - reduces refetches on tab switches
+    // Poll every 30 seconds for real-time updates (only first page)
+    refetchInterval: options?.polling ? 30 * 1000 : undefined,
+    refetchIntervalInBackground: false, // Don't poll when tab is hidden
     // Seed from smaller cached query to prevent skeleton flash
     // e.g., Activity page (limit=20) can show Dashboard's cached data (limit=5) immediately
     placeholderData: options?.seedFromLimit
@@ -433,6 +436,14 @@ export function useActivityDetail(id: string) {
     queryKey: ['activity', id],
     queryFn: () => api.activity.get(id),
     enabled: !!id,
+  })
+}
+
+export function usePayoutHistory() {
+  return useQuery({
+    queryKey: ['payouts'],
+    queryFn: api.activity.getPayouts,
+    staleTime: 60 * 1000, // 1 minute
   })
 }
 

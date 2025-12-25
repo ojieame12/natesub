@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react'
+import { useMemo, useRef, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
     Calendar,
@@ -10,57 +10,126 @@ import {
     Share2,
     Send,
     Check,
+    XCircle,
+    RotateCcw,
+    AlertTriangle,
+    CheckCircle,
+    Banknote,
+    ShieldAlert,
+    ShieldCheck,
+    ShieldX,
 } from 'lucide-react'
-import { Pressable, Skeleton, SkeletonList, ErrorState, LoadingButton } from './components'
+import { Pressable, Skeleton, SkeletonList, ErrorState, LoadingButton, PullToRefresh } from './components'
 import { useScrolled } from './hooks'
 import { useActivity, useMetrics, useCurrentUser } from './api/hooks'
 import { centsToDisplayAmount, getCurrencySymbol, formatCompactNumber, formatSmartAmount } from './utils/currency'
 import './Activity.css'
 
-// Activity icon helper
+// Activity icon helper - comprehensive list
 const getActivityIcon = (type: string) => {
     switch (type) {
+        // Positive events
         case 'subscription_created':
         case 'new_subscriber': return <UserPlus size={20} />
         case 'payment_received':
         case 'payment': return <DollarSign size={20} />
         case 'renewal': return <RefreshCw size={20} />
-        case 'subscription_canceled':
-        case 'cancelled': return <UserX size={20} />
-        case 'request_sent': return <Send size={20} />
         case 'request_accepted': return <Check size={20} />
+        case 'dispute_won': return <ShieldCheck size={20} />
+        case 'payout_completed': return <CheckCircle size={20} />
+
+        // Negative events
+        case 'payment_refunded': return <RotateCcw size={20} />
+        case 'dispute_lost': return <ShieldX size={20} />
+
+        // Warning events
+        case 'payment_failed': return <XCircle size={20} />
+        case 'dispute_created': return <ShieldAlert size={20} />
+        case 'payout_failed': return <AlertTriangle size={20} />
+
+        // Neutral events
+        case 'subscription_canceled':
+        case 'cancelled':
+        case 'subscription_auto_canceled': return <UserX size={20} />
+        case 'request_sent': return <Send size={20} />
+        case 'request_declined': return <XCircle size={20} />
+        case 'payout_initiated': return <Banknote size={20} />
+
         default: return <DollarSign size={20} />
     }
 }
 
+// Icon class determines color/background
 const getActivityIconClass = (type: string) => {
     switch (type) {
+        // Positive - green
         case 'subscription_created':
         case 'new_subscriber': return 'activity-icon subscriber'
         case 'payment_received':
         case 'payment': return 'activity-icon payment'
         case 'renewal': return 'activity-icon renewal'
-        case 'subscription_canceled':
-        case 'cancelled': return 'activity-icon cancelled'
-        case 'request_sent':
         case 'request_accepted': return 'activity-icon payment'
+        case 'dispute_won': return 'activity-icon payment'
+        case 'payout_completed': return 'activity-icon payment'
+
+        // Negative - red
+        case 'payment_refunded':
+        case 'dispute_lost': return 'activity-icon refund'
+
+        // Warning - amber
+        case 'payment_failed':
+        case 'dispute_created':
+        case 'payout_failed': return 'activity-icon warning'
+
+        // Neutral - gray
+        case 'subscription_canceled':
+        case 'cancelled':
+        case 'subscription_auto_canceled': return 'activity-icon cancelled'
+        case 'request_sent':
+        case 'request_declined':
+        case 'payout_initiated': return 'activity-icon neutral'
+
         default: return 'activity-icon'
     }
 }
 
+// Title with service vs personal variants
 const getActivityTitle = (type: string, isService: boolean) => {
     switch (type) {
+        // Positive
         case 'subscription_created':
         case 'new_subscriber': return isService ? 'New Client' : 'New Subscriber'
         case 'payment_received':
         case 'payment': return isService ? 'Invoice Paid' : 'Payment Received'
         case 'renewal': return isService ? 'Retainer Renewed' : 'Renewed'
-        case 'subscription_canceled':
-        case 'cancelled': return isService ? 'Client Left' : 'Cancelled'
-        case 'request_sent': return isService ? 'Invoice Sent' : 'Request Sent'
         case 'request_accepted': return isService ? 'Invoice Accepted' : 'Request Accepted'
+        case 'dispute_won': return 'Dispute Won'
+        case 'payout_completed': return 'Payout Received'
+
+        // Negative
+        case 'payment_refunded': return 'Refund Issued'
+        case 'dispute_lost': return 'Dispute Lost'
+
+        // Warning
+        case 'payment_failed': return 'Payment Failed'
+        case 'dispute_created': return 'Dispute Opened'
+        case 'payout_failed': return 'Payout Failed'
+
+        // Neutral
+        case 'subscription_canceled':
+        case 'cancelled':
+        case 'subscription_auto_canceled': return isService ? 'Client Left' : 'Cancelled'
+        case 'request_sent': return isService ? 'Invoice Sent' : 'Request Sent'
+        case 'request_declined': return isService ? 'Invoice Declined' : 'Request Declined'
+        case 'payout_initiated': return 'Payout Started'
+
         default: return 'Activity'
     }
+}
+
+// Check if amount should show as negative
+const isNegativeActivity = (type: string) => {
+    return ['payment_refunded', 'dispute_lost'].includes(type)
 }
 
 // Format date for grouping
@@ -91,7 +160,11 @@ export default function Activity() {
     const currencyCode = userData?.profile?.currency || 'USD'
     const isService = userData?.profile?.purpose === 'service'
 
-    // Real API hooks
+    // Track previously seen activity IDs to detect new items
+    const [seenIds, setSeenIds] = useState<Set<string>>(new Set())
+    const [newIds, setNewIds] = useState<Set<string>>(new Set())
+
+    // Real API hooks with polling enabled
     const {
         data: activityData,
         isLoading,
@@ -100,7 +173,7 @@ export default function Activity() {
         fetchNextPage,
         hasNextPage,
         isFetchingNextPage,
-    } = useActivity(20, { seedFromLimit: 5 }) // Seed from Dashboard's cached data
+    } = useActivity(20, { seedFromLimit: 5, polling: true }) // Seed from Dashboard's cached data + poll every 30s
 
     // Track if this is the initial load to prevent re-animating on refetch
     const hasAnimatedRef = useRef(false)
@@ -115,6 +188,51 @@ export default function Activity() {
     const allActivities = useMemo(() => {
         return activityData?.pages.flatMap(page => page.activities) || []
     }, [activityData])
+
+    // Detect new activities for entry animation
+    // Cap seenIds at 200 to prevent unbounded memory growth in long sessions
+    const MAX_SEEN_IDS = 200
+
+    useEffect(() => {
+        if (allActivities.length === 0) return
+
+        const currentIds = allActivities.map((a: any) => a.id)
+
+        // First load - just store IDs, no animations
+        if (seenIds.size === 0) {
+            // Keep only the most recent MAX_SEEN_IDS
+            const cappedIds = new Set(currentIds.slice(0, MAX_SEEN_IDS))
+            setSeenIds(cappedIds)
+            return
+        }
+
+        // Find new IDs that weren't in previous set
+        const freshIds = new Set<string>()
+        currentIds.forEach(id => {
+            if (!seenIds.has(id)) {
+                freshIds.add(id)
+            }
+        })
+
+        if (freshIds.size > 0) {
+            setNewIds(freshIds)
+            // Merge current IDs with seen, capped at MAX_SEEN_IDS
+            const mergedIds = [...currentIds, ...Array.from(seenIds)]
+            const cappedIds = new Set(mergedIds.slice(0, MAX_SEEN_IDS))
+            setSeenIds(cappedIds)
+
+            // Clear "new" state after animation completes
+            const timer = setTimeout(() => {
+                setNewIds(new Set())
+            }, 600)
+            return () => clearTimeout(timer)
+        }
+    }, [allActivities])
+
+    // Pull-to-refresh handler
+    const handleRefresh = async () => {
+        await refetch()
+    }
 
     // Group activities by date
     const groupedActivities = useMemo(() => {
@@ -133,15 +251,16 @@ export default function Activity() {
     }
 
     return (
-        <div className="activity-page" ref={scrollRef}>
-            {/* Header */}
-            <header className={`activity-header ${isScrolled ? 'scrolled' : ''}`}>
-                <h1 className="activity-page-title">Activity</h1>
-            </header>
+        <PullToRefresh onRefresh={handleRefresh} disabled={isLoading}>
+            <div className="activity-page" ref={scrollRef}>
+                {/* Header */}
+                <header className={`activity-header ${isScrolled ? 'scrolled' : ''}`}>
+                    <h1 className="activity-page-title">Activity</h1>
+                </header>
 
-            {/* Content */}
-            <div className="activity-content">
-                {isError ? (
+                {/* Content */}
+                <div className="activity-content">
+                    {isError ? (
                     <ErrorState
                         title="Couldn't load activity"
                         message="We had trouble loading your activity. Please try again."
@@ -200,13 +319,20 @@ export default function Activity() {
                                         const amount = payload.amount ? centsToDisplayAmount(payload.amount, currency) : 0
                                         const name = payload.subscriberName || payload.recipientName || ''
                                         const tier = payload.tierName || ''
-                                        const isCanceled = activity.type === 'subscription_canceled'
+                                        const isNegative = isNegativeActivity(activity.type)
+                                        const isCanceled = activity.type === 'subscription_canceled' || activity.type === 'subscription_auto_canceled'
+
+                                        // Determine amount styling class
+                                        const amountClass = isNegative ? 'refund' : isCanceled ? 'cancelled' : ''
+
+                                        // Check if this is a newly arrived activity
+                                        const isNew = newIds.has(activity.id)
 
                                         return (
                                             <Pressable
                                                 key={activity.id}
-                                                className={`activity-row ${hasAnimatedRef.current ? '' : 'stagger-item'}`}
-                                                style={hasAnimatedRef.current ? undefined : { animationDelay: `${index * 50}ms` }}
+                                                className={`activity-row ${hasAnimatedRef.current ? '' : 'stagger-item'} ${isNew ? 'activity-new' : ''}`}
+                                                style={hasAnimatedRef.current && !isNew ? undefined : { animationDelay: `${index * 50}ms` }}
                                                 onClick={() => navigate(`/activity/${activity.id}`)}
                                             >
                                                 <div className={getActivityIconClass(activity.type)}>
@@ -220,8 +346,8 @@ export default function Activity() {
                                                 </div>
                                                 {amount > 0 && (
                                                     <div className="activity-amount-col">
-                                                        <span className={`activity-amount ${isCanceled ? 'cancelled' : ''}`}>
-                                                            {isCanceled ? '-' : '+'}{currencySymbolForRow}{formatCompactNumber(amount)}
+                                                        <span className={`activity-amount ${amountClass}`}>
+                                                            {isNegative ? '-' : isCanceled ? '' : '+'}{currencySymbolForRow}{formatCompactNumber(amount)}
                                                         </span>
                                                         {tier && <span className="activity-tier">{tier}</span>}
                                                     </div>
@@ -269,5 +395,6 @@ export default function Activity() {
                 )}
             </div>
         </div>
+        </PullToRefresh>
     )
 }

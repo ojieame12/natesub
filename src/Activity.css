@@ -209,7 +209,27 @@
 }
 
 .activity-amount.cancelled {
+    color: var(--text-tertiary);
+}
+
+.activity-amount.refund {
     color: var(--accent-red);
+}
+
+/* Icon type variants */
+.activity-icon.refund {
+    background: var(--accent-red-soft);
+    color: var(--accent-red);
+}
+
+.activity-icon.warning {
+    background: #FEF3C7;
+    color: #D97706;
+}
+
+.activity-icon.neutral {
+    background: var(--neutral-100);
+    color: var(--neutral-500);
 }
 
 .activity-tier {
@@ -264,4 +284,43 @@
     font-size: 13px;
     color: var(--text-secondary);
     margin-top: 2px;
+}
+
+/* New item entry animation - slides in from top with flash */
+.activity-row.activity-new {
+    animation: activitySlideIn 0.5s var(--ease-spring) both;
+}
+
+@keyframes activitySlideIn {
+    0% {
+        opacity: 0;
+        transform: translateY(-20px) scale(0.95);
+        background: var(--accent-green-soft);
+    }
+    50% {
+        background: var(--accent-green-soft);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+        background: transparent;
+    }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+    .activity-row.activity-new {
+        animation: none;
+        background: var(--accent-green-soft);
+    }
+
+    .activity-section {
+        animation: none;
+    }
+}
+
+/* Load more button */
+.load-more-btn {
+    width: 100%;
+    margin-top: var(--space-lg);
 }

@@ -1,5 +1,5 @@
 import Stripe from 'stripe'
-import { stripe, setSubscriptionDefaultFee } from '../../../services/stripe.js'
+import { stripe, setSubscriptionDefaultFee, getChargeFxData } from '../../../services/stripe.js'
 import { db } from '../../../db/client.js'
 import { sendNewSubscriberEmail, sendSubscriptionConfirmationEmail, sendPlatformDebitRecoveredNotification } from '../../../services/email.js'
 import { cancelAllRemindersForEntity } from '../../../jobs/reminders.js'
@@ -138,6 +138,7 @@ export async function handleCheckoutCompleted(event: Stripe.Event) {
             requestId: request.id,
             recipientName: request.recipientName,
             amount: request.amountCents,
+            provider: 'stripe',
           },
         },
       })
@@ -276,6 +277,7 @@ export async function handleCheckoutCompleted(event: Stripe.Event) {
       // For SUBSCRIPTIONS: Don't create payment here - invoice.paid handles it
       // This prevents double-counting the first payment
       // For ONE-TIME payments: Create payment record here
+      let oneTimePaymentId: string | null = null
       if (!isSubscriptionMode) {
         // Get charge ID from payment intent if available
         let stripeChargeId: string | null = null
@@ -312,6 +314,7 @@ export async function handleCheckoutCompleted(event: Stripe.Event) {
             stripeChargeId,
           },
         })
+        oneTimePaymentId = oneTimePayment.id
 
         // Create dispute evidence record for chargeback defense
         if (checkoutIp || checkoutUserAgent) {
@@ -358,12 +361,15 @@ export async function handleCheckoutCompleted(event: Stripe.Event) {
 
       // Create activity event
       // IMPORTANT: Show NET amount (what creator receives), not gross
+      // For subscriptions: paymentId is null here (invoice.paid creates the payment later)
+      // For one-time: paymentId is set above
       await tx.activity.create({
         data: {
           userId: creatorId,
           type: 'subscription_created',
           payload: {
             subscriptionId: newSubscription.id,
+            paymentId: oneTimePaymentId,  // Only set for one-time payments (subscriptions get it from invoice.paid)
             subscriberEmail,
             subscriberName,
             tierName,
@@ -371,6 +377,7 @@ export async function handleCheckoutCompleted(event: Stripe.Event) {
             grossAmount: grossCents,    // GROSS - what subscriber paid (for reference)
             feeCents,                   // Platform fee taken
             currency: session.currency,
+            provider: 'stripe',         // Payment provider
           },
         },
       })
@@ -522,6 +529,7 @@ export async function handleAsyncPaymentSucceeded(event: Stripe.Event) {
             recipientName: request.recipientName,
             amount: request.amountCents,
             asyncPayment: true,
+            provider: 'stripe',
           },
         },
       })
@@ -629,7 +637,7 @@ export async function handleAsyncPaymentSucceeded(event: Stripe.Event) {
   }
 
   // Create payment record
-  await db.payment.create({
+  const checkoutPayment = await db.payment.create({
     data: {
       subscriptionId: subscription.id,
       creatorId,
@@ -652,6 +660,36 @@ export async function handleAsyncPaymentSucceeded(event: Stripe.Event) {
     },
   })
 
+  // Fetch FX data for cross-border payments (e.g., USD → NGN)
+  // Do this async after payment creation so it doesn't block the main flow
+  // Note: Transfer may not exist yet at webhook time - that's OK, activity.ts will backfill on-demand
+  if (stripeChargeId) {
+    db.profile.findUnique({
+      where: { userId: creatorId },
+      select: { stripeAccountId: true },
+    }).then(async (profile) => {
+      if (profile?.stripeAccountId) {
+        const result = await getChargeFxData(stripeChargeId, profile.stripeAccountId)
+        if (result.status === 'fx_found') {
+          await db.payment.update({
+            where: { id: checkoutPayment.id },
+            data: {
+              payoutCurrency: result.data.payoutCurrency,
+              payoutAmountCents: result.data.payoutAmountCents,
+              exchangeRate: result.data.exchangeRate,
+            },
+          })
+          console.log(`[checkout] Stored FX data for payment ${checkoutPayment.id}: ${result.data.originalCurrency} → ${result.data.payoutCurrency} @ ${result.data.exchangeRate}`)
+        } else {
+          // pending/no_fx/error - activity.ts will handle on-demand backfill
+          console.log(`[checkout] FX lookup status for payment ${checkoutPayment.id}: ${result.status}`)
+        }
+      }
+    }).catch((err) => {
+      console.warn(`[checkout] Could not fetch FX data for payment ${checkoutPayment.id}:`, err.message)
+    })
+  }
+
   // Invalidate admin revenue cache to ensure fresh dashboard data
   await invalidateAdminRevenueCache()
 
@@ -670,6 +708,7 @@ export async function handleAsyncPaymentSucceeded(event: Stripe.Event) {
         feeCents,                    // Platform fee taken
         currency: session.currency,
         asyncPayment: true,
+        provider: 'stripe',
       },
     },
   })

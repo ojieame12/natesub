@@ -4,6 +4,7 @@ import { Check, Play, Pause, Banknote, Briefcase, Pencil, X, ChevronLeft, Loader
 import { Pressable } from '../components'
 import { useCreateCheckout, useRecordPageView, useUpdatePageView } from '../api/hooks'
 import { useHaptics } from '../hooks/useHaptics'
+import { detectPayerCountry } from '../api/client'
 import type { Profile } from '../api/client'
 import { getCurrencySymbol, formatCompactNumber, formatAmountWithSeparators, calculateFeePreview, displayAmountToCents } from '../utils/currency'
 import './template-one.css'
@@ -146,29 +147,10 @@ export default function SubscriptionLiquid({ profile, canceled, isOwner }: Subsc
         trackView()
     }, [profileId, recordPageView, searchParams])
 
-    // Detect payer country via IP for geo-based provider selection
-    // Uses sessionStorage cache to reduce API calls (ipapi.co has rate limits)
+    // Detect payer country for geo-based provider selection
+    // Server-side detection uses CDN headers with ipapi.co fallback
     useEffect(() => {
-        const CACHE_KEY = 'natepay_payer_country'
-        const cached = sessionStorage.getItem(CACHE_KEY)
-
-        if (cached && /^[A-Z]{2}$/.test(cached)) {
-            setPayerCountry(cached)
-            return
-        }
-
-        fetch('https://ipapi.co/country/')
-            .then(r => r.text())
-            .then(code => {
-                const cleaned = code.trim().toUpperCase()
-                // Only accept valid 2-letter ISO country codes
-                if (/^[A-Z]{2}$/.test(cleaned)) {
-                    sessionStorage.setItem(CACHE_KEY, cleaned)
-                    setPayerCountry(cleaned)
-                }
-                // Invalid response → payerCountry stays null → backend uses creator default
-            })
-            .catch(() => { }) // Silent fail - backend uses creator default
+        detectPayerCountry().then(setPayerCountry).catch(() => {})
     }, [])
 
     // Track when user reaches payment screen

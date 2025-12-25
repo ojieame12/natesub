@@ -1,0 +1,132 @@
+/* ===========================================
+   BOTTOM DRAWER - Swipe-to-dismiss sheet
+   =========================================== */
+
+/* Overlay */
+.bottom-drawer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 999;
+  animation: bottomDrawerFadeIn 0.2s ease-out both;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.bottom-drawer-overlay.closing {
+  animation: bottomDrawerFadeOut 0.2s ease-out both;
+}
+
+@keyframes bottomDrawerFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes bottomDrawerFadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+/* Drawer */
+.bottom-drawer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  max-height: 85vh;
+  max-height: 85dvh;
+  background: var(--bg-card);
+  border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
+  box-shadow: 0 -4px 32px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: bottomDrawerSlideUp 0.35s var(--ease-spring) both;
+  transition: transform 0.3s var(--ease-spring);
+  /* Allow vertical panning on content, handle area overrides */
+  touch-action: pan-y;
+  /* Focus styles for accessibility */
+  outline: none;
+}
+
+.bottom-drawer.closing {
+  animation: bottomDrawerSlideDown 0.2s ease-out both;
+}
+
+@keyframes bottomDrawerSlideUp {
+  from {
+    transform: translateY(100%);
+    opacity: 0.8;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes bottomDrawerSlideDown {
+  from {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateY(100%);
+    opacity: 0.8;
+  }
+}
+
+/* Drag handle area - larger touch target */
+.bottom-drawer-handle-area {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-md) var(--space-xl);
+  cursor: grab;
+  touch-action: none;
+}
+
+.bottom-drawer-handle-area:active {
+  cursor: grabbing;
+}
+
+/* Visual handle */
+.bottom-drawer-handle {
+  width: 36px;
+  height: 4px;
+  background: var(--neutral-300);
+  border-radius: 2px;
+  transition: background 0.15s ease;
+}
+
+.bottom-drawer:active .bottom-drawer-handle {
+  background: var(--neutral-400);
+}
+
+/* Title */
+.bottom-drawer-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+  padding: 0 var(--space-xl) var(--space-md);
+  text-align: center;
+}
+
+/* Content - allows normal scrolling */
+.bottom-drawer-content {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 var(--space-xl) calc(var(--space-xl) + env(safe-area-inset-bottom));
+  -webkit-overflow-scrolling: touch;
+  /* Allow vertical pan/scroll gestures in content */
+  touch-action: pan-y;
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .bottom-drawer,
+  .bottom-drawer-overlay {
+    animation: none;
+    transition: none;
+  }
+}

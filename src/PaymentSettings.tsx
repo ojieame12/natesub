@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Building2, Check, CreditCard, ExternalLink, Loader2, RefreshCw, TriangleAlert } from 'lucide-react'
+import { ArrowLeft, Building2, Check, CreditCard, ExternalLink, History, Loader2, RefreshCw, TriangleAlert, Zap, Clock, TrendingUp } from 'lucide-react'
 import { InlineError, Pressable, Skeleton, SwiftCodeLookup } from './components'
 import { api } from './api'
 import type { PaystackConnectionStatus } from './api/client'
@@ -12,6 +12,63 @@ import './PaymentSettings.css'
 type StripeStatus = Awaited<ReturnType<typeof api.stripe.getStatus>>
 
 const STRIPE_ONBOARDING_RETURN_MAX_AGE_MS = 30 * 60 * 1000
+
+// Helper to format payout schedule for display
+function formatPayoutSchedule(schedule: {
+  interval: string
+  delayDays: number
+  weeklyAnchor: string | null
+  monthlyAnchor: number | null
+} | undefined): { intervalText: string; delayText: string; availableDate: string } {
+  if (!schedule) {
+    return { intervalText: 'Daily', delayText: '2 business days', availableDate: '' }
+  }
+
+  // Format interval
+  let intervalText = 'Daily'
+  if (schedule.interval === 'weekly' && schedule.weeklyAnchor) {
+    const day = schedule.weeklyAnchor.charAt(0).toUpperCase() + schedule.weeklyAnchor.slice(1)
+    intervalText = `Weekly (${day}s)`
+  } else if (schedule.interval === 'monthly' && schedule.monthlyAnchor) {
+    intervalText = `Monthly (${schedule.monthlyAnchor}${getOrdinalSuffix(schedule.monthlyAnchor)})`
+  } else if (schedule.interval === 'manual') {
+    intervalText = 'Manual'
+  }
+
+  // Format delay - T+1 is "1 business day", T+2 is "2 business days"
+  const days = schedule.delayDays || 2
+  const delayText = days === 1 ? '1 business day' : `${days} business days`
+
+  // Calculate when today's payments become available
+  const today = new Date()
+  const availableDate = addBusinessDays(today, days)
+  const availableDateText = availableDate.toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  })
+
+  return { intervalText, delayText, availableDate: availableDateText }
+}
+
+function getOrdinalSuffix(n: number): string {
+  const s = ['th', 'st', 'nd', 'rd']
+  const v = n % 100
+  return s[(v - 20) % 10] || s[v] || s[0]
+}
+
+function addBusinessDays(date: Date, days: number): Date {
+  const result = new Date(date)
+  let added = 0
+  while (added < days) {
+    result.setDate(result.getDate() + 1)
+    const dayOfWeek = result.getDay()
+    if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+      added++
+    }
+  }
+  return result
+}
 
 function getErrorMessage(err: unknown): string {
   const anyErr = err as any
@@ -395,6 +452,42 @@ export default function PaymentSettings() {
               </div>
             </div>
 
+            {/* Payout Schedule Info */}
+            {stripeStatus?.details?.payoutSchedule && (
+              <div className="payout-schedule-info">
+                {(() => {
+                  const schedule = formatPayoutSchedule(stripeStatus.details.payoutSchedule)
+                  const delayDays = stripeStatus.details.payoutSchedule.delayDays || 2
+                  return (
+                    <>
+                      <div className="payout-schedule-row">
+                        <Zap size={14} className="payout-schedule-icon" />
+                        <span className="payout-schedule-text">
+                          {schedule.intervalText} payouts
+                        </span>
+                        <span className="payout-schedule-separator">·</span>
+                        <span className="payout-schedule-delay">
+                          {schedule.delayText} to settle
+                        </span>
+                      </div>
+                      {schedule.availableDate && (
+                        <div className="payout-schedule-estimate">
+                          <Clock size={12} />
+                          <span>Today's payments available {schedule.availableDate}</span>
+                        </div>
+                      )}
+                      {delayDays > 1 && (
+                        <div className="payout-schedule-note">
+                          <TrendingUp size={12} />
+                          <span>Speeds up automatically as you grow</span>
+                        </div>
+                      )}
+                    </>
+                  )
+                })()}
+              </div>
+            )}
+
             {/* Next payout estimate */}
             {stripeBalance?.nextPayoutDate && stripeBalance?.pending > 0 && (
               <div className="payout-estimate">
@@ -408,13 +501,22 @@ export default function PaymentSettings() {
               </div>
             )}
 
-            <Pressable
-              className="cashout-btn"
-              onClick={handleOpenStripeDashboard}
-              disabled={stripeOpeningDashboard}
-            >
-              {stripeOpeningDashboard ? 'Opening Stripe…' : 'View Stripe Dashboard'}
-            </Pressable>
+            <div className="balance-actions">
+              <Pressable
+                className="cashout-btn"
+                onClick={handleOpenStripeDashboard}
+                disabled={stripeOpeningDashboard}
+              >
+                {stripeOpeningDashboard ? 'Opening Stripe…' : 'View Stripe Dashboard'}
+              </Pressable>
+              <Pressable
+                className="payout-history-btn"
+                onClick={() => navigate('/settings/payouts')}
+              >
+                <History size={16} />
+                <span>Payout History</span>
+              </Pressable>
+            </div>
           </section>
         )}
 

@@ -379,6 +379,12 @@ model Payment {
   providerFeeCents   Int?    // Processing fee charged by payment provider
   providerTransferFeeCents Int? // Transfer/payout fee (Paystack only)
 
+  // FX conversion (for cross-border payments, e.g., USD → NGN)
+  payoutCurrency     String?   // Creator's local currency (e.g., NGN)
+  payoutAmountCents  Int?      // Amount after FX conversion in local currency
+  exchangeRate       Float?    // Rate used (e.g., 1600.50 for USD→NGN)
+  fxCheckedAt        DateTime? // When we checked for FX data (sentinel to avoid repeated API calls)
+
   // Type & Status
   type   PaymentType
   status PaymentStatus

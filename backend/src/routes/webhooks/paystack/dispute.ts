@@ -145,6 +145,7 @@ export async function handlePaystackDisputeCreated(data: PaystackDisputeData, ev
         reason: reason || 'Unknown',
         status,
         paystackDisputeId: String(disputeId),
+        provider: 'paystack',
       },
     },
   })
@@ -258,6 +259,7 @@ export async function handlePaystackDisputeResolved(data: PaystackDisputeData, e
             subscriptionId: subscription.id,
             reason: 'dispute_lost',
             paystackDisputeId: String(disputeId),
+            provider: 'paystack',
           },
         },
       })
@@ -278,6 +280,7 @@ export async function handlePaystackDisputeResolved(data: PaystackDisputeData, e
         reason: reason || 'Unknown',
         resolution,
         paystackDisputeId: String(disputeId),
+        provider: 'paystack',
       },
     },
   })

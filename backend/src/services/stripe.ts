@@ -298,6 +298,15 @@ export async function getAccountStatus(stripeAccountId: string, options: { skipB
     }
   }
 
+  // Extract payout schedule details
+  const payoutSettings = account.settings?.payouts?.schedule
+  const payoutSchedule = {
+    interval: payoutSettings?.interval || 'daily',
+    delayDays: payoutSettings?.delay_days || 2, // Default T+2 if not specified
+    weeklyAnchor: payoutSettings?.weekly_anchor || null,
+    monthlyAnchor: payoutSettings?.monthly_anchor || null,
+  }
+
   const result = {
     type: account.type, // 'standard', 'express', etc.
     country: account.country || null,
@@ -307,7 +316,7 @@ export async function getAccountStatus(stripeAccountId: string, options: { skipB
     chargesEnabled: account.charges_enabled,
     payoutsEnabled: account.payouts_enabled,
     bankAccount,
-    payoutSchedule: account.settings?.payouts?.schedule?.interval || 'daily',
+    payoutSchedule,
     requirements: {
       currentlyDue,
       eventuallyDue,
@@ -568,6 +577,132 @@ export async function getPayoutHistory(stripeAccountId: string, limit = 10) {
     arrivalDate: new Date(p.arrival_date * 1000),
     createdAt: new Date(p.created * 1000),
   }))
+}
+
+/**
+ * FX lookup result - distinguishes between different outcomes for proper retry handling
+ */
+export type FxLookupResult =
+  | { status: 'fx_found'; data: { payoutCurrency: string; payoutAmountCents: number; exchangeRate: number; originalCurrency: string; originalAmountCents: number } }
+  | { status: 'no_fx' }      // Same currency, no conversion needed - safe to mark as checked
+  | { status: 'pending' }    // Transfer not ready yet - should retry later
+  | { status: 'error' }      // Stripe API error - should retry later
+
+/**
+ * Get FX conversion data for a destination charge.
+ *
+ * With destination charges, the charge lives on the PLATFORM account, and a
+ * transfer is automatically created to the connected account. The FX conversion
+ * happens on the transfer, not the charge.
+ *
+ * Flow:
+ * 1. Charge created on platform (USD)
+ * 2. Automatic transfer to connected account
+ * 3. Transfer's balance_transaction on connected account has exchange_rate (USD → NGN)
+ *
+ * @param chargeId - The Stripe charge ID (ch_xxx) on the platform
+ * @param stripeAccountId - The connected account ID that received the transfer
+ * @returns FxLookupResult with status indicating outcome
+ */
+export async function getChargeFxData(chargeId: string, stripeAccountId: string): Promise<FxLookupResult> {
+  try {
+    // Step 1: Get the charge from the PLATFORM (not connected account)
+    // With destination charges, the charge lives on the platform
+    const charge = await stripe.charges.retrieve(chargeId, {
+      expand: ['transfer'],
+    })
+
+    // Step 2: Get the transfer ID
+    // For destination charges, Stripe auto-creates a transfer to the connected account
+    const transferId = typeof charge.transfer === 'string'
+      ? charge.transfer
+      : charge.transfer?.id
+
+    if (!transferId) {
+      // No transfer yet - may still be processing
+      console.log(`[getChargeFxData] No transfer found for charge ${chargeId} - pending`)
+      return { status: 'pending' }
+    }
+
+    // Step 3: Get the transfer's balance_transaction on the CONNECTED account
+    // This is where the FX conversion data lives
+    const transfer = await stripe.transfers.retrieve(transferId, {
+      expand: ['destination_payment.balance_transaction'],
+    })
+
+    // The destination_payment is the payment object on the connected account
+    let destinationPayment = transfer.destination_payment as Stripe.Charge | null
+
+    // Fallback: If expansion didn't work (returned string ID), fetch directly
+    if (typeof transfer.destination_payment === 'string') {
+      try {
+        destinationPayment = await stripe.charges.retrieve(
+          transfer.destination_payment,
+          { expand: ['balance_transaction'] },
+          { stripeAccount: stripeAccountId }
+        )
+      } catch (err) {
+        console.log(`[getChargeFxData] Fallback fetch failed for destination_payment ${transfer.destination_payment}`)
+        return { status: 'error' }
+      }
+    }
+
+    if (!destinationPayment) {
+      // Transfer exists but destination_payment not yet created - still processing
+      console.log(`[getChargeFxData] No destination_payment for transfer ${transferId} - pending`)
+      return { status: 'pending' }
+    }
+
+    let balanceTransaction = destinationPayment.balance_transaction as Stripe.BalanceTransaction | null
+
+    // Fallback: If balance_transaction expansion didn't work, fetch directly
+    if (typeof destinationPayment.balance_transaction === 'string') {
+      try {
+        balanceTransaction = await stripe.balanceTransactions.retrieve(
+          destinationPayment.balance_transaction,
+          {},
+          { stripeAccount: stripeAccountId }
+        )
+      } catch (err) {
+        console.log(`[getChargeFxData] Fallback fetch failed for balance_transaction`)
+        return { status: 'error' }
+      }
+    }
+
+    if (!balanceTransaction) {
+      // Balance transaction not yet created - still processing
+      console.log(`[getChargeFxData] No balance_transaction for destination_payment - pending`)
+      return { status: 'pending' }
+    }
+
+    // Check if there was currency conversion
+    // exchange_rate is present when the transfer currency differs from the account's settlement currency
+    if (!balanceTransaction.exchange_rate) {
+      // No FX conversion (same currency) - this is a confirmed final state
+      console.log(`[getChargeFxData] Same currency, no FX conversion for charge ${chargeId}`)
+      return { status: 'no_fx' }
+    }
+
+    // Return FX data:
+    // - originalCurrency: What subscriber paid (charge currency, e.g., USD)
+    // - originalAmountCents: Gross charge amount (what subscriber paid)
+    // - payoutCurrency: Creator's local currency (e.g., NGN)
+    // - payoutAmountCents: Amount after FX conversion (using net to exclude Stripe fees)
+    // - exchangeRate: The conversion rate applied
+    return {
+      status: 'fx_found',
+      data: {
+        payoutCurrency: balanceTransaction.currency.toUpperCase(),
+        payoutAmountCents: balanceTransaction.net, // Net after any Stripe fees
+        exchangeRate: balanceTransaction.exchange_rate,
+        originalCurrency: charge.currency.toUpperCase(),
+        originalAmountCents: charge.amount, // Gross amount subscriber paid
+      },
+    }
+  } catch (err) {
+    console.error(`[getChargeFxData] Failed to get FX data for charge ${chargeId}:`, err)
+    return { status: 'error' }
+  }
 }
 
 /**

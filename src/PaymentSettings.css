@@ -125,6 +125,75 @@
     font-weight: 500;
 }
 
+/* Payout Schedule Info */
+.payout-schedule-info {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    padding: var(--space-sm) var(--space-md);
+    margin-bottom: var(--space-md);
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius-md);
+}
+
+.payout-schedule-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.payout-schedule-icon {
+    color: #10B981;
+    flex-shrink: 0;
+}
+
+.payout-schedule-text {
+    font-weight: 500;
+}
+
+.payout-schedule-separator {
+    color: rgba(255, 255, 255, 0.4);
+}
+
+.payout-schedule-delay {
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.payout-schedule-estimate {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.5);
+    padding-left: 20px;
+}
+
+.payout-schedule-estimate svg {
+    flex-shrink: 0;
+}
+
+.payout-schedule-note {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: #10B981;
+    padding-left: 20px;
+    margin-top: 2px;
+}
+
+.payout-schedule-note svg {
+    flex-shrink: 0;
+}
+
+.balance-actions {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
 .cashout-btn {
     width: 100%;
     padding: var(--space-md);
@@ -138,6 +207,24 @@
 
 .cashout-btn.pressed {
     opacity: 0.9;
+}
+
+.payout-history-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-lg);
+    background: rgba(255, 255, 255, 0.15);
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.payout-history-btn.pressed {
+    background: rgba(255, 255, 255, 0.2);
 }
 
 /* === SECTIONS === */

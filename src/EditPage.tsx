@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Camera, Loader2, ExternalLink, ChevronDown, Check } from 'lucide-react'
-import { Pressable, useToast, Skeleton, LoadingButton } from './components'
+import { Pressable, useToast, Skeleton, LoadingButton, BottomDrawer } from './components'
 import { useProfile, useUpdateProfile, uploadFile } from './api/hooks'
 import { getCurrencySymbol, centsToDisplayAmount } from './utils/currency'
 import './EditPage.css'
@@ -365,36 +365,30 @@ export default function EditPage() {
         </LoadingButton>
       </div>
 
-      {/* Purpose Drawer */}
-      {showPurposeDrawer && (
-        <>
-          <div
-            className="drawer-overlay"
-            onClick={() => setShowPurposeDrawer(false)}
-          />
-          <div className="country-drawer">
-            <div className="drawer-handle" />
-            <h3 className="drawer-title">What's this for?</h3>
-            <div className="country-list">
-              {PURPOSE_OPTIONS.map((option) => (
-                <Pressable
-                  key={option.value}
-                  className={`country-option ${purpose === option.value ? 'selected' : ''}`}
-                  onClick={() => {
-                    setPurpose(option.value)
-                    setShowPurposeDrawer(false)
-                  }}
-                >
-                  <span className="country-option-name">{option.label}</span>
-                  {purpose === option.value && (
-                    <Check size={20} className="country-option-check" />
-                  )}
-                </Pressable>
-              ))}
-            </div>
-          </div>
-        </>
-      )}
+      {/* Purpose Drawer - with swipe-to-dismiss */}
+      <BottomDrawer
+        open={showPurposeDrawer}
+        onClose={() => setShowPurposeDrawer(false)}
+        title="What's this for?"
+      >
+        <div className="country-list">
+          {PURPOSE_OPTIONS.map((option) => (
+            <Pressable
+              key={option.value}
+              className={`country-option ${purpose === option.value ? 'selected' : ''}`}
+              onClick={() => {
+                setPurpose(option.value)
+                setShowPurposeDrawer(false)
+              }}
+            >
+              <span className="country-option-name">{option.label}</span>
+              {purpose === option.value && (
+                <Check size={20} className="country-option-check" />
+              )}
+            </Pressable>
+          ))}
+        </div>
+      </BottomDrawer>
     </div>
   )
 }

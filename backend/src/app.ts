@@ -164,6 +164,69 @@ app.get('/health', async (c) => {
 // Lightweight liveness probe (for k8s)
 app.get('/health/live', (c) => c.json({ status: 'ok' }))
 
+// Geo detection endpoint - uses CDN headers with ipapi.co fallback
+// This moves the external API call server-side for better reliability
+app.get('/geo', async (c) => {
+  // 1. Try CDN headers first (instant, no external call)
+  const cfCountry = c.req.header('CF-IPCountry')
+  const vercelCountry = c.req.header('x-vercel-ip-country')
+  const railwayCountry = c.req.header('x-railway-country') // Future-proofing
+
+  const cdnCountry = cfCountry || vercelCountry || railwayCountry
+  if (cdnCountry && /^[A-Z]{2}$/.test(cdnCountry)) {
+    return c.json({ country: cdnCountry, source: 'cdn' })
+  }
+
+  // 2. Check Redis cache for this IP
+  const clientIp = c.req.header('x-forwarded-for')?.split(',')[0]?.trim()
+    || c.req.header('x-real-ip')
+    || 'unknown'
+
+  const cacheKey = `geo:${clientIp}`
+  try {
+    const cached = await redis.get(cacheKey)
+    if (cached && /^[A-Z]{2}$/.test(cached)) {
+      return c.json({ country: cached, source: 'cache' })
+    }
+  } catch {
+    // Redis unavailable, continue to fallback
+  }
+
+  // 3. Fallback to ipapi.co (server-side, with timeout)
+  try {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 3000) // 3s timeout
+
+    const response = await fetch('https://ipapi.co/country/', {
+      signal: controller.signal,
+      headers: {
+        'User-Agent': 'NatePay/1.0', // Be a good API citizen
+      },
+    })
+    clearTimeout(timeoutId)
+
+    if (response.ok) {
+      const text = await response.text()
+      const country = text.trim().toUpperCase()
+
+      if (/^[A-Z]{2}$/.test(country)) {
+        // Cache for 24 hours
+        try {
+          await redis.set(cacheKey, country, 'EX', 86400)
+        } catch {
+          // Cache write failed, continue
+        }
+        return c.json({ country, source: 'ipapi' })
+      }
+    }
+  } catch {
+    // ipapi.co failed or timed out
+  }
+
+  // 4. Default to US (most common for global apps)
+  return c.json({ country: 'US', source: 'default' })
+})
+
 // Metrics endpoint for monitoring dashboards
 app.get('/metrics', async (c) => {
   // Only allow in non-production or with valid API key

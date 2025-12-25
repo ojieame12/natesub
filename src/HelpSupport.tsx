@@ -7,6 +7,7 @@ import { TERMS_URL, PRIVACY_URL } from './utils/constants'
 import './HelpSupport.css'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
+const SUPPORT_TIMEOUT_MS = 15_000 // 15s for support ticket submission
 
 const faqs = [
   {
@@ -88,14 +89,19 @@ export default function HelpSupport() {
 
     setSubmitting(true)
 
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), SUPPORT_TIMEOUT_MS)
+
     try {
       const response = await fetch(`${API_URL}/support/tickets`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify(formData),
+        signal: controller.signal,
       })
 
+      clearTimeout(timeoutId)
       const data = await response.json()
 
       if (!response.ok) {
@@ -112,7 +118,11 @@ export default function HelpSupport() {
         message: '',
       })
     } catch (err: any) {
-      toast.error(err.message || 'Failed to submit request')
+      clearTimeout(timeoutId)
+      const message = err.name === 'AbortError'
+        ? 'Request timed out. Please check your connection and try again.'
+        : (err.message || 'Failed to submit request')
+      toast.error(message)
     } finally {
       setSubmitting(false)
     }

@@ -7,6 +7,8 @@ import { formatCurrencyFromCents } from '../utils/currency'
 import { PUBLIC_DOMAIN } from '../utils/constants'
 import './payroll.css'
 
+const PDF_TIMEOUT_MS = 30_000 // 30s for PDF generation (can be slow)
+
 // Format date for display
 const formatDate = (date: string) => {
     return new Date(date).toLocaleDateString('en-US', {
@@ -39,6 +41,9 @@ export default function PayrollDetail() {
         if (!periodId) return
 
         setDownloading(true)
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), PDF_TIMEOUT_MS)
+
         try {
             const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
             const token = localStorage.getItem('nate_auth_token')
@@ -49,7 +54,10 @@ export default function PayrollDetail() {
                     'Content-Type': 'application/json',
                     ...(token ? { Authorization: `Bearer ${token}` } : {}),
                 },
+                signal: controller.signal,
             })
+
+            clearTimeout(timeoutId)
 
             if (response.status === 401) {
                 toast.error('Please sign in to download')
@@ -74,8 +82,13 @@ export default function PayrollDetail() {
             } else {
                 toast.error('PDF URL not available')
             }
-        } catch {
-            toast.error('Failed to download PDF')
+        } catch (err: any) {
+            clearTimeout(timeoutId)
+            if (err.name === 'AbortError') {
+                toast.error('Request timed out. Please try again.')
+            } else {
+                toast.error('Failed to download PDF')
+            }
         } finally {
             setDownloading(false)
         }

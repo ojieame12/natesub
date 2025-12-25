@@ -1,5 +1,5 @@
 import Stripe from 'stripe'
-import { stripe } from '../../../services/stripe.js'
+import { stripe, getChargeFxData } from '../../../services/stripe.js'
 import { db } from '../../../db/client.js'
 import { calculateServiceFee, calculateLegacyFee } from '../../../services/fees.js'
 import { withLock } from '../../../services/lock.js'
@@ -312,7 +312,7 @@ export async function handleInvoicePaid(event: Stripe.Event) {
       where: { stripeSubscriptionId: subscriptionId },
       include: {
         creator: {
-          include: { profile: { select: { purpose: true } } },
+          include: { profile: { select: { purpose: true, stripeAccountId: true } } },
         },
       },
     })
@@ -334,7 +334,7 @@ export async function handleInvoicePaid(event: Stripe.Event) {
         where: { stripeSubscriptionId: subscriptionId },
         include: {
           creator: {
-            include: { profile: { select: { purpose: true } } },
+            include: { profile: { select: { purpose: true, stripeAccountId: true } } },
           },
         },
       })
@@ -507,6 +507,33 @@ export async function handleInvoicePaid(event: Stripe.Event) {
 
     console.log(`[invoice.paid] Created Payment ${recurringPayment.id}: netCents=${netCents}, feeCents=${feeCents}, grossCents=${grossCents}`)
 
+    // Fetch FX data for cross-border payments (e.g., USD → NGN)
+    // Do this async after payment creation so it doesn't block the main flow
+    // Note: Transfer may not exist yet at webhook time - that's OK, activity.ts will backfill on-demand
+    const creatorStripeAccountId = subscription.creator?.profile?.stripeAccountId
+    if (recurringPayment.stripeChargeId && creatorStripeAccountId) {
+      getChargeFxData(recurringPayment.stripeChargeId, creatorStripeAccountId)
+        .then(async (result) => {
+          if (result.status === 'fx_found') {
+            await db.payment.update({
+              where: { id: recurringPayment.id },
+              data: {
+                payoutCurrency: result.data.payoutCurrency,
+                payoutAmountCents: result.data.payoutAmountCents,
+                exchangeRate: result.data.exchangeRate,
+              },
+            })
+            console.log(`[invoice.paid] Stored FX data for payment ${recurringPayment.id}: ${result.data.originalCurrency} → ${result.data.payoutCurrency} @ ${result.data.exchangeRate}`)
+          } else {
+            // pending/no_fx/error - activity.ts will handle on-demand backfill
+            console.log(`[invoice.paid] FX lookup status for payment ${recurringPayment.id}: ${result.status}`)
+          }
+        })
+        .catch((err) => {
+          console.warn(`[invoice.paid] Could not fetch FX data for payment ${recurringPayment.id}:`, err.message)
+        })
+    }
+
     // Create dispute evidence record for chargeback defense
     // Only create if we have at least some evidence from checkout
     if (checkoutIp || checkoutUserAgent) {
@@ -564,6 +591,7 @@ export async function handleInvoicePaid(event: Stripe.Event) {
                 requestId: request.id,
                 recipientName: request.recipientName,
                 amount: request.amountCents,
+                provider: 'stripe',
               },
             },
           })
@@ -590,10 +618,12 @@ export async function handleInvoicePaid(event: Stripe.Event) {
         type: 'payment_received',
         payload: {
           subscriptionId: subscription.id,
+          paymentId: recurringPayment.id, // For exact payment lookup (FX data, payout status)
           amount: netCents,              // NET - what creator receives after fees
           grossAmount: invoice.amount_paid, // GROSS - what subscriber paid
           feeCents,                      // Platform fee taken
           currency: invoice.currency,
+          provider: 'stripe',
         },
       },
     })
@@ -770,12 +800,40 @@ export async function handleInvoicePaymentFailed(event: Stripe.Event) {
 
   const subscription = await db.subscription.findUnique({
     where: { stripeSubscriptionId: subscriptionId },
+    include: {
+      subscriber: { select: { email: true } },
+    },
   })
 
   if (!subscription) return
 
+  // Update subscription status
   await db.subscription.update({
     where: { id: subscription.id },
     data: { status: 'past_due' },
   })
+
+  // Get failure reason from invoice
+  const lastError = (invoice as any).last_finalization_error
+  const failureMessage = lastError?.message || 'Payment could not be processed'
+
+  // Create activity for failed renewal payment
+  await db.activity.create({
+    data: {
+      userId: subscription.creatorId,
+      type: 'payment_failed',
+      payload: {
+        subscriptionId: subscription.id,
+        subscriberEmail: subscription.subscriber?.email,
+        tierName: subscription.tierName, // Stored directly on subscription
+        amount: invoice.amount_due, // Amount that failed (in cents)
+        currency: invoice.currency?.toUpperCase() || 'USD',
+        provider: 'stripe',
+        failureMessage,
+        invoiceId: invoice.id,
+      },
+    },
+  })
+
+  console.log(`Stripe invoice payment failed for subscription ${subscription.id}, invoice: ${invoice.id}`)
 }

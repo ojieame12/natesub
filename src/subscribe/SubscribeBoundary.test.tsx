@@ -30,12 +30,13 @@ vi.mock('../api/hooks', () => ({
   })),
 }))
 
-// Mock api.checkout.verifySession
+// Mock api.checkout.verifySession and detectPayerCountry
 vi.mock('../api/client', () => ({
   checkout: {
     verifySession: vi.fn(() => Promise.resolve({ verified: true })),
     verifyPaystack: vi.fn(() => Promise.resolve({ verified: true })),
   },
+  detectPayerCountry: vi.fn(() => Promise.resolve('US')),
 }))
 
 import * as api from '../api/client'
@@ -259,14 +260,17 @@ describe('SubscribeBoundary', () => {
       expect(screen.getByPlaceholderText('user@example.com')).toBeInTheDocument()
     })
 
-    it('passes cached payerCountry to createCheckout', async () => {
-      sessionStorage.setItem('natepay_payer_country', 'NG')
+    it('passes payerCountry from geo detection to createCheckout', async () => {
       mockCreateCheckout.mockResolvedValueOnce({ url: 'https://checkout.example.com' })
 
       renderWithProviders(<SubscribeBoundary profile={mockProfile} />, {
         route: '/testcreator',
         routePath: '/:username',
       })
+
+      // Wait for detectPayerCountry promise to resolve (it returns 'US' from mock)
+      // Need to flush microtasks to resolve the Promise.then()
+      await new Promise(resolve => setTimeout(resolve, 0))
 
       const emailInput = screen.getByPlaceholderText('user@example.com')
       fireEvent.change(emailInput, { target: { value: 'sub@example.com' } })
@@ -297,7 +301,7 @@ describe('SubscribeBoundary', () => {
 
       expect(mockCreateCheckout).toHaveBeenCalledWith(expect.objectContaining({
         creatorUsername: 'testcreator',
-        payerCountry: 'NG',
+        payerCountry: 'US', // From detectPayerCountry mock
       }))
       expect((window as any).location.href).toBe('https://checkout.example.com')
     })
@@ -331,20 +335,12 @@ describe('SubscribeBoundary', () => {
     })
   })
 
-  describe('IP country detection', () => {
-    it('uses cached country from sessionStorage when available', async () => {
+  describe('Geo detection', () => {
+    it('calls detectPayerCountry for geo-based provider selection', async () => {
       vi.useFakeTimers()
 
-      // Pre-populate cache with country code
-      const mockStorage: Record<string, string> = { natepay_payer_country: 'US' }
-      vi.stubGlobal('sessionStorage', {
-        getItem: (key: string) => mockStorage[key] || null,
-        setItem: (key: string, value: string) => { mockStorage[key] = value },
-        removeItem: (key: string) => { delete mockStorage[key] },
-        clear: () => { Object.keys(mockStorage).forEach(k => delete mockStorage[k]) },
-      })
-
-      mockFetch.mockClear()
+      // Import the mocked function to verify it was called
+      const { detectPayerCountry } = await import('../api/client')
 
       renderWithProviders(<SubscribeBoundary profile={mockProfile} />, {
         route: '/testcreator',
@@ -353,8 +349,8 @@ describe('SubscribeBoundary', () => {
 
       await vi.advanceTimersByTimeAsync(200)
 
-      // Should not fetch since value is cached
-      expect(mockFetch).not.toHaveBeenCalledWith('https://ipapi.co/country/')
+      // Should call server-side geo detection
+      expect(detectPayerCountry).toHaveBeenCalled()
     })
   })
 

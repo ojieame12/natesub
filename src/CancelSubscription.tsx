@@ -5,6 +5,26 @@ import { Pressable, AmbientBackground } from './components'
 import { API_URL } from './api/client'
 import './subscribe/template-one.css'
 
+const FETCH_TIMEOUT_MS = 15_000
+
+/**
+ * Fetch with timeout to prevent infinite loading states
+ */
+async function fetchWithTimeout(url: string, options: RequestInit = {}): Promise<Response> {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    })
+    return response
+  } finally {
+    clearTimeout(timeoutId)
+  }
+}
+
 interface SubscriptionInfo {
   id: string
   providerName: string
@@ -34,7 +54,7 @@ export default function CancelSubscription() {
       return
     }
 
-    fetch(`${API_URL}/my-subscriptions/unsubscribe/${token}`)
+    fetchWithTimeout(`${API_URL}/my-subscriptions/unsubscribe/${token}`)
       .then(async (res) => {
         if (!res.ok) {
           const data = await res.json()
@@ -52,7 +72,10 @@ export default function CancelSubscription() {
       })
       .catch((err) => {
         setState('error')
-        setError(err.message || 'Failed to load subscription info')
+        const message = err.name === 'AbortError'
+          ? 'Request timed out. Please check your connection and try again.'
+          : (err.message || 'Failed to load subscription info')
+        setError(message)
       })
   }, [token])
 
@@ -61,7 +84,7 @@ export default function CancelSubscription() {
 
     setState('canceling')
     try {
-      const res = await fetch(`${API_URL}/my-subscriptions/unsubscribe/${token}`, {
+      const res = await fetchWithTimeout(`${API_URL}/my-subscriptions/unsubscribe/${token}`, {
         method: 'POST',
       })
 
@@ -73,7 +96,10 @@ export default function CancelSubscription() {
       setState('success')
     } catch (err: any) {
       setState('error')
-      setError(err.message || 'Failed to cancel subscription')
+      const message = err.name === 'AbortError'
+        ? 'Request timed out. Please try again.'
+        : (err.message || 'Failed to cancel subscription')
+      setError(message)
     }
   }
 

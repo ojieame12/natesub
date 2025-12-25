@@ -6,17 +6,32 @@ import { Button } from './components'
 import { useAIGenerate, blobToBase64 } from '../api/hooks'
 import './onboarding.css'
 
+const AUDIO_FETCH_TIMEOUT_MS = 30_000 // 30s for audio files (can be large)
+
 // Helper to fetch audio from URL and convert to base64 with MIME type
 async function fetchAudioWithMime(url: string): Promise<{ base64: string; mimeType: string }> {
-    const response = await fetch(url)
-    if (!response.ok) throw new Error('Failed to fetch audio')
-    // Get MIME type from response headers (set by R2 based on upload)
-    const contentType = response.headers.get('content-type') || 'audio/webm'
-    // Strip codec params like 'audio/webm;codecs=opus' -> 'audio/webm'
-    const mimeType = contentType.split(';')[0]
-    const blob = await response.blob()
-    const base64 = await blobToBase64(blob)
-    return { base64, mimeType }
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), AUDIO_FETCH_TIMEOUT_MS)
+
+    try {
+        const response = await fetch(url, { signal: controller.signal })
+        clearTimeout(timeoutId)
+
+        if (!response.ok) throw new Error('Failed to fetch audio')
+        // Get MIME type from response headers (set by R2 based on upload)
+        const contentType = response.headers.get('content-type') || 'audio/webm'
+        // Strip codec params like 'audio/webm;codecs=opus' -> 'audio/webm'
+        const mimeType = contentType.split(';')[0]
+        const blob = await response.blob()
+        const base64 = await blobToBase64(blob)
+        return { base64, mimeType }
+    } catch (err: any) {
+        clearTimeout(timeoutId)
+        if (err.name === 'AbortError') {
+            throw new Error('Audio fetch timed out. Please try again.')
+        }
+        throw err
+    }
 }
 
 export default function AIGeneratingStep() {

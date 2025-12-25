@@ -194,13 +194,22 @@
   max-width: 1400px;
 }
 
-/* Overlay for mobile */
+/* Overlay for mobile - with fade animation */
 .admin-sidebar-overlay {
-  display: none;
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.5);
   z-index: 99;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s ease, visibility 0.2s ease;
+  pointer-events: none;
+}
+
+.admin-sidebar-overlay.visible {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
 }
 
 /* Error and denied pages */
@@ -837,9 +846,7 @@
     display: block;
   }
 
-  .admin-sidebar-overlay {
-    display: block;
-  }
+  /* Overlay visibility controlled by .visible class now */
 
   .admin-main {
     margin-left: 0;
@@ -980,18 +987,23 @@
   border-radius: 2px 2px 0 0;
 }
 
-/* Detail Sidebar */
-.admin-sidebar-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+/* Detail Sidebar Overlay - conditionally rendered, uses keyframe animation */
+.admin-sidebar-overlay:has(.admin-sidebar),
+.admin-sidebar-overlay:has(.admin-detail-sidebar),
+.admin-sidebar-overlay:has(.admin-details-sidebar) {
   z-index: 150;
-  display: none;
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  animation: adminOverlayFadeIn 0.2s ease;
 }
 
-@media (min-width: 769px) {
-  .admin-sidebar-overlay:has(.admin-sidebar) {
-    display: block;
+@keyframes adminOverlayFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
   }
 }
 

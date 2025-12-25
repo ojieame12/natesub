@@ -175,6 +175,51 @@ export interface Activity {
   createdAt: string
 }
 
+// Payout info enriched from Profile (real data from Stripe webhooks)
+export interface PayoutInfoResponse {
+  status: 'pending' | 'in_transit' | 'paid' | 'failed' | null
+  amount: number | null
+  date: string | null
+  provider: string | null
+}
+
+// FX conversion data for cross-border payments
+export interface FxDataResponse {
+  originalCurrency: string      // e.g., "USD"
+  originalAmountCents: number   // Amount in original currency
+  payoutCurrency: string        // e.g., "NGN"
+  payoutAmountCents: number     // Amount after FX conversion
+  exchangeRate: number          // e.g., 1600.50
+}
+
+// Payout history item
+export interface PayoutHistoryItem {
+  id: string
+  amount: number
+  currency: string
+  status: 'pending' | 'paid' | 'failed'
+  initiatedAt: string
+  arrivedAt: string | null
+  failureReason?: string | null
+}
+
+// Account health summary
+export interface AccountHealth {
+  payoutStatus: 'pending' | 'active' | 'restricted' | 'disabled'
+  provider: 'stripe' | 'paystack' | null
+  hasStripeAccount: boolean
+  lastPayout: {
+    amount: number
+    date: string
+    status: string
+  } | null
+  currentBalance: {
+    available: number
+    pending: number
+    currency: string
+  }
+}
+
 export interface Metrics {
   subscriberCount: number
   mrrCents: number
@@ -534,10 +579,18 @@ export interface StripeRequirements {
   currentDeadline: string | null
 }
 
+export interface StripePayoutSchedule {
+  interval: 'daily' | 'weekly' | 'monthly' | 'manual'
+  delayDays: number  // e.g., 2 means T+2 (funds available 2 days after payment)
+  weeklyAnchor: string | null  // e.g., 'monday' for weekly payouts
+  monthlyAnchor: number | null // e.g., 15 for monthly payouts on the 15th
+}
+
 export interface StripeStatusDetails {
   detailsSubmitted: boolean
   chargesEnabled: boolean
   payoutsEnabled: boolean
+  payoutSchedule: StripePayoutSchedule
   requirements: StripeRequirements
 }
 
@@ -569,7 +622,15 @@ export const stripe = {
   },
 
   getBalance: () =>
-    apiFetch<{ balance: { available: number; pending: number } }>('/stripe/balance'),
+    apiFetch<{
+      balance: {
+        available: number
+        pending: number
+        currency: string
+        nextPayoutDate: string | null
+        nextPayoutAmount: number | null
+      }
+    }>('/stripe/balance'),
 
   getPayouts: () =>
     apiFetch<{ payouts: any[] }>('/stripe/payouts'),
@@ -770,9 +831,13 @@ export const activity = {
       `/activity?limit=${limit}${cursor ? `&cursor=${cursor}` : ''}`
     ),
 
-  get: (id: string) => apiFetch<{ activity: Activity }>(`/activity/${id}`),
+  get: (id: string) => apiFetch<{ activity: Activity; payoutInfo: PayoutInfoResponse | null; fxData: FxDataResponse | null; fxPending: boolean }>(`/activity/${id}`),
 
   getMetrics: () => apiFetch<{ metrics: Metrics }>('/activity/metrics'),
+
+  getPayouts: () => apiFetch<{ payouts: PayoutHistoryItem[]; accountHealth: AccountHealth }>('/activity/payouts'),
+
+  refreshBalance: () => apiFetch<{ balance: { available: number; pending: number; currency: string } }>('/activity/balance/refresh', { method: 'POST' }),
 }
 
 // ============================================
@@ -1325,6 +1390,64 @@ export const api = {
   payroll,
   analytics,
   billing,
+}
+
+// ============================================
+// GEO DETECTION
+// ============================================
+
+const GEO_CACHE_KEY = 'natepay_payer_country'
+const GEO_TIMEOUT_MS = 5000
+
+/**
+ * Detect payer's country via server-side geo detection.
+ * Uses CDN headers (Cloudflare, Vercel) with ipapi.co fallback.
+ * Caches result in sessionStorage for the session.
+ *
+ * @returns ISO 2-letter country code (e.g., 'US', 'NG')
+ */
+export async function detectPayerCountry(): Promise<string> {
+  // Check sessionStorage cache first
+  try {
+    const cached = sessionStorage.getItem(GEO_CACHE_KEY)
+    if (cached && /^[A-Z]{2}$/.test(cached)) {
+      return cached
+    }
+  } catch {
+    // Storage blocked (private browsing)
+  }
+
+  // Call server-side geo endpoint
+  try {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), GEO_TIMEOUT_MS)
+
+    const response = await fetch(`${API_URL}/geo`, {
+      signal: controller.signal,
+      credentials: 'include',
+    })
+    clearTimeout(timeoutId)
+
+    if (response.ok) {
+      const data = await response.json()
+      const country = data.country?.toUpperCase()
+
+      if (country && /^[A-Z]{2}$/.test(country)) {
+        // Cache for the session
+        try {
+          sessionStorage.setItem(GEO_CACHE_KEY, country)
+        } catch {
+          // Storage blocked
+        }
+        return country
+      }
+    }
+  } catch {
+    // Network error or timeout
+  }
+
+  // Default fallback
+  return 'US'
 }
 
 export default api
