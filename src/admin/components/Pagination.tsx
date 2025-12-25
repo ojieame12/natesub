@@ -131,9 +131,9 @@ export default function Pagination({
         {totalPages > 5 && (
           <div className="admin-pagination-jump">
             <input
-              type="number"
-              min={1}
-              max={totalPages}
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
               value={jumpValue}
               onChange={(e) => setJumpValue(e.target.value)}
               onKeyDown={handleJumpKeyDown}

@@ -1,5 +1,6 @@
-import { useMemo } from 'react'
+import { useMemo, useCallback, memo } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { GroupedVirtuoso } from 'react-virtuoso'
 import {
     Calendar,
     UserPlus,
@@ -84,6 +85,49 @@ const formatTime = (date: Date | string) => {
     })
 }
 
+// Memoized activity row for virtualization performance
+interface ActivityRowProps {
+    activity: any
+    currencyCode: string
+    isService: boolean
+    onNavigate: (id: string) => void
+}
+
+const ActivityRow = memo(function ActivityRow({ activity, currencyCode, isService, onNavigate }: ActivityRowProps) {
+    const payload = activity.payload || {}
+    const currency = (payload.currency || currencyCode || 'USD').toUpperCase()
+    const currencySymbolForRow = getCurrencySymbol(currency)
+    const amount = payload.amount ? centsToDisplayAmount(payload.amount, currency) : 0
+    const name = payload.subscriberName || payload.recipientName || ''
+    const tier = payload.tierName || ''
+    const isCanceled = activity.type === 'subscription_canceled'
+
+    return (
+        <Pressable
+            className="activity-row"
+            onClick={() => onNavigate(activity.id)}
+        >
+            <div className={getActivityIconClass(activity.type)}>
+                {getActivityIcon(activity.type)}
+            </div>
+            <div className="activity-info">
+                <div className="activity-row-title">{getActivityTitle(activity.type, isService)}</div>
+                <div className="activity-row-meta">
+                    {formatTime(activity.createdAt)}{name ? ` - ${name}` : ''}
+                </div>
+            </div>
+            {amount > 0 && (
+                <div className="activity-amount-col">
+                    <span className={`activity-amount ${isCanceled ? 'cancelled' : ''}`}>
+                        {isCanceled ? '-' : '+'}{currencySymbolForRow}{formatCompactNumber(amount)}
+                    </span>
+                    {tier && <span className="activity-tier">{tier}</span>}
+                </div>
+            )}
+        </Pressable>
+    )
+})
+
 export default function Activity() {
     const navigate = useNavigate()
     const [scrollRef, isScrolled] = useScrolled()
@@ -110,21 +154,88 @@ export default function Activity() {
         return activityData?.pages.flatMap(page => page.activities) || []
     }, [activityData])
 
-    // Group activities by date
-    const groupedActivities = useMemo(() => {
-        return allActivities.reduce((groups, activity: any) => {
+    // Group activities by date for virtualized list
+    const { groups, groupCounts, flatActivities } = useMemo(() => {
+        const grouped: Record<string, any[]> = {}
+
+        for (const activity of allActivities) {
             const date = formatDateGroup(activity.createdAt)
-            if (!groups[date]) {
-                groups[date] = []
+            if (!grouped[date]) {
+                grouped[date] = []
             }
-            groups[date].push(activity)
-            return groups
-        }, {} as Record<string, any[]>)
+            grouped[date].push(activity)
+        }
+
+        const groupNames = Object.keys(grouped)
+        const counts = groupNames.map(name => grouped[name].length)
+        const flat = groupNames.flatMap(name => grouped[name])
+
+        return { groups: groupNames, groupCounts: counts, flatActivities: flat }
     }, [allActivities])
+
+    const handleNavigate = useCallback((id: string) => {
+        navigate(`/activity/${id}`)
+    }, [navigate])
 
     const loadData = () => {
         refetch()
     }
+
+    // Render group header (date)
+    const renderGroupHeader = useCallback((index: number) => (
+        <div className="activity-date-header">
+            <Calendar size={16} />
+            <span>{groups[index]}</span>
+        </div>
+    ), [groups])
+
+    // Render activity item
+    const renderItem = useCallback((index: number) => (
+        <ActivityRow
+            activity={flatActivities[index]}
+            currencyCode={currencyCode}
+            isService={isService}
+            onNavigate={handleNavigate}
+        />
+    ), [flatActivities, currencyCode, isService, handleNavigate])
+
+    // Footer component with load more and summary
+    const Footer = useCallback(() => (
+        <>
+            {/* Load More */}
+            {hasNextPage && (
+                <LoadingButton
+                    className="load-more-btn"
+                    onClick={async () => { await fetchNextPage() }}
+                    loading={isFetchingNextPage}
+                    variant="secondary"
+                >
+                    Load More
+                </LoadingButton>
+            )}
+
+            {/* Monthly Summary */}
+            {metrics && (
+                <div className="summary-card">
+                    <span className="summary-title">Overview</span>
+                    <div className="summary-grid">
+                        <div className="summary-stat">
+                            <span className="summary-value">{formatCompactNumber(metrics.subscriberCount)}</span>
+                            <span className="summary-label">{isService ? 'Clients' : 'Subscribers'}</span>
+                        </div>
+                        <div className="summary-stat">
+                            <span className="summary-value positive">{formatSmartAmount(metrics.mrr, currencyCode, 10)}</span>
+                            <span className="summary-label">MRR</span>
+                        </div>
+                        <div className="summary-stat">
+                            <span className="summary-value">{formatSmartAmount(metrics.totalRevenue, currencyCode, 10)}</span>
+                            <span className="summary-label">Total Revenue</span>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </>
+    ), [hasNextPage, fetchNextPage, isFetchingNextPage, metrics, isService, currencyCode])
 
     return (
         <div className="activity-page" ref={scrollRef}>
@@ -176,90 +287,14 @@ export default function Activity() {
                         </Pressable>
                     </div>
                 ) : (
-                    <>
-                        {Object.entries(groupedActivities).map(([date, activities]) => (
-                            <div key={date} className="activity-section">
-                                {/* Date Header */}
-                                <div className="activity-date-header">
-                                    <Calendar size={16} />
-                                    <span>{date}</span>
-                                </div>
-
-                                {/* Activity Group */}
-                                <div className="activity-group">
-                                    {activities.map((activity: any, index: number) => {
-                                        const payload = activity.payload || {}
-                                        const currency = (payload.currency || currencyCode || 'USD').toUpperCase()
-                                        const currencySymbolForRow = getCurrencySymbol(currency)
-                                        const amount = payload.amount ? centsToDisplayAmount(payload.amount, currency) : 0
-                                        const name = payload.subscriberName || payload.recipientName || ''
-                                        const tier = payload.tierName || ''
-                                        const isCanceled = activity.type === 'subscription_canceled'
-
-                                        return (
-                                            <Pressable
-                                                key={activity.id}
-                                                className="activity-row stagger-item"
-                                                style={{ animationDelay: `${index * 50}ms` }}
-                                                onClick={() => navigate(`/activity/${activity.id}`)}
-                                            >
-                                                <div className={getActivityIconClass(activity.type)}>
-                                                    {getActivityIcon(activity.type)}
-                                                </div>
-                                                <div className="activity-info">
-                                                    <div className="activity-row-title">{getActivityTitle(activity.type, isService)}</div>
-                                                    <div className="activity-row-meta">
-                                                        {formatTime(activity.createdAt)}{name ? ` - ${name}` : ''}
-                                                    </div>
-                                                </div>
-                                                {amount > 0 && (
-                                                    <div className="activity-amount-col">
-                                                        <span className={`activity-amount ${isCanceled ? 'cancelled' : ''}`}>
-                                                            {isCanceled ? '-' : '+'}{currencySymbolForRow}{formatCompactNumber(amount)}
-                                                        </span>
-                                                        {tier && <span className="activity-tier">{tier}</span>}
-                                                    </div>
-                                                )}
-                                            </Pressable>
-                                        )
-                                    })}
-                                </div>
-                            </div>
-                        ))}
-
-                        {/* Load More */}
-                        {hasNextPage && (
-                            <LoadingButton
-                                className="load-more-btn"
-                                onClick={async () => { await fetchNextPage() }}
-                                loading={isFetchingNextPage}
-                                variant="secondary"
-                            >
-                                Load More
-                            </LoadingButton>
-                        )}
-
-                        {/* Monthly Summary */}
-	                        {metrics && (
-	                            <div className="summary-card">
-	                                <span className="summary-title">Overview</span>
-	                                <div className="summary-grid">
-	                                    <div className="summary-stat">
-	                                        <span className="summary-value">{formatCompactNumber(metrics.subscriberCount)}</span>
-	                                        <span className="summary-label">{isService ? 'Clients' : 'Subscribers'}</span>
-	                                    </div>
-	                                    <div className="summary-stat">
-	                                        <span className="summary-value positive">{formatSmartAmount(metrics.mrr, currencyCode, 10)}</span>
-	                                        <span className="summary-label">MRR</span>
-	                                    </div>
-	                                    <div className="summary-stat">
-	                                        <span className="summary-value">{formatSmartAmount(metrics.totalRevenue, currencyCode, 10)}</span>
-	                                        <span className="summary-label">Total Revenue</span>
-	                                    </div>
-	                                </div>
-	                            </div>
-	                        )}
-                    </>
+                    <GroupedVirtuoso
+                        useWindowScroll
+                        groupCounts={groupCounts}
+                        groupContent={renderGroupHeader}
+                        itemContent={renderItem}
+                        components={{ Footer }}
+                        style={{ minHeight: '100%' }}
+                    />
                 )}
             </div>
         </div>
