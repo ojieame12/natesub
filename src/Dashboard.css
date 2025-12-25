@@ -225,8 +225,8 @@
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    gap: var(--space-lg);
-    min-height: 200px;
+    justify-content: space-between;
+    min-height: 220px;
 }
 
 .stats-card::before {

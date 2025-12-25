@@ -143,22 +143,40 @@ export default function Dashboard() {
   // Avoid "Clients ↔ Subscribers" flicker while /profile loads by using the already-loaded /auth/me profile.
   const isService = (profile?.purpose || currentUser?.profile?.purpose) === 'service'
 
-  // Currency conversion helpers
+  // Currency conversion
+  // fxRate = 1 profile currency = X payout currency (e.g., 1 USD = 1600 NGN)
   const payoutCurrency = metrics?.balance?.currency || currencyCode
-  const fxRate = metrics?.fxRate || null
-  const hasDualCurrency = payoutCurrency !== currencyCode && fxRate !== null
+  const fxRate = metrics?.fxRate ?? null
+  const hasDualCurrency = payoutCurrency !== currencyCode
+  const canToggle = hasDualCurrency && fxRate !== null
 
-  // Get display values based on currency toggle
-  const displayCurrency = currencyView === 'payout' && hasDualCurrency ? payoutCurrency : currencyCode
-  const displayMrr = currencyView === 'payout' && hasDualCurrency && fxRate
+  // Determine which currency to show everything in
+  // When toggled to payout OR when can't convert (no fxRate), show in payout currency
+  const showInPayoutCurrency = canToggle
+    ? currencyView === 'payout'
+    : hasDualCurrency  // Fallback to payout currency when can't convert
+  const displayCurrency = showInPayoutCurrency ? payoutCurrency : currencyCode
+
+  // MRR and Total Revenue are in profile currency - convert if showing payout
+  const displayMrr = showInPayoutCurrency && fxRate
     ? (metrics?.mrr ?? 0) * fxRate
-    : (metrics?.mrr ?? 0)
-  const displayTotalRevenue = currencyView === 'payout' && hasDualCurrency && fxRate
+    : showInPayoutCurrency && !fxRate
+      ? (metrics?.mrr ?? 0)  // Can't convert, show raw (will be wrong but no choice)
+      : (metrics?.mrr ?? 0)
+
+  const displayTotalRevenue = showInPayoutCurrency && fxRate
     ? (metrics?.totalRevenue ?? 0) * fxRate
-    : (metrics?.totalRevenue ?? 0)
-  const displayPending = currencyView === 'profile' && hasDualCurrency && fxRate
-    ? centsToDisplayAmount(metrics?.balance?.pending ?? 0, payoutCurrency) / fxRate
-    : centsToDisplayAmount(metrics?.balance?.pending ?? 0, payoutCurrency)
+    : showInPayoutCurrency && !fxRate
+      ? (metrics?.totalRevenue ?? 0)
+      : (metrics?.totalRevenue ?? 0)
+
+  // Pending is in payout currency - convert to profile if showing profile currency
+  const pendingRaw = centsToDisplayAmount(metrics?.balance?.pending ?? 0, payoutCurrency)
+  const displayPending = showInPayoutCurrency
+    ? pendingRaw  // Native payout currency
+    : fxRate
+      ? pendingRaw / fxRate  // Convert to profile currency
+      : pendingRaw  // Fallback (shouldn't happen since showInPayoutCurrency would be true)
 
   // Build menu items based on service vs personal
   const menuItems = useMemo(() => getMenuItems(isService), [isService])
@@ -609,8 +627,8 @@ export default function Dashboard() {
               </section>
             ) : (
               <section className="stats-card">
-              {/* Currency Toggle - only show if dual currency */}
-              {hasDualCurrency ? (
+              {/* Currency Toggle - only show if can convert between currencies */}
+              {canToggle ? (
                 <Pressable
                   className="currency-toggle"
                   onClick={() => setCurrencyView(v => v === 'profile' ? 'payout' : 'profile')}
@@ -629,7 +647,7 @@ export default function Dashboard() {
                 <span className="stats-mrr">
                   <AnimatedNumber value={displayMrr} duration={600} format={(n) => formatCompactAmount(n, displayCurrency)} />
                 </span>
-                {/* Pending Balance - under MRR */}
+                {/* Pending Balance - under MRR, converted to display currency */}
                 {(metrics?.balance?.pending ?? 0) > 0 && (
                   <div className="stats-pending">
                     <Clock size={12} />
