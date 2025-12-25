@@ -173,12 +173,12 @@
 
 /* === CONTENT === */
 .subscribers-content {
-    flex: 1;
     padding: 0 var(--space-lg);
     padding-bottom: calc(80px + env(safe-area-inset-bottom));
 }
 
 /* === SUBSCRIBER LIST === */
+/* Base card styles - fits content naturally */
 .subscribers-list {
     background: var(--bg-card);
     border-radius: var(--radius-xl);
@@ -187,11 +187,10 @@
     overflow: hidden;
 }
 
-/* Virtuoso list needs explicit height */
+/* Virtuoso list needs explicit height for scroll virtualization */
 .subscribers-list.virtuoso-list {
-    flex: 1;
-    min-height: 300px;
-    max-height: calc(100vh - 280px);
+    height: calc(100vh - 280px);
+    min-height: 200px;
 }
 
 .load-more-loading {

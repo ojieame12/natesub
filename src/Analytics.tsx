@@ -44,6 +44,27 @@ function MiniBarChart({ data }: { data: { date: string; count: number }[] }) {
   if (!data.length) return null
 
   const maxCount = Math.max(...data.map(d => d.count), 1)
+  const formatDate = (dateStr: string) =>
+    new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+
+  // Handle single data point - show centered dot instead of full-width bar
+  if (data.length === 1) {
+    return (
+      <div className="analytics-chart analytics-chart-single">
+        <div className="analytics-chart-single-point">
+          <div className="analytics-chart-dot" />
+          <span className="analytics-chart-single-value">{data[0].count} views</span>
+        </div>
+        <div className="analytics-chart-labels analytics-chart-labels-center">
+          <span>{formatDate(data[0].date)}</span>
+        </div>
+      </div>
+    )
+  }
+
+  const firstDate = formatDate(data[0].date)
+  const lastDate = formatDate(data[data.length - 1].date)
+  const sameDate = firstDate === lastDate
 
   return (
     <div className="analytics-chart">
@@ -57,9 +78,15 @@ function MiniBarChart({ data }: { data: { date: string; count: number }[] }) {
           </div>
         ))}
       </div>
-      <div className="analytics-chart-labels">
-        <span>{data[0]?.date ? new Date(data[0].date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''}</span>
-        <span>{data[data.length - 1]?.date ? new Date(data[data.length - 1].date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''}</span>
+      <div className={`analytics-chart-labels ${sameDate ? 'analytics-chart-labels-center' : ''}`}>
+        {sameDate ? (
+          <span>{firstDate}</span>
+        ) : (
+          <>
+            <span>{firstDate}</span>
+            <span>{lastDate}</span>
+          </>
+        )}
       </div>
     </div>
   )

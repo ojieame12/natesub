@@ -197,7 +197,23 @@ export default function Subscribers() {
               {searchQuery ? 'Try a different search term' : 'Share your page to get started'}
             </p>
           </div>
+        ) : filteredSubscribers.length < 20 ? (
+          /* Simple list for small counts - fits content naturally */
+          <div className="subscribers-list">
+            {filteredSubscribers.map((subscription: any) => (
+              <SubscriberRow
+                key={subscription.id}
+                subscription={subscription}
+                defaultTier={defaultTier}
+                onNavigate={handleNavigate}
+              />
+            ))}
+            {isFetchingNextPage && (
+              <div className="load-more-loading">Loading...</div>
+            )}
+          </div>
         ) : (
+          /* Virtuoso for large lists - better scroll performance */
           <Virtuoso
             className="subscribers-list virtuoso-list"
             data={filteredSubscribers}
