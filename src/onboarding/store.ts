@@ -1,5 +1,57 @@
 import { create } from 'zustand'
-import { persist, createJSONStorage } from 'zustand/middleware'
+import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware'
+
+// === Safe Storage ===
+// Wrap localStorage to prevent crashes in Safari Private Mode, in-app browsers, etc.
+function createSafeStorage(): StateStorage {
+    // Test if localStorage is available
+    const isAvailable = (() => {
+        try {
+            const testKey = '__storage_test__'
+            localStorage.setItem(testKey, testKey)
+            localStorage.removeItem(testKey)
+            return true
+        } catch {
+            return false
+        }
+    })()
+
+    if (isAvailable) {
+        return {
+            getItem: (name) => {
+                try {
+                    return localStorage.getItem(name)
+                } catch {
+                    return null
+                }
+            },
+            setItem: (name, value) => {
+                try {
+                    localStorage.setItem(name, value)
+                } catch {
+                    // Silently fail
+                }
+            },
+            removeItem: (name) => {
+                try {
+                    localStorage.removeItem(name)
+                } catch {
+                    // Silently fail
+                }
+            },
+        }
+    }
+
+    // Fallback to in-memory storage
+    const memoryStore = new Map<string, string>()
+    return {
+        getItem: (name) => memoryStore.get(name) ?? null,
+        setItem: (name, value) => memoryStore.set(name, value),
+        removeItem: (name) => memoryStore.delete(name),
+    }
+}
+
+const safeStorage = createSafeStorage()
 
 // === Types ===
 
@@ -371,7 +423,7 @@ export const useOnboardingStore = create<OnboardingStore>()(
             version: 2, // Bumped to force migration from sessionStorage
             // Use localStorage with TTL to persist onboarding progress across tab closes
             // while still preventing stale state via the 24-hour TTL check below
-            storage: createJSONStorage(() => localStorage),
+            storage: createJSONStorage(() => safeStorage),
             partialize: (state) => ({
                 // Persist key state for resume
                 // Note: serviceDescriptionAudio (Blob) is NOT persisted - only the URL after upload
