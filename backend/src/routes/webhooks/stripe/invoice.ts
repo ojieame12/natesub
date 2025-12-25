@@ -317,9 +317,19 @@ export async function handleInvoicePaid(event: Stripe.Event) {
       },
     })
 
+    console.log(`[invoice.paid] Subscription lookup for ${subscriptionId}: ${subscription ? 'FOUND' : 'NOT FOUND'}`)
+
     // If checkout.session.completed was missed or failed, reconstruct from Stripe subscription metadata.
     if (!subscription) {
-      await backfillStripeSubscriptionForInvoicePaid(invoice, subscriptionId)
+      console.log(`[invoice.paid] Attempting backfill for ${subscriptionId}...`)
+      try {
+        await backfillStripeSubscriptionForInvoicePaid(invoice, subscriptionId)
+        console.log(`[invoice.paid] Backfill completed for ${subscriptionId}`)
+      } catch (backfillErr: any) {
+        console.error(`[invoice.paid] Backfill FAILED for ${subscriptionId}:`, backfillErr.message)
+        throw backfillErr
+      }
+
       subscription = await db.subscription.findUnique({
         where: { stripeSubscriptionId: subscriptionId },
         include: {
@@ -328,9 +338,13 @@ export async function handleInvoicePaid(event: Stripe.Event) {
           },
         },
       })
+      console.log(`[invoice.paid] Re-query after backfill for ${subscriptionId}: ${subscription ? 'FOUND' : 'STILL NOT FOUND'}`)
     }
 
-    if (!subscription) return true // Nothing to process
+    if (!subscription) {
+      console.error(`[invoice.paid] CRITICAL: No subscription found after backfill for ${subscriptionId}. Throwing to trigger retry.`)
+      throw new Error(`No subscription found for ${subscriptionId} after backfill attempt - checkout.session.completed may not have processed yet`)
+    }
 
     // Retrieve Stripe subscription metadata for checkout evidence
     // Evidence was captured at initial checkout and stored in subscription metadata
@@ -490,6 +504,8 @@ export async function handleInvoicePaid(event: Stripe.Event) {
         stripeChargeId: invoiceAny.charge as string || null,
       },
     })
+
+    console.log(`[invoice.paid] Created Payment ${recurringPayment.id}: netCents=${netCents}, feeCents=${feeCents}, grossCents=${grossCents}`)
 
     // Create dispute evidence record for chargeback defense
     // Only create if we have at least some evidence from checkout
