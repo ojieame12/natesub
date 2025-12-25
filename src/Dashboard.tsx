@@ -241,12 +241,14 @@ export default function Dashboard() {
     }
 
     try {
-      await Promise.all([
+      console.log('[dashboard] Starting refresh...')
+      const results = await Promise.all([
         refetchProfile(),
         refetchMetrics(),
         refetchActivity(),
         refetchAnalytics(),
       ])
+      console.log('[dashboard] Refresh complete:', results.map(r => r.status))
     } catch (err) {
       console.error('[dashboard] refresh failed:', err)
       toast.error('Failed to refresh')
@@ -348,12 +350,15 @@ export default function Dashboard() {
       const pulled = pullOffsetRef.current
       const shouldRefresh = pulled >= PULL_TRIGGER_PX
 
+      console.log('[dashboard] Touch end - pulled:', pulled, 'shouldRefresh:', shouldRefresh)
+
       startYRef.current = null
       startXRef.current = null
       intentDetectedRef.current = null
       isPullingRef.current = false
 
       if (shouldRefresh) {
+        console.log('[dashboard] Triggering pull refresh')
         void refreshDashboard('pull')
         return
       }
