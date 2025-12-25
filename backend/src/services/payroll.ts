@@ -634,38 +634,69 @@ export async function generatePayrollPeriod(
   // Find actual payout record for this period
   const payoutInfo = await findPayoutForPeriod(userId, periodStart, periodEnd, periodCurrency)
 
-  // Create period record
-  const period = await db.payrollPeriod.create({
-    data: {
-      userId,
-      periodStart,
-      periodEnd,
-      periodType: 'biweekly',
-      currency: periodCurrency,
-      grossCents,
-      refundsCents,
-      chargebacksCents,
-      platformFeeCents,
-      processingFeeCents,
-      netCents,
-      paymentCount,
-      ytdGrossCents: ytd.grossCents,
-      ytdNetCents: ytd.netCents,
-      payoutDate: payoutInfo?.payoutDate || null,
-      payoutMethod: payoutInfo?.payoutMethod || null,
-      bankLast4,
-      verificationCode,
-    },
-  })
+  // Create period record with race condition handling
+  // If another concurrent request created the same period, just return the existing one
+  let period
+  try {
+    period = await db.payrollPeriod.create({
+      data: {
+        userId,
+        periodStart,
+        periodEnd,
+        periodType: 'biweekly',
+        currency: periodCurrency,
+        grossCents,
+        refundsCents,
+        chargebacksCents,
+        platformFeeCents,
+        processingFeeCents,
+        netCents,
+        paymentCount,
+        ytdGrossCents: ytd.grossCents,
+        ytdNetCents: ytd.netCents,
+        payoutDate: payoutInfo?.payoutDate || null,
+        payoutMethod: payoutInfo?.payoutMethod || null,
+        bankLast4,
+        verificationCode,
+      },
+    })
 
-  // Schedule payroll ready notification (sends immediately)
-  await scheduleReminder({
-    userId,
-    entityType: 'payroll',
-    entityId: period.id,
-    type: 'payroll_ready',
-    scheduledFor: new Date(), // Send immediately
-  })
+    // Schedule payroll ready notification only for newly created periods
+    await scheduleReminder({
+      userId,
+      entityType: 'payroll',
+      entityId: period.id,
+      type: 'payroll_ready',
+      scheduledFor: new Date(), // Send immediately
+    })
+  } catch (err: any) {
+    // Handle race condition: unique constraint violation (P2002)
+    if (err?.code === 'P2002') {
+      const existingPeriod = await db.payrollPeriod.findFirst({
+        where: { userId, periodStart, periodEnd, currency: periodCurrency },
+      })
+      if (existingPeriod) {
+        return {
+          id: existingPeriod.id,
+          periodStart: existingPeriod.periodStart,
+          periodEnd: existingPeriod.periodEnd,
+          periodType: existingPeriod.periodType,
+          grossCents: existingPeriod.grossCents,
+          refundsCents: existingPeriod.refundsCents,
+          chargebacksCents: existingPeriod.chargebacksCents,
+          platformFeeCents: existingPeriod.platformFeeCents,
+          processingFeeCents: existingPeriod.processingFeeCents,
+          netCents: existingPeriod.netCents,
+          paymentCount: existingPeriod.paymentCount,
+          currency: existingPeriod.currency,
+          verificationCode: existingPeriod.verificationCode,
+          payoutDate: existingPeriod.payoutDate,
+          createdAt: existingPeriod.createdAt,
+        }
+      }
+    }
+    throw err // Re-throw non-unique constraint errors
+  }
 
   return {
     id: period.id,

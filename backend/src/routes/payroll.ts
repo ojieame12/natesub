@@ -31,24 +31,12 @@ const payroll = new Hono()
 // GET /payroll/periods - List all payroll periods for current user
 payroll.get('/periods', requireAuth, async (c) => {
   const userId = c.get('userId')
-
-  // Only generate the LAST completed period on-demand (incremental approach)
-  // Full historical backfill runs via scheduled job to avoid O(months) on every page load
   const now = new Date()
-  const currentPeriod = getPeriodBoundaries(now)
 
-  // Check if the previous period needs generation (most recent completed period)
-  // Move back 16 days to ensure we're in the previous period
-  const prevPeriodDate = new Date(currentPeriod.start.getTime() - 16 * 24 * 60 * 60 * 1000)
-  const lastPeriod = getPeriodBoundaries(prevPeriodDate)
-
-  if (lastPeriod.end < now) {
-    // Generate for all currencies received in this period
-    const { generatePayrollPeriodsForAllCurrencies } = await import('../services/payroll.js')
-    await generatePayrollPeriodsForAllCurrencies(userId, lastPeriod.start, lastPeriod.end)
-  }
-
-  // Then fetch all periods
+  // Fetch existing periods immediately (no blocking generation)
+  // Period generation happens via:
+  // 1. Scheduled cron job (primary)
+  // 2. POST /payroll/generate endpoint (manual trigger)
   const periods = await getPayrollPeriods(userId)
 
   // Check if user has address for warning
@@ -109,6 +97,26 @@ payroll.get('/periods', requireAuth, async (c) => {
     ytdByCurrency, // YTD per currency: { "USD": 50000, "NGN": 1000000 }
     total: periods.length,
     warnings,
+  })
+})
+
+// POST /payroll/generate - Manually trigger period generation (non-blocking)
+// This backfills any missing periods without blocking the list endpoint
+payroll.post('/generate', requireAuth, async (c) => {
+  const userId = c.get('userId')
+
+  // Import dynamically to avoid circular deps
+  const { generateMissingPeriods } = await import('../services/payroll.js')
+
+  // Run backfill in background - don't await
+  // This generates all missing periods without blocking the response
+  generateMissingPeriods(userId).catch((err: Error) => {
+    console.error('[payroll] Background generation failed:', err)
+  })
+
+  return c.json({
+    message: 'Period generation started',
+    status: 'processing',
   })
 })
 

@@ -54,6 +54,7 @@ export default function PayrollDetail() {
                     'Content-Type': 'application/json',
                     ...(token ? { Authorization: `Bearer ${token}` } : {}),
                 },
+                credentials: 'include', // Include cookies for auth fallback
                 signal: controller.signal,
             })
 

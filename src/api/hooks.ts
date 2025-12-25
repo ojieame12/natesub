@@ -998,10 +998,15 @@ export function useAISuggestPrice() {
 // PAYROLL
 // ============================================
 
+// Payroll data changes infrequently - use 5 minute staleTime to avoid
+// repeated fetches that could be slow (period generation, aggregation)
+const PAYROLL_STALE_TIME = 5 * 60 * 1000 // 5 minutes
+
 export function usePayrollPeriods() {
   return useQuery({
     queryKey: ['payroll', 'periods'],
     queryFn: () => api.payroll.getPeriods(),
+    staleTime: PAYROLL_STALE_TIME,
   })
 }
 
@@ -1010,6 +1015,7 @@ export function usePayrollPeriod(id: string) {
     queryKey: ['payroll', 'periods', id],
     queryFn: () => api.payroll.getPeriod(id),
     enabled: !!id,
+    staleTime: PAYROLL_STALE_TIME,
   })
 }
 
@@ -1018,6 +1024,7 @@ export function usePayrollVerify(code: string) {
     queryKey: ['payroll', 'verify', code],
     queryFn: () => api.payroll.verify(code),
     enabled: !!code,
+    staleTime: PAYROLL_STALE_TIME,
   })
 }
 
@@ -1025,6 +1032,7 @@ export function usePayrollSubscribers() {
   return useQuery({
     queryKey: ['payroll', 'subscribers'],
     queryFn: () => api.payroll.getSubscribers(),
+    staleTime: PAYROLL_STALE_TIME,
   })
 }
 
