@@ -53,3 +53,23 @@
     transform: scale(1.05);
   }
 }
+
+/* Reduced motion - instant transitions, no animations */
+@media (prefers-reduced-motion: reduce) {
+  .splash-screen {
+    animation: none;
+  }
+
+  .splash-screen.exiting {
+    display: none;
+  }
+
+  .splash-loader {
+    opacity: 1;
+    transition: none;
+  }
+
+  .splash-loader-bar {
+    animation: none;
+  }
+}

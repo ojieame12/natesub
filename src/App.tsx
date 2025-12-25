@@ -454,8 +454,12 @@ function AppShell() {
     }
   }, [bypassSplash, minTimeElapsed, splashExiting])
 
+  // DEBUG: Log state BEFORE splash check
+  console.log('[AppShell] PRE-CHECK: showSplash:', showSplash, 'bypassSplash:', bypassSplash, 'isReady:', isReady, 'status:', status, 'minTimeElapsed:', minTimeElapsed)
+
   // Show splash while checking auth (except for public routes after min time)
   if (showSplash && !bypassSplash) {
+    console.log('[AppShell] Showing SplashScreen, exiting:', splashExiting)
     return <SplashScreen exiting={splashExiting} />
   }
 
