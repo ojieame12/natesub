@@ -66,6 +66,7 @@ export default function PaymentSettings() {
   const returnTo = useMemo(() => getLocationReturnTo(location.state), [location.state])
 
   const [loading, setLoading] = useState(true)
+  const [isRefreshing, setIsRefreshing] = useState(false)
   const [stripeStatus, setStripeStatus] = useState<StripeStatus | null>(null)
   const [paystackStatus, setPaystackStatus] = useState<PaystackConnectionStatus | null>(null)
 
@@ -130,13 +131,21 @@ export default function PaymentSettings() {
     }
   }, [])
 
-  const loadPaymentData = useCallback(async () => {
+  const loadPaymentData = useCallback(async (isManualRefresh = false) => {
     if (redirectIfStripeReturnedHere()) return
 
-    setLoading(true)
+    // Only show full skeleton on initial load, not manual refresh
+    if (isManualRefresh) {
+      setIsRefreshing(true)
+    } else {
+      setLoading(true)
+    }
     setStripeError(null)
     setPaystackError(null)
-    setStripeBalance(null)
+    // Don't clear balance on refresh - keep showing stale data
+    if (!isManualRefresh) {
+      setStripeBalance(null)
+    }
 
     const [stripeResult, paystackResult] = await Promise.allSettled([
       api.stripe.getStatus({ quick: true, refresh: false }),
@@ -169,6 +178,7 @@ export default function PaymentSettings() {
     }
 
     setLoading(false)
+    setIsRefreshing(false)
   }, [fetchStripeBalance, redirectIfStripeReturnedHere])
 
   useEffect(() => {
@@ -356,8 +366,8 @@ export default function PaymentSettings() {
           <ArrowLeft size={20} />
         </Pressable>
         <div className="payment-settings-title">Payments</div>
-        <Pressable className="back-btn" onClick={loadPaymentData} disabled={loading}>
-          <RefreshCw size={20} />
+        <Pressable className="back-btn" onClick={() => loadPaymentData(true)} disabled={loading || isRefreshing}>
+          <RefreshCw size={20} className={isRefreshing ? 'spin' : ''} />
         </Pressable>
       </header>
 

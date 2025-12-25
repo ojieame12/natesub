@@ -399,7 +399,12 @@ export function useMySubscriptions(status: 'all' | 'active' | 'canceled' = 'acti
 // ACTIVITY HOOKS
 // ============================================
 
-export function useActivity(limit = 20) {
+type ActivityPage = Awaited<ReturnType<typeof api.activity.list>>
+type ActivityInfiniteData = { pages: ActivityPage[]; pageParams: (string | undefined)[] }
+
+export function useActivity(limit = 20, options?: { seedFromLimit?: number }) {
+  const queryClient = useQueryClient()
+
   return useInfiniteQuery({
     // Include limit in key to prevent cache collisions between different page sizes
     queryKey: ['activity', { limit }],
@@ -407,6 +412,11 @@ export function useActivity(limit = 20) {
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor || undefined,
     staleTime: 2 * 60 * 1000, // 2 minutes - reduces refetches on tab switches
+    // Seed from smaller cached query to prevent skeleton flash
+    // e.g., Activity page (limit=20) can show Dashboard's cached data (limit=5) immediately
+    placeholderData: options?.seedFromLimit
+      ? () => queryClient.getQueryData<ActivityInfiniteData>(['activity', { limit: options.seedFromLimit }])
+      : undefined,
   })
 }
 

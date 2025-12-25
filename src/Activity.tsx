@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
     Calendar,
@@ -100,7 +100,13 @@ export default function Activity() {
         fetchNextPage,
         hasNextPage,
         isFetchingNextPage,
-    } = useActivity(20)
+    } = useActivity(20, { seedFromLimit: 5 }) // Seed from Dashboard's cached data
+
+    // Track if this is the initial load to prevent re-animating on refetch
+    const hasAnimatedRef = useRef(false)
+    if (activityData && !hasAnimatedRef.current) {
+        hasAnimatedRef.current = true
+    }
 
     const { data: metricsData } = useMetrics()
     const metrics = metricsData?.metrics
@@ -199,8 +205,8 @@ export default function Activity() {
                                         return (
                                             <Pressable
                                                 key={activity.id}
-                                                className="activity-row stagger-item"
-                                                style={{ animationDelay: `${index * 50}ms` }}
+                                                className={`activity-row ${hasAnimatedRef.current ? '' : 'stagger-item'}`}
+                                                style={hasAnimatedRef.current ? undefined : { animationDelay: `${index * 50}ms` }}
                                                 onClick={() => navigate(`/activity/${activity.id}`)}
                                             >
                                                 <div className={getActivityIconClass(activity.type)}>
