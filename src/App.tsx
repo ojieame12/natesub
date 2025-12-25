@@ -579,10 +579,19 @@ function App() {
   // Conditionally render router based on platform
   const RouterComponent = isNative ? HashRouter : BrowserRouter
 
+  // DEBUG: Absolutely first thing - prove React is mounting
+  console.log('[App] Component rendering')
+
   return (
-    <RouterComponent>
-      <AppShell />
-    </RouterComponent>
+    <>
+      {/* DEBUG: Very first element - should always show if React mounts */}
+      <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 999999, background: '#ff0000', color: 'white', padding: 16, textAlign: 'center', fontSize: 18, fontWeight: 'bold' }}>
+        🔴 DEBUG: App is rendering - React mounted successfully
+      </div>
+      <RouterComponent>
+        <AppShell />
+      </RouterComponent>
+    </>
   )
 }
 
