@@ -10,32 +10,57 @@ console.log('[api/client] API_URL =', API_URL)
 const AUTH_TOKEN_KEY = 'nate_auth_token'
 const AUTH_SESSION_KEY = 'nate_has_session'
 
+// Safe storage wrapper - handles Safari private mode, in-app browsers, etc.
+function safeGetItem(key: string): string | null {
+  try {
+    return localStorage.getItem(key)
+  } catch {
+    return null
+  }
+}
+
+function safeSetItem(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value)
+  } catch {
+    // Storage blocked - silently fail
+  }
+}
+
+function safeRemoveItem(key: string): void {
+  try {
+    localStorage.removeItem(key)
+  } catch {
+    // Storage blocked - silently fail
+  }
+}
+
 // Token storage utilities (works on web and Capacitor)
 export function getAuthToken(): string | null {
-  return localStorage.getItem(AUTH_TOKEN_KEY)
+  return safeGetItem(AUTH_TOKEN_KEY)
 }
 
 export function setAuthToken(token: string): void {
-  localStorage.setItem(AUTH_TOKEN_KEY, token)
-  localStorage.setItem(AUTH_SESSION_KEY, 'true')
+  safeSetItem(AUTH_TOKEN_KEY, token)
+  safeSetItem(AUTH_SESSION_KEY, 'true')
 }
 
 export function clearAuthToken(): void {
-  localStorage.removeItem(AUTH_TOKEN_KEY)
-  localStorage.removeItem(AUTH_SESSION_KEY)
+  safeRemoveItem(AUTH_TOKEN_KEY)
+  safeRemoveItem(AUTH_SESSION_KEY)
 }
 
 // Session flag for cookie-based auth (no token stored)
 export function hasAuthSession(): boolean {
-  return localStorage.getItem(AUTH_SESSION_KEY) === 'true'
+  return safeGetItem(AUTH_SESSION_KEY) === 'true'
 }
 
 export function setAuthSession(): void {
-  localStorage.setItem(AUTH_SESSION_KEY, 'true')
+  safeSetItem(AUTH_SESSION_KEY, 'true')
 }
 
 export function clearAuthSession(): void {
-  localStorage.removeItem(AUTH_SESSION_KEY)
+  safeRemoveItem(AUTH_SESSION_KEY)
 }
 
 // Types

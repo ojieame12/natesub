@@ -355,7 +355,14 @@ function AppShell() {
   const navigate = useNavigate()
 
   // Only show splash on true cold start - not on remounts (HMR, error recovery, etc.)
-  const hasShownSplash = sessionStorage.getItem('splash_shown') === 'true'
+  // Safe sessionStorage access - handles Safari private mode, in-app browsers
+  const hasShownSplash = (() => {
+    try {
+      return sessionStorage.getItem('splash_shown') === 'true'
+    } catch {
+      return false
+    }
+  })()
   const [showSplash, setShowSplash] = useState(!hasShownSplash)
   const [splashExiting, setSplashExiting] = useState(false)
   const [minTimeElapsed, setMinTimeElapsed] = useState(false)
@@ -366,7 +373,11 @@ function AppShell() {
   // Mark splash as shown when it's hidden (persists across remounts within session)
   useEffect(() => {
     if (!showSplash) {
-      sessionStorage.setItem('splash_shown', 'true')
+      try {
+        sessionStorage.setItem('splash_shown', 'true')
+      } catch {
+        // Storage blocked - ignore
+      }
     }
   }, [showSplash])
 

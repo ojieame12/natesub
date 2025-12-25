@@ -56,20 +56,28 @@ export function useCheckoutEngine({ profile, isOwner }: CheckoutEngineProps) {
     // 2. Smart Provider Detection (IP-based)
     useEffect(() => {
         const CACHE_KEY = 'natepay_payer_country'
-        const cached = sessionStorage.getItem(CACHE_KEY)
-        if (cached && /^[A-Z]{2}$/.test(cached)) {
-            setPayerCountry(cached)
-        } else {
-            fetch('https://ipapi.co/country/')
-                .then(r => r.text())
-                .then(code => {
-                    const cleaned = code.trim().toUpperCase()
-                    if (/^[A-Z]{2}$/.test(cleaned)) {
-                        sessionStorage.setItem(CACHE_KEY, cleaned)
-                        setPayerCountry(cleaned)
-                    }
-                }).catch(() => { })
+        try {
+            const cached = sessionStorage.getItem(CACHE_KEY)
+            if (cached && /^[A-Z]{2}$/.test(cached)) {
+                setPayerCountry(cached)
+                return
+            }
+        } catch {
+            // Storage blocked - continue to fetch
         }
+        fetch('https://ipapi.co/country/')
+            .then(r => r.text())
+            .then(code => {
+                const cleaned = code.trim().toUpperCase()
+                if (/^[A-Z]{2}$/.test(cleaned)) {
+                    try {
+                        sessionStorage.setItem(CACHE_KEY, cleaned)
+                    } catch {
+                        // Storage blocked - ignore
+                    }
+                    setPayerCountry(cleaned)
+                }
+            }).catch(() => { })
     }, [])
 
     // 3. Page View Tracking
