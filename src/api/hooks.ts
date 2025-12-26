@@ -347,7 +347,8 @@ export function useCreateCheckout() {
 
 export function useVerifyPaystackPayment() {
   return useMutation({
-    mutationFn: api.checkout.verifyPaystack,
+    mutationFn: ({ reference, username }: { reference: string; username?: string }) =>
+      api.checkout.verifyPaystack(reference, username),
   })
 }
 
