@@ -332,7 +332,7 @@ export default function Activity() {
                                             <Pressable
                                                 key={activity.id}
                                                 className={`activity-row ${hasAnimatedRef.current ? '' : 'stagger-item'} ${isNew ? 'activity-new' : ''}`}
-                                                style={hasAnimatedRef.current && !isNew ? undefined : { animationDelay: `${index * 50}ms` }}
+                                                style={hasAnimatedRef.current && !isNew ? undefined : { animationDelay: `${Math.min(index, 5) * 50}ms` }}
                                                 onClick={() => navigate(`/activity/${activity.id}`)}
                                             >
                                                 <div className={getActivityIconClass(activity.type)}>

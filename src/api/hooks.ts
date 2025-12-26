@@ -5,6 +5,7 @@ import {
   useMutation,
   useQueryClient,
   useInfiniteQuery,
+  keepPreviousData,
 } from '@tanstack/react-query'
 import { api, type ApiError } from './client'
 import { useAuthState } from '../hooks/useAuthState'
@@ -336,6 +337,7 @@ export function useSubscriptions(status: 'all' | 'active' | 'canceled' | 'past_d
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor || undefined,
     staleTime: 2 * 60 * 1000, // 2 minutes - reduces refetches on tab switches
+    placeholderData: keepPreviousData, // Keep old list visible during refetch
   })
 }
 
@@ -393,6 +395,7 @@ export function useMySubscriptions(status: 'all' | 'active' | 'canceled' = 'acti
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor || undefined,
     staleTime: 2 * 60 * 1000, // 2 minutes
+    placeholderData: keepPreviousData, // Keep old list visible during refetch
   })
 }
 
@@ -619,6 +622,7 @@ export function useRequests(status: 'all' | 'draft' | 'sent' | 'pending_payment'
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor || undefined,
     staleTime: 30 * 1000,
+    placeholderData: keepPreviousData, // Keep old list visible during refetch
   })
 }
 
