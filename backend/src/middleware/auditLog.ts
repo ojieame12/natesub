@@ -23,6 +23,7 @@ export type AuditResourceType =
   | 'tax_earnings'
   | 'tax_summary'
   | 'tax_creator_earnings'
+  | 'tax_1099_export'
   | 'stripe_account'
   | 'export_data'
   | 'financial_data'

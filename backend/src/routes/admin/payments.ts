@@ -32,7 +32,8 @@ payments.get('/', auditSensitiveRead('payment_list'), async (c) => {
   }).parse(c.req.query())
 
   const { skip, take } = getPaginationOffsets(query)
-  const where: { type: { in: string[] }; status?: string; OR?: unknown[] } = { type: { in: ['recurring', 'one_time'] } }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const where: any = { type: { in: ['recurring', 'one_time'] } }
 
   if (query.status !== 'all') where.status = query.status
 

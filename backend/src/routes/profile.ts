@@ -30,10 +30,10 @@ const profile = new Hono()
 
 type TemplateId = z.infer<typeof templateSchema>
 
-function normalizeTemplate(template: TemplateId | null | undefined): Exclude<TemplateId, 'liquid'> | null {
+function normalizeTemplate(template: string | null | undefined): Exclude<TemplateId, 'liquid'> | null {
   if (!template) return null
   if (template === 'liquid') return 'boundary'
-  return template
+  return template as Exclude<TemplateId, 'liquid'>
 }
 
 // Get own profile

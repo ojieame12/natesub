@@ -24,6 +24,7 @@ interface CancellationCounts {
   stripeSubscriber: number
   paystackCreator: number
   paystackSubscriber: number
+  [key: string]: number // Index signature for JSON compatibility
 }
 
 /**
@@ -33,6 +34,7 @@ interface DeletionError {
   operation: string
   message: string
   critical: boolean
+  [key: string]: string | boolean // Index signature for JSON compatibility
 }
 
 /**

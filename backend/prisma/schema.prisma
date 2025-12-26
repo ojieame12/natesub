@@ -818,6 +818,8 @@ enum SystemLogType {
   admin_access
   admin_access_denied
   admin_action
+  admin_read
+  admin_export
 }
 
 enum SystemLogLevel {

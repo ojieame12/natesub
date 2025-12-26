@@ -85,9 +85,10 @@ disputes.get('/', auditSensitiveRead('dispute_details'), async (c) => {
   }).parse(c.req.query())
 
   const { skip, take } = getPaginationOffsets(query)
-  const where = {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const where: any = {
     status: query.status === 'all'
-      ? { in: ['disputed', 'dispute_won', 'dispute_lost'] as const }
+      ? { in: ['disputed', 'dispute_won', 'dispute_lost'] }
       : query.status
   }
 

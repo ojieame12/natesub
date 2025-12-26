@@ -46,11 +46,8 @@ creators.get('/', auditSensitiveRead('creator_list'), async (c) => {
     countryCode?: string
     payoutStatus?: string
   }
-  type UserWhere = {
-    profile?: ProfileWhere
-    deletedAt?: null
-    OR?: unknown[]
-  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  type UserWhere = any
 
   const profileWhere: ProfileWhere = { isNot: null }
   if (query.country) profileWhere.countryCode = query.country
