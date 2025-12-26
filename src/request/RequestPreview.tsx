@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronLeft, MessageSquare, Mail, Link2, Check, Mic, Plus, Calendar, CreditCard } from 'lucide-react'
+import { ChevronLeft, Mail, Link2, Check, Mic, Plus, Calendar, CreditCard } from 'lucide-react'
 import { useRequestStore, getRelationshipLabel, type RelationshipType } from './store'
 import { useCreateRequest, useSendRequest, useCurrentUser } from '../api/hooks'
 import { getCurrencySymbol, formatCompactNumber, displayAmountToCents } from '../utils/currency'
 import { Pressable } from '../components'
 import './request.css'
 
-type SendMethod = 'sms' | 'email' | 'link'
+// SMS option removed - backend doesn't support actual SMS, only email or copy link
+type SendMethod = 'email' | 'link'
 
 // Map detailed frontend relationship types to backend coarse types
 function mapRelationshipToBackend(relationship: RelationshipType | null): string {
@@ -54,10 +55,8 @@ export default function RequestPreview() {
     const [error, setError] = useState<string | null>(null)
     const [existingRequestId, setExistingRequestId] = useState<string | null>(null) // Prevents duplicates on retry
 
-    // Editable contact info
-    const [phoneNumber, setPhoneNumber] = useState(recipient?.phone || '')
+    // Editable contact info (SMS removed - backend doesn't support it)
     const [emailAddress, setEmailAddress] = useState(recipient?.email || '')
-    const [editingPhone, setEditingPhone] = useState(false)
     const [editingEmail, setEditingEmail] = useState(false)
 
     // Payout Interceptor State
@@ -84,20 +83,14 @@ export default function RequestPreview() {
         return `${mins}:${secs.toString().padStart(2, '0')}`
     }
 
-    const canSendSMS = phoneNumber.length >= 10
     const canSendEmail = emailAddress.includes('@')
 
     const handleSelectMethod = (method: SendMethod) => {
         setSendMethod(method)
-        // Open edit mode if selecting a method without contact info
-        if (method === 'sms' && !phoneNumber) {
-            setEditingPhone(true)
-            setEditingEmail(false)
-        } else if (method === 'email' && !emailAddress) {
+        // Open edit mode if selecting email without contact info
+        if (method === 'email' && !emailAddress) {
             setEditingEmail(true)
-            setEditingPhone(false)
         } else {
-            setEditingPhone(false)
             setEditingEmail(false)
         }
     }
@@ -111,10 +104,6 @@ export default function RequestPreview() {
         }
 
         // Validate before sending
-        if (sendMethod === 'sms' && !canSendSMS) {
-            setEditingPhone(true)
-            return
-        }
         if (sendMethod === 'email' && !canSendEmail) {
             setEditingEmail(true)
             return
@@ -135,7 +124,6 @@ export default function RequestPreview() {
                 const { request } = await createRequest({
                     recipientName: recipient.name,
                     recipientEmail: sendMethod === 'email' ? emailAddress : undefined,
-                    recipientPhone: sendMethod === 'sms' ? phoneNumber : undefined,
                     relationship: mapRelationshipToBackend(relationship),
                     amountCents: displayAmountToCents(amount, currency),
                     currency,  // Use creator's currency
@@ -150,16 +138,15 @@ export default function RequestPreview() {
             }
 
             // Step 2: Send via chosen method (idempotent / safe to retry)
-            const apiMethod = sendMethod === 'sms' ? 'link' : sendMethod // SMS uses link mechanism
             const { requestLink: link } = await sendRequest({
                 id: requestId,
-                method: apiMethod as 'email' | 'link',
+                method: sendMethod,
             })
 
             setRequestLink(link)
 
-            // Auto-copy for Link OR SMS (since SMS just means "copy to paste in text")
-            if ((sendMethod === 'link' || sendMethod === 'sms') && link) {
+            // Auto-copy for Link method
+            if (sendMethod === 'link' && link) {
                 await navigator.clipboard.writeText(link)
             }
 
@@ -195,7 +182,6 @@ export default function RequestPreview() {
                     <h2 className="request-success-title">{isService ? 'Invoice Sent!' : 'Request Sent!'}</h2>
                     <p className="request-success-text">
                         Your {isService ? 'invoice' : 'request'} has been sent to {recipient.name}
-                        {sendMethod === 'sms' && ' via SMS'}
                         {sendMethod === 'email' && ' via email'}
                         {sendMethod === 'link' && '. Link copied!'}
                     </p>
@@ -291,36 +277,6 @@ export default function RequestPreview() {
                 <div className="request-send-section">
                     <label className="request-label">Send via</label>
                     <div className="request-send-methods">
-                        {/* SMS Option */}
-                        <Pressable
-                            className={`request-send-method ${sendMethod === 'sms' ? 'active' : ''}`}
-                            onClick={() => handleSelectMethod('sms')}
-                        >
-                            <MessageSquare size={20} />
-                            <span>Copy link to text</span>
-                            {phoneNumber ? (
-                                <span className="request-send-detail">{phoneNumber}</span>
-                            ) : (
-                                <span className="request-send-detail request-send-add">
-                                    <Plus size={14} /> Add number
-                                </span>
-                            )}
-                        </Pressable>
-
-                        {/* Phone input when editing */}
-                        {editingPhone && sendMethod === 'sms' && (
-                            <div className="request-send-input-wrapper">
-                                <input
-                                    type="tel"
-                                    placeholder="Enter phone number"
-                                    value={phoneNumber}
-                                    onChange={(e) => setPhoneNumber(e.target.value)}
-                                    className="request-send-input"
-                                    autoFocus
-                                />
-                            </div>
-                        )}
-
                         {/* Email Option */}
                         <Pressable
                             className={`request-send-method ${sendMethod === 'email' ? 'active' : ''}`}
@@ -403,11 +359,10 @@ export default function RequestPreview() {
                         </>
                     ) : (
                         <>
-                            {sendMethod === 'sms' && <MessageSquare size={20} />}
                             {sendMethod === 'email' && <Mail size={20} />}
                             {sendMethod === 'link' && <Link2 size={20} />}
                             <span>
-                                {sendMethod === 'link' ? 'Copy Link' : `Send ${sendMethod === 'sms' ? '(Copy Link)' : 'Email'}`}
+                                {sendMethod === 'link' ? 'Copy Link' : 'Send Email'}
                             </span>
                         </>
                     )}

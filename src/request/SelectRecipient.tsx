@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { X, ChevronRight, Zap, RefreshCw } from 'lucide-react'
 import { useRequestStore, type Recipient } from './store'
 import { useCurrentUser, useRequests } from '../api/hooks'
-import { getCurrencySymbol, getSuggestedAmounts, formatCompactNumber } from '../utils/currency'
+import { getCurrencySymbol, getSuggestedAmounts, formatCompactNumber, isZeroDecimalCurrency } from '../utils/currency'
 import { Pressable } from '../components'
 import './request.css'
 
@@ -106,9 +106,26 @@ export default function SelectRecipient() {
                         <span className="request-currency-modern">{currencySymbol}</span>
                         <input
                             type="text"
-                            inputMode="numeric"
+                            inputMode={isZeroDecimalCurrency(currency) ? 'numeric' : 'decimal'}
                             value={amount}
-                            onChange={(e) => setLocalAmount(e.target.value.replace(/[^0-9]/g, ''))}
+                            onChange={(e) => {
+                                // Allow decimals for non-zero-decimal currencies (USD, EUR, etc.)
+                                // Only allow integers for zero-decimal currencies (JPY, KRW, etc.)
+                                const pattern = isZeroDecimalCurrency(currency)
+                                    ? /[^0-9]/g
+                                    : /[^0-9.]/g
+                                let value = e.target.value.replace(pattern, '')
+                                // Prevent multiple decimal points
+                                const parts = value.split('.')
+                                if (parts.length > 2) {
+                                    value = parts[0] + '.' + parts.slice(1).join('')
+                                }
+                                // Limit to 2 decimal places for non-zero-decimal
+                                if (parts.length === 2 && parts[1].length > 2) {
+                                    value = parts[0] + '.' + parts[1].slice(0, 2)
+                                }
+                                setLocalAmount(value)
+                            }}
                             className="request-amount-input-modern"
                             placeholder="0"
                             autoFocus
@@ -120,7 +137,7 @@ export default function SelectRecipient() {
                         {suggestedAmounts.map((value) => (
                             <Pressable
                                 key={value}
-                                className={`request-chip ${parseInt(amount) === value ? 'active' : ''}`}
+                                className={`request-chip ${parseFloat(amount) === value ? 'active' : ''}`}
                                 onClick={() => handleAmountSelect(value)}
                             >
                                 {currencySymbol}{formatCompactNumber(value)}
