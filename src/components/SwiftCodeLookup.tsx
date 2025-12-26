@@ -2,7 +2,8 @@
  * SwiftCodeLookup - Pre-Stripe onboarding modal for cross-border countries
  *
  * Shows users their bank's SWIFT code before redirecting to Stripe,
- * reducing friction for users in NG, ZA, KE, GH who may not know their SWIFT code.
+ * reducing friction for users in NG, GH, KE who may not know their SWIFT code.
+ * (ZA has native Stripe support and doesn't need SWIFT lookup)
  */
 
 import { useState } from 'react'

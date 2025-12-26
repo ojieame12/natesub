@@ -117,9 +117,13 @@ export function getCountryName(countryCode: string): string {
 
 /**
  * Check if a country needs SWIFT code help (cross-border payout country)
+ * Only shows for countries using Stripe cross-border payouts (NG, GH, KE)
+ * ZA has native Stripe support and doesn't need SWIFT code lookup
  */
 export function needsSwiftCodeHelp(countryCode: string | null | undefined): boolean {
   if (!countryCode) return false
   const code = countryCode.toUpperCase()
-  return ['NG', 'ZA', 'KE', 'GH'].includes(code)
+  // Only cross-border countries need SWIFT help
+  // ZA removed - has native Stripe support, doesn't use cross-border payouts
+  return ['NG', 'KE', 'GH'].includes(code)
 }

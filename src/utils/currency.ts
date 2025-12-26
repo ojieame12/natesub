@@ -90,6 +90,10 @@ const currencySymbols: Record<string, string> = {
     ZAR: 'R',
     KES: 'KSh',
     GHS: 'GH₵',
+    XOF: 'CFA', // West African CFA Franc (Côte d'Ivoire)
+
+    // Eastern Europe
+    BGN: 'лв', // Bulgarian Lev
 }
 
 /**
@@ -401,6 +405,12 @@ const suggestedAmountsMap: Record<string, SuggestedAmountsConfig> = {
     HUF: { personal: [2500, 5000, 10000, 25000], service: [25000, 50000, 100000, 250000] },
     // RON (~4.5 per USD)
     RON: { personal: [50, 100, 200, 500], service: [500, 1000, 2000, 5000] },
+    // BGN (~1.8 per USD) - Bulgarian Lev
+    BGN: { personal: [20, 50, 100, 200], service: [200, 500, 1000, 2000] },
+
+    // === West African CFA ===
+    // XOF (~600 per USD) - Used by Côte d'Ivoire
+    XOF: { personal: [5000, 10000, 25000, 50000], service: [50000, 100000, 250000, 500000] },
 }
 
 // Default fallback (USD-like)

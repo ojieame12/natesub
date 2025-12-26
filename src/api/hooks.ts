@@ -789,8 +789,8 @@ export function useSendUpdate() {
 
 export function useUploadUrl() {
   return useMutation({
-    mutationFn: ({ type, mimeType }: { type: 'avatar' | 'photo' | 'voice'; mimeType: string }) =>
-      api.media.getUploadUrl(type, mimeType),
+    mutationFn: ({ type, mimeType, fileSize }: { type: 'avatar' | 'photo' | 'voice'; mimeType: string; fileSize: number }) =>
+      api.media.getUploadUrl(type, mimeType, fileSize),
   })
 }
 
@@ -881,11 +881,12 @@ export async function uploadFile(
     }
   }
 
-  // Get signed URL with the correct mime type
+  // Get signed URL with the correct mime type and file size
+  // Server validates size and includes it in signed URL for security
   let uploadUrl: string
   let publicUrl: string
   try {
-    const result = await api.media.getUploadUrl(type, mimeType)
+    const result = await api.media.getUploadUrl(type, mimeType, uploadBlob.size)
     uploadUrl = result.uploadUrl
     publicUrl = result.publicUrl
   } catch (err: any) {
@@ -948,8 +949,8 @@ export async function uploadBlob(
 
   const contentType = mimeType || blob.type || 'application/octet-stream'
 
-  // Get signed URL
-  const { uploadUrl, publicUrl } = await api.media.getUploadUrl(type, contentType)
+  // Get signed URL (server validates size and includes in signature)
+  const { uploadUrl, publicUrl } = await api.media.getUploadUrl(type, contentType, blob.size)
 
   // Upload to S3
   const response = await fetch(uploadUrl, {

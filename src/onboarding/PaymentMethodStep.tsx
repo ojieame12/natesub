@@ -1,10 +1,12 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronLeft, CreditCard, Check, Loader2, AlertCircle } from 'lucide-react'
 import { useOnboardingStore, type PaymentProvider } from './store'
 import { Button, Pressable } from './components'
+import { SwiftCodeLookup } from '../components'
 import { api } from '../api'
 import { getMinimumAmount, getCurrencySymbol, getSuggestedAmounts } from '../utils/currency'
+import { needsSwiftCodeHelp } from '../utils/swiftCodes'
 import {
     hasPaystack,
     isAfricanCountry,
@@ -63,6 +65,23 @@ export default function PaymentMethodStep() {
     const [selectedMethod, setSelectedMethod] = useState<string | null>(paymentProvider)
     const [saving, setSaving] = useState(false)
     const [error, setError] = useState<string | null>(null)
+
+    // SWIFT code lookup modal state (for cross-border African countries)
+    const [showSwiftLookup, setShowSwiftLookup] = useState(false)
+    const [pendingStripeUrl, setPendingStripeUrl] = useState<string | null>(null)
+
+    // SWIFT lookup handlers
+    const handleSwiftLookupContinue = useCallback(() => {
+        if (pendingStripeUrl) {
+            window.location.href = pendingStripeUrl
+        }
+    }, [pendingStripeUrl])
+
+    const handleSwiftLookupClose = useCallback(() => {
+        setShowSwiftLookup(false)
+        setPendingStripeUrl(null)
+        setSaving(false)
+    }, [])
 
     // Determine which payment methods to show based on country code (from regionConfig)
     const countryUpper = countryCode?.toUpperCase() || ''
@@ -184,6 +203,15 @@ export default function PaymentMethodStep() {
                         // Fallback: return to Review step (next step after Payment)
                         // Dynamic based on whether address step is shown
                         sessionStorage.setItem('stripe_return_to', `/onboarding?step=${currentStep + 1}`)
+
+                        // For cross-border countries (NG/GH/KE), show SWIFT code helper first
+                        // This helps users find their bank's SWIFT code before Stripe onboarding
+                        if (needsSwiftCodeHelp(countryCode)) {
+                            setPendingStripeUrl(result.onboardingUrl)
+                            setShowSwiftLookup(true)
+                            return
+                        }
+
                         // Profile is saved - redirect to Stripe onboarding
                         // Don't reset() here - AuthRedirect will route properly when user returns
                         window.location.href = result.onboardingUrl
@@ -348,6 +376,15 @@ export default function PaymentMethodStep() {
                     </Button>
                 </div>
             </div>
+
+            {/* SWIFT Code Lookup Modal for cross-border African countries */}
+            {showSwiftLookup && countryCode && (
+                <SwiftCodeLookup
+                    countryCode={countryCode}
+                    onContinue={handleSwiftLookupContinue}
+                    onClose={handleSwiftLookupClose}
+                />
+            )}
         </div>
     )
 }

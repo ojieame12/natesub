@@ -140,10 +140,11 @@ function loadEnv() {
       }
     }
 
-    // Encryption key: Required in production for PII protection
+    // Encryption key: Required in production for PII protection (account numbers, auth codes)
     if (!data.ENCRYPTION_KEY) {
-      console.warn('⚠️ WARNING: ENCRYPTION_KEY is missing. PII encryption will be disabled or insecure.')
-      // Don't exit, allow startup
+      console.error('❌ FATAL: ENCRYPTION_KEY is required in production for PII protection')
+      console.error('   Generate one with: openssl rand -base64 32')
+      process.exit(1)
     }
 
     // URLs: Must be HTTPS in production

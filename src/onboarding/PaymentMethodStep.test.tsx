@@ -65,6 +65,19 @@ describe('PaymentMethodStep', () => {
   })
 
   it('selects Stripe and initiates connect flow', async () => {
+    // Use US user to test direct redirect (NG shows SWIFT modal first)
+    useOnboardingStore.setState({
+      username: 'testuser',
+      firstName: 'Test',
+      lastName: 'User',
+      country: 'United States',
+      countryCode: 'US',
+      currency: 'USD',
+      pricingModel: 'single',
+      singleAmount: 10,
+      paymentProvider: null,
+    })
+
     // Mock Stripe connect response
     const mockConnectRes = { success: true, onboardingUrl: 'https://connect.stripe.com/setup' }
     vi.mocked(api.stripe.connect).mockResolvedValue(mockConnectRes)
@@ -85,12 +98,11 @@ describe('PaymentMethodStep', () => {
     fireEvent.click(continueBtn)
 
     await waitFor(() => {
-      // Currency should switch to USD for cross-border Stripe
       expect(api.profile.update).toHaveBeenCalledWith(expect.objectContaining({
         paymentProvider: 'stripe',
         username: 'testuser',
         displayName: 'Test User', // firstName + lastName composite
-        currency: 'USD', // Auto-switched from NGN to USD for Stripe
+        currency: 'USD',
       }))
       expect(api.stripe.connect).toHaveBeenCalled()
       expect(window.location.href).toBe(mockConnectRes.onboardingUrl)

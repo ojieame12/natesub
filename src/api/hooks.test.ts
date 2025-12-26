@@ -13,12 +13,13 @@ describe('api/hooks utilities', () => {
     await expect(uploadBlob(tooLarge, 'avatar')).rejects.toThrow('File too large. Maximum size is 10MB')
   })
 
-  it('uploadBlob requests a signed URL with the blob content type and uploads via PUT', async () => {
+  it('uploadBlob requests a signed URL with the blob content type, size and uploads via PUT', async () => {
     const getUploadUrl = vi.spyOn(api.media, 'getUploadUrl').mockResolvedValue({
       uploadUrl: 'https://example.com/upload',
       publicUrl: 'https://cdn.example.com/public',
       key: 'k',
       expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      maxBytes: 10 * 1024 * 1024,
     })
 
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
@@ -32,7 +33,7 @@ describe('api/hooks utilities', () => {
     const blob = new Blob([new Uint8Array([1, 2, 3])], { type: 'audio/webm' })
     await expect(uploadBlob(blob, 'voice')).resolves.toBe('https://cdn.example.com/public')
 
-    expect(getUploadUrl).toHaveBeenCalledWith('voice', 'audio/webm')
+    expect(getUploadUrl).toHaveBeenCalledWith('voice', 'audio/webm', 3) // 3 bytes
   })
 
   it('uploadBlob respects an explicit mimeType override', async () => {
@@ -41,6 +42,7 @@ describe('api/hooks utilities', () => {
       publicUrl: 'https://cdn.example.com/public',
       key: 'k',
       expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      maxBytes: 10 * 1024 * 1024,
     })
 
     const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
@@ -59,6 +61,7 @@ describe('api/hooks utilities', () => {
       publicUrl: 'https://cdn.example.com/public',
       key: 'k',
       expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      maxBytes: 10 * 1024 * 1024,
     })
 
     vi.stubGlobal('fetch', vi.fn(async () => new Response('nope', { status: 403 })) as any)

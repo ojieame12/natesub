@@ -898,15 +898,16 @@ export const updates = {
 // ============================================
 
 export const media = {
-  getUploadUrl: (type: 'avatar' | 'photo' | 'voice', mimeType: string) =>
+  getUploadUrl: (type: 'avatar' | 'photo' | 'voice', mimeType: string, fileSize: number) =>
     apiFetch<{
       uploadUrl: string
       publicUrl: string
       key: string
       expiresAt: string
+      maxBytes: number
     }>('/media/upload-url', {
       method: 'POST',
-      body: JSON.stringify({ type, mimeType }),
+      body: JSON.stringify({ type, mimeType, fileSize }),
     }),
 }
 

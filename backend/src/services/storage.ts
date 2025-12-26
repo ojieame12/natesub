@@ -42,15 +42,25 @@ interface SignedUploadUrl {
 }
 
 // Generate signed upload URL
+// SECURITY: fileSize is validated and enforced via Content-Length in the signed URL
+// If client sends a different size, the signature will be invalid and upload will fail
 export async function getSignedUploadUrl(
   userId: string,
   type: UploadType,
   mimeType: string,
+  fileSize: number,
   fileName?: string
 ): Promise<SignedUploadUrl> {
   // Validate mime type
   if (!ALLOWED_MIME_TYPES[type].includes(mimeType)) {
     throw new Error(`Invalid file type. Allowed: ${ALLOWED_MIME_TYPES[type].join(', ')}`)
+  }
+
+  // Validate file size against type-specific limits
+  const maxBytes = MAX_FILE_SIZES[type]
+  if (fileSize > maxBytes) {
+    const maxMB = Math.round(maxBytes / (1024 * 1024))
+    throw new Error(`File too large. Maximum size for ${type} is ${maxMB}MB`)
   }
 
   // Generate unique key
@@ -59,11 +69,12 @@ export async function getSignedUploadUrl(
   const key = `${type}s/${userId}/${nanoid()}.${ext}`
 
   // Create signed URL (expires in 10 minutes)
-  // Note: Don't include ChecksumAlgorithm - it causes CORS issues with R2
+  // SECURITY: ContentLength is included in signature - upload fails if size differs
   const command = new PutObjectCommand({
     Bucket: env.R2_BUCKET,
     Key: key,
     ContentType: mimeType,
+    ContentLength: fileSize,
   })
 
   // Disable checksum headers in signed URL to avoid CORS issues
@@ -79,7 +90,7 @@ export async function getSignedUploadUrl(
     publicUrl,
     key,
     expiresAt,
-    maxBytes: MAX_FILE_SIZES[type],
+    maxBytes,
   }
 }
 

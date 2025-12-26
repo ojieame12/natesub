@@ -7,6 +7,7 @@ import { redis } from '../db/redis.js'
 import { requireAuth } from '../middleware/auth.js'
 import { paymentRateLimit } from '../middleware/rateLimit.js'
 import {
+  stripe,
   createExpressAccount,
   createAccountLink,
   getAccountStatus,
@@ -180,13 +181,49 @@ stripeRoutes.post('/connect', requireAuth, paymentRateLimit, async (c) => {
 stripeRoutes.post('/connect/refresh', requireAuth, paymentRateLimit, async (c) => {
   const userId = c.get('userId')
 
-  const profile = await db.profile.findUnique({ where: { userId } })
+  // Fetch profile with user email for prefill
+  const profile = await db.profile.findUnique({
+    where: { userId },
+    include: { user: { select: { email: true } } }
+  })
 
   if (!profile?.stripeAccountId) {
     return c.json({ error: 'No payment account found' }, 400)
   }
 
   try {
+    // Update account with current profile data for prefill (same as main connect flow)
+    // This ensures profile edits are reflected when user returns to Stripe onboarding
+    const nameParts = profile.displayName?.trim().split(' ') || []
+    const firstName = nameParts[0] || undefined
+    const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : undefined
+
+    const updateData: { email?: string; individual?: { email?: string; first_name?: string; last_name?: string; address?: { line1?: string; city?: string; state?: string; postal_code?: string } } } = {
+      email: profile.user?.email,
+      individual: {
+        email: profile.user?.email,
+        first_name: firstName,
+        last_name: lastName,
+      },
+    }
+
+    // Add address if available
+    if (profile.address || profile.city) {
+      updateData.individual!.address = {
+        line1: profile.address || undefined,
+        city: profile.city || undefined,
+        state: profile.state || undefined,
+        postal_code: profile.zip || undefined,
+      }
+    }
+
+    try {
+      await stripe.accounts.update(profile.stripeAccountId, updateData)
+    } catch (err) {
+      // Non-fatal: prefill is nice-to-have, don't block onboarding
+      console.warn('[stripe] Failed to update account for prefill on refresh:', err)
+    }
+
     const accountLink = await createAccountLink(profile.stripeAccountId)
     return c.json({ onboardingUrl: accountLink })
   } catch (error) {
