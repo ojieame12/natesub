@@ -8,7 +8,8 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getAuthToken } from '../api/client'
-import { createFetchClient } from '../api/fetchJson'
+import { createFetchClient, type FetchOptions } from '../api/fetchJson'
+import { adminQueryKeys } from '../api/queryKeys'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
 const ADMIN_FETCH_TIMEOUT_MS = 20_000
@@ -22,7 +23,7 @@ const adminFetchClient = createFetchClient({
 })
 
 // Admin-specific fetch wrapper - delegates to shared layer
-async function adminFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
+async function adminFetch<T>(path: string, options: FetchOptions = {}): Promise<T> {
   return adminFetchClient<T>(path, options)
 }
 
@@ -30,18 +31,95 @@ async function adminFetch<T>(path: string, options: RequestInit = {}): Promise<T
 // TYPES
 // ============================================
 
+/** Per-currency revenue breakdown */
+export interface CurrencyRevenue {
+  feeCents: number
+  volumeCents: number
+  paymentCount: number
+}
+
 export interface DashboardStats {
   users: { total: number; newToday: number; newThisMonth: number }
   subscriptions: { active: number }
-  revenue: { totalCents: number; thisMonthCents: number }
+  revenue: {
+    // Per-currency breakdown (accurate)
+    byCurrency: Record<string, CurrencyRevenue>
+    thisMonthByCurrency: Record<string, CurrencyRevenue>
+    // Currency metadata
+    currencies: string[]
+    thisMonthCurrencies: string[]
+    isMultiCurrency: boolean
+    isThisMonthMultiCurrency: boolean
+    // Totals (WARNING: mixed currencies if isMultiCurrency=true)
+    totalCents: number
+    thisMonthCents: number
+    totalVolumeCents: number
+    thisMonthVolumeCents: number
+    paymentCount: number
+    thisMonthPaymentCount: number
+    // USD equivalent totals (captured at payment time for accuracy)
+    usdEquivalent?: {
+      totalFeesUsdCents: number
+      totalVolumeUsdCents: number
+      thisMonthFeesUsdCents: number
+      thisMonthVolumeUsdCents: number
+      hasEstimatedRates: boolean // True if any payments used backfilled rates
+      estimatedPaymentCount: number
+    }
+  }
   flags: { disputedPayments: number; failedPaymentsToday: number }
+  freshness?: {
+    businessTimezone: string
+    lastPaymentAt: string | null
+    lastWebhookProcessedAt: string | null
+    lastWebhookProvider: string | null
+  }
+}
+
+/** Per-period revenue stats (may mix currencies - use byCurrency for accurate data) */
+interface PeriodStats {
+  totalVolumeCents: number
+  platformFeeCents: number
+  creatorPayoutsCents: number
+  paymentCount: number
+}
+
+/** Per-currency breakdown for a time period */
+interface PeriodByCurrency {
+  [currency: string]: {
+    totalVolumeCents: number
+    platformFeeCents: number
+    creatorPayoutsCents: number
+    paymentCount: number
+  }
+}
+
+/** Currency metadata for a time period */
+interface PeriodCurrencyMeta {
+  currencies: string[]
+  isMultiCurrency: boolean
 }
 
 export interface RevenueOverview {
-  allTime: { totalVolumeCents: number; platformFeeCents: number; creatorPayoutsCents: number; paymentCount: number }
-  thisMonth: { totalVolumeCents: number; platformFeeCents: number; creatorPayoutsCents: number; paymentCount: number }
-  lastMonth: { totalVolumeCents: number; platformFeeCents: number; creatorPayoutsCents: number; paymentCount: number }
-  today: { totalVolumeCents: number; platformFeeCents: number; creatorPayoutsCents: number; paymentCount: number }
+  // Totals (WARNING: may mix currencies if multi-currency)
+  allTime: PeriodStats
+  thisMonth: PeriodStats
+  lastMonth: PeriodStats
+  today: PeriodStats
+  // Per-currency breakdown (accurate)
+  byCurrency?: {
+    allTime: PeriodByCurrency
+    thisMonth: PeriodByCurrency
+    lastMonth: PeriodByCurrency
+    today: PeriodByCurrency
+  }
+  // Currency metadata
+  currencies?: {
+    allTime: PeriodCurrencyMeta
+    thisMonth: PeriodCurrencyMeta
+    lastMonth: PeriodCurrencyMeta
+    today: PeriodCurrencyMeta
+  }
   paymentsByStatus: Record<string, number>
   freshness?: {
     businessTimezone?: string
@@ -251,7 +329,7 @@ export interface AdminActivity {
 
 export function useAdminDashboard() {
   return useQuery({
-    queryKey: ['admin', 'dashboard'],
+    queryKey: adminQueryKeys.dashboard,
     queryFn: () => adminFetch<DashboardStats>('/admin/dashboard'),
     staleTime: 60 * 1000, // 1 minute
   })
@@ -261,69 +339,13 @@ export function useAdminDashboard() {
 // REVENUE
 // ============================================
 
-export function useAdminRevenueOverview() {
-  return useQuery({
-    queryKey: ['admin', 'revenue', 'overview'],
-    queryFn: () => adminFetch<RevenueOverview>('/admin/revenue/overview'),
-    staleTime: 60 * 1000,
-  })
-}
-
-export function useAdminRevenueByProvider(period: string = 'month') {
-  return useQuery({
-    queryKey: ['admin', 'revenue', 'by-provider', period],
-    queryFn: () => adminFetch<RevenueByProvider>(`/admin/revenue/by-provider?period=${period}`),
-    staleTime: 60 * 1000,
-  })
-}
-
-export function useAdminRevenueByCurrency(period: string = 'month') {
-  return useQuery({
-    queryKey: ['admin', 'revenue', 'by-currency', period],
-    queryFn: () => adminFetch<RevenueByCurrency>(`/admin/revenue/by-currency?period=${period}`),
-    staleTime: 60 * 1000,
-  })
-}
-
-export function useAdminRevenueDaily(days: number = 30) {
-  return useQuery({
-    queryKey: ['admin', 'revenue', 'daily', days],
-    queryFn: () => adminFetch<DailyRevenue>(`/admin/revenue/daily?days=${days}`),
-    staleTime: 5 * 60 * 1000, // 5 minutes
-  })
-}
-
-export function useAdminRevenueMonthly(months: number = 12) {
-  return useQuery({
-    queryKey: ['admin', 'revenue', 'monthly', months],
-    queryFn: () => adminFetch<MonthlyRevenue>(`/admin/revenue/monthly?months=${months}`),
-    staleTime: 5 * 60 * 1000,
-  })
-}
-
-export function useAdminTopCreators(period: string = 'month', limit: number = 20) {
-  return useQuery({
-    queryKey: ['admin', 'revenue', 'top-creators', period, limit],
-    queryFn: () => adminFetch<{ period: string; creators: TopCreator[] }>(`/admin/revenue/top-creators?period=${period}&limit=${limit}`),
-    staleTime: 5 * 60 * 1000,
-  })
-}
-
-export function useAdminRefundsStats(period: string = 'month') {
-  return useQuery({
-    queryKey: ['admin', 'revenue', 'refunds', period],
-    queryFn: () => adminFetch<RefundsStats>(`/admin/revenue/refunds?period=${period}`),
-    staleTime: 5 * 60 * 1000,
-  })
-}
-
 /**
  * Combined revenue hook - fetches all revenue data in a single API call
- * Reduces 7 round trips to 1 for the Revenue dashboard
+ * Supersedes individual hooks (useAdminRevenueOverview, useAdminRevenueByProvider, etc.)
  */
 export function useAdminRevenueAll(period: string = 'month', days: number = 30, months: number = 12, topCreatorsLimit: number = 10) {
   return useQuery({
-    queryKey: ['admin', 'revenue', 'all', period, days, months, topCreatorsLimit],
+    queryKey: adminQueryKeys.revenue.combined(period, days, months, topCreatorsLimit),
     queryFn: () => adminFetch<RevenueAll>(`/admin/revenue/all?period=${period}&days=${days}&months=${months}&topCreatorsLimit=${topCreatorsLimit}`),
     staleTime: 60 * 1000, // 1 minute cache
   })
@@ -345,7 +367,7 @@ export function useAdminUsers(
   const query = searchParams.toString()
 
   return useQuery({
-    queryKey: ['admin', 'users', params],
+    queryKey: adminQueryKeys.users.list(params),
     queryFn: () => adminFetch<{ users: AdminUser[]; total: number; page: number; totalPages: number }>(`/admin/users${query ? `?${query}` : ''}`),
     staleTime: 30 * 1000,
     enabled: options.enabled ?? true,
@@ -361,7 +383,7 @@ export function useAdminUserBlock() {
         body: JSON.stringify({ reason }),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] })
+      queryClient.invalidateQueries({ queryKey: adminQueryKeys.users.all })
     },
   })
 }
@@ -374,7 +396,7 @@ export function useAdminUserUnblock() {
         method: 'POST',
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] })
+      queryClient.invalidateQueries({ queryKey: adminQueryKeys.users.all })
     },
   })
 }
@@ -388,7 +410,7 @@ export function useAdminUserDelete() {
         body: JSON.stringify({ confirm: 'DELETE', reason }),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] })
+      queryClient.invalidateQueries({ queryKey: adminQueryKeys.users.all })
     },
   })
 }
@@ -406,7 +428,7 @@ export function useAdminPayments(params: { search?: string; status?: string; pag
   const query = searchParams.toString()
 
   return useQuery({
-    queryKey: ['admin', 'payments', params],
+    queryKey: adminQueryKeys.payments.list(params),
     queryFn: () => adminFetch<{ payments: AdminPayment[]; total: number; page: number; totalPages: number }>(`/admin/payments${query ? `?${query}` : ''}`),
     staleTime: 30 * 1000,
   })
@@ -421,8 +443,8 @@ export function useAdminRefund() {
         body: JSON.stringify({ reason, amount }),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin', 'payments'] })
-      queryClient.invalidateQueries({ queryKey: ['admin', 'revenue'] })
+      queryClient.invalidateQueries({ queryKey: adminQueryKeys.payments.all })
+      queryClient.invalidateQueries({ queryKey: adminQueryKeys.revenue.all })
     },
   })
 }
@@ -440,7 +462,7 @@ export function useAdminSubscriptions(params: { search?: string; status?: string
   const query = searchParams.toString()
 
   return useQuery({
-    queryKey: ['admin', 'subscriptions', params],
+    queryKey: adminQueryKeys.subscriptions.list(params),
     queryFn: () => adminFetch<{ subscriptions: AdminSubscription[]; total: number; page: number; totalPages: number }>(`/admin/subscriptions${query ? `?${query}` : ''}`),
     staleTime: 30 * 1000,
   })
@@ -497,7 +519,7 @@ export interface SubscriptionDetail {
 
 export function useAdminSubscriptionDetail(subscriptionId: string) {
   return useQuery({
-    queryKey: ['admin', 'subscriptions', subscriptionId],
+    queryKey: adminQueryKeys.subscriptions.detail(subscriptionId),
     queryFn: () => adminFetch<SubscriptionDetail>(`/admin/subscriptions/${subscriptionId}`),
     enabled: !!subscriptionId,
     staleTime: 30 * 1000,
@@ -513,7 +535,7 @@ export function useAdminCancelSubscription() {
         body: JSON.stringify({ immediate }),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin', 'subscriptions'] })
+      queryClient.invalidateQueries({ queryKey: adminQueryKeys.subscriptions.all })
     },
   })
 }
@@ -531,7 +553,7 @@ export function useAdminLogs(params: { type?: string; level?: string; page?: num
   const query = searchParams.toString()
 
   return useQuery({
-    queryKey: ['admin', 'logs', params],
+    queryKey: adminQueryKeys.logs.list(params),
     queryFn: () => adminFetch<{ logs: SystemLog[]; total: number; page: number; totalPages: number }>(`/admin/logs${query ? `?${query}` : ''}`),
     staleTime: 30 * 1000,
   })
@@ -539,7 +561,7 @@ export function useAdminLogs(params: { type?: string; level?: string; page?: num
 
 export function useAdminLogsStats() {
   return useQuery({
-    queryKey: ['admin', 'logs', 'stats'],
+    queryKey: adminQueryKeys.logs.stats,
     queryFn: () => adminFetch<LogsStats>('/admin/logs/stats'),
     staleTime: 60 * 1000,
   })
@@ -558,7 +580,7 @@ export function useAdminReminders(params: { status?: string; type?: string; page
   const query = searchParams.toString()
 
   return useQuery({
-    queryKey: ['admin', 'reminders', params],
+    queryKey: adminQueryKeys.reminders.list(params),
     queryFn: () => adminFetch<{ reminders: AdminReminder[]; total: number; page: number; totalPages: number }>(`/admin/reminders${query ? `?${query}` : ''}`),
     staleTime: 30 * 1000,
   })
@@ -566,7 +588,7 @@ export function useAdminReminders(params: { status?: string; type?: string; page
 
 export function useAdminRemindersStats() {
   return useQuery({
-    queryKey: ['admin', 'reminders', 'stats'],
+    queryKey: adminQueryKeys.reminders.stats,
     queryFn: () => adminFetch<RemindersStats>('/admin/reminders/stats'),
     staleTime: 60 * 1000,
   })
@@ -585,7 +607,7 @@ export function useAdminEmails(params: { status?: string; template?: string; pag
   const query = searchParams.toString()
 
   return useQuery({
-    queryKey: ['admin', 'emails', params],
+    queryKey: adminQueryKeys.emails.list(params),
     queryFn: () => adminFetch<{ emails: AdminEmail[]; total: number; page: number; totalPages: number }>(`/admin/emails${query ? `?${query}` : ''}`),
     staleTime: 30 * 1000,
   })
@@ -603,7 +625,7 @@ export function useAdminInvoices(params: { status?: string; page?: number; limit
   const query = searchParams.toString()
 
   return useQuery({
-    queryKey: ['admin', 'invoices', params],
+    queryKey: adminQueryKeys.invoices.list(params),
     queryFn: () => adminFetch<{ invoices: AdminInvoice[]; total: number; page: number; totalPages: number }>(`/admin/invoices${query ? `?${query}` : ''}`),
     staleTime: 30 * 1000,
   })
@@ -621,7 +643,7 @@ export function useAdminActivity(params: { type?: string; page?: number; limit?:
   const query = searchParams.toString()
 
   return useQuery({
-    queryKey: ['admin', 'activity', params],
+    queryKey: adminQueryKeys.activity.list(params),
     queryFn: () => adminFetch<{ activities: AdminActivity[]; total: number; page: number; totalPages: number }>(`/admin/activity${query ? `?${query}` : ''}`),
     staleTime: 30 * 1000,
   })
@@ -760,7 +782,7 @@ export function useAdminStripeAccounts(
   const query = searchParams.toString()
 
   return useQuery({
-    queryKey: ['admin', 'stripe', 'accounts', params],
+    queryKey: adminQueryKeys.stripe.accounts.list(params),
     queryFn: () => adminFetch<{ accounts: StripeAccount[]; total: number; page: number; totalPages: number }>(`/admin/stripe/accounts${query ? `?${query}` : ''}`),
     enabled: options.enabled ?? true,
     staleTime: 60 * 1000,
@@ -769,7 +791,7 @@ export function useAdminStripeAccounts(
 
 export function useAdminStripeAccountDetail(accountId: string) {
   return useQuery({
-    queryKey: ['admin', 'stripe', 'accounts', accountId],
+    queryKey: adminQueryKeys.stripe.accounts.detail(accountId),
     queryFn: () => adminFetch<StripeAccountDetail>(`/admin/stripe/accounts/${accountId}`),
     enabled: !!accountId,
     staleTime: 60 * 1000,
@@ -786,7 +808,7 @@ export function useAdminStripeTransfers(
   const query = searchParams.toString()
 
   return useQuery({
-    queryKey: ['admin', 'stripe', 'transfers', params],
+    queryKey: adminQueryKeys.stripe.transfers(params),
     queryFn: () => adminFetch<{ transfers: StripeTransfer[]; hasMore: boolean; nextCursor: string | null }>(`/admin/stripe/transfers${query ? `?${query}` : ''}`),
     enabled: options.enabled ?? true,
     staleTime: 60 * 1000,
@@ -795,7 +817,7 @@ export function useAdminStripeTransfers(
 
 export function useAdminStripeBalance(options: AdminQueryOptions = {}) {
   return useQuery({
-    queryKey: ['admin', 'stripe', 'balance'],
+    queryKey: adminQueryKeys.stripe.balance,
     queryFn: () => adminFetch<StripeBalance>('/admin/stripe/balance'),
     enabled: options.enabled ?? true,
     staleTime: 60 * 1000,
@@ -813,7 +835,7 @@ export function useAdminStripeEvents(
   const query = searchParams.toString()
 
   return useQuery({
-    queryKey: ['admin', 'stripe', 'events', params],
+    queryKey: adminQueryKeys.stripe.events(params),
     queryFn: () => adminFetch<{ events: StripeEvent[]; hasMore: boolean; nextCursor: string | null }>(`/admin/stripe/events${query ? `?${query}` : ''}`),
     enabled: options.enabled ?? true,
     staleTime: 30 * 1000,
@@ -829,7 +851,7 @@ export function useAdminStripePayout() {
         body: JSON.stringify({ amount, currency }),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin', 'stripe'] })
+      queryClient.invalidateQueries({ queryKey: adminQueryKeys.stripe.all })
     },
   })
 }
@@ -843,7 +865,7 @@ export function useAdminStripeDisablePayouts() {
         body: JSON.stringify({ reason }),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin', 'stripe', 'accounts'] })
+      queryClient.invalidateQueries({ queryKey: adminQueryKeys.stripe.accounts.all })
     },
   })
 }
@@ -856,7 +878,7 @@ export function useAdminStripeEnablePayouts() {
         method: 'POST',
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin', 'stripe', 'accounts'] })
+      queryClient.invalidateQueries({ queryKey: adminQueryKeys.stripe.accounts.all })
     },
   })
 }
@@ -869,7 +891,7 @@ export function useAdminSubscriptionPause() {
         method: 'POST',
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin', 'subscriptions'] })
+      queryClient.invalidateQueries({ queryKey: adminQueryKeys.subscriptions.all })
     },
   })
 }
@@ -882,7 +904,7 @@ export function useAdminSubscriptionResume() {
         method: 'POST',
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin', 'subscriptions'] })
+      queryClient.invalidateQueries({ queryKey: adminQueryKeys.subscriptions.all })
     },
   })
 }
@@ -918,7 +940,7 @@ export interface CreateCreatorResult {
 
 export function usePaystackBanks(country: string) {
   return useQuery({
-    queryKey: ['admin', 'paystack', 'banks', country],
+    queryKey: adminQueryKeys.paystack.banks(country),
     queryFn: () => adminFetch<{ banks: PaystackBank[] }>(`/admin/paystack/banks/${country}`),
     staleTime: 10 * 60 * 1000, // 10 minutes - banks don't change often
     enabled: !!country,
@@ -953,7 +975,7 @@ export function useCreateCreator() {
         body: JSON.stringify(params),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] })
+      queryClient.invalidateQueries({ queryKey: adminQueryKeys.users.all })
     },
   })
 }
@@ -1092,7 +1114,7 @@ export function useBulkCancelSubscriptions() {
         body: JSON.stringify(params),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin', 'subscriptions'] })
+      queryClient.invalidateQueries({ queryKey: adminQueryKeys.subscriptions.all })
     },
   })
 }
@@ -1141,7 +1163,7 @@ export interface MRRTrend {
 
 export function useAdminChurnAnalysis(days: number = 30) {
   return useQuery({
-    queryKey: ['admin', 'analytics', 'churn', days],
+    queryKey: adminQueryKeys.analytics.churn(days),
     queryFn: () => adminFetch<ChurnAnalysis>(`/admin/analytics/churn?days=${days}`),
     staleTime: 5 * 60 * 1000,
   })
@@ -1149,7 +1171,7 @@ export function useAdminChurnAnalysis(days: number = 30) {
 
 export function useAdminMRRTrend(months: number = 12) {
   return useQuery({
-    queryKey: ['admin', 'analytics', 'mrr', months],
+    queryKey: adminQueryKeys.analytics.mrr(months),
     queryFn: () => adminFetch<MRRTrend>(`/admin/analytics/mrr?months=${months}`),
     staleTime: 5 * 60 * 1000,
   })
@@ -1182,7 +1204,7 @@ export interface AdminsListResponse {
 
 export function useAdminsList() {
   return useQuery({
-    queryKey: ['admin', 'admins'],
+    queryKey: adminQueryKeys.admins.list,
     queryFn: () => adminFetch<AdminsListResponse>('/admin/admins'),
     staleTime: 60 * 1000,
   })
@@ -1197,8 +1219,8 @@ export function usePromoteToAdmin() {
         body: JSON.stringify({ role: params.role, reason: params.reason }),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin', 'admins'] })
-      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] })
+      queryClient.invalidateQueries({ queryKey: adminQueryKeys.admins.list })
+      queryClient.invalidateQueries({ queryKey: adminQueryKeys.users.all })
     },
   })
 }
@@ -1212,8 +1234,8 @@ export function useDemoteAdmin() {
         body: JSON.stringify({ reason: params.reason }),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin', 'admins'] })
-      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] })
+      queryClient.invalidateQueries({ queryKey: adminQueryKeys.admins.list })
+      queryClient.invalidateQueries({ queryKey: adminQueryKeys.users.all })
     },
   })
 }
@@ -1227,7 +1249,7 @@ export interface AdminAuditLog {
 
 export function useAdminAuditLog(limit: number = 50, options: { enabled?: boolean } = {}) {
   return useQuery({
-    queryKey: ['admin', 'admins', 'audit', limit],
+    queryKey: adminQueryKeys.admins.audit(limit),
     queryFn: () => adminFetch<{
       audit: AdminAuditLog[]
       pagination: { total: number; limit: number; offset: number; hasMore: boolean }

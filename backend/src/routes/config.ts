@@ -1,0 +1,37 @@
+/**
+ * Config Routes - Public configuration for frontend
+ *
+ * Serves fee constants and other configuration that the frontend needs.
+ * This eliminates the need for frontend to duplicate these values.
+ */
+
+import { Hono } from 'hono'
+import {
+  PLATFORM_FEE_RATE,
+  SPLIT_RATE,
+  CROSS_BORDER_BUFFER,
+} from '../constants/fees.js'
+
+const config = new Hono()
+
+/**
+ * GET /config/fees
+ * Returns fee configuration for frontend pricing calculations
+ *
+ * Response is cacheable (1 hour) since fee rates rarely change.
+ */
+config.get('/fees', (c) => {
+  // Set cache headers - fees don't change often
+  c.header('Cache-Control', 'public, max-age=3600') // 1 hour
+
+  return c.json({
+    platformFeeRate: PLATFORM_FEE_RATE,     // 0.08 (8%)
+    splitRate: SPLIT_RATE,                   // 0.04 (4% each party)
+    crossBorderBuffer: CROSS_BORDER_BUFFER,  // 0.015 (1.5%)
+    // Derived values for convenience
+    platformFeePercent: PLATFORM_FEE_RATE * 100,  // 8
+    splitPercent: SPLIT_RATE * 100,               // 4
+  })
+})
+
+export default config

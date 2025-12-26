@@ -11,6 +11,7 @@ import { db } from '../../db/client.js'
 import { stripe } from '../../services/stripe.js'
 import { getBalance as getPaystackBalance } from '../../services/paystack.js'
 import { requireRole } from '../../middleware/adminAuth.js'
+import { auditSensitiveRead } from '../../middleware/auditLog.js'
 import { todayStart, thisMonthStart, lastNDays } from '../../utils/timezone.js'
 import { env } from '../../config/env.js'
 import { PLATFORM_FEE_RATE } from '../../constants/fees.js'
@@ -25,7 +26,7 @@ financials.use('*', requireRole('super_admin'))
  * Comprehensive financial reconciliation report
  * Compares DB records against Stripe/Paystack
  */
-financials.get('/reconciliation', async (c) => {
+financials.get('/reconciliation', auditSensitiveRead('financial_reconciliation'), async (c) => {
   const query = z.object({
     days: z.coerce.number().min(1).max(90).default(30),
   }).parse(c.req.query())
@@ -188,7 +189,7 @@ financials.get('/reconciliation', async (c) => {
  * Per-transaction fee verification
  * Checks that platform fees were correctly calculated
  */
-financials.get('/fee-audit', async (c) => {
+financials.get('/fee-audit', auditSensitiveRead('fee_audit'), async (c) => {
   const query = z.object({
     days: z.coerce.number().min(1).max(30).default(7),
     limit: z.coerce.number().min(1).max(200).default(100),
@@ -278,7 +279,7 @@ financials.get('/fee-audit', async (c) => {
  * GET /admin/financials/balance-sheet
  * Current platform financial position
  */
-financials.get('/balance-sheet', async (c) => {
+financials.get('/balance-sheet', auditSensitiveRead('balance_sheet'), async (c) => {
   const today = todayStart()
   const monthStart = thisMonthStart()
 
@@ -371,7 +372,7 @@ financials.get('/balance-sheet', async (c) => {
  * GET /admin/financials/daily/:date
  * Daily financial summary for a specific date
  */
-financials.get('/daily/:date', async (c) => {
+financials.get('/daily/:date', auditSensitiveRead('daily_financials'), async (c) => {
   const dateStr = c.req.param('date')
   const date = new Date(dateStr)
 

@@ -7,6 +7,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getAuthToken } from '../../api/client'
+import { adminQueryKeys } from '../../api/queryKeys'
 import StatCard from '../components/StatCard'
 import ActionModal from '../components/ActionModal'
 
@@ -170,21 +171,21 @@ export default function Support() {
 
   // Stats
   const { data: stats, isLoading: statsLoading } = useQuery({
-    queryKey: ['admin', 'support', 'stats'],
+    queryKey: adminQueryKeys.support.stats,
     queryFn: () => adminFetch<TicketStats>('/admin/support/tickets/stats'),
     staleTime: 30 * 1000,
   })
 
   // Tickets list
   const { data: ticketsData, isLoading: ticketsLoading } = useQuery({
-    queryKey: ['admin', 'support', 'tickets', statusFilter, priorityFilter, categoryFilter],
+    queryKey: adminQueryKeys.support.tickets({ status: statusFilter, priority: priorityFilter, category: categoryFilter }),
     queryFn: () => adminFetch<{ tickets: Ticket[]; pagination: any }>(`/admin/support/tickets?status=${statusFilter}&priority=${priorityFilter}&category=${categoryFilter}`),
     staleTime: 30 * 1000,
   })
 
   // Selected ticket detail
   const { data: ticketDetail } = useQuery({
-    queryKey: ['admin', 'support', 'ticket', selectedTicket],
+    queryKey: adminQueryKeys.support.ticket(selectedTicket || ''),
     queryFn: () => adminFetch<{ ticket: TicketDetail }>(`/admin/support/tickets/${selectedTicket}`),
     enabled: !!selectedTicket,
     staleTime: 10 * 1000,
@@ -198,7 +199,7 @@ export default function Support() {
         body: JSON.stringify({ message }),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin', 'support'] })
+      queryClient.invalidateQueries({ queryKey: adminQueryKeys.support.all })
       setReplyText('')
     },
   })
@@ -211,7 +212,7 @@ export default function Support() {
         body: JSON.stringify(updates),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin', 'support'] })
+      queryClient.invalidateQueries({ queryKey: adminQueryKeys.support.all })
     },
   })
 
@@ -223,7 +224,7 @@ export default function Support() {
         body: JSON.stringify({ resolution, sendReply: false }),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin', 'support'] })
+      queryClient.invalidateQueries({ queryKey: adminQueryKeys.support.all })
       setResolveModal(null)
     },
   })

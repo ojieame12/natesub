@@ -2,6 +2,7 @@
  * AdminChart - Chart wrapper components for admin dashboard
  */
 
+import { Skeleton } from '../../components/Skeleton'
 import {
   LineChart,
   Line,
@@ -68,9 +69,7 @@ export function AdminLineChart({
     return (
       <div className="admin-chart-container">
         <div className="admin-chart-title">{title}</div>
-        <div style={{ height: 250, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <span style={{ color: 'var(--text-tertiary)' }}>Loading...</span>
-        </div>
+        <Skeleton width="100%" height="250px" borderRadius="8px" />
       </div>
     )
   }
@@ -100,7 +99,7 @@ export function AdminLineChart({
           <YAxis
             tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }}
             axisLine={{ stroke: 'var(--border-primary)' }}
-            tickFormatter={formatValue}
+            tickFormatter={formatValue ? (v) => formatValue(Number(v)) : undefined}
           />
           <Tooltip
             contentStyle={tooltipStyle}
@@ -139,9 +138,7 @@ export function AdminBarChart({
     return (
       <div className="admin-chart-container">
         <div className="admin-chart-title">{title}</div>
-        <div style={{ height: 250, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <span style={{ color: 'var(--text-tertiary)' }}>Loading...</span>
-        </div>
+        <Skeleton width="100%" height="250px" borderRadius="8px" />
       </div>
     )
   }
@@ -171,7 +168,7 @@ export function AdminBarChart({
           <YAxis
             tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }}
             axisLine={{ stroke: 'var(--border-primary)' }}
-            tickFormatter={formatValue}
+            tickFormatter={formatValue ? (v) => formatValue(Number(v)) : undefined}
           />
           <Tooltip
             contentStyle={tooltipStyle}
@@ -197,9 +194,7 @@ export function AdminPieChart({
     return (
       <div className="admin-chart-container">
         <div className="admin-chart-title">{title}</div>
-        <div style={{ height: 250, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <span style={{ color: 'var(--text-tertiary)' }}>Loading...</span>
-        </div>
+        <Skeleton width="100%" height="250px" borderRadius="8px" />
       </div>
     )
   }

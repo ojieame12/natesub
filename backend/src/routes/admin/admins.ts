@@ -11,6 +11,7 @@ import { db } from '../../db/client.js'
 import { HTTPException } from 'hono/http-exception'
 import { requireRole, logAdminAction, requireFreshSession } from '../../middleware/adminAuth.js'
 import { adminSensitiveRateLimit } from '../../middleware/rateLimit.js'
+import { auditSensitiveRead } from '../../middleware/auditLog.js'
 import type { UserRole } from '@prisma/client'
 
 const admins = new Hono()
@@ -22,7 +23,7 @@ admins.use('*', requireRole('super_admin'))
  * GET /admin/admins
  * List all users with admin or super_admin role
  */
-admins.get('/', async (c) => {
+admins.get('/', auditSensitiveRead('admin_list'), async (c) => {
   const adminUsers = await db.user.findMany({
     where: {
       role: { in: ['admin', 'super_admin'] },
@@ -231,7 +232,7 @@ admins.post('/users/:id/demote', adminSensitiveRateLimit, requireFreshSession, a
  * GET /admin/admins/audit
  * Get audit trail of admin role changes
  */
-admins.get('/audit', async (c) => {
+admins.get('/audit', auditSensitiveRead('admin_audit_log'), async (c) => {
   const limit = Math.min(parseInt(c.req.query('limit') || '50'), 200)
   const offset = parseInt(c.req.query('offset') || '0')
 
@@ -278,7 +279,7 @@ admins.get('/audit', async (c) => {
  * GET /admin/users/:id/admin-history
  * Get admin role history for a specific user
  */
-admins.get('/users/:id/admin-history', async (c) => {
+admins.get('/users/:id/admin-history', auditSensitiveRead('admin_history'), async (c) => {
   const { id } = c.req.param()
 
   const user = await db.user.findUnique({

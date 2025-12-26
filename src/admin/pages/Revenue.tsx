@@ -4,18 +4,59 @@
  */
 
 import { useState } from 'react'
-import { useAdminRevenueAll } from '../api'
+import { useAdminRevenueAll, type RevenueOverview } from '../api'
 import { formatCurrency, formatNumber, formatDateTime } from '../utils/format'
 import StatCard from '../components/StatCard'
 import { AdminLineChart, AdminBarChart, AdminPieChart } from '../components/AdminChart'
+import { SkeletonTableRows } from '../components/SkeletonTableRows'
 
 type Period = 'today' | 'week' | 'month' | 'year' | 'all'
+type TimePeriod = 'allTime' | 'thisMonth' | 'lastMonth' | 'today'
 
 function formatCompactCurrency(cents: number): string {
   const amount = cents / 100
   if (amount >= 1000000) return `$${(amount / 1000000).toFixed(1)}M`
   if (amount >= 1000) return `$${(amount / 1000).toFixed(0)}K`
   return `$${amount.toFixed(0)}`
+}
+
+/** Format revenue with currency awareness for a specific period */
+function formatPeriodRevenue(
+  overview: RevenueOverview | undefined,
+  period: TimePeriod,
+  field: 'platformFeeCents' | 'totalVolumeCents'
+): string {
+  if (!overview) return '---'
+
+  const byCurrency = overview.byCurrency?.[period]
+  const currencyMeta = overview.currencies?.[period]
+
+  // If no per-currency data, fall back to totals (mixed currency warning)
+  if (!byCurrency || !currencyMeta?.currencies?.length) {
+    return formatCurrency(overview[period][field])
+  }
+
+  // Single currency: format with correct symbol
+  if (currencyMeta.currencies.length === 1) {
+    const currency = currencyMeta.currencies[0]
+    return formatCurrency(byCurrency[currency]?.[field] || 0, currency)
+  }
+
+  // Multiple currencies: show each one
+  return currencyMeta.currencies
+    .map(c => formatCurrency(byCurrency[c]?.[field] || 0, c))
+    .join(' + ')
+}
+
+/** Get subtext for multi-currency period */
+function getPeriodSubtext(
+  overview: RevenueOverview | undefined,
+  period: TimePeriod
+): string | undefined {
+  if (!overview) return undefined
+  const count = overview[period].paymentCount
+  const isMulti = overview.currencies?.[period]?.isMultiCurrency
+  return `${formatNumber(count)} payments${isMulti ? ' (multi-currency)' : ''}`
 }
 
 export default function Revenue() {
@@ -96,27 +137,27 @@ export default function Revenue() {
       <div className="admin-stats-grid">
         <StatCard
           label="All-Time Platform Fees"
-          value={overview ? formatCurrency(overview.allTime.platformFeeCents) : '---'}
-          subtext={overview ? `${formatNumber(overview.allTime.paymentCount)} payments` : undefined}
+          value={formatPeriodRevenue(overview, 'allTime', 'platformFeeCents')}
+          subtext={getPeriodSubtext(overview, 'allTime')}
           variant="success"
           loading={isLoading}
         />
         <StatCard
           label="This Month"
-          value={overview ? formatCurrency(overview.thisMonth.platformFeeCents) : '---'}
-          subtext={overview ? `${formatNumber(overview.thisMonth.paymentCount)} payments` : undefined}
+          value={formatPeriodRevenue(overview, 'thisMonth', 'platformFeeCents')}
+          subtext={getPeriodSubtext(overview, 'thisMonth')}
           loading={isLoading}
         />
         <StatCard
           label="Last Month"
-          value={overview ? formatCurrency(overview.lastMonth.platformFeeCents) : '---'}
-          subtext={overview ? `${formatNumber(overview.lastMonth.paymentCount)} payments` : undefined}
+          value={formatPeriodRevenue(overview, 'lastMonth', 'platformFeeCents')}
+          subtext={getPeriodSubtext(overview, 'lastMonth')}
           loading={isLoading}
         />
         <StatCard
           label="Today"
-          value={overview ? formatCurrency(overview.today.platformFeeCents) : '---'}
-          subtext={overview ? `${formatNumber(overview.today.paymentCount)} payments` : undefined}
+          value={formatPeriodRevenue(overview, 'today', 'platformFeeCents')}
+          subtext={getPeriodSubtext(overview, 'today')}
           loading={isLoading}
         />
       </div>
@@ -140,6 +181,11 @@ export default function Revenue() {
       {/* Provider Breakdown */}
       <div className="admin-section">
         <h2 className="admin-section-title">Payment Provider Breakdown</h2>
+        {overview?.currencies?.allTime?.isMultiCurrency && (
+          <p style={{ fontSize: 12, color: 'var(--text-warning, #f59e0b)', marginBottom: 12 }}>
+            ⚠️ Totals may mix currencies. See "Revenue by Currency" for accurate breakdown.
+          </p>
+        )}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px' }}>
           <AdminPieChart
             title="Revenue by Provider"
@@ -159,7 +205,7 @@ export default function Revenue() {
               </thead>
               <tbody>
                 {isLoading ? (
-                  <tr><td colSpan={4} style={{ textAlign: 'center' }}>Loading...</td></tr>
+                  <SkeletonTableRows columns={4} rows={2} />
                 ) : (
                   <>
                     <tr>
@@ -182,9 +228,12 @@ export default function Revenue() {
         </div>
       </div>
 
-      {/* Currency Breakdown */}
+      {/* Currency Breakdown - This is the accurate view */}
       <div className="admin-section">
         <h2 className="admin-section-title">Revenue by Currency</h2>
+        <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 12 }}>
+          Accurate per-currency totals. Use this for financial reporting.
+        </p>
         <div className="admin-table-container">
           <table className="admin-table">
             <thead>
@@ -198,7 +247,7 @@ export default function Revenue() {
             </thead>
             <tbody>
               {isLoading ? (
-                <tr><td colSpan={5} style={{ textAlign: 'center' }}>Loading...</td></tr>
+                <SkeletonTableRows columns={5} rows={3} />
               ) : byCurrency?.currencies?.length ? (
                 byCurrency.currencies.map((c) => (
                   <tr key={c.currency}>
@@ -234,7 +283,7 @@ export default function Revenue() {
             </thead>
             <tbody>
               {isLoading ? (
-                <tr><td colSpan={6} style={{ textAlign: 'center' }}>Loading...</td></tr>
+                <SkeletonTableRows columns={6} rows={5} />
               ) : topCreators?.creators?.length ? (
                 topCreators.creators.map((c) => (
                   <tr key={c.creatorId}>

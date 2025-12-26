@@ -8,6 +8,7 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import { db } from '../../db/client.js'
 import { requireRole } from '../../middleware/adminAuth.js'
+import { auditSensitiveRead, auditExport } from '../../middleware/auditLog.js'
 
 const tax = new Hono()
 
@@ -141,7 +142,7 @@ async function getCreatorEarningsForExport(
  * GET /admin/tax/summary/:year
  * Annual platform tax summary
  */
-tax.get('/summary/:year', async (c) => {
+tax.get('/summary/:year', auditSensitiveRead('tax_summary'), async (c) => {
   const year = parseInt(c.req.param('year'))
   if (isNaN(year) || year < 2020 || year > 2100) {
     return c.json({ error: 'Invalid year' }, 400)
@@ -248,7 +249,7 @@ tax.get('/summary/:year', async (c) => {
  * GET /admin/tax/creator-earnings/:year
  * Per-creator earnings for 1099 reporting
  */
-tax.get('/creator-earnings/:year', async (c) => {
+tax.get('/creator-earnings/:year', auditSensitiveRead('tax_creator_earnings'), async (c) => {
   const year = parseInt(c.req.param('year'))
   if (isNaN(year) || year < 2020 || year > 2100) {
     return c.json({ error: 'Invalid year' }, 400)
@@ -356,7 +357,7 @@ tax.get('/creator-earnings/:year', async (c) => {
  * POST /admin/tax/export-1099
  * Export 1099-ready data as CSV
  */
-tax.post('/export-1099', async (c) => {
+tax.post('/export-1099', auditExport('tax_1099_export'), async (c) => {
   const body = z.object({
     year: z.number().min(2020).max(2100),
     minAmount: z.number().optional(),

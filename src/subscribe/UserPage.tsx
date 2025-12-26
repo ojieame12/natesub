@@ -9,7 +9,6 @@ import { Pressable } from '../components'
 // It checks if the username is valid and renders the subscribe page
 
 import SubscribeBoundary from './SubscribeBoundary'
-import SubscriptionSuccess from './SubscriptionSuccess'
 import AlreadySubscribed from './AlreadySubscribed'
 
 
@@ -17,10 +16,8 @@ export default function UserPage() {
   const { username } = useParams<{ username: string }>()
   const [searchParams] = useSearchParams()
 
-  // Check for checkout result query params
-  const isSuccess = searchParams.get('success') === 'true'
+  // Check for checkout result query params (canceled state shown in SubscribeBoundary)
   const isCanceled = searchParams.get('canceled') === 'true'
-  const provider = searchParams.get('provider')
 
   // Fetch real profile data from API (includes viewerSubscription if logged in)
   // Hook must be called before any early returns (Rules of Hooks)
@@ -108,21 +105,11 @@ export default function UserPage() {
 
   let content: ReactNode
   const isOwner = Boolean(data.isOwner)
-  const templateToUse = data.profile.template || 'boundary' // Restored
 
-  // Determine template component
-  // Only 'boundary' is currently implemented - 'minimal' and 'editorial' coming soon
-  const renderTemplate = (_tpl: string | null, isOwnerMode: boolean = false) => {
-    // All templates currently use Boundary until others are implemented
-    return <SubscribeBoundary profile={data.profile} canceled={isCanceled} isOwner={isOwnerMode} />
-  }
-
-  if (isSuccess && templateToUse !== 'boundary') {
-    // Legacy success page for non-boundary templates (if any)
-    // Since boundary handles its own success, we might eventually remove SubscriptionSuccess entirely
-    content = <SubscriptionSuccess profile={data.profile} provider={provider} />
-  } else if (isOwner) {
-    content = renderTemplate(templateToUse, true)
+  // Currently only 'boundary' template is implemented
+  // The template field is stored in profile for future expansion
+  if (isOwner) {
+    content = <SubscribeBoundary profile={data.profile} canceled={isCanceled} isOwner={true} />
   } else if (data.viewerSubscription?.isActive) {
     content = (
       <AlreadySubscribed
@@ -131,7 +118,7 @@ export default function UserPage() {
       />
     )
   } else {
-    content = renderTemplate(templateToUse, false)
+    content = <SubscribeBoundary profile={data.profile} canceled={isCanceled} isOwner={false} />
   }
 
   return <>{content}</>

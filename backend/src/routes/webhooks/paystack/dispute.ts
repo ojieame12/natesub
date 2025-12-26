@@ -9,6 +9,7 @@ import { db } from '../../../db/client.js'
 import { sendDisputeCreatedEmail, sendDisputeResolvedEmail } from '../../../services/email.js'
 import { alertDisputeCreated, alertDisputeResolved } from '../../../services/slack.js'
 import { invalidateAdminRevenueCache } from '../../../utils/cache.js'
+import { convertLocalCentsToUSD } from '../../../services/fx.js'
 
 interface PaystackDisputeData {
   id: number | string
@@ -78,6 +79,24 @@ export async function handlePaystackDisputeCreated(data: PaystackDisputeData, ev
     netCents = -Math.round(originalPayment.netCents * disputeRatio)
   }
 
+  // Calculate reporting currency fields using original payment's rate
+  const disputeCurrency = currency?.toUpperCase() || 'NGN'
+  let reportingData: Record<string, unknown> = {}
+  if (originalPayment.reportingExchangeRate && originalPayment.reportingCurrency) {
+    const rate = originalPayment.reportingExchangeRate
+    const isUSD = disputeCurrency === 'USD'
+    reportingData = {
+      reportingCurrency: 'USD',
+      reportingGrossCents: isUSD ? -amount : -convertLocalCentsToUSD(amount, rate),
+      reportingFeeCents: 0,
+      reportingNetCents: isUSD ? netCents : convertLocalCentsToUSD(netCents, rate),
+      reportingExchangeRate: rate,
+      reportingRateSource: 'original_payment',
+      reportingRateTimestamp: new Date(),
+      reportingIsEstimated: false,
+    }
+  }
+
   // Create dispute payment record (funds held) with fee breakdown
   await db.payment.create({
     data: {
@@ -85,7 +104,7 @@ export async function handlePaystackDisputeCreated(data: PaystackDisputeData, ev
       creatorId: originalPayment.creatorId,
       subscriberId: originalPayment.subscriberId,
       amountCents: -amount, // Negative - funds held
-      currency: currency?.toUpperCase() || 'NGN',
+      currency: disputeCurrency,
       feeCents: 0,
       netCents,
       creatorFeeCents,
@@ -96,6 +115,8 @@ export async function handlePaystackDisputeCreated(data: PaystackDisputeData, ev
       paystackDisputeId: String(disputeId),
       paystackEventId: eventId,
       paystackTransactionRef: reference,
+      // Reporting currency (use original payment's rate)
+      ...reportingData,
     },
   })
 

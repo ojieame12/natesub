@@ -4,7 +4,7 @@
 
 import { redis } from '../db/redis.js'
 
-const FX_CACHE_TTL = 3600 // 1 hour cache
+const FX_CACHE_TTL = 900 // 15 minute cache for fresher rates
 const FX_CACHE_KEY = 'fx:usd:rates'
 
 interface FXRates {
@@ -116,4 +116,85 @@ export function convertLocalCentsToUSD(localCents: number, rate: number): number
 export function isLocalCurrency(currency: string): boolean {
   const localCurrencies = ['NGN', 'KES', 'ZAR', 'GHS']
   return localCurrencies.includes(currency.toUpperCase())
+}
+
+/**
+ * Reporting currency data for admin dashboard
+ * Stored at payment time for accurate historical totals
+ */
+export interface ReportingCurrencyData {
+  reportingCurrency: string
+  reportingGrossCents: number | null
+  reportingFeeCents: number
+  reportingNetCents: number
+  reportingExchangeRate: number
+  reportingRateSource: string
+  reportingRateTimestamp: Date
+  reportingIsEstimated: boolean
+}
+
+/**
+ * Calculate reporting currency fields for a payment
+ * Converts amounts to USD at current rate for dashboard reporting
+ *
+ * @param grossCents - Gross payment amount (may be null for legacy payments)
+ * @param feeCents - Platform fee amount
+ * @param netCents - Creator payout amount
+ * @param currency - Original payment currency (e.g., "NGN", "USD")
+ * @param stripeExchangeRate - Optional rate from Stripe (for cross-border payments)
+ * @returns Reporting currency fields to store with payment
+ */
+export async function getReportingCurrencyData(
+  grossCents: number | null,
+  feeCents: number,
+  netCents: number,
+  currency: string,
+  stripeExchangeRate?: number
+): Promise<ReportingCurrencyData> {
+  const upperCurrency = currency.toUpperCase()
+  const now = new Date()
+
+  // USD payments: no conversion needed
+  if (upperCurrency === 'USD') {
+    return {
+      reportingCurrency: 'USD',
+      reportingGrossCents: grossCents,
+      reportingFeeCents: feeCents,
+      reportingNetCents: netCents,
+      reportingExchangeRate: 1,
+      reportingRateSource: 'native',
+      reportingRateTimestamp: now,
+      reportingIsEstimated: false,
+    }
+  }
+
+  // Use Stripe rate if provided (most accurate for Stripe payments)
+  if (stripeExchangeRate && stripeExchangeRate > 0) {
+    // Stripe rate is USD per local unit, so we divide
+    // e.g., if rate is 0.000625 for NGN, then 1600 NGN = 1 USD
+    const rate = 1 / stripeExchangeRate
+    return {
+      reportingCurrency: 'USD',
+      reportingGrossCents: grossCents ? convertLocalCentsToUSD(grossCents, rate) : null,
+      reportingFeeCents: convertLocalCentsToUSD(feeCents, rate),
+      reportingNetCents: convertLocalCentsToUSD(netCents, rate),
+      reportingExchangeRate: rate,
+      reportingRateSource: 'stripe',
+      reportingRateTimestamp: now,
+      reportingIsEstimated: false,
+    }
+  }
+
+  // Fetch rate from FX API
+  const rate = await getUSDRate(upperCurrency)
+  return {
+    reportingCurrency: 'USD',
+    reportingGrossCents: grossCents ? convertLocalCentsToUSD(grossCents, rate) : null,
+    reportingFeeCents: convertLocalCentsToUSD(feeCents, rate),
+    reportingNetCents: convertLocalCentsToUSD(netCents, rate),
+    reportingExchangeRate: rate,
+    reportingRateSource: 'exchangerate-api',
+    reportingRateTimestamp: now,
+    reportingIsEstimated: false,
+  }
 }

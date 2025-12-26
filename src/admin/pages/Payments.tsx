@@ -9,6 +9,7 @@ import FilterBar from '../components/FilterBar'
 import Pagination from '../components/Pagination'
 import ActionModal from '../components/ActionModal'
 import DetailsSidebar from '../components/DetailsSidebar'
+import { SkeletonTableRows } from '../components/SkeletonTableRows'
 
 function getStatusBadge(status: string): string {
   switch (status) {
@@ -197,7 +198,7 @@ export default function Payments() {
           </thead>
           <tbody>
             {isLoading ? (
-              <tr><td colSpan={10} style={{ textAlign: 'center', padding: '32px' }}>Loading...</td></tr>
+              <SkeletonTableRows columns={10} rows={5} />
             ) : data?.payments?.length ? (
               data.payments.map((payment) => (
                 <tr key={payment.id} className="clickable" onClick={() => setSelectedPayment(payment)}>

@@ -16,6 +16,7 @@ import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-quer
 import { api } from '../api/client'
 import { getAuthToken, hasAuthSession, clearAuthSession } from '../api/client'
 import { hasRecentPaymentConfirmation } from '../utils/paymentConfirmed'
+import { queryKeys } from '../api/queryKeys'
 
 export type AuthStatus =
   | 'unknown'        // Initial state, haven't checked yet
@@ -79,7 +80,7 @@ export function useAuthState(): AuthState {
     refetch,
     failureCount,
   } = useQuery({
-    queryKey: ['currentUser'],
+    queryKey: queryKeys.currentUser,
     queryFn: async () => {
       const result = await api.auth.me()
       return result
@@ -94,7 +95,7 @@ export function useAuthState(): AuthState {
       if (status === 401) {
         // Clear session flag and cached data on 401 - session is invalid
         clearAuthSession()
-        queryClient.removeQueries({ queryKey: ['currentUser'] })
+        queryClient.removeQueries({ queryKey: queryKeys.currentUser })
         return false
       }
       // Retry other errors once only (reduced from 2)

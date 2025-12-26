@@ -13,6 +13,7 @@ import {
 import { normalizeEmailAddress } from '../utils.js'
 import { invalidateAdminRevenueCache } from '../../../utils/cache.js'
 import { scheduleSubscriptionRenewalReminders } from '../../../jobs/reminders.js'
+import { getReportingCurrencyData } from '../../../services/fx.js'
 
 async function resolveStripeInvoiceCustomerEmail(invoice: Stripe.Invoice, context: string): Promise<string> {
   const anyInvoice = invoice as any
@@ -481,6 +482,14 @@ export async function handleInvoicePaid(event: Stripe.Event) {
       ? new Date(invoiceAny.status_transitions.paid_at * 1000)
       : new Date()
 
+    // Get reporting currency data (USD conversion) for admin dashboard
+    const reportingData = await getReportingCurrencyData(
+      grossCents,
+      feeCents,
+      netCents,
+      invoice.currency.toUpperCase()
+    )
+
     const recurringPayment = await db.payment.create({
       data: {
         subscriptionId: subscription.id,
@@ -502,6 +511,8 @@ export async function handleInvoicePaid(event: Stripe.Event) {
         stripeEventId: event.id,
         stripePaymentIntentId: invoiceAny.payment_intent as string || null,
         stripeChargeId: invoiceAny.charge as string || null,
+        // Reporting currency fields (USD normalized)
+        ...reportingData,
       },
     })
 

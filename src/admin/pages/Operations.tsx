@@ -12,6 +12,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getAuthToken } from '../../api/client'
+import { adminQueryKeys } from '../../api/queryKeys'
 import StatCard from '../components/StatCard'
 import ActionModal from '../components/ActionModal'
 
@@ -81,14 +82,14 @@ export default function Operations() {
 
   // Health check
   const { data: healthData, isLoading: healthLoading, refetch: refetchHealth } = useQuery({
-    queryKey: ['admin', 'health'],
+    queryKey: adminQueryKeys.health,
     queryFn: () => adminFetch<{ status: string; timestamp: string }>('/admin/health'),
     staleTime: 30 * 1000,
   })
 
   // Webhook stats
   const { data: webhookStats, isLoading: webhooksLoading } = useQuery({
-    queryKey: ['admin', 'webhooks', 'stats'],
+    queryKey: adminQueryKeys.webhooks.stats,
     queryFn: () => adminFetch<{
       failed: Record<string, number>
       deadLetter: number
@@ -99,7 +100,7 @@ export default function Operations() {
 
   // Failed webhooks list
   const { data: failedWebhooks } = useQuery({
-    queryKey: ['admin', 'webhooks', 'failed'],
+    queryKey: adminQueryKeys.webhooks.failed,
     queryFn: () => adminFetch<{
       events: Array<{
         id: string
@@ -117,7 +118,7 @@ export default function Operations() {
 
   // Disputes
   const { data: disputeStats } = useQuery({
-    queryKey: ['admin', 'disputes', 'stats'],
+    queryKey: adminQueryKeys.disputes.stats,
     queryFn: () => adminFetch<{
       current: { open: number; blockedSubscribers: number }
       thisMonth: { won: number; lost: number }
@@ -129,7 +130,7 @@ export default function Operations() {
 
   // Blocked subscribers
   const { data: blockedData } = useQuery({
-    queryKey: ['admin', 'blocked-subscribers'],
+    queryKey: adminQueryKeys.blockedSubscribers,
     queryFn: () => adminFetch<{
       blockedSubscribers: Array<{
         id: string
@@ -146,7 +147,7 @@ export default function Operations() {
 
   // Reconciliation: Paystack missing transactions
   const { data: paystackMissing, isLoading: paystackMissingLoading, refetch: refetchPaystackMissing } = useQuery({
-    queryKey: ['admin', 'reconciliation', 'paystack-missing', 48],
+    queryKey: adminQueryKeys.reconciliation.paystackMissing(48),
     queryFn: () => adminFetch<{
       periodHours: number
       count: number
@@ -167,7 +168,7 @@ export default function Operations() {
 
   // Reconciliation: Stripe missing invoices
   const { data: stripeMissing, isLoading: stripeMissingLoading, refetch: refetchStripeMissing } = useQuery({
-    queryKey: ['admin', 'reconciliation', 'stripe-missing', 20],
+    queryKey: adminQueryKeys.reconciliation.stripeMissing(20),
     queryFn: () => adminFetch<{
       missing: Array<{
         invoiceId: string
@@ -189,7 +190,7 @@ export default function Operations() {
     mutationFn: (webhookId: string) =>
       adminFetch(`/admin/webhooks/${webhookId}/retry`, { method: 'POST' }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin', 'webhooks'] })
+      queryClient.invalidateQueries({ queryKey: adminQueryKeys.webhooks.all })
       setRetryModal(null)
     },
   })
@@ -210,7 +211,7 @@ export default function Operations() {
       const mismatches = Array.isArray(data.statusMismatches) ? data.statusMismatches.length : 0
       setReconciliationMessage(`Paystack reconciliation completed: ${missing} missing, ${mismatches} mismatches.`)
       setReconciliationError(null)
-      queryClient.invalidateQueries({ queryKey: ['admin', 'reconciliation'] })
+      queryClient.invalidateQueries({ queryKey: adminQueryKeys.reconciliation.all })
     },
     onError: (err: any) => {
       setReconciliationError(err?.message || 'Reconciliation failed')
@@ -228,7 +229,7 @@ export default function Operations() {
     onSuccess: (data) => {
       setReconciliationMessage(data.message || `Stripe replay completed: processed ${data.processed}/${data.scanned}.`)
       setReconciliationError(null)
-      queryClient.invalidateQueries({ queryKey: ['admin', 'reconciliation'] })
+      queryClient.invalidateQueries({ queryKey: adminQueryKeys.reconciliation.all })
     },
     onError: (err: any) => {
       setReconciliationError(err?.message || 'Stripe replay failed')
@@ -249,7 +250,7 @@ export default function Operations() {
     onSuccess: (data) => {
       setReconciliationMessage(data.message || 'Invoice synced')
       setReconciliationError(null)
-      queryClient.invalidateQueries({ queryKey: ['admin', 'reconciliation'] })
+      queryClient.invalidateQueries({ queryKey: adminQueryKeys.reconciliation.all })
     },
     onError: (err: any) => {
       setReconciliationError(err?.message || 'Sync failed')
@@ -265,7 +266,7 @@ export default function Operations() {
         body: JSON.stringify({ reason: 'Admin review' }),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin', 'blocked-subscribers'] })
+      queryClient.invalidateQueries({ queryKey: adminQueryKeys.blockedSubscribers })
     },
   })
 
@@ -300,7 +301,7 @@ export default function Operations() {
         body: JSON.stringify({ reason }),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin', 'blocked-subscribers'] })
+      queryClient.invalidateQueries({ queryKey: adminQueryKeys.blockedSubscribers })
       setBlockModal(null)
       setBlockSearchEmail('')
       setBlockSearchResult(null)

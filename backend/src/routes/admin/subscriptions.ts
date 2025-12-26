@@ -14,6 +14,9 @@ import { calculateServiceFee, calculateLegacyFee, type FeeMode } from '../../ser
 import { decryptAccountNumber, decryptAuthorizationCode, encryptAuthorizationCode } from '../../utils/encryption.js'
 import { adminSensitiveRateLimit } from '../../middleware/rateLimit.js'
 import { requireRole, requireFreshSession, logAdminAction } from '../../middleware/adminAuth.js'
+import { auditSensitiveRead } from '../../middleware/auditLog.js'
+import { paginationWithSearchSchema, getPaginationOffsets, formatLegacyPaginatedResponse } from '../../utils/pagination.js'
+import { getReportingCurrencyData } from '../../services/fx.js'
 
 const subscriptions = new Hono()
 
@@ -25,16 +28,14 @@ const subscriptions = new Hono()
  * GET /admin/subscriptions
  * List subscriptions with pagination and filtering
  */
-subscriptions.get('/', async (c) => {
+subscriptions.get('/', auditSensitiveRead('subscription_list'), async (c) => {
   const query = z.object({
-    search: z.string().optional(),
+    ...paginationWithSearchSchema.shape,
     status: z.enum(['all', 'active', 'canceled', 'past_due', 'paused']).default('all'),
-    page: z.coerce.number().default(1),
-    limit: z.coerce.number().min(1).max(200).default(50)
   }).parse(c.req.query())
 
-  const skip = (query.page - 1) * query.limit
-  const where: any = query.status !== 'all' ? { status: query.status } : {}
+  const { skip, take } = getPaginationOffsets(query)
+  const where: { status?: string; OR?: unknown[] } = query.status !== 'all' ? { status: query.status } : {}
 
   // Search by subscriber email, creator email, or creator username
   if (query.search) {
@@ -49,7 +50,7 @@ subscriptions.get('/', async (c) => {
     db.subscription.findMany({
       where,
       skip,
-      take: query.limit,
+      take,
       orderBy: { createdAt: 'desc' },
       include: {
         creator: { select: { email: true, profile: { select: { username: true } } } },
@@ -59,30 +60,27 @@ subscriptions.get('/', async (c) => {
     db.subscription.count({ where })
   ])
 
-  return c.json({
-    subscriptions: dbSubscriptions.map(s => ({
-      id: s.id,
-      creator: {
-        id: s.creatorId,
-        email: s.creator.email,
-        username: s.creator.profile?.username || null,
-      },
-      subscriber: {
-        id: s.subscriberId,
-        email: s.subscriber.email,
-      },
-      amount: s.amount,
-      currency: s.currency,
-      interval: s.interval,
-      status: s.status,
-      ltvCents: s.ltvCents,
-      createdAt: s.createdAt,
-      currentPeriodEnd: s.currentPeriodEnd
-    })),
-    total,
-    page: query.page,
-    totalPages: Math.ceil(total / query.limit)
-  })
+  const subscriptions = dbSubscriptions.map(s => ({
+    id: s.id,
+    creator: {
+      id: s.creatorId,
+      email: s.creator.email,
+      username: s.creator.profile?.username || null,
+    },
+    subscriber: {
+      id: s.subscriberId,
+      email: s.subscriber.email,
+    },
+    amount: s.amount,
+    currency: s.currency,
+    interval: s.interval,
+    status: s.status,
+    ltvCents: s.ltvCents,
+    createdAt: s.createdAt,
+    currentPeriodEnd: s.currentPeriodEnd
+  }))
+
+  return c.json(formatLegacyPaginatedResponse(subscriptions, total, query, 'subscriptions'))
 })
 
 // ============================================
@@ -338,7 +336,7 @@ subscriptions.get('/upcoming', async (c) => {
  * GET /admin/subscriptions/:id
  * Get full subscription detail with subscriber info and payment history
  */
-subscriptions.get('/:id', async (c) => {
+subscriptions.get('/:id', auditSensitiveRead('subscription_details'), async (c) => {
   const { id } = c.req.param()
 
   const subscription = await db.subscription.findUnique({
@@ -714,6 +712,9 @@ subscriptions.post('/:id/trigger-renewal', adminSensitiveRateLimit, requireRole(
     // Create payment record
     const paidAt = chargeResult.paid_at ? new Date(chargeResult.paid_at) : new Date()
 
+    // Get reporting currency data (USD conversion) for admin dashboard
+    const reportingData = await getReportingCurrencyData(grossCents, feeCents, netCents, subscription.currency)
+
     const paymentRecord = await db.payment.create({
       data: {
         subscriptionId: subscription.id,
@@ -731,6 +732,8 @@ subscriptions.post('/:id/trigger-renewal', adminSensitiveRateLimit, requireRole(
         occurredAt: paidAt,
         paystackEventId: chargeResult.id?.toString(),
         paystackTransactionRef: reference,
+        // Reporting currency fields (USD normalized)
+        ...reportingData,
       },
     })
 

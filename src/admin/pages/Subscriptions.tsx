@@ -15,6 +15,8 @@ import { formatCurrency, formatDate, formatDateTime } from '../utils/format'
 import FilterBar from '../components/FilterBar'
 import Pagination from '../components/Pagination'
 import ActionModal from '../components/ActionModal'
+import { SkeletonTableRows } from '../components/SkeletonTableRows'
+import { ContentSkeleton } from '../../components/Skeleton'
 
 function getStatusBadge(status: string): string {
   switch (status) {
@@ -190,7 +192,7 @@ export default function Subscriptions() {
           </thead>
           <tbody>
             {isLoading ? (
-              <tr><td colSpan={7} style={{ textAlign: 'center', padding: '32px' }}>Loading...</td></tr>
+              <SkeletonTableRows columns={7} rows={5} />
             ) : data?.subscriptions?.length ? (
               data.subscriptions.map((sub) => (
                 <tr key={sub.id}>
@@ -276,7 +278,7 @@ export default function Subscriptions() {
             </div>
             <div className="admin-sidebar-content">
               {detailLoading ? (
-                <p>Loading...</p>
+                <ContentSkeleton />
               ) : detail ? (
                 <div>
                   {/* Subscriber Info */}

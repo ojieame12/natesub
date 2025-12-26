@@ -1,4 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
+import { queryKeys } from '../api/queryKeys'
 
 // Mock the queryClient and api before importing prefetch
 vi.mock('../api/provider', () => ({
@@ -107,10 +108,10 @@ describe('utils/prefetch', () => {
 
       // Should have prefetched profile and metrics
       expect(queryClient.prefetchQuery).toHaveBeenCalledWith(
-        expect.objectContaining({ queryKey: ['profile'] })
+        expect.objectContaining({ queryKey: queryKeys.profile })
       )
       expect(queryClient.prefetchQuery).toHaveBeenCalledWith(
-        expect.objectContaining({ queryKey: ['metrics'] })
+        expect.objectContaining({ queryKey: queryKeys.metrics })
       )
     })
 
@@ -150,7 +151,7 @@ describe('utils/prefetch', () => {
       await new Promise(resolve => setTimeout(resolve, 10))
 
       expect(queryClient.prefetchQuery).toHaveBeenCalledWith(
-        expect.objectContaining({ queryKey: ['settings'] })
+        expect.objectContaining({ queryKey: queryKeys.settings })
       )
     })
 
@@ -168,10 +169,10 @@ describe('utils/prefetch', () => {
       await new Promise(resolve => setTimeout(resolve, 10))
 
       expect(queryClient.prefetchQuery).toHaveBeenCalledWith(
-        expect.objectContaining({ queryKey: ['stripeStatus'] })
+        expect.objectContaining({ queryKey: queryKeys.stripe.status })
       )
       expect(queryClient.prefetchQuery).toHaveBeenCalledWith(
-        expect.objectContaining({ queryKey: ['paystackStatus'] })
+        expect.objectContaining({ queryKey: queryKeys.paystack.status })
       )
     })
   })
@@ -210,10 +211,10 @@ describe('utils/prefetch', () => {
       await new Promise(resolve => setTimeout(resolve, 10))
 
       expect(queryClient.prefetchQuery).toHaveBeenCalledWith(
-        expect.objectContaining({ queryKey: ['profile'] })
+        expect.objectContaining({ queryKey: queryKeys.profile })
       )
       expect(queryClient.prefetchQuery).toHaveBeenCalledWith(
-        expect.objectContaining({ queryKey: ['metrics'] })
+        expect.objectContaining({ queryKey: queryKeys.metrics })
       )
     })
 

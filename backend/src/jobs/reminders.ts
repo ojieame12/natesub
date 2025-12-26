@@ -1,6 +1,26 @@
-// Reminder System - Schedule and process reminders for requests, invoices, payouts, etc.
-// Run hourly via cron to process due reminders
-// Supports multi-channel: email (default), SMS (for African markets)
+/**
+ * Reminder System
+ *
+ * Unified scheduler and processor for all application reminders.
+ * Run hourly via cron to process due reminders.
+ * Supports multi-channel: email (default), SMS (for African markets).
+ *
+ * MODULE STRUCTURE:
+ * ─────────────────
+ * Lines 40-65:     Helpers & Types
+ * Lines 66-222:    Core Scheduler (scheduleReminder, cancelReminder, cancelAllRemindersForEntity)
+ * Lines 225-384:   Request Reminders (unopened, unpaid, expiring)
+ * Lines 388-443:   Engagement Reminders (onboarding, no-subscribers)
+ * Lines 445-586:   Subscription Reminders (renewal, payment failed, past due)
+ * Lines 588-707:   Main Processor (processDueReminders - the cron job entry point)
+ * Lines 710-889:   Notification Preferences & Router
+ * Lines 892-1315:  Individual Reminder Processors (one per reminder type)
+ * Lines 1318-1377: Recovery (scanAndScheduleMissedReminders)
+ * Lines 1380+:     Subscription Processors
+ *
+ * FUTURE: Consider splitting into reminders/core.ts, reminders/request.ts, etc.
+ *         See types at: src/jobs/reminders/types.ts
+ */
 
 import { db } from '../db/client.js'
 import { env } from '../config/env.js'

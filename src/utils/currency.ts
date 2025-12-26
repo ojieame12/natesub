@@ -445,7 +445,7 @@ export function isReasonableAmount(amount: number, currencyCode: string): boolea
 // ============================================
 
 // Import fee constants from pricing.ts (single source of truth for frontend)
-import { SPLIT_RATE, CROSS_BORDER_BUFFER } from './pricing'
+import { SPLIT_RATE, CROSS_BORDER_BUFFER, type FeeConfigOverride } from './pricing'
 
 export interface FeePreview {
     creatorReceives: number      // What creator gets (in dollars)
@@ -471,13 +471,15 @@ export interface FeePreview {
  * @param _purpose - Creator's purpose (unused - all purposes use 8% now)
  * @param _feeMode - DEPRECATED: Ignored, always uses split model
  * @param isCrossBorder - Whether subscriber is in different country
+ * @param feeConfig - Optional: pass values from useFeeConfig() hook
  */
 export function calculateFeePreview(
     amountDollars: number,
     _currency: string,
     _purpose?: string | null,
     _feeMode?: 'absorb' | 'pass_to_subscriber' | 'split' | null,
-    isCrossBorder: boolean = false
+    isCrossBorder: boolean = false,
+    feeConfig?: FeeConfigOverride
 ): FeePreview {
     if (amountDollars === 0) {
         return {
@@ -491,10 +493,14 @@ export function calculateFeePreview(
         }
     }
 
+    // Use provided config or fall back to module constants
+    const baseSplitRate = feeConfig?.splitRate ?? SPLIT_RATE
+    const crossBorderBuffer = feeConfig?.crossBorderBuffer ?? CROSS_BORDER_BUFFER
+
     // Calculate split rate (4% base, +0.75% each for cross-border)
-    let splitRate = SPLIT_RATE
+    let splitRate = baseSplitRate
     if (isCrossBorder) {
-        splitRate += CROSS_BORDER_BUFFER / 2 // Split the 1.5% evenly
+        splitRate += crossBorderBuffer / 2 // Split the 1.5% evenly
     }
 
     // Both parties pay the same rate

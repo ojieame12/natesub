@@ -6,6 +6,7 @@ import { useProfile, useMetrics, useLogout, useCurrentUser } from './api/hooks'
 import { useOnboardingStore } from './onboarding/store'
 import { getShareableLink, getShareableLinkFull, getPublicPageUrl } from './utils/constants'
 import { getAuthToken } from './api/client'
+import { adminQueryKeys } from './api/queryKeys'
 import './Profile.css'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
@@ -52,7 +53,7 @@ export default function Profile() {
 
   // Check if user is admin
   const { data: adminStatus } = useQuery({
-    queryKey: ['admin', 'me'],
+    queryKey: adminQueryKeys.me,
     queryFn: checkAdminStatus,
     staleTime: 5 * 60 * 1000, // Cache for 5 minutes
     retry: false,

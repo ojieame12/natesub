@@ -16,6 +16,8 @@ import { db } from '../../db/client.js'
 import { HTTPException } from 'hono/http-exception'
 import { requireRole, logAdminAction, requireFreshSession } from '../../middleware/adminAuth.js'
 import { adminSensitiveRateLimit } from '../../middleware/rateLimit.js'
+import { auditSensitiveRead } from '../../middleware/auditLog.js'
+import { PAGINATION_DEFAULTS } from '../../utils/pagination.js'
 
 const creators = new Hono()
 
@@ -26,9 +28,9 @@ creators.use('*', requireRole('admin'))
  * GET /admin/creators
  * List all creators with revenue and health metrics
  */
-creators.get('/', async (c) => {
+creators.get('/', auditSensitiveRead('creator_list'), async (c) => {
   const query = z.object({
-    limit: z.coerce.number().min(1).max(100).default(50),
+    limit: z.coerce.number().min(1).max(PAGINATION_DEFAULTS.maxLimit).default(PAGINATION_DEFAULTS.limit),
     offset: z.coerce.number().min(0).default(0),
     search: z.string().optional(),
     country: z.string().optional(),
@@ -38,9 +40,24 @@ creators.get('/', async (c) => {
     sortOrder: z.enum(['asc', 'desc']).default('desc'),
   }).parse(c.req.query())
 
-  // Build where clause
-  const where: any = {
-    profile: { isNot: null },
+  // Build type-safe where clause
+  type ProfileWhere = {
+    isNot?: null
+    countryCode?: string
+    payoutStatus?: string
+  }
+  type UserWhere = {
+    profile?: ProfileWhere
+    deletedAt?: null
+    OR?: unknown[]
+  }
+
+  const profileWhere: ProfileWhere = { isNot: null }
+  if (query.country) profileWhere.countryCode = query.country
+  if (query.payoutStatus) profileWhere.payoutStatus = query.payoutStatus
+
+  const where: UserWhere = {
+    profile: profileWhere,
     deletedAt: null,
   }
 
@@ -50,14 +67,6 @@ creators.get('/', async (c) => {
       { profile: { username: { contains: query.search, mode: 'insensitive' } } },
       { profile: { displayName: { contains: query.search, mode: 'insensitive' } } },
     ]
-  }
-
-  if (query.country) {
-    where.profile = { ...where.profile, countryCode: query.country }
-  }
-
-  if (query.payoutStatus) {
-    where.profile = { ...where.profile, payoutStatus: query.payoutStatus }
   }
 
   // Get creators with aggregated metrics
@@ -213,7 +222,7 @@ creators.get('/', async (c) => {
  * GET /admin/creators/:id
  * Get detailed creator profile with compliance information
  */
-creators.get('/:id', async (c) => {
+creators.get('/:id', auditSensitiveRead('creator_details'), async (c) => {
   const { id } = c.req.param()
 
   const creator = await db.user.findUnique({

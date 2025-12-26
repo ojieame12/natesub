@@ -11,6 +11,7 @@ import { PageSkeleton, Pressable } from '../components'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { getAuthToken } from '../api/client'
+import { adminQueryKeys } from '../api/queryKeys'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
 const ADMIN_ME_TIMEOUT_MS = 20_000
@@ -71,7 +72,7 @@ export default function AdminRoute({ children }: AdminRouteProps) {
 
   // Check admin status via backend
   const { data: adminStatus, isLoading: adminLoading, error: adminError, refetch: refetchAdmin } = useQuery({
-    queryKey: ['admin', 'me'],
+    queryKey: adminQueryKeys.me,
     queryFn: checkAdminStatus,
     enabled: status === 'authenticated',
     staleTime: 5 * 60 * 1000, // Cache for 5 minutes

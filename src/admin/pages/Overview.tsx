@@ -1,11 +1,13 @@
 /**
  * Overview - Admin dashboard home with KPIs and quick actions
+ * Uses single dashboard endpoint for all metrics (3 → 2 API calls)
  */
 
-import { useAdminDashboard, useAdminRevenueOverview, useAdminActivity } from '../api'
+import { useAdminDashboard, useAdminActivity, type CurrencyRevenue } from '../api'
 import { formatCurrency, formatNumber } from '../utils/format'
 import StatCard from '../components/StatCard'
 import { Link } from 'react-router-dom'
+import { SkeletonList } from '../../components/Skeleton'
 
 function timeAgo(date: string): string {
   const seconds = Math.floor((Date.now() - new Date(date).getTime()) / 1000)
@@ -15,28 +17,62 @@ function timeAgo(date: string): string {
   return `${Math.floor(seconds / 86400)}d ago`
 }
 
+/** Format revenue with currency awareness */
+function formatRevenue(
+  byCurrency: Record<string, CurrencyRevenue> | undefined,
+  field: 'feeCents' | 'volumeCents',
+  currencies: string[] | undefined
+): string {
+  if (!byCurrency || !currencies || currencies.length === 0) return '---'
+
+  // Single currency: format with correct symbol
+  if (currencies.length === 1) {
+    const currency = currencies[0]
+    return formatCurrency(byCurrency[currency]?.[field] || 0, currency)
+  }
+
+  // Multiple currencies: show each one
+  return currencies
+    .map(c => formatCurrency(byCurrency[c]?.[field] || 0, c))
+    .join(' + ')
+}
+
+/** Get subtext for multi-currency display with optional USD equivalent */
+function getRevenueSubtext(
+  byCurrency: Record<string, CurrencyRevenue> | undefined,
+  isMultiCurrency: boolean | undefined,
+  paymentCount: number | undefined,
+  usdEquivalentCents?: number
+): string | undefined {
+  if (!byCurrency) return undefined
+  if (isMultiCurrency && usdEquivalentCents) {
+    return `≈ ${formatCurrency(usdEquivalentCents, 'USD')} · ${formatNumber(paymentCount || 0)} payments`
+  }
+  if (isMultiCurrency) {
+    return `${formatNumber(paymentCount || 0)} payments (multiple currencies)`
+  }
+  return `${formatNumber(paymentCount || 0)} payments`
+}
+
 export default function Overview() {
   const { data: dashboard, isLoading: dashboardLoading, error: dashboardError, refetch: refetchDashboard } = useAdminDashboard()
-  const { data: revenue, isLoading: revenueLoading, error: revenueError, refetch: refetchRevenue } = useAdminRevenueOverview()
   const { data: activityData, isLoading: activityLoading, refetch: refetchActivity } = useAdminActivity({ limit: 10 })
 
-  const loading = dashboardLoading || revenueLoading
-  const hasError = dashboardError || revenueError
-  const freshness = revenue?.freshness
+  const loading = dashboardLoading
+  const freshness = dashboard?.freshness
 
   const handleRefresh = () => {
     refetchDashboard()
-    refetchRevenue()
     refetchActivity()
   }
 
   // Error state
-  if (hasError) {
+  if (dashboardError) {
     return (
       <div>
         <h1 className="admin-page-title">Overview</h1>
         <div className="admin-alert admin-alert-error" style={{ marginBottom: 16 }}>
-          Failed to load dashboard data: {(dashboardError || revenueError)?.message}
+          Failed to load dashboard data: {dashboardError?.message}
         </div>
         <button className="admin-btn admin-btn-primary" onClick={handleRefresh}>
           Retry
@@ -70,15 +106,17 @@ export default function Overview() {
       <div className="admin-stats-grid">
         <StatCard
           label="Platform Revenue (MTD)"
-          value={revenue ? formatCurrency(revenue.thisMonth.platformFeeCents) : '---'}
-          subtext={revenue ? `${formatNumber(revenue.thisMonth.paymentCount)} payments` : undefined}
+          value={formatRevenue(dashboard?.revenue.thisMonthByCurrency, 'feeCents', dashboard?.revenue.thisMonthCurrencies)}
+          subtext={getRevenueSubtext(dashboard?.revenue.thisMonthByCurrency, dashboard?.revenue.isThisMonthMultiCurrency, dashboard?.revenue.thisMonthPaymentCount, dashboard?.revenue.usdEquivalent?.thisMonthFeesUsdCents)}
           variant="success"
           loading={loading}
         />
         <StatCard
           label="Volume Processed (MTD)"
-          value={revenue ? formatCurrency(revenue.thisMonth.totalVolumeCents) : '---'}
-          subtext="Total subscriber payments"
+          value={formatRevenue(dashboard?.revenue.thisMonthByCurrency, 'volumeCents', dashboard?.revenue.thisMonthCurrencies)}
+          subtext={dashboard?.revenue.isThisMonthMultiCurrency && dashboard?.revenue.usdEquivalent
+            ? `≈ ${formatCurrency(dashboard.revenue.usdEquivalent.thisMonthVolumeUsdCents, 'USD')}`
+            : 'Total subscriber payments'}
           loading={loading}
         />
         <StatCard
@@ -108,27 +146,73 @@ export default function Overview() {
 
       {/* Revenue Summary */}
       <div className="admin-section">
-        <h2 className="admin-section-title">Revenue Summary</h2>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <h2 className="admin-section-title" style={{ margin: 0 }}>Revenue Summary</h2>
+          <Link to="/admin/revenue" style={{ fontSize: 13, color: 'var(--accent-primary)' }}>View detailed breakdown →</Link>
+        </div>
         <div className="admin-stats-grid">
           <StatCard
             label="All Time Platform Revenue"
-            value={revenue ? formatCurrency(revenue.allTime.platformFeeCents) : '---'}
-            subtext={revenue ? `${formatNumber(revenue.allTime.paymentCount)} total payments` : undefined}
+            value={formatRevenue(dashboard?.revenue.byCurrency, 'feeCents', dashboard?.revenue.currencies)}
+            subtext={getRevenueSubtext(dashboard?.revenue.byCurrency, dashboard?.revenue.isMultiCurrency, dashboard?.revenue.paymentCount, dashboard?.revenue.usdEquivalent?.totalFeesUsdCents)}
             loading={loading}
           />
           <StatCard
-            label="Last Month"
-            value={revenue ? formatCurrency(revenue.lastMonth.platformFeeCents) : '---'}
-            subtext={revenue ? `${formatNumber(revenue.lastMonth.paymentCount)} payments` : undefined}
-            loading={loading}
-          />
-          <StatCard
-            label="Today"
-            value={revenue ? formatCurrency(revenue.today.platformFeeCents) : '---'}
-            subtext={revenue ? `${formatNumber(revenue.today.paymentCount)} payments` : undefined}
+            label="All Time Volume"
+            value={formatRevenue(dashboard?.revenue.byCurrency, 'volumeCents', dashboard?.revenue.currencies)}
+            subtext={dashboard?.revenue.isMultiCurrency && dashboard?.revenue.usdEquivalent
+              ? `≈ ${formatCurrency(dashboard.revenue.usdEquivalent.totalVolumeUsdCents, 'USD')}`
+              : 'Total processed'}
             loading={loading}
           />
         </div>
+
+        {/* Per-currency breakdown when multi-currency */}
+        {dashboard?.revenue.isMultiCurrency && (
+          <div style={{ marginTop: 16 }}>
+            <h3 style={{ fontSize: 14, fontWeight: 500, marginBottom: 8, color: 'var(--text-secondary)' }}>By Currency</h3>
+            <div className="admin-table-container">
+              <table className="admin-table" style={{ fontSize: 13 }}>
+                <thead>
+                  <tr>
+                    <th>Currency</th>
+                    <th style={{ textAlign: 'right' }}>Platform Fees</th>
+                    <th style={{ textAlign: 'right' }}>Volume</th>
+                    <th style={{ textAlign: 'right' }}>Payments</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dashboard.revenue.currencies.map(currency => {
+                    const data = dashboard.revenue.byCurrency[currency]
+                    return (
+                      <tr key={currency}>
+                        <td>{currency}</td>
+                        <td style={{ textAlign: 'right' }}>{formatCurrency(data?.feeCents || 0, currency)}</td>
+                        <td style={{ textAlign: 'right' }}>{formatCurrency(data?.volumeCents || 0, currency)}</td>
+                        <td style={{ textAlign: 'right' }}>{formatNumber(data?.paymentCount || 0)}</td>
+                      </tr>
+                    )
+                  })}
+                  {/* USD equivalent total row */}
+                  {dashboard.revenue.usdEquivalent && (
+                    <tr style={{ borderTop: '2px solid var(--border-secondary)', fontWeight: 500 }}>
+                      <td>≈ USD Total</td>
+                      <td style={{ textAlign: 'right' }}>{formatCurrency(dashboard.revenue.usdEquivalent.totalFeesUsdCents, 'USD')}</td>
+                      <td style={{ textAlign: 'right' }}>{formatCurrency(dashboard.revenue.usdEquivalent.totalVolumeUsdCents, 'USD')}</td>
+                      <td style={{ textAlign: 'right' }}>{formatNumber(dashboard.revenue.paymentCount)}</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            {/* Estimated rates note */}
+            {dashboard.revenue.usdEquivalent?.hasEstimatedRates && (
+              <p style={{ fontSize: 11, color: 'var(--text-warning, #f59e0b)', marginTop: 8 }}>
+                {dashboard.revenue.usdEquivalent.estimatedPaymentCount} payment(s) use estimated FX rates (backfilled)
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Quick Links */}
@@ -152,7 +236,7 @@ export default function Overview() {
         </div>
         {activityLoading ? (
           <div className="admin-activity-list">
-            <div className="admin-empty">Loading...</div>
+            <SkeletonList count={5} />
           </div>
         ) : activityData?.activities?.length ? (
           <div className="admin-activity-list">

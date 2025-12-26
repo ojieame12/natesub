@@ -11,6 +11,8 @@ import { db } from '../../db/client.js'
 import { thisMonthStart } from '../../utils/timezone.js'
 import { adminSensitiveRateLimit } from '../../middleware/rateLimit.js'
 import { requireRole, requireFreshSession } from '../../middleware/adminAuth.js'
+import { auditSensitiveRead } from '../../middleware/auditLog.js'
+import { paginationSchema, getPaginationOffsets, formatLegacyPaginatedResponse } from '../../utils/pagination.js'
 
 const disputes = new Hono()
 
@@ -22,7 +24,7 @@ const disputes = new Hono()
  * GET /admin/disputes/stats
  * Dispute statistics overview
  */
-disputes.get('/stats', async (c) => {
+disputes.get('/stats', auditSensitiveRead('dispute_stats'), async (c) => {
   const startOfMonth = thisMonthStart()
 
   const [
@@ -76,17 +78,16 @@ disputes.get('/stats', async (c) => {
  * GET /admin/disputes
  * List all disputes with full details
  */
-disputes.get('/', async (c) => {
+disputes.get('/', auditSensitiveRead('dispute_details'), async (c) => {
   const query = z.object({
+    ...paginationSchema.shape,
     status: z.enum(['all', 'disputed', 'dispute_won', 'dispute_lost']).default('all'),
-    page: z.coerce.number().default(1),
-    limit: z.coerce.number().min(1).max(200).default(50)
   }).parse(c.req.query())
 
-  const skip = (query.page - 1) * query.limit
-  const where: any = {
+  const { skip, take } = getPaginationOffsets(query)
+  const where = {
     status: query.status === 'all'
-      ? { in: ['disputed', 'dispute_won', 'dispute_lost'] }
+      ? { in: ['disputed', 'dispute_won', 'dispute_lost'] as const }
       : query.status
   }
 
@@ -94,7 +95,7 @@ disputes.get('/', async (c) => {
     db.payment.findMany({
       where,
       skip,
-      take: query.limit,
+      take,
       orderBy: { createdAt: 'desc' },
       include: {
         subscription: {
@@ -108,34 +109,31 @@ disputes.get('/', async (c) => {
     db.payment.count({ where })
   ])
 
-  return c.json({
-    disputes: disputesList.map(d => ({
-      id: d.id,
-      status: d.status,
-      amountCents: Math.abs(d.amountCents),
-      currency: d.currency,
-      provider: d.stripeDisputeId ? 'stripe' : d.paystackDisputeId ? 'paystack' : 'unknown',
-      stripeDisputeId: d.stripeDisputeId,
-      paystackDisputeId: d.paystackDisputeId,
-      creator: d.subscription?.creator ? {
-        id: d.subscription.creator.id,
-        email: d.subscription.creator.email,
-        username: d.subscription.creator.profile?.username,
-        displayName: d.subscription.creator.profile?.displayName
-      } : null,
-      subscriber: d.subscription?.subscriber ? {
-        id: d.subscription.subscriber.id,
-        email: d.subscription.subscriber.email,
-        disputeCount: d.subscription.subscriber.disputeCount,
-        isBlocked: !!d.subscription.subscriber.blockedReason
-      } : null,
-      subscriptionId: d.subscriptionId,
-      createdAt: d.createdAt
-    })),
-    total,
-    page: query.page,
-    totalPages: Math.ceil(total / query.limit)
-  })
+  const disputes = disputesList.map(d => ({
+    id: d.id,
+    status: d.status,
+    amountCents: Math.abs(d.amountCents),
+    currency: d.currency,
+    provider: d.stripeDisputeId ? 'stripe' : d.paystackDisputeId ? 'paystack' : 'unknown',
+    stripeDisputeId: d.stripeDisputeId,
+    paystackDisputeId: d.paystackDisputeId,
+    creator: d.subscription?.creator ? {
+      id: d.subscription.creator.id,
+      email: d.subscription.creator.email,
+      username: d.subscription.creator.profile?.username,
+      displayName: d.subscription.creator.profile?.displayName
+    } : null,
+    subscriber: d.subscription?.subscriber ? {
+      id: d.subscription.subscriber.id,
+      email: d.subscription.subscriber.email,
+      disputeCount: d.subscription.subscriber.disputeCount,
+      isBlocked: !!d.subscription.subscriber.blockedReason
+    } : null,
+    subscriptionId: d.subscriptionId,
+    createdAt: d.createdAt
+  }))
+
+  return c.json(formatLegacyPaginatedResponse(disputes, total, query, 'disputes'))
 })
 
 export default disputes
@@ -151,19 +149,15 @@ export const blockedSubscribers = new Hono()
  * GET /admin/blocked-subscribers
  * List subscribers blocked due to disputes
  */
-blockedSubscribers.get('/', async (c) => {
-  const query = z.object({
-    page: z.coerce.number().default(1),
-    limit: z.coerce.number().min(1).max(200).default(50)
-  }).parse(c.req.query())
-
-  const skip = (query.page - 1) * query.limit
+blockedSubscribers.get('/', auditSensitiveRead('user_list'), async (c) => {
+  const query = paginationSchema.parse(c.req.query())
+  const { skip, take } = getPaginationOffsets(query)
 
   const [users, total] = await Promise.all([
     db.user.findMany({
       where: { blockedReason: { not: null } },
       skip,
-      take: query.limit,
+      take,
       orderBy: { createdAt: 'desc' },
       select: {
         id: true,
@@ -185,24 +179,21 @@ blockedSubscribers.get('/', async (c) => {
     db.user.count({ where: { blockedReason: { not: null } } })
   ])
 
-  return c.json({
-    blockedSubscribers: users.map(u => ({
-      id: u.id,
-      email: u.email,
-      disputeCount: u.disputeCount,
-      blockedReason: u.blockedReason,
-      createdAt: u.createdAt,
-      recentSubscriptions: u.subscribedTo.map((s: { id: string; status: string; creator: { email: string; profile: { username: string } | null } }) => ({
-        id: s.id,
-        status: s.status,
-        creatorEmail: s.creator.email,
-        creatorUsername: s.creator.profile?.username
-      }))
-    })),
-    total,
-    page: query.page,
-    totalPages: Math.ceil(total / query.limit)
-  })
+  const blockedUsers = users.map(u => ({
+    id: u.id,
+    email: u.email,
+    disputeCount: u.disputeCount,
+    blockedReason: u.blockedReason,
+    createdAt: u.createdAt,
+    recentSubscriptions: u.subscribedTo.map((s: { id: string; status: string; creator: { email: string; profile: { username: string } | null } }) => ({
+      id: s.id,
+      status: s.status,
+      creatorEmail: s.creator.email,
+      creatorUsername: s.creator.profile?.username
+    }))
+  }))
+
+  return c.json(formatLegacyPaginatedResponse(blockedUsers, total, query, 'blockedSubscribers'))
 })
 
 /**

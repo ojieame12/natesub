@@ -7,6 +7,7 @@ import { useAdminReminders, useAdminRemindersStats } from '../api'
 import StatCard from '../components/StatCard'
 import FilterBar from '../components/FilterBar'
 import Pagination from '../components/Pagination'
+import { SkeletonTableRows } from '../components/SkeletonTableRows'
 
 function formatDate(date: string): string {
   return new Date(date).toLocaleDateString('en-US', {
@@ -124,7 +125,7 @@ export default function Reminders() {
           </thead>
           <tbody>
             {isLoading ? (
-              <tr><td colSpan={6} style={{ textAlign: 'center', padding: '32px' }}>Loading...</td></tr>
+              <SkeletonTableRows columns={6} rows={5} />
             ) : data?.reminders?.length ? (
               data.reminders.map((reminder) => (
                 <tr key={reminder.id}>

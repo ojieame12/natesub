@@ -9,6 +9,7 @@ import { formatCurrency, formatDate } from '../utils/format'
 import FilterBar from '../components/FilterBar'
 import Pagination from '../components/Pagination'
 import ActionModal from '../components/ActionModal'
+import { SkeletonTableRows } from '../components/SkeletonTableRows'
 
 type SortField = 'email' | 'revenue' | 'subscribers' | 'created'
 type SortOrder = 'asc' | 'desc'
@@ -223,7 +224,7 @@ export default function Users() {
           </thead>
           <tbody>
             {isLoading ? (
-              <tr><td colSpan={9} style={{ textAlign: 'center', padding: '32px' }}>Loading...</td></tr>
+              <SkeletonTableRows columns={9} rows={5} />
             ) : sortedUsers?.length ? (
               sortedUsers.map((user) => (
                 <tr key={user.id}>

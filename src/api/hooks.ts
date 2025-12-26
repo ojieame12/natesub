@@ -8,6 +8,7 @@ import {
 } from '@tanstack/react-query'
 import { api, type ApiError } from './client'
 import { useAuthState } from '../hooks/useAuthState'
+import { queryKeys } from './queryKeys'
 
 // ============================================
 // ERROR HANDLING UTILITIES
@@ -101,7 +102,7 @@ export function useVerifyMagicLink() {
     mutationFn: ({ otp, email }: { otp: string; email: string }) => api.auth.verify(otp, email),
     retry: false, // Don't retry auth - causes rate limit issues
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['currentUser'] })
+      queryClient.invalidateQueries({ queryKey: queryKeys.currentUser })
     },
   })
 }
@@ -146,7 +147,7 @@ export function useDeleteAccount() {
 
 export function useProfile() {
   return useQuery({
-    queryKey: ['profile'],
+    queryKey: queryKeys.profile,
     queryFn: api.profile.get,
     staleTime: 5 * 60 * 1000,
   })
@@ -158,11 +159,11 @@ export function useUpdateProfile() {
   return useMutation({
     mutationFn: api.profile.patch,
     onSuccess: (data) => {
-      queryClient.setQueryData(['profile'], data)
-      queryClient.invalidateQueries({ queryKey: ['currentUser'] })
+      queryClient.setQueryData(queryKeys.profile, data)
+      queryClient.invalidateQueries({ queryKey: queryKeys.currentUser })
       // Keep public profile view in sync (template, pricing, paymentsReady, etc.)
       if (data?.profile?.username) {
-        queryClient.invalidateQueries({ queryKey: ['publicProfile', data.profile.username] })
+        queryClient.invalidateQueries({ queryKey: queryKeys.publicProfile(data.profile.username) })
       }
     },
   })
@@ -170,7 +171,7 @@ export function useUpdateProfile() {
 
 export function useSettings() {
   return useQuery({
-    queryKey: ['settings'],
+    queryKey: queryKeys.settings,
     queryFn: api.profile.getSettings,
     staleTime: 5 * 60 * 1000, // 5 minutes
   })
@@ -182,9 +183,9 @@ export function useUpdateSettings() {
   return useMutation({
     mutationFn: api.profile.updateSettings,
     onSuccess: (data, variables) => {
-      queryClient.setQueryData(['settings'], data.settings)
+      queryClient.setQueryData(queryKeys.settings, data.settings)
       // Keep the profile cache in sync for fields that also live on the Profile model (e.g., isPublic).
-      queryClient.setQueryData(['profile'], (oldData: any) => {
+      queryClient.setQueryData(queryKeys.profile, (oldData: any) => {
         if (!oldData?.profile) return oldData
         return {
           ...oldData,
@@ -202,7 +203,7 @@ export function useUpdateSettings() {
 
 export function useCheckUsername(username: string) {
   return useQuery({
-    queryKey: ['checkUsername', username],
+    queryKey: queryKeys.checkUsername(username),
     queryFn: () => api.profile.checkUsername(username),
     enabled: username.length >= 3,
     staleTime: 10 * 1000, // 10 seconds
@@ -215,7 +216,7 @@ export function useCheckUsername(username: string) {
 
 export function usePublicProfile(username: string) {
   return useQuery({
-    queryKey: ['publicProfile', username],
+    queryKey: queryKeys.publicProfile(username),
     queryFn: () => api.users.getByUsername(username),
     enabled: !!username,
     staleTime: 60 * 1000, // 1 minute
@@ -232,15 +233,15 @@ export function useStripeConnect() {
   return useMutation({
     mutationFn: api.stripe.connect,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['stripeStatus'] })
-      queryClient.invalidateQueries({ queryKey: ['profile'] })
+      queryClient.invalidateQueries({ queryKey: queryKeys.stripe.status })
+      queryClient.invalidateQueries({ queryKey: queryKeys.profile })
     },
   })
 }
 
 export function useStripeStatus() {
   return useQuery({
-    queryKey: ['stripeStatus'],
+    queryKey: queryKeys.stripe.status,
     queryFn: () => api.stripe.getStatus(),
     staleTime: 2 * 60 * 1000, // 2 minutes - status rarely changes once connected
   })
@@ -248,7 +249,7 @@ export function useStripeStatus() {
 
 export function useStripeBalance() {
   return useQuery({
-    queryKey: ['stripeBalance'],
+    queryKey: queryKeys.stripe.balance,
     queryFn: api.stripe.getBalance,
     staleTime: 60 * 1000,
   })
@@ -256,7 +257,7 @@ export function useStripeBalance() {
 
 export function useStripePayouts() {
   return useQuery({
-    queryKey: ['stripePayouts'],
+    queryKey: queryKeys.stripe.payouts,
     queryFn: api.stripe.getPayouts,
     staleTime: 60 * 1000,
   })
@@ -274,7 +275,7 @@ export function useStripeDashboardLink() {
 
 export function usePaystackBanks(country: string) {
   return useQuery({
-    queryKey: ['paystackBanks', country],
+    queryKey: queryKeys.paystack.banks(country),
     queryFn: () => api.paystack.getBanks(country),
     enabled: !!country,
     staleTime: 5 * 60 * 1000, // 5 minutes - banks don't change often
@@ -294,15 +295,15 @@ export function usePaystackConnect() {
   return useMutation({
     mutationFn: api.paystack.connect,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['paystackStatus'] })
-      queryClient.invalidateQueries({ queryKey: ['profile'] })
+      queryClient.invalidateQueries({ queryKey: queryKeys.paystack.status })
+      queryClient.invalidateQueries({ queryKey: queryKeys.profile })
     },
   })
 }
 
 export function usePaystackStatus() {
   return useQuery({
-    queryKey: ['paystackStatus'],
+    queryKey: queryKeys.paystack.status,
     queryFn: api.paystack.getStatus,
     staleTime: 2 * 60 * 1000, // 2 minutes - status rarely changes once connected
   })
@@ -330,7 +331,7 @@ export function useVerifyPaystackPayment() {
 
 export function useSubscriptions(status: 'all' | 'active' | 'canceled' | 'past_due' = 'active') {
   return useInfiniteQuery({
-    queryKey: ['subscriptions', status],
+    queryKey: queryKeys.subscriptions.list(status),
     queryFn: ({ pageParam }) => api.subscriptions.list({ cursor: pageParam, status }),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor || undefined,
@@ -341,7 +342,7 @@ export function useSubscriptions(status: 'all' | 'active' | 'canceled' | 'past_d
 // Simple non-paginated version for dashboards/summaries
 export function useSubscriptionsSummary() {
   return useQuery({
-    queryKey: ['subscriptions', 'summary'],
+    queryKey: queryKeys.subscriptions.summary,
     queryFn: () => api.subscriptions.list({ limit: 10, status: 'active' }),
     staleTime: 2 * 60 * 1000, // 2 minutes
   })
@@ -349,7 +350,7 @@ export function useSubscriptionsSummary() {
 
 export function useSubscription(id: string) {
   return useQuery({
-    queryKey: ['subscription', id],
+    queryKey: queryKeys.subscriptions.detail(id),
     queryFn: () => api.subscriptions.get(id),
     enabled: !!id,
   })
@@ -363,9 +364,9 @@ export function useCancelSubscription() {
       api.subscriptions.cancel(id, { immediate }),
     onSuccess: (data) => {
       // Invalidate specific subscription and list
-      queryClient.invalidateQueries({ queryKey: ['subscription', data.subscription.id] })
-      queryClient.invalidateQueries({ queryKey: ['subscriptions'] })
-      queryClient.invalidateQueries({ queryKey: ['metrics'] })
+      queryClient.invalidateQueries({ queryKey: queryKeys.subscriptions.detail(data.subscription.id) })
+      queryClient.invalidateQueries({ queryKey: queryKeys.subscriptions.all })
+      queryClient.invalidateQueries({ queryKey: queryKeys.metrics })
     },
   })
 }
@@ -387,7 +388,7 @@ export function useManageSubscription() {
 
 export function useMySubscriptions(status: 'all' | 'active' | 'canceled' = 'active') {
   return useInfiniteQuery({
-    queryKey: ['mySubscriptions', status],
+    queryKey: queryKeys.subscriptions.my(status),
     queryFn: ({ pageParam }) => api.mySubscriptions.list({ cursor: pageParam, status }),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor || undefined,
@@ -407,7 +408,7 @@ export function useActivity(limit = 20, options?: { seedFromLimit?: number; poll
 
   return useInfiniteQuery({
     // Include limit in key to prevent cache collisions between different page sizes
-    queryKey: ['activity', { limit }],
+    queryKey: queryKeys.activity.list(limit),
     queryFn: ({ pageParam }) => api.activity.list(pageParam, limit),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor || undefined,
@@ -425,7 +426,7 @@ export function useActivity(limit = 20, options?: { seedFromLimit?: number; poll
 
 export function useMetrics() {
   return useQuery({
-    queryKey: ['metrics'],
+    queryKey: queryKeys.metrics,
     queryFn: api.activity.getMetrics,
     staleTime: 60 * 1000,
   })
@@ -433,7 +434,7 @@ export function useMetrics() {
 
 export function useActivityDetail(id: string) {
   return useQuery({
-    queryKey: ['activity', id],
+    queryKey: queryKeys.activity.detail(id),
     queryFn: () => api.activity.get(id),
     enabled: !!id,
   })
@@ -441,7 +442,7 @@ export function useActivityDetail(id: string) {
 
 export function usePayoutHistory() {
   return useQuery({
-    queryKey: ['payouts'],
+    queryKey: queryKeys.payouts,
     queryFn: api.activity.getPayouts,
     staleTime: 60 * 1000, // 1 minute
   })
@@ -555,7 +556,7 @@ export function useNotifications(limit = 10) {
 
   // Fetch recent activities
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ['notifications', limit],
+    queryKey: queryKeys.notifications(limit),
     queryFn: () => api.activity.list(undefined, limit),
     staleTime: 60 * 1000, // 1 minute
     refetchInterval: 60 * 1000, // Poll every minute
@@ -584,7 +585,7 @@ export function useNotifications(limit = 10) {
     newReadIds.add(id)
     saveReadNotificationIds(newReadIds)
     // Invalidate to trigger re-render with new read state
-    queryClient.invalidateQueries({ queryKey: ['notifications'] })
+    queryClient.invalidateQueries({ queryKey: queryKeys.notifications() })
   }
 
   // Mark all notifications as read
@@ -592,7 +593,7 @@ export function useNotifications(limit = 10) {
     const newReadIds = new Set(readIds)
     notifications.forEach(n => newReadIds.add(n.id))
     saveReadNotificationIds(newReadIds)
-    queryClient.invalidateQueries({ queryKey: ['notifications'] })
+    queryClient.invalidateQueries({ queryKey: queryKeys.notifications() })
   }
 
   const unreadCount = notifications.filter(n => !n.read).length
@@ -613,7 +614,7 @@ export function useNotifications(limit = 10) {
 
 export function useRequests(status: 'all' | 'draft' | 'sent' | 'pending_payment' | 'accepted' | 'declined' | 'expired' = 'all') {
   return useInfiniteQuery({
-    queryKey: ['requests', status],
+    queryKey: queryKeys.requests.list(status),
     queryFn: ({ pageParam }) => api.requests.list({ cursor: pageParam, status }),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor || undefined,
@@ -624,7 +625,7 @@ export function useRequests(status: 'all' | 'draft' | 'sent' | 'pending_payment'
 // Simple non-paginated version for dashboards
 export function useRequestsSummary() {
   return useQuery({
-    queryKey: ['requests', 'summary'],
+    queryKey: queryKeys.requests.summary,
     queryFn: () => api.requests.list({ limit: 10 }),
     staleTime: 30 * 1000,
   })
@@ -632,7 +633,7 @@ export function useRequestsSummary() {
 
 export function useRequest(id: string) {
   return useQuery({
-    queryKey: ['request', id],
+    queryKey: queryKeys.requests.detail(id),
     queryFn: () => api.requests.get(id),
     enabled: !!id,
   })
@@ -644,7 +645,7 @@ export function useCreateRequest() {
   return useMutation({
     mutationFn: api.requests.create,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['requests'] })
+      queryClient.invalidateQueries({ queryKey: queryKeys.requests.all })
     },
   })
 }
@@ -656,8 +657,8 @@ export function useSendRequest() {
     mutationFn: ({ id, method }: { id: string; method: 'email' | 'link' }) =>
       api.requests.send(id, method),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['requests'] })
-      queryClient.invalidateQueries({ queryKey: ['activity'] })
+      queryClient.invalidateQueries({ queryKey: queryKeys.requests.all })
+      queryClient.invalidateQueries({ queryKey: queryKeys.activity.all })
     },
   })
 }
@@ -665,7 +666,7 @@ export function useSendRequest() {
 // Public request hooks (for recipients)
 export function usePublicRequest(token: string) {
   return useQuery({
-    queryKey: ['publicRequest', token],
+    queryKey: queryKeys.requests.public(token),
     queryFn: () => api.requests.view(token),
     enabled: !!token,
     retry: false,
@@ -691,7 +692,7 @@ export function useDeclineRequest() {
 
 export function useUpdates() {
   return useQuery({
-    queryKey: ['updates'],
+    queryKey: queryKeys.updates.list,
     queryFn: api.updates.list,
     staleTime: 30 * 1000,
   })
@@ -699,7 +700,7 @@ export function useUpdates() {
 
 export function useUpdate(id: string) {
   return useQuery({
-    queryKey: ['update', id],
+    queryKey: queryKeys.updates.detail(id),
     queryFn: () => api.updates.get(id),
     enabled: !!id,
   })
@@ -711,7 +712,7 @@ export function useCreateUpdate() {
   return useMutation({
     mutationFn: api.updates.create,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['updates'] })
+      queryClient.invalidateQueries({ queryKey: queryKeys.updates.list })
     },
   })
 }
@@ -723,8 +724,8 @@ export function useEditUpdate() {
     mutationFn: ({ id, data }: { id: string; data: Partial<any> }) =>
       api.updates.update(id, data),
     onSuccess: (_, { id }) => {
-      queryClient.invalidateQueries({ queryKey: ['update', id] })
-      queryClient.invalidateQueries({ queryKey: ['updates'] })
+      queryClient.invalidateQueries({ queryKey: queryKeys.updates.detail(id) })
+      queryClient.invalidateQueries({ queryKey: queryKeys.updates.list })
     },
   })
 }
@@ -735,7 +736,7 @@ export function useDeleteUpdate() {
   return useMutation({
     mutationFn: api.updates.delete,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['updates'] })
+      queryClient.invalidateQueries({ queryKey: queryKeys.updates.list })
     },
   })
 }
@@ -746,8 +747,8 @@ export function useSendUpdate() {
   return useMutation({
     mutationFn: api.updates.send,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['updates'] })
-      queryClient.invalidateQueries({ queryKey: ['activity'] })
+      queryClient.invalidateQueries({ queryKey: queryKeys.updates.list })
+      queryClient.invalidateQueries({ queryKey: queryKeys.activity.all })
     },
   })
 }
@@ -963,7 +964,7 @@ export async function uploadBlob(
 
 export function useAIStatus() {
   return useQuery({
-    queryKey: ['aiStatus'],
+    queryKey: queryKeys.aiStatus,
     queryFn: api.ai.status,
     staleTime: 5 * 60 * 1000, // 5 minutes
   })
@@ -1004,7 +1005,7 @@ const PAYROLL_STALE_TIME = 5 * 60 * 1000 // 5 minutes
 
 export function usePayrollPeriods() {
   return useQuery({
-    queryKey: ['payroll', 'periods'],
+    queryKey: queryKeys.payroll.periods,
     queryFn: () => api.payroll.getPeriods(),
     staleTime: PAYROLL_STALE_TIME,
   })
@@ -1012,7 +1013,7 @@ export function usePayrollPeriods() {
 
 export function usePayrollPeriod(id: string) {
   return useQuery({
-    queryKey: ['payroll', 'periods', id],
+    queryKey: queryKeys.payroll.period(id),
     queryFn: () => api.payroll.getPeriod(id),
     enabled: !!id,
     staleTime: PAYROLL_STALE_TIME,
@@ -1021,7 +1022,7 @@ export function usePayrollPeriod(id: string) {
 
 export function usePayrollVerify(code: string) {
   return useQuery({
-    queryKey: ['payroll', 'verify', code],
+    queryKey: queryKeys.payroll.verify(code),
     queryFn: () => api.payroll.verify(code),
     enabled: !!code,
     staleTime: PAYROLL_STALE_TIME,
@@ -1030,7 +1031,7 @@ export function usePayrollVerify(code: string) {
 
 export function usePayrollSubscribers() {
   return useQuery({
-    queryKey: ['payroll', 'subscribers'],
+    queryKey: queryKeys.payroll.subscribers,
     queryFn: () => api.payroll.getSubscribers(),
     staleTime: PAYROLL_STALE_TIME,
   })
@@ -1048,7 +1049,7 @@ export function useCustomStatement() {
 
 export function useAnalyticsStats() {
   return useQuery({
-    queryKey: ['analytics', 'stats'],
+    queryKey: queryKeys.analytics.stats,
     queryFn: api.analytics.getStats,
     staleTime: 60 * 1000, // 1 minute
   })
@@ -1073,7 +1074,7 @@ export function useUpdatePageView() {
 
 export function useBillingStatus() {
   return useQuery({
-    queryKey: ['billing', 'status'],
+    queryKey: queryKeys.billing.status,
     queryFn: () => api.billing.getStatus(),
     staleTime: 1000 * 60 * 5, // 5 minutes
   })
@@ -1115,6 +1116,24 @@ export async function blobToBase64(blob: Blob): Promise<string> {
     }
     reader.onerror = reject
     reader.readAsDataURL(blob)
+  })
+}
+
+// ============================================
+// CONFIG HOOKS
+// ============================================
+
+/**
+ * Fetch fee configuration from backend (source of truth)
+ * Falls back to frontend defaults if API unavailable
+ */
+export function useFeeConfig() {
+  return useQuery({
+    queryKey: queryKeys.config.fees,
+    queryFn: api.config.getFees,
+    staleTime: 60 * 60 * 1000, // 1 hour - fees rarely change
+    gcTime: 24 * 60 * 60 * 1000, // 24 hours cache
+    retry: 1, // Only retry once
   })
 }
 

@@ -2,6 +2,8 @@
  * StatCard - KPI stat display component
  */
 
+import { Skeleton } from '../../components/Skeleton'
+
 interface StatCardProps {
   label: string
   value: string | number
@@ -21,7 +23,8 @@ export default function StatCard({
     return (
       <div className="admin-stat-card">
         <div className="admin-stat-label">{label}</div>
-        <div className="admin-stat-value" style={{ opacity: 0.3 }}>---</div>
+        <Skeleton width="60%" height={32} style={{ marginTop: 4 }} />
+        {subtext !== undefined && <Skeleton width="40%" height={14} style={{ marginTop: 8 }} />}
       </div>
     )
   }

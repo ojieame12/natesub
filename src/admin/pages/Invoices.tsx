@@ -7,6 +7,7 @@ import { useAdminInvoices } from '../api'
 import { formatCurrency, formatDate } from '../utils/format'
 import FilterBar from '../components/FilterBar'
 import Pagination from '../components/Pagination'
+import { SkeletonTableRows } from '../components/SkeletonTableRows'
 
 function getStatusBadge(status: string): string {
   switch (status) {
@@ -77,7 +78,7 @@ export default function Invoices() {
           </thead>
           <tbody>
             {isLoading ? (
-              <tr><td colSpan={7} style={{ textAlign: 'center', padding: '32px' }}>Loading...</td></tr>
+              <SkeletonTableRows columns={7} rows={5} />
             ) : data?.invoices?.length ? (
               data.invoices.map((invoice) => (
                 <tr key={invoice.id}>

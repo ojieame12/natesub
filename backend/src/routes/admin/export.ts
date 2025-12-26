@@ -15,6 +15,8 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import { db } from '../../db/client.js'
 import { requireRole, logAdminAction } from '../../middleware/adminAuth.js'
+import { auditExport } from '../../middleware/auditLog.js'
+import { createExportResponse } from '../../utils/csv.js'
 
 const exportRoutes = new Hono()
 
@@ -22,31 +24,10 @@ const exportRoutes = new Hono()
 exportRoutes.use('*', requireRole('admin'))
 
 /**
- * Escape CSV value
- */
-function escapeCSV(val: unknown): string {
-  if (val === null || val === undefined) return ''
-  const str = String(val)
-  if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
-    return `"${str.replace(/"/g, '""')}"`
-  }
-  return str
-}
-
-/**
- * Convert array of objects to CSV string
- */
-function toCSV(headers: string[], rows: unknown[][]): string {
-  const headerLine = headers.map(escapeCSV).join(',')
-  const dataLines = rows.map(row => row.map(escapeCSV).join(','))
-  return [headerLine, ...dataLines].join('\n')
-}
-
-/**
  * POST /admin/export/payments
  * Export payments data
  */
-exportRoutes.post('/payments', async (c) => {
+exportRoutes.post('/payments', auditExport('export_data'), async (c) => {
   const body = z.object({
     startDate: z.string().datetime().optional(),
     endDate: z.string().datetime().optional(),
@@ -145,25 +126,19 @@ exportRoutes.post('/payments', async (c) => {
     p.createdAt.toISOString(),
   ])
 
-  const csv = toCSV(headers, rows)
-
   await logAdminAction(c, 'Exported payments', {
     filters: body,
     count: payments.length,
   })
 
-  return c.json({
-    filename: `payments-export-${new Date().toISOString().split('T')[0]}.csv`,
-    rowCount: payments.length,
-    csv,
-  })
+  return c.json(createExportResponse(headers, rows, 'payments-export'))
 })
 
 /**
  * POST /admin/export/subscriptions
  * Export subscriptions data
  */
-exportRoutes.post('/subscriptions', async (c) => {
+exportRoutes.post('/subscriptions', auditExport('export_data'), async (c) => {
   const body = z.object({
     status: z.enum(['active', 'canceled', 'paused', 'past_due', 'all']).default('all'),
     creatorId: z.string().optional(),
@@ -251,25 +226,19 @@ exportRoutes.post('/subscriptions', async (c) => {
     s.createdAt.toISOString(),
   ])
 
-  const csv = toCSV(headers, rows)
-
   await logAdminAction(c, 'Exported subscriptions', {
     filters: body,
     count: subscriptions.length,
   })
 
-  return c.json({
-    filename: `subscriptions-export-${new Date().toISOString().split('T')[0]}.csv`,
-    rowCount: subscriptions.length,
-    csv,
-  })
+  return c.json(createExportResponse(headers, rows, 'subscriptions-export'))
 })
 
 /**
  * POST /admin/export/creators
  * Export creator profiles
  */
-exportRoutes.post('/creators', async (c) => {
+exportRoutes.post('/creators', auditExport('export_data'), async (c) => {
   const body = z.object({
     country: z.string().optional(),
     payoutStatus: z.enum(['pending', 'connected', 'verified']).optional(),
@@ -372,25 +341,19 @@ exportRoutes.post('/creators', async (c) => {
     p.user?.deletedAt?.toISOString() || '',
   ])
 
-  const csv = toCSV(headers, rows)
-
   await logAdminAction(c, 'Exported creators', {
     filters: body,
     count: profiles.length,
   })
 
-  return c.json({
-    filename: `creators-export-${new Date().toISOString().split('T')[0]}.csv`,
-    rowCount: profiles.length,
-    csv,
-  })
+  return c.json(createExportResponse(headers, rows, 'creators-export'))
 })
 
 /**
  * POST /admin/export/users
  * Export all users
  */
-exportRoutes.post('/users', async (c) => {
+exportRoutes.post('/users', auditExport('export_data'), async (c) => {
   const body = z.object({
     role: z.enum(['user', 'admin', 'super_admin', 'all']).default('all'),
     includeDeleted: z.boolean().default(false),
@@ -465,25 +428,19 @@ exportRoutes.post('/users', async (c) => {
     u.deletedAt?.toISOString() || '',
   ])
 
-  const csv = toCSV(headers, rows)
-
   await logAdminAction(c, 'Exported users', {
     filters: body,
     count: users.length,
   })
 
-  return c.json({
-    filename: `users-export-${new Date().toISOString().split('T')[0]}.csv`,
-    rowCount: users.length,
-    csv,
-  })
+  return c.json(createExportResponse(headers, rows, 'users-export'))
 })
 
 /**
  * POST /admin/export/disputes
  * Export dispute data
  */
-exportRoutes.post('/disputes', async (c) => {
+exportRoutes.post('/disputes', auditExport('export_data'), async (c) => {
   const body = z.object({
     status: z.enum(['disputed', 'dispute_won', 'dispute_lost', 'all']).default('all'),
     startDate: z.string().datetime().optional(),
@@ -562,18 +519,12 @@ exportRoutes.post('/disputes', async (c) => {
     d.createdAt.toISOString(),
   ])
 
-  const csv = toCSV(headers, rows)
-
   await logAdminAction(c, 'Exported disputes', {
     filters: body,
     count: disputes.length,
   })
 
-  return c.json({
-    filename: `disputes-export-${new Date().toISOString().split('T')[0]}.csv`,
-    rowCount: disputes.length,
-    csv,
-  })
+  return c.json(createExportResponse(headers, rows, 'disputes-export'))
 })
 
 export default exportRoutes

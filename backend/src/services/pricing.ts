@@ -1,15 +1,16 @@
 // Pricing Service - Centralized fee calculation based on user purpose
 // Personal: Free plan, 8% transaction fee
 // Service: $5/mo subscription, 8% transaction fee
+//
+// NOTE: Fee constants are imported from constants/fees.ts - the single source of truth
+
+import { PLATFORM_FEE_RATE } from '../constants/fees.js'
 
 export type UserPurpose = 'personal' | 'service'
 
-// Platform fee percentages by purpose (all-inclusive, no separate processing fee)
-// These match the actual fees charged in fees.ts
-const PLATFORM_FEES: Record<UserPurpose, number> = {
-  personal: 8, // 8% for free personal users
-  service: 8,   // 8% for paid service providers
-}
+// Platform fee percentage derived from the canonical PLATFORM_FEE_RATE
+// Both personal and service users pay the same 8% fee
+const PLATFORM_FEE_PERCENT = PLATFORM_FEE_RATE * 100 // 0.08 -> 8
 
 // Processing fee is included in platform fee - kept at 0 for backward compatibility
 // with payroll display. The platform fee IS the total fee.
@@ -23,11 +24,9 @@ export const PLATFORM_SUBSCRIPTION_PRICE_CENTS = 500 // $5.00/month
  * @param purpose - 'personal' or 'service'
  * @returns Platform fee percentage (8%)
  */
-export function getPlatformFeePercent(purpose: UserPurpose | null | undefined): number {
-  if (!purpose || !PLATFORM_FEES[purpose]) {
-    return PLATFORM_FEES.personal // Default to personal (8%)
-  }
-  return PLATFORM_FEES[purpose]
+export function getPlatformFeePercent(_purpose: UserPurpose | null | undefined): number {
+  // All users pay the same fee - purpose is kept for backward compatibility
+  return PLATFORM_FEE_PERCENT
 }
 
 /**

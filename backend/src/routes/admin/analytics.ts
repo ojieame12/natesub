@@ -12,6 +12,7 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import { db } from '../../db/client.js'
 import { requireRole } from '../../middleware/adminAuth.js'
+import { auditSensitiveRead } from '../../middleware/auditLog.js'
 import { lastNDays } from '../../utils/timezone.js'
 
 const analytics = new Hono()
@@ -23,7 +24,7 @@ analytics.use('*', requireRole('admin'))
  * GET /admin/analytics/churn
  * Analyze subscription cancellations and churn patterns
  */
-analytics.get('/churn', async (c) => {
+analytics.get('/churn', auditSensitiveRead('analytics_churn'), async (c) => {
   const query = z.object({
     days: z.coerce.number().min(1).max(365).default(30),
   }).parse(c.req.query())
@@ -124,7 +125,7 @@ analytics.get('/churn', async (c) => {
  * GET /admin/analytics/ltv
  * Lifetime Value analysis by creator and overall
  */
-analytics.get('/ltv', async (c) => {
+analytics.get('/ltv', auditSensitiveRead('analytics_ltv'), async (c) => {
   const query = z.object({
     limit: z.coerce.number().min(1).max(100).default(20),
   }).parse(c.req.query())
@@ -241,7 +242,7 @@ analytics.get('/ltv', async (c) => {
  * GET /admin/analytics/at-risk
  * Identify subscriptions at risk of churning
  */
-analytics.get('/at-risk', async (c) => {
+analytics.get('/at-risk', auditSensitiveRead('analytics_at_risk'), async (c) => {
   const now = new Date()
   const threeDaysAgo = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000)
   const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
@@ -453,7 +454,7 @@ analytics.get('/at-risk', async (c) => {
  * GET /admin/analytics/cohort/:month
  * Cohort retention analysis for a specific month
  */
-analytics.get('/cohort/:month', async (c) => {
+analytics.get('/cohort/:month', auditSensitiveRead('analytics_cohort'), async (c) => {
   const monthStr = c.req.param('month') // Expected format: YYYY-MM
   const match = monthStr.match(/^(\d{4})-(\d{2})$/)
 
@@ -560,7 +561,7 @@ analytics.get('/cohort/:month', async (c) => {
  * GET /admin/analytics/mrr
  * Monthly Recurring Revenue trends
  */
-analytics.get('/mrr', async (c) => {
+analytics.get('/mrr', auditSensitiveRead('analytics_mrr'), async (c) => {
   const query = z.object({
     months: z.coerce.number().min(1).max(24).default(12),
   }).parse(c.req.query())

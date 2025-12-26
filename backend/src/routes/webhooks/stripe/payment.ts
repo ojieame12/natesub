@@ -3,6 +3,7 @@ import { db } from '../../../db/client.js'
 import { calculateServiceFee, calculateLegacyFee } from '../../../services/fees.js'
 import { stripe } from '../../../services/stripe.js'
 import { isStripeCrossBorderSupported } from '../../../utils/constants.js'
+import { convertLocalCentsToUSD } from '../../../services/fx.js'
 
 // Handle charge refunded
 export async function handleChargeRefunded(event: Stripe.Event) {
@@ -135,6 +136,34 @@ export async function handleChargeRefunded(event: Stripe.Event) {
     netCents = legacyFees.netCents
   }
 
+  // Calculate reporting currency fields using original payment's rate (if available)
+  // This ensures refunds cancel out the original payment exactly in USD terms
+  let reportingData: {
+    reportingCurrency: string
+    reportingGrossCents: number | null
+    reportingFeeCents: number
+    reportingNetCents: number
+    reportingExchangeRate: number
+    reportingRateSource: string
+    reportingRateTimestamp: Date
+    reportingIsEstimated: boolean
+  } | null = null
+
+  if (originalPayment?.reportingExchangeRate && originalPayment.reportingCurrency) {
+    const rate = originalPayment.reportingExchangeRate
+    const isUSD = charge.currency.toUpperCase() === 'USD'
+    reportingData = {
+      reportingCurrency: 'USD',
+      reportingGrossCents: isUSD ? -refundAmount : -convertLocalCentsToUSD(refundAmount, rate),
+      reportingFeeCents: isUSD ? -feeCents : -convertLocalCentsToUSD(feeCents, rate),
+      reportingNetCents: isUSD ? -netCents : -convertLocalCentsToUSD(netCents, rate),
+      reportingExchangeRate: rate,
+      reportingRateSource: 'original_payment', // Use original rate for consistency
+      reportingRateTimestamp: new Date(),
+      reportingIsEstimated: false,
+    }
+  }
+
   // Create refund payment record with split fee fields
   await db.payment.create({
     data: {
@@ -151,6 +180,8 @@ export async function handleChargeRefunded(event: Stripe.Event) {
       type: subscription.interval === 'month' ? 'recurring' : 'one_time',
       status: 'refunded',
       stripeEventId: event.id,
+      // Reporting currency (use original payment's rate for consistency)
+      ...(reportingData || {}),
     },
   })
 

@@ -4,6 +4,7 @@ import { stripe, getAccountBalance } from '../../../services/stripe.js'
 import { cancelSubscription } from '../../../services/stripe.js'
 import { sendDisputeCreatedEmail, sendDisputeResolvedEmail } from '../../../services/email.js'
 import { alertDisputeCreated, alertDisputeResolved, alertPlatformLiability } from '../../../services/slack.js'
+import { convertLocalCentsToUSD } from '../../../services/fx.js'
 
 // Handle dispute/chargeback created
 export async function handleDisputeCreated(event: Stripe.Event) {
@@ -49,6 +50,23 @@ export async function handleDisputeCreated(event: Stripe.Event) {
     netCents = -Math.round(originalPayment.netCents * disputeRatio)
   }
 
+  // Calculate reporting currency fields using original payment's rate
+  let reportingData: Record<string, unknown> = {}
+  if (originalPayment?.reportingExchangeRate && originalPayment.reportingCurrency) {
+    const rate = originalPayment.reportingExchangeRate
+    const isUSD = dispute.currency.toUpperCase() === 'USD'
+    reportingData = {
+      reportingCurrency: 'USD',
+      reportingGrossCents: isUSD ? -dispute.amount : -convertLocalCentsToUSD(dispute.amount, rate),
+      reportingFeeCents: 0, // No fee on dispute
+      reportingNetCents: isUSD ? netCents : convertLocalCentsToUSD(netCents, rate),
+      reportingExchangeRate: rate,
+      reportingRateSource: 'original_payment',
+      reportingRateTimestamp: new Date(),
+      reportingIsEstimated: false,
+    }
+  }
+
   // Create dispute payment record (funds held) with fee breakdown
   await db.payment.create({
     data: {
@@ -67,6 +85,8 @@ export async function handleDisputeCreated(event: Stripe.Event) {
       stripeDisputeId: dispute.id, // Track dispute for later resolution
       stripeChargeId: dispute.charge as string || null,
       stripeEventId: event.id,
+      // Reporting currency (use original payment's rate)
+      ...reportingData,
     },
   })
 

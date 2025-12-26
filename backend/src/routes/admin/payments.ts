@@ -12,6 +12,8 @@ import { stripe } from '../../services/stripe.js'
 import { env } from '../../config/env.js'
 import { adminSensitiveRateLimit } from '../../middleware/rateLimit.js'
 import { requireRole, requireFreshSession } from '../../middleware/adminAuth.js'
+import { auditSensitiveRead } from '../../middleware/auditLog.js'
+import { paginationWithSearchSchema, getPaginationOffsets, formatLegacyPaginatedResponse } from '../../utils/pagination.js'
 
 const payments = new Hono()
 
@@ -23,16 +25,14 @@ const payments = new Hono()
  * GET /admin/payments
  * List payments with pagination and filtering
  */
-payments.get('/', async (c) => {
+payments.get('/', auditSensitiveRead('payment_list'), async (c) => {
   const query = z.object({
-    search: z.string().optional(),
+    ...paginationWithSearchSchema.shape,
     status: z.enum(['all', 'succeeded', 'failed', 'refunded', 'disputed']).default('all'),
-    page: z.coerce.number().default(1),
-    limit: z.coerce.number().min(1).max(200).default(50)
   }).parse(c.req.query())
 
-  const skip = (query.page - 1) * query.limit
-  const where: any = { type: { in: ['recurring', 'one_time'] } }
+  const { skip, take } = getPaginationOffsets(query)
+  const where: { type: { in: string[] }; status?: string; OR?: unknown[] } = { type: { in: ['recurring', 'one_time'] } }
 
   if (query.status !== 'all') where.status = query.status
 
@@ -53,7 +53,7 @@ payments.get('/', async (c) => {
     db.payment.findMany({
       where,
       skip,
-      take: query.limit,
+      take,
       orderBy: { occurredAt: 'desc' },
       include: {
         subscription: {
@@ -67,42 +67,39 @@ payments.get('/', async (c) => {
     db.payment.count({ where })
   ])
 
-  return c.json({
-    payments: dbPayments.map(p => ({
-      id: p.id,
-      creator: {
-        id: p.creatorId,
-        email: p.subscription?.creator?.email || '',
-        username: p.subscription?.creator?.profile?.username || null,
-      },
-      subscriber: {
-        id: p.subscriberId,
-        email: p.subscription?.subscriber?.email || '',
-      },
-      grossCents: p.grossCents ?? p.amountCents,
-      amountCents: p.amountCents,
-      feeCents: p.feeCents,
-      netCents: p.netCents,
-      currency: p.currency,
-      status: p.status,
-      type: p.type,
-      provider: p.stripePaymentIntentId ? 'stripe' : p.paystackTransactionRef ? 'paystack' : 'unknown',
-      stripePaymentIntentId: p.stripePaymentIntentId,
-      paystackTransactionRef: p.paystackTransactionRef,
-      occurredAt: p.occurredAt,
-      createdAt: p.createdAt,
-    })),
-    total,
-    page: query.page,
-    totalPages: Math.ceil(total / query.limit)
-  })
+  const payments = dbPayments.map(p => ({
+    id: p.id,
+    creator: {
+      id: p.creatorId,
+      email: p.subscription?.creator?.email || '',
+      username: p.subscription?.creator?.profile?.username || null,
+    },
+    subscriber: {
+      id: p.subscriberId,
+      email: p.subscription?.subscriber?.email || '',
+    },
+    grossCents: p.grossCents ?? p.amountCents,
+    amountCents: p.amountCents,
+    feeCents: p.feeCents,
+    netCents: p.netCents,
+    currency: p.currency,
+    status: p.status,
+    type: p.type,
+    provider: p.stripePaymentIntentId ? 'stripe' : p.paystackTransactionRef ? 'paystack' : 'unknown',
+    stripePaymentIntentId: p.stripePaymentIntentId,
+    paystackTransactionRef: p.paystackTransactionRef,
+    occurredAt: p.occurredAt,
+    createdAt: p.createdAt,
+  }))
+
+  return c.json(formatLegacyPaginatedResponse(payments, total, query, 'payments'))
 })
 
 /**
  * GET /admin/payments/:id
  * Get payment details
  */
-payments.get('/:id', async (c) => {
+payments.get('/:id', auditSensitiveRead('payment_details'), async (c) => {
   const { id } = c.req.param()
 
   const payment = await db.payment.findUnique({

@@ -9,6 +9,7 @@ import { useMySubscriptions, useManageSubscription } from './api/hooks'
 import { Pressable, useToast, SkeletonList, ErrorState, LoadingButton } from './components'
 import { useViewTransition, useScrolled } from './hooks'
 import { getCurrencySymbol, formatCompactNumber } from './utils/currency'
+import { queryKeys } from './api/queryKeys'
 import './Subscribers.css' // Reuse Subscribers styles for consistency
 
 type FilterType = 'all' | 'active' | 'canceled'
@@ -152,7 +153,7 @@ export default function MySubscriptions() {
   const cancelMutation = useMutation({
     mutationFn: (id: string) => api.mySubscriptions.cancel(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['mySubscriptions'] })
+      queryClient.invalidateQueries({ queryKey: queryKeys.subscriptions.myAll })
       toast.success('Subscription cancelled')
       setCancellingId(null)
     },
@@ -165,7 +166,7 @@ export default function MySubscriptions() {
   const reactivateMutation = useMutation({
     mutationFn: (id: string) => api.mySubscriptions.reactivate(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['mySubscriptions'] })
+      queryClient.invalidateQueries({ queryKey: queryKeys.subscriptions.myAll })
       toast.success('Subscription reactivated')
       setReactivatingId(null)
     },

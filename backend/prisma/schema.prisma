@@ -401,6 +401,16 @@ model Payment {
   paystackTransferCode   String?  // Transfer code for OTP finalization
   paystackDisputeId      String? @unique  // Track Paystack disputes/chargebacks
 
+  // Reporting currency (USD normalized for admin dashboard)
+  reportingCurrency      String?   // "USD" - base reporting currency
+  reportingGrossCents    Int?      // grossCents converted to USD
+  reportingFeeCents      Int?      // feeCents converted to USD (platform revenue)
+  reportingNetCents      Int?      // netCents converted to USD (creator payout)
+  reportingExchangeRate  Float?    // Rate used (e.g., 1600.0 for NGN→USD)
+  reportingRateSource    String?   // "stripe" | "exchangerate-api" | "backfill"
+  reportingRateTimestamp DateTime? // When rate was captured
+  reportingIsEstimated   Boolean   @default(false) // true for backfilled payments
+
   // Timestamps
   occurredAt DateTime @default(now())
   createdAt  DateTime @default(now())

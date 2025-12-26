@@ -2,109 +2,14 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { api } from './api/client'
 import { getShareableLink } from './utils/constants'
-import {
-  Menu,
-  Bell,
-  Copy,
-  Share2,
-  Check,
-  ChevronRight,
-  Pen,
-  Layout,
-  CreditCard,
-  Settings,
-  HelpCircle,
-  X,
-  UserPlus,
-  DollarSign,
-  RefreshCw,
-  UserX,
-  Send,
-  Clock,
-  Activity,
-  FileText,
-  Heart,
-  BarChart3,
-} from 'lucide-react'
-import { Pressable, useToast, Skeleton, SkeletonList, ErrorState, AnimatedNumber } from './components'
+import { Menu, Bell, Copy, Share2, Check, RefreshCw, Clock, ChevronRight, CreditCard } from 'lucide-react'
+import { Pressable, useToast, Skeleton, ErrorState } from './components'
 import { useViewTransition } from './hooks'
 import { useCurrentUser, useMetrics, useActivity, useProfile, useAnalyticsStats, useNotifications } from './api/hooks'
-import { centsToDisplayAmount, getCurrencySymbol, formatCompactNumber, formatCompactAmount } from './utils/currency'
+import { centsToDisplayAmount } from './utils/currency'
+import { SlideOutMenu, NotificationsPanel, StatsCard, ActivityFeed } from './dashboard/index'
+import { queryKeys } from './api/queryKeys'
 import './Dashboard.css'
-
-// Menu items - unified account type
-const menuItems = [
-  { id: 'subscribers', title: 'Subscribers', icon: UserPlus, path: '/subscribers' },
-  { id: 'my-subs', title: 'Following', icon: Heart, path: '/my-subscriptions' },
-  { id: 'analytics', title: 'Analytics', icon: BarChart3, path: '/analytics' },
-  { id: 'new-request', title: 'New Request', icon: DollarSign, path: '/new-request' },
-  { id: 'sent-requests', title: 'Sent Requests', icon: Clock, path: '/requests' },
-  { id: 'payroll', title: 'Payroll', icon: FileText, path: '/payroll' },
-  { id: 'edit', title: 'Edit My Page', icon: Pen, path: '/edit-page' },
-  { id: 'templates', title: 'Templates', icon: Layout, path: '/templates' },
-  { id: 'payment', title: 'Payment Settings', icon: CreditCard, path: '/settings/payments' },
-]
-
-const menuFooterItems = [
-  { id: 'settings', title: 'Settings', icon: Settings, path: '/settings' },
-  { id: 'help', title: 'Help and Support', icon: HelpCircle, path: '/settings/help' },
-]
-
-// Activity icon helper
-const getActivityIcon = (type: string) => {
-  switch (type) {
-    case 'subscription_created':
-    case 'new_subscriber': return <UserPlus size={18} />
-    case 'payment_received':
-    case 'payment': return <DollarSign size={18} />
-    case 'renewal': return <RefreshCw size={18} />
-    case 'subscription_canceled':
-    case 'cancelled': return <UserX size={18} />
-    case 'request_sent': return <Send size={18} />
-    case 'request_accepted': return <Check size={18} />
-    // Payout lifecycle
-    case 'payout_initiated': return <Clock size={18} />
-    case 'payout_completed': return <Check size={18} />
-    case 'payout_failed': return <UserX size={18} />
-    default: return <DollarSign size={18} />
-  }
-}
-
-const getActivityTitle = (type: string) => {
-  switch (type) {
-    case 'subscription_created':
-    case 'new_subscriber': return 'New Subscriber'
-    case 'payment_received':
-    case 'payment': return 'Payment Received'
-    case 'renewal': return 'Renewed'
-    case 'subscription_canceled':
-    case 'cancelled': return 'Cancelled'
-    case 'request_sent': return 'Request Sent'
-    case 'request_accepted': return 'Request Accepted'
-    // Payout lifecycle
-    case 'payout_initiated': return 'Payout Initiated'
-    case 'payout_completed': return 'Payout Received'
-    case 'payout_failed': return 'Payout Failed'
-    default: return 'Activity'
-  }
-}
-
-// Format relative time
-const formatRelativeTime = (date: Date | string) => {
-  const now = new Date()
-  const then = new Date(date)
-  const diffMs = now.getTime() - then.getTime()
-  const diffMins = Math.floor(diffMs / 60000)
-  const diffHours = Math.floor(diffMs / 3600000)
-  const diffDays = Math.floor(diffMs / 86400000)
-
-  if (diffMins < 1) return 'Just now'
-  if (diffMins < 60) return `${diffMins}m ago`
-  if (diffHours < 24) return `${diffHours}h ago`
-  if (diffDays === 1) return 'Yesterday'
-  if (diffDays < 7) return `${diffDays}d ago`
-  return then.toLocaleDateString()
-}
 
 // Pre-load subscription page component to avoid serial waterfall
 const preloadSubscriptionPage = () => {
@@ -417,12 +322,6 @@ export default function Dashboard() {
   const openNotifications = useCallback(() => setNotificationsOpen(true), [])
   const closeNotifications = useCallback(() => setNotificationsOpen(false), [])
 
-  // Menu navigation handler - navigate immediately, menu closes via CSS
-  const handleMenuNavigate = useCallback((path: string) => {
-    setMenuOpen(false)
-    navigate(path) // Navigate instantly - no delay
-  }, [navigate])
-
   const pageUrl = getShareableLink(profile?.username || 'yourname')
 
   const handleCopyLink = async () => {
@@ -465,7 +364,7 @@ export default function Dashboard() {
     if (!username) return
     // Prefetch the API data
     queryClient.prefetchQuery({
-      queryKey: ['publicProfile', username],
+      queryKey: queryKeys.publicProfile(username),
       queryFn: () => api.users.getByUsername(username),
       staleTime: 60 * 1000,
     })
@@ -500,102 +399,24 @@ export default function Dashboard() {
       </div>
 
       {/* Slide-out Menu */}
-      <div className={`menu-overlay ${menuOpen ? 'open' : ''}`} onClick={closeMenu} />
-      <div className={`menu-panel ${menuOpen ? 'open' : ''}`}>
-        <div className="menu-profile">
-          <div className="menu-profile-info">
-            <div className="menu-avatar">
-              {profile?.avatarUrl ? (
-                <img src={profile.avatarUrl} alt="" className="menu-avatar-img" />
-              ) : (
-                displayName ? displayName.charAt(0).toUpperCase() : 'U'
-              )}
-            </div>
-            <div className="menu-profile-text">
-              <span className="menu-profile-name">{displayName}</span>
-              <span className="menu-profile-username">@{username}</span>
-            </div>
-          </div>
-          <Pressable className="menu-close" onClick={closeMenu}>
-            <X size={20} />
-          </Pressable>
-        </div>
-        <div className="menu-items">
-          {menuItems.map((item) => (
-            <Pressable
-              key={item.id}
-              className="menu-item"
-              onClick={() => handleMenuNavigate(item.path)}
-            >
-              <item.icon size={20} className="menu-item-icon" />
-              <div className="menu-item-content">
-                <span className="menu-item-title">{item.title}</span>
-                <ChevronRight size={18} className="menu-item-chevron" />
-              </div>
-            </Pressable>
-          ))}
-        </div>
-        <div className="menu-footer">
-          {menuFooterItems.map((item) => (
-            <Pressable
-              key={item.id}
-              className="menu-item"
-              onClick={() => handleMenuNavigate(item.path)}
-            >
-              <item.icon size={20} className="menu-item-icon" />
-              <div className="menu-item-content">
-                <span className="menu-item-title">{item.title}</span>
-                <ChevronRight size={18} className="menu-item-chevron" />
-              </div>
-            </Pressable>
-          ))}
-        </div>
-      </div>
+      <SlideOutMenu
+        open={menuOpen}
+        onClose={closeMenu}
+        onNavigate={navigate}
+        displayName={displayName}
+        username={username}
+        avatarUrl={profile?.avatarUrl}
+      />
 
       {/* Notifications Panel */}
-      {notificationsOpen && (
-        <>
-          <div className="menu-overlay" onClick={closeNotifications} />
-          <div className="notifications-panel">
-            <div className="notifications-header">
-              <span className="notifications-title">Notifications</span>
-              <Pressable className="menu-close" onClick={closeNotifications}>
-                <X size={24} />
-              </Pressable>
-            </div>
-            <div className="notifications-list">
-              {notifications.length === 0 ? (
-                <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-tertiary)' }}>
-                  <Bell size={32} style={{ opacity: 0.3, marginBottom: 8 }} />
-                  <p style={{ fontSize: 14 }}>No notifications yet</p>
-                </div>
-              ) : (
-                notifications.map((notif) => (
-                  <Pressable
-                    key={notif.id}
-                    className={`notification-item ${notif.read ? 'read' : ''}`}
-                    onClick={() => {
-                      if (!notif.read) markAsRead(notif.id)
-                    }}
-                  >
-                    <div className="notification-content">
-                      <div className="notification-title">{notif.title}</div>
-                      <div className="notification-desc">{notif.description}</div>
-                      <div className="notification-time">{formatRelativeTime(notif.time)}</div>
-                    </div>
-                    {!notif.read && <div className="notification-unread-dot" />}
-                  </Pressable>
-                ))
-              )}
-            </div>
-            {notifications.length > 0 && unreadCount > 0 && (
-              <Pressable className="notifications-footer" onClick={markAllAsRead}>
-                <span>Mark all as read</span>
-              </Pressable>
-            )}
-          </div>
-        </>
-      )}
+      <NotificationsPanel
+        open={notificationsOpen}
+        onClose={closeNotifications}
+        notifications={notifications}
+        unreadCount={unreadCount}
+        onMarkAsRead={markAsRead}
+        onMarkAllAsRead={markAllAsRead}
+      />
 
       {/* Main Content - transform controlled by --pull-offset CSS variable */}
       <main className="main">
@@ -607,72 +428,20 @@ export default function Dashboard() {
           />
         ) : (
           <>
-            {/* Stats Card - show skeleton only while metrics loading */}
-            {metricsLoading ? (
-              <section className="stats-card">
-                <div className="stats-primary">
-                  <Skeleton width={180} height={14} />
-                  <Skeleton width={100} height={40} style={{ marginTop: 8 }} />
-                </div>
-                <div className="stats-secondary-row">
-                  <div className="stats-metric">
-                    <Skeleton width={60} height={28} />
-                    <Skeleton width={80} height={12} style={{ marginTop: 4 }} />
-                  </div>
-                  <div className="stats-metric">
-                    <Skeleton width={60} height={28} />
-                    <Skeleton width={80} height={12} style={{ marginTop: 4 }} />
-                  </div>
-                </div>
-              </section>
-            ) : (
-              <section className="stats-card">
-              {/* Currency Toggle - only show if can convert between currencies */}
-              {canToggle ? (
-                <Pressable
-                  className="currency-toggle"
-                  onClick={() => setCurrencyView(v => v === 'profile' ? 'payout' : 'profile')}
-                >
-                  <span className={`currency-toggle-option ${currencyView === 'profile' ? 'active' : ''}`}>
-                    {getCurrencySymbol(currencyCode)}
-                  </span>
-                  <span className={`currency-toggle-option ${currencyView === 'payout' ? 'active' : ''}`}>
-                    {getCurrencySymbol(payoutCurrency)}
-                  </span>
-                </Pressable>
-              ) : null}
-
-              <div className="stats-primary">
-                <span className="stats-label">Monthly Recurring Revenue</span>
-                <span className="stats-mrr">
-                  <AnimatedNumber value={displayMrr} duration={600} format={(n) => formatCompactAmount(n, displayCurrency)} />
-                </span>
-                {/* Pending Balance - under MRR, converted to display currency */}
-                {(metrics?.balance?.pending ?? 0) > 0 && (
-                  <div className="stats-pending">
-                    <Clock size={12} />
-                    <span>{formatCompactAmount(displayPending, displayCurrency)} pending</span>
-                  </div>
-                )}
-              </div>
-              <div className="stats-secondary-row">
-                <div className="stats-metric">
-                  <div className="stats-metric-value">
-                    <AnimatedNumber value={metrics?.subscriberCount ?? 0} duration={500} format={(n) => formatCompactNumber(n)} />
-                  </div>
-                  <span className="stats-label">
-                    {(metrics?.subscriberCount ?? 0) === 1 ? 'Subscriber' : 'Subscribers'}
-                  </span>
-                </div>
-                <div className="stats-metric">
-                  <div className="stats-metric-value">
-                    <AnimatedNumber value={displayTotalRevenue} duration={600} format={(n) => formatCompactAmount(n, displayCurrency)} />
-                  </div>
-                  <span className="stats-label">Total Revenue</span>
-                </div>
-              </div>
-              </section>
-            )}
+            {/* Stats Card */}
+            <StatsCard
+              loading={metricsLoading}
+              mrr={displayMrr}
+              subscriberCount={metrics?.subscriberCount ?? 0}
+              totalRevenue={displayTotalRevenue}
+              pendingBalance={displayPending}
+              displayCurrency={displayCurrency}
+              profileCurrency={currencyCode}
+              payoutCurrency={payoutCurrency}
+              currencyView={currencyView}
+              canToggle={canToggle}
+              onToggleCurrency={() => setCurrencyView(v => v === 'profile' ? 'payout' : 'profile')}
+            />
 
             {/* Payment Status Banner */}
             {profile?.payoutStatus === 'pending' && (
@@ -738,75 +507,13 @@ export default function Dashboard() {
               </Pressable>
             )}
 
-            {/* Activity Section - show skeleton while activity loading */}
-            {activityLoading ? (
-              <section className="dash-activity-card">
-                <div className="dash-activity-header">
-                  <Skeleton width={80} height={18} />
-                  <Skeleton width={60} height={14} />
-                </div>
-                <SkeletonList count={4} />
-              </section>
-            ) : (
-              <section className="dash-activity-card">
-              <div className="dash-activity-header">
-                <span className="dash-activity-title">Activity</span>
-                <Pressable className="dash-activity-view-all" onClick={() => navigate('/activity')}>
-                  View All
-                </Pressable>
-              </div>
-              <div className="dash-activity-list">
-                {activities.length === 0 ? (
-                  <div className="dash-activity-empty">
-                    <div className="dash-activity-empty-icon">
-                      <Activity size={24} />
-                    </div>
-                    <p className="dash-activity-empty-title">No activity yet</p>
-                    <p className="dash-activity-empty-desc">
-                      Share your page to get your first subscriber
-                    </p>
-                  </div>
-                ) : (
-                  activities.map((activity: any, index: number) => {
-                    const payload = activity.payload || {}
-                    const currency = (payload.currency || profile?.currency || currentUser?.profile?.currency || 'USD').toUpperCase()
-                    const currencySymbolForRow = getCurrencySymbol(currency)
-                    const amount = payload.amount ? centsToDisplayAmount(payload.amount, currency) : 0
-                    const name = payload.subscriberName || payload.recipientName || ''
-                    const tier = payload.tierName || ''
-                    const isCanceled = activity.type === 'subscription_canceled'
-
-                    return (
-                      <Pressable
-                        key={activity.id}
-                        className="dash-activity-item animate-fade-in-up"
-                        style={{ animationDelay: `${index * 0.05}s`, animationFillMode: 'both' }}
-                        onClick={() => navigate(`/activity/${activity.id}`)}
-                      >
-                        <div className="dash-activity-icon">
-                          {getActivityIcon(activity.type)}
-                        </div>
-                        <div className="dash-activity-info">
-                          <div className="dash-activity-item-title">{getActivityTitle(activity.type)}</div>
-                          <div className="dash-activity-item-meta">
-                            {formatRelativeTime(activity.createdAt)}{name ? ` - ${name}` : ''}
-                          </div>
-                        </div>
-                        {amount > 0 && (
-                          <div className="dash-activity-amount-col">
-                            <span className={`dash-activity-amount ${isCanceled ? 'cancelled' : ''}`}>
-                              {isCanceled ? '-' : '+'}{currencySymbolForRow}{formatCompactNumber(amount)}
-                            </span>
-                            {tier && <span className="dash-activity-tier">{tier}</span>}
-                          </div>
-                        )}
-                      </Pressable>
-                    )
-                  })
-                )}
-              </div>
-              </section>
-            )}
+            {/* Activity Section */}
+            <ActivityFeed
+              loading={activityLoading}
+              activities={activities}
+              defaultCurrency={currencyCode}
+              onNavigate={navigate}
+            />
           </>
         )}
       </main>

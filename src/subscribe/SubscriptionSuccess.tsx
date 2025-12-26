@@ -5,6 +5,7 @@ import { CheckCircle, Heart, Loader2 } from 'lucide-react'
 import { Pressable } from '../components'
 import { api } from '../api'
 import type { Profile } from '../api/client'
+import { queryKeys } from '../api/queryKeys'
 import './subscribe.css'
 
 interface SubscriptionSuccessProps {
@@ -42,7 +43,7 @@ export default function SubscriptionSuccess({ profile, provider }: SubscriptionS
                 if (data.verified) {
                     if (isMounted) {
                         setStatus('verified')
-                        queryClient.invalidateQueries({ queryKey: ['publicProfile', profile.username] })
+                        queryClient.invalidateQueries({ queryKey: queryKeys.publicProfile(profile.username) })
                     }
                     return true
                 }
@@ -60,7 +61,7 @@ export default function SubscriptionSuccess({ profile, provider }: SubscriptionS
                     if (isMounted) {
                         setStatus('verified')
                         // Update global cache
-                        queryClient.invalidateQueries({ queryKey: ['publicProfile', profile.username] })
+                        queryClient.invalidateQueries({ queryKey: queryKeys.publicProfile(profile.username) })
                     }
                     return true
                 }

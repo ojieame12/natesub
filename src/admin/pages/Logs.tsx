@@ -7,6 +7,7 @@ import { useAdminLogs, useAdminLogsStats } from '../api'
 import StatCard from '../components/StatCard'
 import FilterBar from '../components/FilterBar'
 import Pagination from '../components/Pagination'
+import { SkeletonTableRows } from '../components/SkeletonTableRows'
 
 function formatDate(date: string): string {
   return new Date(date).toLocaleDateString('en-US', {
@@ -144,7 +145,7 @@ export default function Logs() {
           </thead>
           <tbody>
             {isLoading ? (
-              <tr><td colSpan={5} style={{ textAlign: 'center', padding: '32px' }}>Loading...</td></tr>
+              <SkeletonTableRows columns={5} rows={5} />
             ) : data?.logs?.length ? (
               data.logs.map((log) => (
                 <Fragment key={log.id}>

@@ -11,6 +11,7 @@ import {
   schedulePaymentFailedReminder,
   schedulePastDueReminder,
 } from './reminders.js'
+import { getReportingCurrencyData } from '../services/fx.js'
 
 // Configuration
 const MAX_RETRY_ATTEMPTS = 3
@@ -245,6 +246,9 @@ export async function processRecurringBilling(): Promise<BillingResult> {
       // Use paid_at from Paystack response if available, otherwise current time
       const paidAt = chargeResult.paid_at ? new Date(chargeResult.paid_at) : new Date()
 
+      // Get reporting currency data (USD conversion) for admin dashboard
+      const reportingData = await getReportingCurrencyData(grossCents, feeCents, netCents, sub.currency)
+
       await db.payment.create({
         data: {
           subscriptionId: sub.id,
@@ -263,6 +267,8 @@ export async function processRecurringBilling(): Promise<BillingResult> {
           occurredAt: paidAt,
           paystackEventId: chargeResult.id?.toString(),
           paystackTransactionRef: reference,
+          // Reporting currency fields (USD normalized)
+          ...reportingData,
         },
       })
 
@@ -482,6 +488,9 @@ export async function processRetries(): Promise<BillingResult> {
       // Use paid_at from Paystack response if available
       const paidAt = chargeResult.paid_at ? new Date(chargeResult.paid_at) : new Date()
 
+      // Get reporting currency data (USD conversion) for admin dashboard
+      const retryReportingData = await getReportingCurrencyData(grossCents, feeCents, netCents, sub.currency)
+
       await db.payment.create({
         data: {
           subscriptionId: sub.id,
@@ -500,6 +509,8 @@ export async function processRetries(): Promise<BillingResult> {
           occurredAt: paidAt,
           paystackEventId: chargeResult.id?.toString(),
           paystackTransactionRef: reference,
+          // Reporting currency fields (USD normalized)
+          ...retryReportingData,
         },
       })
 

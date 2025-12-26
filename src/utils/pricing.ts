@@ -1,8 +1,14 @@
 // Pricing configuration for Personal vs Service branches
 // Using split model: 4% subscriber + 4% creator = 8% total
+//
+// SOURCE OF TRUTH: Backend serves canonical values at GET /config/fees
+// These are fallback defaults for offline/SSR. Runtime code should use
+// useFeeConfig() hook from api/hooks.ts for guaranteed accuracy.
+//
+// To verify sync: compare these with backend/src/constants/fees.ts
+// API endpoint: GET /config/fees returns { platformFeeRate, splitRate, ... }
 
-// Fee constants - single source of truth for frontend
-// These MUST match backend/src/constants/fees.ts
+// Fee constants - FALLBACK values (backend is source of truth)
 export const PLATFORM_FEE_RATE = 0.08     // 8% total
 export const SPLIT_RATE = 0.04            // 4% each party
 export const CROSS_BORDER_BUFFER = 0.015  // 1.5%
@@ -50,11 +56,19 @@ export function calculateFee(grossCents: number, purpose: string | undefined): n
   return Math.round(grossCents * pricing.transactionFee)
 }
 
+// Fee config interface for optional overrides from useFeeConfig()
+export interface FeeConfigOverride {
+  platformFeeRate?: number
+  splitRate?: number
+  crossBorderBuffer?: number
+}
+
 // Calculate fee preview using split model (4% subscriber + 4% creator = 8% total)
 export function calculateFeePreview(
   amountCents: number,
   _purpose: string | undefined, // Reserved for future use
-  _legacyFeeMode?: 'absorb' | 'pass_to_subscriber' // Ignored - always split
+  _legacyFeeMode?: 'absorb' | 'pass_to_subscriber', // Ignored - always split
+  feeConfig?: FeeConfigOverride // Optional: pass values from useFeeConfig()
 ): {
   subscriberPays: number
   creatorReceives: number
@@ -63,9 +77,13 @@ export function calculateFeePreview(
   creatorFee: number     // Creator's portion (4%)
   feePercent: number
 } {
-  // Split model: 4% each side = 8% total (uses exported constants)
-  const subscriberFee = Math.round(amountCents * SPLIT_RATE)
-  const creatorFee = Math.round(amountCents * SPLIT_RATE)
+  // Use provided config or fall back to module constants
+  const splitRate = feeConfig?.splitRate ?? SPLIT_RATE
+  const platformFeeRate = feeConfig?.platformFeeRate ?? PLATFORM_FEE_RATE
+
+  // Split model: 4% each side = 8% total
+  const subscriberFee = Math.round(amountCents * splitRate)
+  const creatorFee = Math.round(amountCents * splitRate)
   const feeAmount = subscriberFee + creatorFee
 
   return {
@@ -74,6 +92,6 @@ export function calculateFeePreview(
     feeAmount,
     subscriberFee,
     creatorFee,
-    feePercent: PLATFORM_FEE_RATE * 100,
+    feePercent: platformFeeRate * 100,
   }
 }

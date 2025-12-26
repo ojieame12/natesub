@@ -6,6 +6,7 @@ import { useState } from 'react'
 import { useAdminEmails } from '../api'
 import FilterBar from '../components/FilterBar'
 import Pagination from '../components/Pagination'
+import { SkeletonTableRows } from '../components/SkeletonTableRows'
 
 function formatDate(date: string): string {
   return new Date(date).toLocaleDateString('en-US', {
@@ -86,7 +87,7 @@ export default function Emails() {
           </thead>
           <tbody>
             {isLoading ? (
-              <tr><td colSpan={6} style={{ textAlign: 'center', padding: '32px' }}>Loading...</td></tr>
+              <SkeletonTableRows columns={6} rows={5} />
             ) : data?.emails?.length ? (
               data.emails.map((email) => (
                 <tr key={email.id}>

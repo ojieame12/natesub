@@ -16,6 +16,7 @@ import { db } from '../../db/client.js'
 import { HTTPException } from 'hono/http-exception'
 import { requireRole, logAdminAction, requireFreshSession } from '../../middleware/adminAuth.js'
 import { adminSensitiveRateLimit } from '../../middleware/rateLimit.js'
+import { auditSensitiveRead } from '../../middleware/auditLog.js'
 import { stripe } from '../../services/stripe.js'
 import { env } from '../../config/env.js'
 import { invalidateAdminRevenueCache } from '../../utils/cache.js'
@@ -37,7 +38,7 @@ const DEFAULT_REFUND_POLICY = {
  * GET /admin/refunds
  * List all refunds with filters
  */
-refunds.get('/', async (c) => {
+refunds.get('/', auditSensitiveRead('refund_list'), async (c) => {
   const query = z.object({
     limit: z.coerce.number().min(1).max(100).default(50),
     offset: z.coerce.number().min(0).default(0),
@@ -144,7 +145,7 @@ refunds.get('/', async (c) => {
  * GET /admin/refunds/eligible/:paymentId
  * Check if a payment is eligible for refund
  */
-refunds.get('/eligible/:paymentId', async (c) => {
+refunds.get('/eligible/:paymentId', auditSensitiveRead('refund_details'), async (c) => {
   const { paymentId } = c.req.param()
 
   const payment = await db.payment.findUnique({
@@ -405,7 +406,7 @@ refunds.post('/:paymentId/process', adminSensitiveRateLimit, requireFreshSession
  * GET /admin/refunds/stats
  * Refund statistics and trends
  */
-refunds.get('/stats', async (c) => {
+refunds.get('/stats', auditSensitiveRead('refund_stats'), async (c) => {
   const query = z.object({
     days: z.coerce.number().min(1).max(365).default(30),
   }).parse(c.req.query())

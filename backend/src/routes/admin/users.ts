@@ -16,7 +16,10 @@ import { displayAmountToCents } from '../../utils/currency.js'
 import { env } from '../../config/env.js'
 import { adminSensitiveRateLimit } from '../../middleware/rateLimit.js'
 import { requireRole, requireFreshSession, logAdminAction } from '../../middleware/adminAuth.js'
+import { auditSensitiveRead } from '../../middleware/auditLog.js'
 import { deleteUser } from '../../services/userDeletion.js'
+import { paginationWithSearchSchema, getPaginationOffsets, formatLegacyPaginatedResponse } from '../../utils/pagination.js'
+import { buildUserWhere } from '../../utils/prismaFilters.js'
 
 const users = new Hono()
 
@@ -35,26 +38,18 @@ const COUNTRY_CURRENCY_MAP: Record<PaystackCountry, { currency: string; countryN
  * GET /admin/users
  * List users with pagination and filtering
  */
-users.get('/', async (c) => {
+users.get('/', auditSensitiveRead('user_list'), async (c) => {
   const query = z.object({
-    search: z.string().optional(),
-    page: z.coerce.number().default(1),
-    limit: z.coerce.number().min(1).max(200).default(50),
+    ...paginationWithSearchSchema.shape,
     status: z.enum(['all', 'active', 'blocked', 'deleted']).default('all')
   }).parse(c.req.query())
 
-  const skip = (query.page - 1) * query.limit
-  const where: any = {}
+  const { skip, take } = getPaginationOffsets(query)
 
-  if (query.search) {
-    where.OR = [
-      { email: { contains: query.search, mode: 'insensitive' } },
-      { profile: { username: { contains: query.search, mode: 'insensitive' } } },
-      { profile: { displayName: { contains: query.search, mode: 'insensitive' } } }
-    ]
-  }
+  // Build base where clause with search
+  const where = buildUserWhere({ search: query.search })
 
-  // Status filtering at DB level
+  // Status filtering - uses custom semantics (deletedAt + profile presence)
   if (query.status === 'active') {
     where.deletedAt = null
   } else if (query.status === 'blocked') {
@@ -69,7 +64,7 @@ users.get('/', async (c) => {
     db.user.findMany({
       where,
       skip,
-      take: query.limit,
+      take,
       orderBy: { createdAt: 'desc' },
       include: {
         profile: {
@@ -100,37 +95,34 @@ users.get('/', async (c) => {
     return user.profile ? 'blocked' : 'deleted'
   }
 
-  return c.json({
-    users: dbUsers.map(u => ({
-      id: u.id,
-      email: u.email,
-      profile: u.profile ? {
-        username: u.profile.username,
-        displayName: u.profile.displayName,
-        avatarUrl: u.profile.avatarUrl,
-        country: u.profile.country,
-        currency: u.profile.currency,
-        payoutStatus: u.profile.payoutStatus,
-        paymentProvider: u.profile.paymentProvider,
-      } : null,
-      status: getUserStatus(u),
-      subscriberCount: u._count.subscriptions,
-      subscribedToCount: u._count.subscribedTo,
-      revenueTotal: revenueMapObj.get(u.id) || 0,
-      createdAt: u.createdAt,
-      lastLoginAt: u.lastLoginAt
-    })),
-    total,
-    page: query.page,
-    totalPages: Math.ceil(total / query.limit)
-  })
+  const users = dbUsers.map(u => ({
+    id: u.id,
+    email: u.email,
+    profile: u.profile ? {
+      username: u.profile.username,
+      displayName: u.profile.displayName,
+      avatarUrl: u.profile.avatarUrl,
+      country: u.profile.country,
+      currency: u.profile.currency,
+      payoutStatus: u.profile.payoutStatus,
+      paymentProvider: u.profile.paymentProvider,
+    } : null,
+    status: getUserStatus(u),
+    subscriberCount: u._count.subscriptions,
+    subscribedToCount: u._count.subscribedTo,
+    revenueTotal: revenueMapObj.get(u.id) || 0,
+    createdAt: u.createdAt,
+    lastLoginAt: u.lastLoginAt
+  }))
+
+  return c.json(formatLegacyPaginatedResponse(users, total, query, 'users'))
 })
 
 /**
  * GET /admin/users/:id
  * Get user details with stats
  */
-users.get('/:id', async (c) => {
+users.get('/:id', auditSensitiveRead('user_details'), async (c) => {
   const { id } = c.req.param()
 
   const user = await db.user.findUnique({

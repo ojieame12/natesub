@@ -19,6 +19,7 @@ import { authVerifyRateLimit, authMagicLinkRateLimit } from '../middleware/rateL
 import { env } from '../config/env.js'
 import { db } from '../db/client.js'
 import { stripe } from '../services/stripe.js'
+import { deactivateAuthorizationsBatch } from '../services/paystack/authorizations.js'
 
 const auth = new Hono()
 
@@ -448,6 +449,76 @@ auth.delete(
               console.error(`[auth] Failed to cancel subscriber subscription:`, err.message)
             }
           }
+        }
+      }
+
+      // 4. Cancel Paystack subscriptions where user is creator
+      const paystackCreatorSubs = await db.subscription.findMany({
+        where: {
+          creatorId: userId,
+          paystackAuthorizationCode: { not: null },
+          status: { in: ['active', 'past_due', 'pending'] },
+        },
+        select: { id: true, paystackAuthorizationCode: true },
+      })
+
+      const creatorAuthCodes = paystackCreatorSubs
+        .map((s) => s.paystackAuthorizationCode)
+        .filter((code): code is string => code !== null)
+
+      if (creatorAuthCodes.length > 0) {
+        try {
+          const revokeResult = await deactivateAuthorizationsBatch(creatorAuthCodes)
+          console.log(`[auth] Revoked ${revokeResult.success}/${creatorAuthCodes.length} Paystack creator authorizations`)
+
+          // Mark subscriptions as canceled
+          await db.subscription.updateMany({
+            where: {
+              id: { in: paystackCreatorSubs.map((s) => s.id) },
+            },
+            data: {
+              status: 'canceled',
+              canceledAt: new Date(),
+              paystackAuthorizationCode: null,
+            },
+          })
+        } catch (err: any) {
+          console.error(`[auth] Failed to revoke Paystack creator authorizations:`, err.message)
+        }
+      }
+
+      // 5. Cancel Paystack subscriptions where user is subscriber
+      const paystackSubscriberSubs = await db.subscription.findMany({
+        where: {
+          subscriberId: userId,
+          paystackAuthorizationCode: { not: null },
+          status: { in: ['active', 'past_due', 'pending'] },
+        },
+        select: { id: true, paystackAuthorizationCode: true },
+      })
+
+      const subscriberAuthCodes = paystackSubscriberSubs
+        .map((s) => s.paystackAuthorizationCode)
+        .filter((code): code is string => code !== null)
+
+      if (subscriberAuthCodes.length > 0) {
+        try {
+          const revokeResult = await deactivateAuthorizationsBatch(subscriberAuthCodes)
+          console.log(`[auth] Revoked ${revokeResult.success}/${subscriberAuthCodes.length} Paystack subscriber authorizations`)
+
+          // Mark subscriptions as canceled
+          await db.subscription.updateMany({
+            where: {
+              id: { in: paystackSubscriberSubs.map((s) => s.id) },
+            },
+            data: {
+              status: 'canceled',
+              canceledAt: new Date(),
+              paystackAuthorizationCode: null,
+            },
+          })
+        } catch (err: any) {
+          console.error(`[auth] Failed to revoke Paystack subscriber authorizations:`, err.message)
         }
       }
 

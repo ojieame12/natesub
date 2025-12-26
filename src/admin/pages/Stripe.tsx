@@ -18,6 +18,8 @@ import type { StripeAccount } from '../api'
 import { formatCurrency, formatDate } from '../utils/format'
 import StatCard from '../components/StatCard'
 import FilterBar from '../components/FilterBar'
+import { SkeletonTableRows } from '../components/SkeletonTableRows'
+import { ContentSkeleton } from '../../components/Skeleton'
 import Pagination from '../components/Pagination'
 import ActionModal from '../components/ActionModal'
 
@@ -381,7 +383,7 @@ export default function Stripe() {
               </thead>
               <tbody>
                 {accountsLoading ? (
-                  <tr><td colSpan={7} style={{ textAlign: 'center', padding: '32px' }}>Loading...</td></tr>
+                  <SkeletonTableRows columns={7} rows={5} />
                 ) : accountsData?.accounts?.length ? (
                   accountsData.accounts.map((account) => (
                     <tr key={account.userId}>
@@ -481,7 +483,7 @@ export default function Stripe() {
             </thead>
             <tbody>
               {transfersLoading ? (
-                <tr><td colSpan={6} style={{ textAlign: 'center', padding: '32px' }}>Loading...</td></tr>
+                <SkeletonTableRows columns={6} rows={5} />
               ) : transfersData?.transfers?.length ? (
                 transfersData.transfers.map((transfer) => (
                   <tr key={transfer.id}>
@@ -529,7 +531,7 @@ export default function Stripe() {
             </thead>
             <tbody>
               {eventsLoading ? (
-                <tr><td colSpan={6} style={{ textAlign: 'center', padding: '32px' }}>Loading...</td></tr>
+                <SkeletonTableRows columns={6} rows={5} />
               ) : eventsData?.events?.length ? (
                 eventsData.events.map((event) => (
                   <tr key={event.id}>
@@ -579,7 +581,7 @@ export default function Stripe() {
             </div>
             <div className="admin-sidebar-content">
               {detailLoading ? (
-                <p>Loading...</p>
+                <ContentSkeleton />
               ) : accountDetail ? (
                 <div>
                   {/* Stripe Error Banner */}

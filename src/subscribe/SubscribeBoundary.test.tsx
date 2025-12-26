@@ -28,6 +28,10 @@ vi.mock('../api/hooks', () => ({
   useUpdatePageView: vi.fn(() => ({
     mutateAsync: mockUpdatePageView,
   })),
+  useFeeConfig: vi.fn(() => ({
+    data: { platformFeeRate: 0.08, splitRate: 0.04, crossBorderBuffer: 0.015 },
+    isLoading: false,
+  })),
 }))
 
 // Mock api.checkout.verifySession and detectPayerCountry

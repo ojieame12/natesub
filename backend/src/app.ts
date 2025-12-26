@@ -30,6 +30,7 @@ import billing from './routes/billing.js'
 import analytics from './routes/analytics.js'
 import admin from './routes/admin/index.js'
 import support from './routes/support.js'
+import config from './routes/config.js'
 
 const app = new Hono()
 
@@ -303,6 +304,7 @@ app.get('/metrics', async (c) => {
 })
 
 // API routes
+app.route('/config', config)  // Public config (fee constants, etc.)
 app.route('/auth', auth)
 app.route('/profile', profile)
 app.route('/users', users)

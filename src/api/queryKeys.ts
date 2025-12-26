@@ -30,6 +30,7 @@ export const queryKeys = {
     list: (status?: string) => ['subscriptions', status] as const,
     summary: ['subscriptions', 'summary'] as const,
     detail: (id: string) => ['subscription', id] as const,
+    myAll: ['mySubscriptions'] as const,  // Base key for invalidation
     my: (status?: string) => ['mySubscriptions', status] as const,
   },
 
@@ -88,23 +89,25 @@ export const queryKeys = {
     all: ['billing'] as const,
     status: ['billing', 'status'] as const,
   },
+
+  // Config (public, no auth)
+  config: {
+    all: ['config'] as const,
+    fees: ['config', 'fees'] as const,
+  },
 } as const
 
 // Admin query keys - separate namespace
 export const adminQueryKeys = {
   all: ['admin'] as const,
+  me: ['admin', 'me'] as const,
   dashboard: ['admin', 'dashboard'] as const,
 
-  // Revenue
+  // Revenue - uses combined endpoint (individual endpoints deprecated)
   revenue: {
     all: ['admin', 'revenue'] as const,
-    overview: ['admin', 'revenue', 'overview'] as const,
-    byProvider: (period: string) => ['admin', 'revenue', 'by-provider', period] as const,
-    byCurrency: (period: string) => ['admin', 'revenue', 'by-currency', period] as const,
-    daily: (days: number) => ['admin', 'revenue', 'daily', days] as const,
-    monthly: (months: number) => ['admin', 'revenue', 'monthly', months] as const,
-    topCreators: (period: string, limit: number) => ['admin', 'revenue', 'top-creators', period, limit] as const,
-    refunds: (period: string) => ['admin', 'revenue', 'refunds', period] as const,
+    combined: (period: string, days: number, months: number, topCreatorsLimit: number) =>
+      ['admin', 'revenue', 'all', period, days, months, topCreatorsLimit] as const,
   },
 
   // Users
@@ -184,5 +187,67 @@ export const adminQueryKeys = {
     all: ['admin', 'admins'] as const,
     list: ['admin', 'admins'] as const,
     audit: (limit: number) => ['admin', 'admins', 'audit', limit] as const,
+  },
+
+  // Support
+  support: {
+    all: ['admin', 'support'] as const,
+    stats: ['admin', 'support', 'stats'] as const,
+    tickets: (filters?: Record<string, string>) => ['admin', 'support', 'tickets', filters] as const,
+    ticket: (id: string) => ['admin', 'support', 'ticket', id] as const,
+  },
+
+  // Health
+  health: ['admin', 'health'] as const,
+
+  // Webhooks
+  webhooks: {
+    all: ['admin', 'webhooks'] as const,
+    stats: ['admin', 'webhooks', 'stats'] as const,
+    failed: ['admin', 'webhooks', 'failed'] as const,
+    list: (params: Record<string, unknown>) => ['admin', 'webhooks', params] as const,
+  },
+
+  // Blocked Subscribers
+  blockedSubscribers: ['admin', 'blocked-subscribers'] as const,
+
+  // Disputes
+  disputes: {
+    all: ['admin', 'disputes'] as const,
+    stats: ['admin', 'disputes', 'stats'] as const,
+    list: (params: Record<string, unknown>) => ['admin', 'disputes', params] as const,
+  },
+
+  // Reconciliation
+  reconciliation: {
+    all: ['admin', 'reconciliation'] as const,
+    paystackMissing: (hours: number) => ['admin', 'reconciliation', 'paystack-missing', hours] as const,
+    stripeMissing: (limit: number) => ['admin', 'reconciliation', 'stripe-missing', limit] as const,
+  },
+
+  // Creators
+  creators: {
+    all: ['admin', 'creators'] as const,
+    list: (params: Record<string, unknown>) => ['admin', 'creators', params] as const,
+    detail: (id: string) => ['admin', 'creators', id] as const,
+    stats: ['admin', 'creators', 'stats'] as const,
+  },
+
+  // Subscribers (admin view)
+  subscribers: {
+    all: ['admin', 'subscribers'] as const,
+    list: (params: Record<string, unknown>) => ['admin', 'subscribers', params] as const,
+  },
+
+  // Tax
+  tax: {
+    all: ['admin', 'tax'] as const,
+    earnings: (year: number) => ['admin', 'tax', 'earnings', year] as const,
+  },
+
+  // Refunds
+  refunds: {
+    all: ['admin', 'refunds'] as const,
+    list: (params: Record<string, unknown>) => ['admin', 'refunds', params] as const,
   },
 } as const

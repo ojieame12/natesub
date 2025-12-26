@@ -12,6 +12,7 @@ import {
 } from '../../../utils/webhookValidation.js'
 import { normalizeEmailAddress } from '../utils.js'
 import { invalidateAdminRevenueCache } from '../../../utils/cache.js'
+import { getReportingCurrencyData } from '../../../services/fx.js'
 
 async function resolveStripeCheckoutCustomer(session: Stripe.Checkout.Session): Promise<{ email: string; name: string | null }> {
   const directEmail = session.customer_details?.email || session.customer_email || null
@@ -636,6 +637,10 @@ export async function handleAsyncPaymentSucceeded(event: Stripe.Event) {
     }
   }
 
+  // Get reporting currency data (USD conversion) for admin dashboard
+  const currency = session.currency?.toUpperCase() || 'USD'
+  const reportingData = await getReportingCurrencyData(grossCents, feeCents, netCents, currency)
+
   // Create payment record
   const checkoutPayment = await db.payment.create({
     data: {
@@ -644,7 +649,7 @@ export async function handleAsyncPaymentSucceeded(event: Stripe.Event) {
       subscriberId: subscriber.id,
       grossCents,
       amountCents: session.amount_total || 0,
-      currency: session.currency?.toUpperCase() || 'USD',
+      currency,
       feeCents,
       netCents,
       subscriberFeeCents: subFeeCents,   // Split fee: subscriber's portion
@@ -657,6 +662,8 @@ export async function handleAsyncPaymentSucceeded(event: Stripe.Event) {
       stripeEventId: event.id,
       stripePaymentIntentId: session.payment_intent as string || null,
       stripeChargeId,
+      // Reporting currency fields (USD normalized)
+      ...reportingData,
     },
   })
 

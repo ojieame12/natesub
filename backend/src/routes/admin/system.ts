@@ -18,7 +18,7 @@ import { checkEmailHealth, sendTestEmail, _sendEmail } from '../../services/emai
 import { isSmsEnabled, sendVerificationSms } from '../../services/sms.js'
 import { env } from '../../config/env.js'
 import { handleInvoicePaid } from '../webhooks/stripe/invoice.js'
-import { todayStart, thisMonthStart, lastNDays } from '../../utils/timezone.js'
+import { todayStart, thisMonthStart, lastNDays, BUSINESS_TIMEZONE } from '../../utils/timezone.js'
 import { adminSensitiveRateLimit } from '../../middleware/rateLimit.js'
 import { getSessionToken, isAdminRole, requireRole, logAdminAction, requireFreshSession } from '../../middleware/adminAuth.js'
 import { validateSession } from '../../services/auth.js'
@@ -296,6 +296,17 @@ system.get('/metrics', async (c) => {
 /**
  * GET /admin/dashboard
  * Dashboard stats (cached for 60 seconds)
+ *
+ * DATA SOURCE NOTE:
+ * This endpoint uses DB aggregates (payments table) for revenue metrics.
+ * The admin Stripe tab uses live Stripe API calls (stripe.balance.retrieve).
+ * This creates a data freshness gap:
+ * - DB data lags behind Stripe by webhook processing time (typically <1min)
+ * - Cached for 60s, so could be up to ~2min behind live Stripe
+ *
+ * The freshness metadata helps surface this gap to admins.
+ * Future improvement: Consider adding live Stripe balance to this endpoint
+ * for full consistency, or clearly label DB-sourced vs live data in UI.
  */
 system.get('/dashboard', async (c) => {
   const result = await cached(
@@ -310,36 +321,165 @@ system.get('/dashboard', async (c) => {
         newUsersToday,
         newUsersThisMonth,
         activeSubscriptions,
-        totalRevenueCents,
-        revenueThisMonthCents,
+        // Group by currency for accurate per-currency revenue
+        totalRevenueByCurrency,
+        thisMonthRevenueByCurrency,
+        // Legacy payments (grossCents is null, use amountCents)
+        legacyTotalByCurrency,
+        legacyThisMonthByCurrency,
+        // Stored USD reporting amounts (accurate historical totals)
+        reportingTotals,
+        reportingThisMonth,
+        // Count payments with estimated reporting (for UI indicator)
+        estimatedCount,
         disputedPayments,
-        failedPaymentsToday
+        failedPaymentsToday,
+        lastPayment,
+        lastProcessedWebhook
       ] = await Promise.all([
         db.user.count({ where: { deletedAt: null } }),
         db.user.count({ where: { createdAt: { gte: startOfDay }, deletedAt: null } }),
         db.user.count({ where: { createdAt: { gte: startOfMonth }, deletedAt: null } }),
         db.subscription.count({ where: { status: 'active' } }),
-        // Include both recurring and one-time payments for accurate revenue
-        db.payment.aggregate({
+        // Group by currency for accurate revenue reporting (new schema: grossCents)
+        db.payment.groupBy({
+          by: ['currency'],
           where: { status: 'succeeded', type: { in: ['recurring', 'one_time'] } },
-          _sum: { feeCents: true }
+          _sum: { feeCents: true, grossCents: true },
+          _count: true
+        }),
+        db.payment.groupBy({
+          by: ['currency'],
+          where: { status: 'succeeded', type: { in: ['recurring', 'one_time'] }, occurredAt: { gte: startOfMonth } },
+          _sum: { feeCents: true, grossCents: true },
+          _count: true
+        }),
+        // Legacy payments: amountCents when grossCents is null
+        db.payment.groupBy({
+          by: ['currency'],
+          where: { status: 'succeeded', type: { in: ['recurring', 'one_time'] }, grossCents: null },
+          _sum: { amountCents: true },
+          _count: true
+        }),
+        db.payment.groupBy({
+          by: ['currency'],
+          where: { status: 'succeeded', type: { in: ['recurring', 'one_time'] }, occurredAt: { gte: startOfMonth }, grossCents: null },
+          _sum: { amountCents: true },
+          _count: true
+        }),
+        // Stored USD reporting amounts (use these for accurate historical totals)
+        db.payment.aggregate({
+          where: { status: 'succeeded', type: { in: ['recurring', 'one_time'] }, reportingCurrency: 'USD' },
+          _sum: { reportingFeeCents: true, reportingGrossCents: true, reportingNetCents: true },
         }),
         db.payment.aggregate({
-          where: { status: 'succeeded', type: { in: ['recurring', 'one_time'] }, occurredAt: { gte: startOfMonth } },
-          _sum: { feeCents: true }
+          where: { status: 'succeeded', type: { in: ['recurring', 'one_time'] }, occurredAt: { gte: startOfMonth }, reportingCurrency: 'USD' },
+          _sum: { reportingFeeCents: true, reportingGrossCents: true, reportingNetCents: true },
+        }),
+        // Count payments with estimated reporting data
+        db.payment.count({
+          where: { status: 'succeeded', type: { in: ['recurring', 'one_time'] }, reportingIsEstimated: true }
         }),
         db.payment.count({ where: { status: 'disputed' } }),
-        db.payment.count({ where: { status: 'failed', occurredAt: { gte: startOfDay } } })
+        db.payment.count({ where: { status: 'failed', occurredAt: { gte: startOfDay } } }),
+        // Freshness: last payment
+        db.payment.findFirst({
+          where: { status: 'succeeded' },
+          orderBy: { occurredAt: 'desc' },
+          select: { occurredAt: true }
+        }),
+        // Freshness: last processed webhook
+        db.webhookEvent.findFirst({
+          where: { status: 'processed' },
+          orderBy: { processedAt: 'desc' },
+          select: { processedAt: true, provider: true, eventType: true }
+        })
       ])
+
+      // Build legacy amount maps (for payments where grossCents is null)
+      const legacyTotalMap = new Map(legacyTotalByCurrency.map(c => [c.currency, c._sum.amountCents || 0]))
+      const legacyThisMonthMap = new Map(legacyThisMonthByCurrency.map(c => [c.currency, c._sum.amountCents || 0]))
+
+      // Build per-currency breakdown, merging grossCents + legacy amountCents
+      const byCurrency: Record<string, { feeCents: number; volumeCents: number; paymentCount: number }> = {}
+      const thisMonthByCurrency: Record<string, { feeCents: number; volumeCents: number; paymentCount: number }> = {}
+
+      for (const c of totalRevenueByCurrency) {
+        const legacyVolume = legacyTotalMap.get(c.currency) || 0
+        byCurrency[c.currency] = {
+          feeCents: c._sum.feeCents || 0,
+          volumeCents: (c._sum.grossCents || 0) + legacyVolume,
+          paymentCount: c._count
+        }
+      }
+
+      for (const c of thisMonthRevenueByCurrency) {
+        const legacyVolume = legacyThisMonthMap.get(c.currency) || 0
+        thisMonthByCurrency[c.currency] = {
+          feeCents: c._sum.feeCents || 0,
+          volumeCents: (c._sum.grossCents || 0) + legacyVolume,
+          paymentCount: c._count
+        }
+      }
+
+      const currencies = Object.keys(byCurrency)
+      const thisMonthCurrencies = Object.keys(thisMonthByCurrency)
+      const isMultiCurrency = currencies.length > 1
+      const isThisMonthMultiCurrency = thisMonthCurrencies.length > 1
+
+      // Calculate totals (for backward compatibility - but flag if mixed)
+      const totalCents = Object.values(byCurrency).reduce((sum, c) => sum + c.feeCents, 0)
+      const totalVolumeCents = Object.values(byCurrency).reduce((sum, c) => sum + c.volumeCents, 0)
+      const paymentCount = Object.values(byCurrency).reduce((sum, c) => sum + c.paymentCount, 0)
+      const thisMonthCents = Object.values(thisMonthByCurrency).reduce((sum, c) => sum + c.feeCents, 0)
+      const thisMonthVolumeCents = Object.values(thisMonthByCurrency).reduce((sum, c) => sum + c.volumeCents, 0)
+      const thisMonthPaymentCount = Object.values(thisMonthByCurrency).reduce((sum, c) => sum + c.paymentCount, 0)
+
+      // USD equivalent totals from stored reporting amounts
+      // These are calculated at payment time using the FX rate at that moment
+      // Much more accurate than live conversion for historical totals
+      const totalFeesUsdCents = reportingTotals._sum.reportingFeeCents || 0
+      const totalVolumeUsdCents = reportingTotals._sum.reportingGrossCents || 0
+      const thisMonthFeesUsdCents = reportingThisMonth._sum.reportingFeeCents || 0
+      const thisMonthVolumeUsdCents = reportingThisMonth._sum.reportingGrossCents || 0
 
       return {
         users: { total: totalUsers, newToday: newUsersToday, newThisMonth: newUsersThisMonth },
         subscriptions: { active: activeSubscriptions },
         revenue: {
-          totalCents: totalRevenueCents._sum.feeCents || 0,
-          thisMonthCents: revenueThisMonthCents._sum.feeCents || 0
+          // Per-currency breakdown (accurate)
+          byCurrency,
+          thisMonthByCurrency,
+          // Currency metadata
+          currencies,
+          thisMonthCurrencies,
+          isMultiCurrency,
+          isThisMonthMultiCurrency,
+          // Totals (backward compatibility - WARNING: mixed currencies if isMultiCurrency=true)
+          totalCents,
+          thisMonthCents,
+          totalVolumeCents,
+          thisMonthVolumeCents,
+          paymentCount,
+          thisMonthPaymentCount,
+          // USD equivalent totals (from stored reporting amounts - captured at payment time)
+          usdEquivalent: {
+            totalFeesUsdCents,
+            totalVolumeUsdCents,
+            thisMonthFeesUsdCents,
+            thisMonthVolumeUsdCents,
+            // Flag if any payments have estimated rates (backfilled with current rate)
+            hasEstimatedRates: estimatedCount > 0,
+            estimatedPaymentCount: estimatedCount,
+          }
         },
-        flags: { disputedPayments, failedPaymentsToday }
+        flags: { disputedPayments, failedPaymentsToday },
+        freshness: {
+          businessTimezone: BUSINESS_TIMEZONE,
+          lastPaymentAt: lastPayment?.occurredAt?.toISOString() || null,
+          lastWebhookProcessedAt: lastProcessedWebhook?.processedAt?.toISOString() || null,
+          lastWebhookProvider: lastProcessedWebhook?.provider || null
+        }
       }
     }
   )

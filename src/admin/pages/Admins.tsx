@@ -18,6 +18,7 @@ import {
 } from '../api'
 import { formatDate, formatDateTime } from '../utils/format'
 import ActionModal from '../components/ActionModal'
+import { SkeletonTableRows } from '../components/SkeletonTableRows'
 import StatCard from '../components/StatCard'
 
 function getRoleBadge(role: string): string {
@@ -166,7 +167,7 @@ export default function Admins() {
             </thead>
             <tbody>
               {adminsLoading ? (
-                <tr><td colSpan={7} style={{ textAlign: 'center', padding: '32px' }}>Loading...</td></tr>
+                <SkeletonTableRows columns={7} rows={5} />
               ) : adminsData?.admins?.length ? (
                 adminsData.admins.map((admin) => (
                   <tr key={admin.id}>

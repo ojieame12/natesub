@@ -1,5 +1,6 @@
 import { db } from '../../../db/client.js'
 import { invalidateAdminRevenueCache } from '../../../utils/cache.js'
+import { convertLocalCentsToUSD } from '../../../services/fx.js'
 
 // Handle Paystack refund.processed - refund completed successfully
 export async function handlePaystackRefundProcessed(data: any, eventId: string) {
@@ -68,6 +69,24 @@ export async function handlePaystackRefundProcessed(data: any, eventId: string) 
     }
   }
 
+  // Calculate reporting currency fields using original payment's rate
+  const refundCurrency = currency?.toUpperCase() || originalPayment.currency
+  let reportingData: Record<string, unknown> = {}
+  if (originalPayment.reportingExchangeRate && originalPayment.reportingCurrency) {
+    const rate = originalPayment.reportingExchangeRate
+    const isUSD = refundCurrency === 'USD'
+    reportingData = {
+      reportingCurrency: 'USD',
+      reportingGrossCents: isUSD ? -refundAmount : -convertLocalCentsToUSD(refundAmount, rate),
+      reportingFeeCents: isUSD ? -feeCents : -convertLocalCentsToUSD(feeCents, rate),
+      reportingNetCents: isUSD ? -netCents : -convertLocalCentsToUSD(netCents, rate),
+      reportingExchangeRate: rate,
+      reportingRateSource: 'original_payment',
+      reportingRateTimestamp: new Date(),
+      reportingIsEstimated: false,
+    }
+  }
+
   // Create refund payment record (negative amounts) with split fee fields
   // Use eventId for uniqueness to support multiple partial refunds for same transaction
   await db.payment.create({
@@ -76,7 +95,7 @@ export async function handlePaystackRefundProcessed(data: any, eventId: string) 
       creatorId: originalPayment.creatorId,
       subscriberId: originalPayment.subscriberId,
       amountCents: -refundAmount, // Negative for refund
-      currency: currency?.toUpperCase() || originalPayment.currency,
+      currency: refundCurrency,
       feeCents: -feeCents,
       netCents: -netCents,
       creatorFeeCents: creatorFeeCents !== null ? -creatorFeeCents : null,
@@ -86,6 +105,8 @@ export async function handlePaystackRefundProcessed(data: any, eventId: string) 
       paystackEventId: eventId,
       paystackTransactionRef: `REF-${eventId}`, // Use eventId for uniqueness (supports partial refunds)
       feeModel: originalPayment.feeModel,
+      // Reporting currency (use original payment's rate)
+      ...reportingData,
     },
   })
 

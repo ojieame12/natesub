@@ -1,7 +1,7 @@
 // API Client for Nate Backend
 
 import { Capacitor } from '@capacitor/core'
-import { createFetchClient } from './fetchJson'
+import { createFetchClient, type FetchOptions } from './fetchJson'
 
 export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
 
@@ -104,7 +104,7 @@ export interface Profile {
   paymentProvider: string | null
   payoutStatus: 'pending' | 'active' | 'restricted'
   shareUrl: string | null
-  template?: 'boundary' | 'minimal' | 'editorial' // Subscribe page template
+  template?: 'boundary' // Subscribe page template (only 'boundary' implemented)
   paymentsReady?: boolean // For public profiles - indicates if checkout will work
   feeMode?: 'absorb' | 'pass_to_subscriber' | 'split' // Fee model (split = 4%/4%)
   crossBorder?: boolean // True if Stripe cross-border account (payments in USD, payouts in local currency)
@@ -306,7 +306,7 @@ const fetchClient = createFetchClient({
 // Maintains ApiError type for backward compatibility
 async function apiFetch<T>(
   path: string,
-  options: RequestInit = {}
+  options: FetchOptions = {}
 ): Promise<T> {
   try {
     return await fetchClient<T>(path, options)
@@ -1302,6 +1302,23 @@ export const analytics = {
     apiFetch<AnalyticsStats>('/analytics/stats'),
 }
 
+// Config API (public, no auth required)
+export interface FeeConfig {
+  platformFeeRate: number
+  splitRate: number
+  crossBorderBuffer: number
+  platformFeePercent: number
+  splitPercent: number
+}
+
+const config = {
+  // Get fee configuration from backend (source of truth)
+  getFees: () =>
+    fetch(`${API_URL}/config/fees`)
+      .then(res => res.ok ? res.json() as Promise<FeeConfig> : null)
+      .catch(() => null),
+}
+
 // Export all
 export const api = {
   auth,
@@ -1320,6 +1337,7 @@ export const api = {
   payroll,
   analytics,
   billing,
+  config,
 }
 
 // ============================================

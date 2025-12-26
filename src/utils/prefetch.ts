@@ -14,6 +14,7 @@
 
 import { queryClient } from '../api/provider'
 import { api } from '../api/client'
+import { queryKeys } from '../api/queryKeys'
 
 // Map route paths to their import functions
 // These must match the lazy() imports in App.tsx
@@ -51,12 +52,12 @@ const routeDataPrefetch: Record<string, () => Promise<void>> = {
     // Note: Activity is NOT prefetched because it uses useInfiniteQuery
     await Promise.all([
       queryClient.prefetchQuery({
-        queryKey: ['profile'],
+        queryKey: queryKeys.profile,
         queryFn: () => api.profile.get(),
         staleTime: 5 * 60 * 1000,
       }),
       queryClient.prefetchQuery({
-        queryKey: ['metrics'],
+        queryKey: queryKeys.metrics,
         queryFn: () => api.activity.getMetrics(),
         staleTime: 60 * 1000,
       }),
@@ -67,7 +68,7 @@ const routeDataPrefetch: Record<string, () => Promise<void>> = {
     // Only prefetch metrics (simple query)
     // Activity list uses useInfiniteQuery - not prefetched
     await queryClient.prefetchQuery({
-      queryKey: ['metrics'],
+      queryKey: queryKeys.metrics,
       queryFn: () => api.activity.getMetrics(),
       staleTime: 60 * 1000,
     })
@@ -81,12 +82,12 @@ const routeDataPrefetch: Record<string, () => Promise<void>> = {
   '/profile': async () => {
     await Promise.all([
       queryClient.prefetchQuery({
-        queryKey: ['profile'],
+        queryKey: queryKeys.profile,
         queryFn: () => api.profile.get(),
         staleTime: 5 * 60 * 1000,
       }),
       queryClient.prefetchQuery({
-        queryKey: ['metrics'],
+        queryKey: queryKeys.metrics,
         queryFn: () => api.activity.getMetrics(),
         staleTime: 60 * 1000,
       }),
@@ -96,12 +97,12 @@ const routeDataPrefetch: Record<string, () => Promise<void>> = {
   '/settings': async () => {
     await Promise.all([
       queryClient.prefetchQuery({
-        queryKey: ['profile'],
+        queryKey: queryKeys.profile,
         queryFn: () => api.profile.get(),
         staleTime: 5 * 60 * 1000,
       }),
       queryClient.prefetchQuery({
-        queryKey: ['settings'],
+        queryKey: queryKeys.settings,
         queryFn: () => api.profile.getSettings(),
         staleTime: 5 * 60 * 1000,
       }),
@@ -111,12 +112,12 @@ const routeDataPrefetch: Record<string, () => Promise<void>> = {
   '/settings/payments': async () => {
     await Promise.all([
       queryClient.prefetchQuery({
-        queryKey: ['stripeStatus'],
+        queryKey: queryKeys.stripe.status,
         queryFn: () => api.stripe.getStatus(),
         staleTime: 2 * 60 * 1000,
       }),
       queryClient.prefetchQuery({
-        queryKey: ['paystackStatus'],
+        queryKey: queryKeys.paystack.status,
         queryFn: () => api.paystack.getStatus(),
         staleTime: 2 * 60 * 1000,
       }),
@@ -126,7 +127,7 @@ const routeDataPrefetch: Record<string, () => Promise<void>> = {
   '/updates': async () => {
     // Updates list is a simple query, safe to prefetch
     await queryClient.prefetchQuery({
-      queryKey: ['updates'],
+      queryKey: queryKeys.updates.list,
       queryFn: () => api.updates.list(),
       staleTime: 60 * 1000,
     })
@@ -253,14 +254,14 @@ export function prefetchCoreData(): void {
   const doPrefetch = () => {
     // Profile - most commonly needed, persisted
     queryClient.prefetchQuery({
-      queryKey: ['profile'],
+      queryKey: queryKeys.profile,
       queryFn: () => api.profile.get(),
       staleTime: 5 * 60 * 1000,
     }).catch(() => {})
 
     // Metrics - shown on dashboard and profile, persisted
     queryClient.prefetchQuery({
-      queryKey: ['metrics'],
+      queryKey: queryKeys.metrics,
       queryFn: () => api.activity.getMetrics(),
       staleTime: 60 * 1000,
     }).catch(() => {})
