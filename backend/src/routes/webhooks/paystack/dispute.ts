@@ -9,7 +9,7 @@ import { db } from '../../../db/client.js'
 import { sendDisputeCreatedEmail, sendDisputeResolvedEmail } from '../../../services/email.js'
 import { alertDisputeCreated, alertDisputeResolved } from '../../../services/slack.js'
 import { invalidateAdminRevenueCache } from '../../../utils/cache.js'
-import { convertLocalCentsToUSD } from '../../../services/fx.js'
+import { convertLocalCentsToUSD, getUSDRate } from '../../../services/fx.js'
 
 interface PaystackDisputeData {
   id: number | string
@@ -79,12 +79,22 @@ export async function handlePaystackDisputeCreated(data: PaystackDisputeData, ev
     netCents = -Math.round(originalPayment.netCents * disputeRatio)
   }
 
-  // Calculate reporting currency fields using original payment's rate
+  // Calculate reporting currency fields using original payment's rate (or fallback to current)
   const disputeCurrency = currency?.toUpperCase() || 'NGN'
-  let reportingData: Record<string, unknown> = {}
+  const isUSD = disputeCurrency === 'USD'
+  let reportingData: {
+    reportingCurrency: string
+    reportingGrossCents: number
+    reportingFeeCents: number
+    reportingNetCents: number
+    reportingExchangeRate: number
+    reportingRateSource: string
+    reportingRateTimestamp: Date
+    reportingIsEstimated: boolean
+  }
+
   if (originalPayment.reportingExchangeRate && originalPayment.reportingCurrency) {
     const rate = originalPayment.reportingExchangeRate
-    const isUSD = disputeCurrency === 'USD'
     reportingData = {
       reportingCurrency: 'USD',
       reportingGrossCents: isUSD ? -amount : -convertLocalCentsToUSD(amount, rate),
@@ -94,6 +104,19 @@ export async function handlePaystackDisputeCreated(data: PaystackDisputeData, ev
       reportingRateSource: 'original_payment',
       reportingRateTimestamp: new Date(),
       reportingIsEstimated: false,
+    }
+  } else {
+    // Fall back to current rate if original payment has no reporting data
+    const rate = isUSD ? 1 : await getUSDRate(disputeCurrency)
+    reportingData = {
+      reportingCurrency: 'USD',
+      reportingGrossCents: isUSD ? -amount : -convertLocalCentsToUSD(amount, rate),
+      reportingFeeCents: 0,
+      reportingNetCents: isUSD ? netCents : convertLocalCentsToUSD(netCents, rate),
+      reportingExchangeRate: rate,
+      reportingRateSource: 'current_rate',
+      reportingRateTimestamp: new Date(),
+      reportingIsEstimated: !isUSD,
     }
   }
 

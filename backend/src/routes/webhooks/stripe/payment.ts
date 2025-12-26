@@ -3,7 +3,7 @@ import { db } from '../../../db/client.js'
 import { calculateServiceFee, calculateLegacyFee } from '../../../services/fees.js'
 import { stripe } from '../../../services/stripe.js'
 import { isStripeCrossBorderSupported } from '../../../utils/constants.js'
-import { convertLocalCentsToUSD } from '../../../services/fx.js'
+import { convertLocalCentsToUSD, getUSDRate } from '../../../services/fx.js'
 
 // Handle charge refunded
 export async function handleChargeRefunded(event: Stripe.Event) {
@@ -138,29 +138,45 @@ export async function handleChargeRefunded(event: Stripe.Event) {
 
   // Calculate reporting currency fields using original payment's rate (if available)
   // This ensures refunds cancel out the original payment exactly in USD terms
+  // Fall back to current rate if original payment has no reporting data
+  const refundCurrency = charge.currency.toUpperCase()
+  const isUSD = refundCurrency === 'USD'
   let reportingData: {
     reportingCurrency: string
-    reportingGrossCents: number | null
+    reportingGrossCents: number
     reportingFeeCents: number
     reportingNetCents: number
     reportingExchangeRate: number
     reportingRateSource: string
     reportingRateTimestamp: Date
     reportingIsEstimated: boolean
-  } | null = null
+  }
 
   if (originalPayment?.reportingExchangeRate && originalPayment.reportingCurrency) {
+    // Use original payment's rate for exact cancellation
     const rate = originalPayment.reportingExchangeRate
-    const isUSD = charge.currency.toUpperCase() === 'USD'
     reportingData = {
       reportingCurrency: 'USD',
       reportingGrossCents: isUSD ? -refundAmount : -convertLocalCentsToUSD(refundAmount, rate),
       reportingFeeCents: isUSD ? -feeCents : -convertLocalCentsToUSD(feeCents, rate),
       reportingNetCents: isUSD ? -netCents : -convertLocalCentsToUSD(netCents, rate),
       reportingExchangeRate: rate,
-      reportingRateSource: 'original_payment', // Use original rate for consistency
+      reportingRateSource: 'original_payment',
       reportingRateTimestamp: new Date(),
       reportingIsEstimated: false,
+    }
+  } else {
+    // Fall back to current rate (original payment has no reporting data)
+    const rate = isUSD ? 1 : await getUSDRate(refundCurrency)
+    reportingData = {
+      reportingCurrency: 'USD',
+      reportingGrossCents: isUSD ? -refundAmount : -convertLocalCentsToUSD(refundAmount, rate),
+      reportingFeeCents: isUSD ? -feeCents : -convertLocalCentsToUSD(feeCents, rate),
+      reportingNetCents: isUSD ? -netCents : -convertLocalCentsToUSD(netCents, rate),
+      reportingExchangeRate: rate,
+      reportingRateSource: 'current_rate',
+      reportingRateTimestamp: new Date(),
+      reportingIsEstimated: !isUSD, // Non-USD payments use estimated rate
     }
   }
 
@@ -171,7 +187,7 @@ export async function handleChargeRefunded(event: Stripe.Event) {
       creatorId: subscription.creatorId,
       subscriberId: subscription.subscriberId,
       amountCents: -refundAmount, // Negative for refund
-      currency: charge.currency.toUpperCase(),
+      currency: refundCurrency,
       feeCents: -feeCents, // Reverse the fee
       netCents: -netCents,
       creatorFeeCents: creatorFeeCents !== null ? -creatorFeeCents : null,
@@ -180,8 +196,8 @@ export async function handleChargeRefunded(event: Stripe.Event) {
       type: subscription.interval === 'month' ? 'recurring' : 'one_time',
       status: 'refunded',
       stripeEventId: event.id,
-      // Reporting currency (use original payment's rate for consistency)
-      ...(reportingData || {}),
+      // Reporting currency (always set - uses original rate or current fallback)
+      ...reportingData,
     },
   })
 

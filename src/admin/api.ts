@@ -100,6 +100,13 @@ interface PeriodCurrencyMeta {
   isMultiCurrency: boolean
 }
 
+/** USD equivalent totals (captured at payment time for historical accuracy) */
+interface UsdEquivalentPeriod {
+  totalVolumeUsdCents: number
+  platformFeeUsdCents: number
+  creatorPayoutsUsdCents: number
+}
+
 export interface RevenueOverview {
   // Totals (WARNING: may mix currencies if multi-currency)
   allTime: PeriodStats
@@ -119,6 +126,13 @@ export interface RevenueOverview {
     thisMonth: PeriodCurrencyMeta
     lastMonth: PeriodCurrencyMeta
     today: PeriodCurrencyMeta
+  }
+  // USD equivalent totals (accurate - captured at payment time)
+  usdEquivalent?: {
+    allTime: UsdEquivalentPeriod
+    thisMonth: UsdEquivalentPeriod
+    hasEstimatedRates: boolean
+    estimatedPaymentCount: number
   }
   paymentsByStatus: Record<string, number>
   freshness?: {

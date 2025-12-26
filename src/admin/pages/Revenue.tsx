@@ -266,6 +266,46 @@ export default function Revenue() {
         </div>
       </div>
 
+      {/* USD Equivalent Totals - Accurate multi-currency view */}
+      {overview?.usdEquivalent && (
+        <div className="admin-section">
+          <h2 className="admin-section-title">USD Equivalent Totals</h2>
+          <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 12 }}>
+            Accurate totals normalized to USD at each payment's exchange rate.
+            {overview.usdEquivalent.hasEstimatedRates && (
+              <span style={{ color: 'var(--text-warning, #f59e0b)', marginLeft: 8 }}>
+                ⚠️ {overview.usdEquivalent.estimatedPaymentCount} payment(s) use estimated rates.
+              </span>
+            )}
+          </p>
+          <div className="admin-stats-grid">
+            <StatCard
+              label="All-Time Platform Fees (USD)"
+              value={formatCurrency(overview.usdEquivalent.allTime.platformFeeUsdCents, 'USD')}
+              subtext="Normalized from all currencies"
+              variant="success"
+              loading={isLoading}
+            />
+            <StatCard
+              label="All-Time Volume (USD)"
+              value={formatCurrency(overview.usdEquivalent.allTime.totalVolumeUsdCents, 'USD')}
+              subtext="Total payment volume"
+              loading={isLoading}
+            />
+            <StatCard
+              label="This Month Fees (USD)"
+              value={formatCurrency(overview.usdEquivalent.thisMonth.platformFeeUsdCents, 'USD')}
+              loading={isLoading}
+            />
+            <StatCard
+              label="This Month Volume (USD)"
+              value={formatCurrency(overview.usdEquivalent.thisMonth.totalVolumeUsdCents, 'USD')}
+              loading={isLoading}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Top Creators */}
       <div className="admin-section">
         <h2 className="admin-section-title">Top Creators</h2>

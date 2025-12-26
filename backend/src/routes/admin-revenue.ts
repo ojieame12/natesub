@@ -202,6 +202,10 @@ adminRevenue.get('/all', async (c) => {
         refunded,
         disputed,
         disputeLost,
+        // USD equivalent totals (from stored reporting amounts)
+        usdAllTime,
+        usdThisMonth,
+        usdEstimatedCount,
       ] = await Promise.all([
         // Overview
         aggregatePaymentStatsByCurrency({ status: 'succeeded', type: { in: ['recurring', 'one_time'] } }),
@@ -235,6 +239,16 @@ adminRevenue.get('/all', async (c) => {
         aggregateGrossOnly({ status: 'refunded', ...(periodStart && { occurredAt: { gte: periodStart } }) }),
         aggregateGrossOnly({ status: 'disputed', ...(periodStart && { occurredAt: { gte: periodStart } }) }),
         aggregateGrossOnly({ status: 'dispute_lost', ...(periodStart && { occurredAt: { gte: periodStart } }) }),
+        // USD equivalent totals (from stored reporting amounts at payment time)
+        db.payment.aggregate({
+          where: { status: 'succeeded', type: { in: ['recurring', 'one_time'] }, reportingCurrency: 'USD' },
+          _sum: { reportingFeeCents: true, reportingGrossCents: true, reportingNetCents: true },
+        }),
+        db.payment.aggregate({
+          where: { status: 'succeeded', type: { in: ['recurring', 'one_time'] }, occurredAt: { gte: startOfMonth }, reportingCurrency: 'USD' },
+          _sum: { reportingFeeCents: true, reportingGrossCents: true, reportingNetCents: true },
+        }),
+        db.payment.count({ where: { status: 'succeeded', type: { in: ['recurring', 'one_time'] }, reportingIsEstimated: true } }),
       ])
 
       // Process daily data
@@ -309,6 +323,21 @@ adminRevenue.get('/all', async (c) => {
           byCurrency: { allTime: allTimeStats.byCurrency, thisMonth: thisMonthStats.byCurrency, lastMonth: lastMonthStats.byCurrency, today: todayStats.byCurrency },
           currencies: { allTime: { currencies: allTimeStats.currencies, isMultiCurrency: allTimeStats.isMultiCurrency }, thisMonth: { currencies: thisMonthStats.currencies, isMultiCurrency: thisMonthStats.isMultiCurrency }, lastMonth: { currencies: lastMonthStats.currencies, isMultiCurrency: lastMonthStats.isMultiCurrency }, today: { currencies: todayStats.currencies, isMultiCurrency: todayStats.isMultiCurrency } },
           paymentsByStatus: statusCounts,
+          // USD equivalent totals (captured at payment time for historical accuracy)
+          usdEquivalent: {
+            allTime: {
+              totalVolumeUsdCents: usdAllTime._sum.reportingGrossCents || 0,
+              platformFeeUsdCents: usdAllTime._sum.reportingFeeCents || 0,
+              creatorPayoutsUsdCents: usdAllTime._sum.reportingNetCents || 0,
+            },
+            thisMonth: {
+              totalVolumeUsdCents: usdThisMonth._sum.reportingGrossCents || 0,
+              platformFeeUsdCents: usdThisMonth._sum.reportingFeeCents || 0,
+              creatorPayoutsUsdCents: usdThisMonth._sum.reportingNetCents || 0,
+            },
+            hasEstimatedRates: usdEstimatedCount > 0,
+            estimatedPaymentCount: usdEstimatedCount,
+          },
           freshness: { businessTimezone: BUSINESS_TIMEZONE, lastPaymentAt: lastPayment?.occurredAt?.toISOString() || null, lastWebhookProcessedAt: lastProcessedWebhook?.processedAt?.toISOString() || null, lastWebhookProvider: lastProcessedWebhook?.provider || null, lastWebhookType: lastProcessedWebhook?.eventType || null },
         },
         byProvider: { period: query.period, stripe: stripeStats, paystack: paystackStats },

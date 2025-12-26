@@ -141,7 +141,9 @@ export interface ReportingCurrencyData {
  * @param feeCents - Platform fee amount
  * @param netCents - Creator payout amount
  * @param currency - Original payment currency (e.g., "NGN", "USD")
- * @param stripeExchangeRate - Optional rate from Stripe (for cross-border payments)
+ * @param amountCentsFallback - Fallback for grossCents if null (legacy payments stored amount in amountCents)
+ * @param stripeExchangeRate - Optional rate from Stripe. IMPORTANT: Stripe's exchange_rate is
+ *   "local currency per USD" (e.g., 1600 for NGN). We use it directly as the rate for division.
  * @returns Reporting currency fields to store with payment
  */
 export async function getReportingCurrencyData(
@@ -149,16 +151,20 @@ export async function getReportingCurrencyData(
   feeCents: number,
   netCents: number,
   currency: string,
+  amountCentsFallback?: number,
   stripeExchangeRate?: number
 ): Promise<ReportingCurrencyData> {
   const upperCurrency = currency.toUpperCase()
   const now = new Date()
 
+  // Use grossCents if available, otherwise fall back to amountCents (legacy payments)
+  const effectiveGross = grossCents ?? amountCentsFallback ?? null
+
   // USD payments: no conversion needed
   if (upperCurrency === 'USD') {
     return {
       reportingCurrency: 'USD',
-      reportingGrossCents: grossCents,
+      reportingGrossCents: effectiveGross,
       reportingFeeCents: feeCents,
       reportingNetCents: netCents,
       reportingExchangeRate: 1,
@@ -169,13 +175,13 @@ export async function getReportingCurrencyData(
   }
 
   // Use Stripe rate if provided (most accurate for Stripe payments)
+  // Stripe's exchange_rate is "local currency per USD" (e.g., 1600 for NGN means 1 USD = 1600 NGN)
+  // So we use it directly as our rate for the convertLocalCentsToUSD function which divides by rate
   if (stripeExchangeRate && stripeExchangeRate > 0) {
-    // Stripe rate is USD per local unit, so we divide
-    // e.g., if rate is 0.000625 for NGN, then 1600 NGN = 1 USD
-    const rate = 1 / stripeExchangeRate
+    const rate = stripeExchangeRate
     return {
       reportingCurrency: 'USD',
-      reportingGrossCents: grossCents ? convertLocalCentsToUSD(grossCents, rate) : null,
+      reportingGrossCents: effectiveGross ? convertLocalCentsToUSD(effectiveGross, rate) : null,
       reportingFeeCents: convertLocalCentsToUSD(feeCents, rate),
       reportingNetCents: convertLocalCentsToUSD(netCents, rate),
       reportingExchangeRate: rate,
@@ -189,7 +195,7 @@ export async function getReportingCurrencyData(
   const rate = await getUSDRate(upperCurrency)
   return {
     reportingCurrency: 'USD',
-    reportingGrossCents: grossCents ? convertLocalCentsToUSD(grossCents, rate) : null,
+    reportingGrossCents: effectiveGross ? convertLocalCentsToUSD(effectiveGross, rate) : null,
     reportingFeeCents: convertLocalCentsToUSD(feeCents, rate),
     reportingNetCents: convertLocalCentsToUSD(netCents, rate),
     reportingExchangeRate: rate,

@@ -4,7 +4,7 @@ import { stripe, getAccountBalance } from '../../../services/stripe.js'
 import { cancelSubscription } from '../../../services/stripe.js'
 import { sendDisputeCreatedEmail, sendDisputeResolvedEmail } from '../../../services/email.js'
 import { alertDisputeCreated, alertDisputeResolved, alertPlatformLiability } from '../../../services/slack.js'
-import { convertLocalCentsToUSD } from '../../../services/fx.js'
+import { convertLocalCentsToUSD, getUSDRate } from '../../../services/fx.js'
 
 // Handle dispute/chargeback created
 export async function handleDisputeCreated(event: Stripe.Event) {
@@ -50,11 +50,22 @@ export async function handleDisputeCreated(event: Stripe.Event) {
     netCents = -Math.round(originalPayment.netCents * disputeRatio)
   }
 
-  // Calculate reporting currency fields using original payment's rate
-  let reportingData: Record<string, unknown> = {}
+  // Calculate reporting currency fields using original payment's rate (or fallback to current)
+  const disputeCurrency = dispute.currency.toUpperCase()
+  const isUSD = disputeCurrency === 'USD'
+  let reportingData: {
+    reportingCurrency: string
+    reportingGrossCents: number
+    reportingFeeCents: number
+    reportingNetCents: number
+    reportingExchangeRate: number
+    reportingRateSource: string
+    reportingRateTimestamp: Date
+    reportingIsEstimated: boolean
+  }
+
   if (originalPayment?.reportingExchangeRate && originalPayment.reportingCurrency) {
     const rate = originalPayment.reportingExchangeRate
-    const isUSD = dispute.currency.toUpperCase() === 'USD'
     reportingData = {
       reportingCurrency: 'USD',
       reportingGrossCents: isUSD ? -dispute.amount : -convertLocalCentsToUSD(dispute.amount, rate),
@@ -65,6 +76,19 @@ export async function handleDisputeCreated(event: Stripe.Event) {
       reportingRateTimestamp: new Date(),
       reportingIsEstimated: false,
     }
+  } else {
+    // Fall back to current rate if original payment has no reporting data
+    const rate = isUSD ? 1 : await getUSDRate(disputeCurrency)
+    reportingData = {
+      reportingCurrency: 'USD',
+      reportingGrossCents: isUSD ? -dispute.amount : -convertLocalCentsToUSD(dispute.amount, rate),
+      reportingFeeCents: 0,
+      reportingNetCents: isUSD ? netCents : convertLocalCentsToUSD(netCents, rate),
+      reportingExchangeRate: rate,
+      reportingRateSource: 'current_rate',
+      reportingRateTimestamp: new Date(),
+      reportingIsEstimated: !isUSD,
+    }
   }
 
   // Create dispute payment record (funds held) with fee breakdown
@@ -74,7 +98,7 @@ export async function handleDisputeCreated(event: Stripe.Event) {
       creatorId: subscription.creatorId,
       subscriberId: subscription.subscriberId,
       amountCents: -dispute.amount, // Negative - funds held
-      currency: dispute.currency.toUpperCase(),
+      currency: disputeCurrency,
       feeCents: 0,
       netCents,
       creatorFeeCents,
@@ -85,7 +109,7 @@ export async function handleDisputeCreated(event: Stripe.Event) {
       stripeDisputeId: dispute.id, // Track dispute for later resolution
       stripeChargeId: dispute.charge as string || null,
       stripeEventId: event.id,
-      // Reporting currency (use original payment's rate)
+      // Reporting currency (always set - uses original rate or current fallback)
       ...reportingData,
     },
   })
