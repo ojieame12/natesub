@@ -152,9 +152,27 @@ requests.post(
       return c.json({ error: 'This service provider has not set up payments yet' }, 400)
     }
 
-    // Determine which provider to use based on profile setting
-    // If profile has paymentProvider set, use that; otherwise prefer Stripe if available
-    const usePaystack = profile?.paymentProvider === 'paystack' && hasPaystack
+    // Determine which provider to use:
+    // 1. If paymentProvider is explicitly set and that provider is connected, use it
+    // 2. If paymentProvider not set (legacy), use whichever is available (prefer Stripe if both)
+    // 3. If paymentProvider is set but that provider isn't connected, fall back to what's available
+    let usePaystack: boolean
+    if (profile?.paymentProvider === 'paystack') {
+      usePaystack = hasPaystack // Use Paystack if set and available, else will fail below
+    } else if (profile?.paymentProvider === 'stripe') {
+      usePaystack = !hasStripe && hasPaystack // Only use Paystack as fallback if Stripe unavailable
+    } else {
+      // No explicit provider set (legacy data) - use what's available, prefer Stripe
+      usePaystack = !hasStripe && hasPaystack
+    }
+
+    // Validate the selected provider is actually available
+    if (usePaystack && !hasPaystack) {
+      return c.json({ error: 'Paystack payments are not configured for this creator' }, 400)
+    }
+    if (!usePaystack && !hasStripe) {
+      return c.json({ error: 'Stripe payments are not configured for this creator' }, 400)
+    }
 
     // Enforce platform debit cap for service providers ($30 max = 6 months) - Stripe only
     const PLATFORM_DEBIT_CAP_CENTS = 3000
@@ -355,6 +373,31 @@ requests.post(
   async (c) => {
     const userId = c.get('userId')
     const data = c.req.valid('json')
+    const requestCurrency = data.currency.toUpperCase()
+
+    // Validate currency against creator's profile
+    const profile = await db.profile.findUnique({
+      where: { userId },
+      select: { currency: true, paymentProvider: true, stripeAccountId: true, paystackSubaccountCode: true },
+    })
+
+    if (!profile) {
+      return c.json({ error: 'Profile not found. Complete onboarding first.' }, 404)
+    }
+
+    // Enforce currency matches profile (prevents currency mismatch issues at checkout)
+    if (requestCurrency !== profile.currency) {
+      return c.json({
+        error: `Currency mismatch. Your profile is set to ${profile.currency}, but request uses ${requestCurrency}.`,
+      }, 400)
+    }
+
+    // Validate payment provider is configured
+    const hasStripe = !!profile.stripeAccountId
+    const hasPaystack = !!profile.paystackSubaccountCode
+    if (!hasStripe && !hasPaystack) {
+      return c.json({ error: 'Set up payments before creating requests.' }, 400)
+    }
 
     const request = await db.request.create({
       data: {
@@ -364,7 +407,7 @@ requests.post(
         recipientPhone: data.recipientPhone || null,
         relationship: data.relationship,
         amountCents: data.amountCents,
-        currency: data.currency.toUpperCase(),
+        currency: requestCurrency,
         isRecurring: data.isRecurring,
         message: data.message || null,
         voiceUrl: data.voiceUrl || null,
