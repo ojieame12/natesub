@@ -27,7 +27,13 @@ import {
 import { Pressable, useToast, Skeleton, ErrorState } from './components'
 import { useActivityDetail, useCurrentUser } from './api/hooks'
 import { centsToDisplayAmount, getCurrencySymbol, formatCompactNumber } from './utils/currency'
+import { getPaystackCountryCodes, getCountry } from './utils/regionConfig'
 import './ActivityDetail.css'
+
+// Get Paystack currencies from regionConfig (single source of truth)
+const PAYSTACK_CURRENCIES = getPaystackCountryCodes()
+    .map(code => getCountry(code)?.currency)
+    .filter((c): c is string => !!c)
 
 // Payment provider configuration
 // Note: Stripe default is T+2 for most accounts (funds available 2 business days after payment)
@@ -281,7 +287,8 @@ export default function ActivityDetail() {
     const displayName = rawName && rawName.trim() ? rawName.trim() : 'Unknown'
 
     // Detect provider from payload or guess from currency
-    const provider = payload.provider || (currencyCode === 'NGN' || currencyCode === 'GHS' || currencyCode === 'KES' ? 'paystack' : 'stripe')
+    // Note: Best practice is for backend to include provider in payload
+    const provider = payload.provider || (PAYSTACK_CURRENCIES.includes(currencyCode) ? 'paystack' : 'stripe')
 
     // Check if this is a payment-related activity (for showing payout status)
     const paymentActivityTypes = [

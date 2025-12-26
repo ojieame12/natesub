@@ -1,21 +1,21 @@
 import { useState, useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Camera, Loader2, ExternalLink, ChevronDown, Check } from 'lucide-react'
+import { ArrowLeft, Camera, Loader2, ExternalLink, ChevronDown, Check, Heart, Gift, Briefcase, Star, Sparkles, Wallet, MoreHorizontal } from 'lucide-react'
 import { Pressable, useToast, Skeleton, LoadingButton, BottomDrawer } from './components'
 import { useProfile, useUpdateProfile, uploadFile } from './api/hooks'
 import { getCurrencySymbol, centsToDisplayAmount } from './utils/currency'
 import './EditPage.css'
 
-// Purpose options with labels
+// Purpose options with labels and icons for visual differentiation
 type Purpose = 'tips' | 'support' | 'allowance' | 'fan_club' | 'exclusive_content' | 'service' | 'other'
-const PURPOSE_OPTIONS: { value: Purpose; label: string }[] = [
-  { value: 'support', label: 'Support Me' },
-  { value: 'tips', label: 'Tips & Appreciation' },
-  { value: 'service', label: 'Services' },
-  { value: 'fan_club', label: 'Fan Club' },
-  { value: 'exclusive_content', label: 'Exclusive Content' },
-  { value: 'allowance', label: 'Allowance' },
-  { value: 'other', label: 'Other' },
+const PURPOSE_OPTIONS: { value: Purpose; label: string; icon: React.ReactNode }[] = [
+  { value: 'support', label: 'Support Me', icon: <Heart size={20} /> },
+  { value: 'tips', label: 'Tips & Appreciation', icon: <Gift size={20} /> },
+  { value: 'service', label: 'Services', icon: <Briefcase size={20} /> },
+  { value: 'fan_club', label: 'Fan Club', icon: <Star size={20} /> },
+  { value: 'exclusive_content', label: 'Exclusive Content', icon: <Sparkles size={20} /> },
+  { value: 'allowance', label: 'Allowance', icon: <Wallet size={20} /> },
+  { value: 'other', label: 'Other', icon: <MoreHorizontal size={20} /> },
 ]
 
 // Frequency options
@@ -371,7 +371,7 @@ export default function EditPage() {
         onClose={() => setShowPurposeDrawer(false)}
         title="What's this for?"
       >
-        <div className="country-list">
+        <div className="purpose-drawer-list">
           {PURPOSE_OPTIONS.map((option) => (
             <Pressable
               key={option.value}
@@ -381,6 +381,7 @@ export default function EditPage() {
                 setShowPurposeDrawer(false)
               }}
             >
+              <span className="purpose-option-icon">{option.icon}</span>
               <span className="country-option-name">{option.label}</span>
               {purpose === option.value && (
                 <Check size={20} className="country-option-check" />

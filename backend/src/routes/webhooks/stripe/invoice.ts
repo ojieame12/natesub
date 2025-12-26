@@ -639,6 +639,45 @@ export async function handleInvoicePaid(event: Stripe.Event) {
       },
     })
 
+    // SALARY MODE: Track successful payments for unlock gate
+    // After 2 successful payments, unlock salary mode feature
+    // Only count real payments (amount_paid > 0), not $0 trials
+    if (invoice.amount_paid > 0) {
+      // Atomically increment counter and get new value
+      const updatedProfile = await db.profile.update({
+        where: { userId: subscription.creatorId },
+        data: { totalSuccessfulPayments: { increment: 1 } },
+        select: { totalSuccessfulPayments: true, paydayAlignmentUnlocked: true },
+      })
+
+      // Check if we should unlock (2+ payments AND not already unlocked)
+      if (updatedProfile.totalSuccessfulPayments >= 2 && !updatedProfile.paydayAlignmentUnlocked) {
+        // Atomic unlock: only update if still locked (prevents duplicate activities)
+        const unlockResult = await db.profile.updateMany({
+          where: {
+            userId: subscription.creatorId,
+            paydayAlignmentUnlocked: false, // Only unlock if still locked
+          },
+          data: { paydayAlignmentUnlocked: true },
+        })
+
+        // Only create activity if we actually unlocked (count > 0)
+        if (unlockResult.count > 0) {
+          console.log(`[invoice.paid] Unlocked Salary Mode for creator ${subscription.creatorId} after ${updatedProfile.totalSuccessfulPayments} successful payments`)
+          await db.activity.create({
+            data: {
+              userId: subscription.creatorId,
+              type: 'salary_mode_unlocked',
+              payload: {
+                successfulPayments: updatedProfile.totalSuccessfulPayments,
+                message: 'You can now set a preferred payday for predictable monthly income.',
+              },
+            },
+          })
+        }
+      }
+    }
+
     // Schedule 7/3/1-day renewal reminder emails for chargeback prevention
     // Visa VAMP compliance: pre-billing notifications reduce friendly fraud
     try {

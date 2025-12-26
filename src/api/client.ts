@@ -486,6 +486,27 @@ export const profile = {
       method: 'PATCH',
       body: JSON.stringify(data),
     }),
+
+  // Salary Mode (aligned billing for predictable paydays)
+  getSalaryMode: () =>
+    apiFetch<SalaryModeStatus>('/profile/salary-mode'),
+
+  updateSalaryMode: (data: { enabled: boolean; preferredPayday?: number }) =>
+    apiFetch<{ success: boolean; enabled: boolean; preferredPayday: number | null; billingDay: number | null }>('/profile/salary-mode', {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+}
+
+// Salary Mode types
+export interface SalaryModeStatus {
+  enabled: boolean
+  preferredPayday: number | null
+  billingDay: number | null
+  unlocked: boolean
+  successfulPayments: number
+  paymentsUntilUnlock: number
+  available: boolean  // Only available for Stripe
 }
 
 // ============================================
@@ -699,7 +720,8 @@ export const checkout = {
     }),
 
   // Verify Paystack transaction (called on redirect with ?reference=xxx)
-  verifyPaystack: (reference: string) =>
+  // SECURITY: username param enables creator binding to prevent cross-creator spoofing
+  verifyPaystack: (reference: string, username?: string) =>
     apiFetch<{
       verified: boolean
       status: string
@@ -709,7 +731,7 @@ export const checkout = {
       paidAt?: string
       channel?: string
       error?: string
-    }>(`/checkout/verify/${reference}`),
+    }>(`/checkout/verify/${reference}${username ? `?username=${encodeURIComponent(username)}` : ''}`),
 
   // Verify Stripe session (Anti-spoofing)
   verifySession: (sessionId: string, username?: string) =>

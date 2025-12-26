@@ -49,10 +49,10 @@ export function BottomDrawer({
   const rafId = useRef<number>(0)
   const previousFocusRef = useRef<HTMLElement | null>(null)
 
-  // Check reduced motion preference
+  // Check reduced motion preference (defensive for SSR/test environments)
   const prefersReducedMotion = useRef(
     typeof window !== 'undefined' &&
-    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches === true
   )
 
   // Apply transform via rAF for smooth 60fps motion

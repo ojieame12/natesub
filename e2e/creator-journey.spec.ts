@@ -1,17 +1,40 @@
 import { test, expect } from '@playwright/test';
+import path from 'path';
 
 // Always use local backend for E2E tests (not production)
 const API_URL = 'http://localhost:3001';
+const APP_URL = 'http://localhost:5173';
 
 // Use shorter unique IDs for testing
 const uniqueId = Date.now().toString(36);
 const CREATOR_EMAIL = `e2e_${uniqueId}@test.com`;
 const CREATOR_USERNAME = `e2e${uniqueId}`;
+const CREATOR_FIRST_NAME = 'Test';
+const CREATOR_LAST_NAME = 'Creator';
 const SUBSCRIBER_EMAIL = `sub_${uniqueId}@test.com`;
 
 test.describe('Creator Journey (Golden Path)', () => {
 
   test('Full flow: Onboard -> Connect Stripe (Stub) -> Public Page -> Subscribe (Stub)', async ({ page, request }) => {
+    // Stub media upload to avoid hitting real storage
+    await page.route('**/media/upload-url', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          uploadUrl: `${APP_URL}/__e2e-upload__`,
+          publicUrl: `${APP_URL}/logo.svg`,
+        }),
+      });
+    });
+    await page.route('**/__e2e-upload__', async (route) => {
+      if (route.request().method() === 'PUT') {
+        await route.fulfill({ status: 200, body: '' });
+        return;
+      }
+      await route.fulfill({ status: 404, body: '' });
+    });
+
     // 1. Creator Login (Backdoor) - calls backend directly
     console.log(`[E2E] Logging in with email: ${CREATOR_EMAIL}`);
     const loginRes = await request.post(`${API_URL}/auth/e2e-login`, {
@@ -44,13 +67,14 @@ test.describe('Creator Journey (Golden Path)', () => {
     // Wait for the IdentityStep to load - look for the heading
     await expect(page.locator('h1:has-text("What should we call you?")')).toBeVisible({ timeout: 10000 });
 
-    // Fill name (placeholder="Your name")
-    await page.fill('input[placeholder="Your name"]', 'Test Creator');
+    // Fill name
+    await page.fill('input[placeholder="First name"]', CREATOR_FIRST_NAME);
+    await page.fill('input[placeholder="Last name"]', CREATOR_LAST_NAME);
 
-    // Select country - click the country selector and choose United States
+    // Select country - choose Nigeria to skip address step
     await page.click('.country-selector');
     await expect(page.locator('.country-drawer')).toBeVisible();
-    await page.click('.country-option:has-text("United States")');
+    await page.click('.country-option:has-text("Nigeria")');
 
     // Click Continue
     await page.click('button:has-text("Continue")');
@@ -77,22 +101,31 @@ test.describe('Creator Journey (Golden Path)', () => {
     // which immediately proceeds to the next step
     await page.click('button:has-text("Connect with Stripe")');
 
-    // 5. PersonalReviewStep - "Ready to launch?"
-    await expect(page.locator('h1:has-text("Ready to launch?")')).toBeVisible({ timeout: 15000 });
+    // 5. PersonalReviewStep - "Set up your page"
+    await expect(page.locator('h1:has-text("Set up your page")')).toBeVisible({ timeout: 15000 });
+
+    // Upload avatar (required)
+    const avatarPath = path.join(process.cwd(), 'public', 'logo.svg');
+    await page.setInputFiles('input[type="file"]', avatarPath);
+    await expect(page.locator('.setup-avatar-image')).toBeVisible({ timeout: 10000 });
 
     // Click "Launch My Page"
     await page.click('button:has-text("Launch My Page")');
 
-    // Should redirect to dashboard
-    await expect(page).toHaveURL('/dashboard', { timeout: 15000 });
+    // Should redirect to public page
+    await expect(page).toHaveURL(`/${CREATOR_USERNAME}`, { timeout: 15000 });
 
     // 6. Visit Public Page (as Subscriber)
-    // Clear cookies to simulate a new anonymous user
+    // Clear auth storage to simulate a new anonymous user
     await page.context().clearCookies();
+    await page.evaluate(() => {
+      localStorage.clear();
+      sessionStorage.clear();
+    });
     await page.goto(`/${CREATOR_USERNAME}`);
 
     // Verify creator page loaded - look for the creator's name or username
-    await expect(page.locator(`text=Test Creator`)).toBeVisible({ timeout: 10000 });
+    await expect(page.locator(`text=${CREATOR_FIRST_NAME} ${CREATOR_LAST_NAME}`)).toBeVisible({ timeout: 10000 });
 
     // 7. Subscribe flow
     // Click the main subscribe button

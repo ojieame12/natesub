@@ -82,9 +82,10 @@ profile.put(
     // Get user email for welcome email
     const user = await db.user.findUnique({ where: { id: userId } })
 
-    // Check if this is a new profile
+    // Check if this is a new profile or a publish transition
     const currentProfile = await db.profile.findUnique({ where: { userId } })
     const isNewProfile = !currentProfile
+    const isPublishTransition = data.isPublic === true && (!currentProfile || !currentProfile.isPublic)
 
     // Normalize currency for consistent handling
     const currency = data.currency.toUpperCase()
@@ -148,7 +149,7 @@ profile.put(
       paymentProvider: data.paymentProvider || null,
       template: normalizeTemplate(data.template) || 'boundary',
       feeMode: 'split' as const, // Always split (4%/4% model)
-      isPublic: true, // FORCE PUBLIC: All profiles are public by default
+      isPublic: data.isPublic ?? false, // Default to draft until user explicitly publishes
       shareUrl: `${env.PUBLIC_PAGE_URL || 'https://natepay.co'}/${data.username.toLowerCase()}`,
       address: data.address || null,
       city: data.city || null,
@@ -163,10 +164,11 @@ profile.put(
       update: profileData,
     })
 
-    // Send welcome email for new profiles and clean up onboarding state
-    if (isNewProfile && user) {
+    // Send welcome email only when profile is first published (not on creation)
+    // This ensures users don't get the welcome email until they click "Launch My Page"
+    if (isPublishTransition && user) {
       await sendWelcomeEmail(user.email, data.displayName)
-      // Cancel any pending onboarding reminders (legacy: only scheduled for users without profiles)
+      // Cancel any pending onboarding reminders
       await cancelOnboardingReminders(userId)
     }
 
@@ -308,13 +310,9 @@ profile.patch(
       updateData.impactItems = data.impactItems === null ? Prisma.JsonNull : data.impactItems
     }
 
-    // FORCE PUBLIC: Ensure page stays public on updates
+    // Respect isPublic value - allows draft mode during onboarding
     if (data.isPublic !== undefined) {
-      updateData.isPublic = true
-    } else {
-      // Optional: Should we always force it true on any edit? 
-      // If the goal is "Force Public", we can start passively enforcing it here:
-      updateData.isPublic = true
+      updateData.isPublic = data.isPublic
     }
 
     const updatedProfile = await db.profile.update({
@@ -457,14 +455,17 @@ profile.patch(
       return c.json({ error: 'Profile not found. Complete onboarding first.' }, 404)
     }
 
+    // Check if this is a publish transition (private → public)
+    const isPublishTransition = data.isPublic === true && !existingProfile.isPublic
+
     // Build update object
     const updateData: any = {}
     if (data.notificationPrefs !== undefined) {
       updateData.notificationPrefs = data.notificationPrefs
     }
-    // FORCE PUBLIC: Settings cannot disable public visibility anymore
+    // Respect isPublic value - controls page visibility
     if (data.isPublic !== undefined) {
-      updateData.isPublic = true
+      updateData.isPublic = data.isPublic
     }
     // Note: feeMode is no longer configurable - always 'split'
 
@@ -472,6 +473,17 @@ profile.patch(
       where: { userId },
       data: updateData,
     })
+
+    // Send welcome email on first publish (fire-and-forget)
+    if (isPublishTransition) {
+      const user = await db.user.findUnique({ where: { id: userId } })
+      if (user) {
+        sendWelcomeEmail(user.email, existingProfile.displayName).catch((err) => {
+          console.error('[profile/settings] Failed to send welcome email:', err)
+        })
+        cancelOnboardingReminders(userId).catch(() => {})
+      }
+    }
 
     return c.json({
       success: true,
@@ -606,5 +618,142 @@ profile.get('/pricing/:plan', publicRateLimit, async (c) => {
     } : null,
   })
 })
+
+// ============================================
+// SALARY MODE (Aligned Billing for Predictable Paydays)
+// ============================================
+
+// Get salary mode status
+profile.get('/salary-mode', requireAuth, async (c) => {
+  const userId = c.get('userId')
+
+  const userProfile = await db.profile.findUnique({
+    where: { userId },
+    select: {
+      salaryModeEnabled: true,
+      preferredPayday: true,
+      paydayAlignmentUnlocked: true,
+      totalSuccessfulPayments: true,
+      stripeAccountId: true,
+    },
+  })
+
+  if (!userProfile) {
+    return c.json({ error: 'Profile not found' }, 404)
+  }
+
+  // Calculate billing day using actual date math
+  // Find next payday, subtract 7 days, get day of month
+  let billingDay: number | null = null
+  if (userProfile.preferredPayday) {
+    const now = new Date()
+    let paydayDate = new Date(now.getFullYear(), now.getMonth(), userProfile.preferredPayday)
+    if (paydayDate <= now) {
+      paydayDate.setMonth(paydayDate.getMonth() + 1)
+    }
+    const billingDate = new Date(paydayDate)
+    billingDate.setDate(billingDate.getDate() - 7)
+    billingDay = billingDate.getDate()
+  }
+
+  return c.json({
+    enabled: userProfile.salaryModeEnabled,
+    preferredPayday: userProfile.preferredPayday,
+    billingDay,
+    unlocked: userProfile.paydayAlignmentUnlocked,
+    successfulPayments: userProfile.totalSuccessfulPayments,
+    paymentsUntilUnlock: Math.max(0, 2 - userProfile.totalSuccessfulPayments),
+    // Available if creator has a Stripe account connected (cross-border creators may have both Stripe + Paystack)
+    available: !!userProfile.stripeAccountId,
+  })
+})
+
+// Salary mode update schema
+const salaryModeSchema = z.object({
+  enabled: z.boolean(),
+  preferredPayday: z.number().int().min(1).max(28).optional(),
+})
+
+// Enable/disable salary mode and set payday
+profile.patch(
+  '/salary-mode',
+  requireAuth,
+  zValidator('json', salaryModeSchema),
+  async (c) => {
+    const userId = c.get('userId')
+    const data = c.req.valid('json')
+
+    const userProfile = await db.profile.findUnique({
+      where: { userId },
+      select: {
+        paydayAlignmentUnlocked: true,
+        stripeAccountId: true,
+        salaryModeEnabled: true,
+        preferredPayday: true,
+      },
+    })
+
+    if (!userProfile) {
+      return c.json({ error: 'Profile not found' }, 404)
+    }
+
+    // Salary Mode requires a Stripe account (for billing_cycle_anchor)
+    // Cross-border creators may have Paystack for local but Stripe for international
+    if (!userProfile.stripeAccountId) {
+      return c.json({
+        error: 'Salary Mode requires a Stripe account for billing alignment. Connect Stripe to enable this feature.',
+      }, 400)
+    }
+
+    // Check if trying to enable without unlock
+    if (data.enabled && !userProfile.paydayAlignmentUnlocked) {
+      return c.json({
+        error: 'Salary Mode requires 2 successful payments to unlock. Keep accepting payments and check back soon!',
+      }, 403)
+    }
+
+    // Validate payday is provided when enabling
+    if (data.enabled && !data.preferredPayday && !userProfile.preferredPayday) {
+      return c.json({
+        error: 'Please select a preferred payday (1-28)',
+      }, 400)
+    }
+
+    // Build update
+    const updateData: any = {
+      salaryModeEnabled: data.enabled,
+    }
+
+    // Only update payday if provided (allows toggling without changing payday)
+    if (data.preferredPayday !== undefined) {
+      updateData.preferredPayday = data.preferredPayday
+    }
+
+    const updatedProfile = await db.profile.update({
+      where: { userId },
+      data: updateData,
+    })
+
+    // Calculate billing day using actual date math
+    let billingDay: number | null = null
+    if (updatedProfile.preferredPayday) {
+      const now = new Date()
+      let paydayDate = new Date(now.getFullYear(), now.getMonth(), updatedProfile.preferredPayday)
+      if (paydayDate <= now) {
+        paydayDate.setMonth(paydayDate.getMonth() + 1)
+      }
+      const billingDate = new Date(paydayDate)
+      billingDate.setDate(billingDate.getDate() - 7)
+      billingDay = billingDate.getDate()
+    }
+
+    return c.json({
+      success: true,
+      enabled: updatedProfile.salaryModeEnabled,
+      preferredPayday: updatedProfile.preferredPayday,
+      billingDay,
+    })
+  }
+)
 
 export default profile

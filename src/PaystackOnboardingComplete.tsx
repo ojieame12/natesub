@@ -3,17 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { Loader2 } from 'lucide-react'
 import { setPaymentConfirmed } from './utils/paymentConfirmed'
+import { getReviewStepIndex } from './utils/constants'
 import { useOnboardingStore } from './onboarding/store'
 import './StripeComplete.css'
-
-// Countries that skip the address step (cross-border recipients)
-const SKIP_ADDRESS_COUNTRIES = ['NG', 'GH', 'KE']
-
-// Calculate review step based on country (6 for 7-step flow, 7 for 8-step flow)
-function getReviewStep(countryCode: string | null): number {
-  const skipAddress = SKIP_ADDRESS_COUNTRIES.includes((countryCode || '').toUpperCase())
-  return skipAddress ? 6 : 7
-}
 
 /**
  * PaystackOnboardingComplete - Handles redirect after Paystack bank setup
@@ -58,7 +50,7 @@ export default function PaystackOnboardingComplete() {
       })
 
       // Immediately redirect to review/launch step (dynamic based on country)
-      const reviewStep = getReviewStep(countryCode)
+      const reviewStep = getReviewStepIndex(countryCode)
       navigate(`/onboarding?step=${reviewStep}`, { replace: true })
     }
   }, [navigate, queryClient, countryCode])

@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Building2, Check, CreditCard, ExternalLink, History, Loader2, RefreshCw, TriangleAlert, Zap, Clock, TrendingUp } from 'lucide-react'
-import { InlineError, Pressable, Skeleton, SwiftCodeLookup } from './components'
+import { ArrowLeft, Building2, Check, ChevronDown, CreditCard, ExternalLink, History, Loader2, Lock, RefreshCw, TriangleAlert, Zap, Clock, TrendingUp, Calendar } from 'lucide-react'
+import { InlineError, Pressable, Skeleton, SwiftCodeLookup, BottomDrawer } from './components'
 import { api } from './api'
 import type { PaystackConnectionStatus } from './api/client'
-import { useProfile } from './api/hooks'
+import { useProfile, useSalaryMode, useUpdateSalaryMode } from './api/hooks'
 import { formatCurrencyFromCents } from './utils/currency'
 import { needsSwiftCodeHelp } from './utils/swiftCodes'
+import { formatStripeCurrencies, formatPaystackCurrencies } from './utils/regionConfig'
 import './PaymentSettings.css'
 
 type StripeStatus = Awaited<ReturnType<typeof api.stripe.getStatus>>
@@ -145,6 +146,14 @@ export default function PaymentSettings() {
   const [stripeOpeningDashboard, setStripeOpeningDashboard] = useState(false)
   const [showSwiftLookup, setShowSwiftLookup] = useState(false)
   const [pendingStripeUrl, setPendingStripeUrl] = useState<string | null>(null)
+
+  // Salary Mode state
+  const { data: salaryMode, isLoading: salaryModeLoading } = useSalaryMode()
+  const updateSalaryMode = useUpdateSalaryMode()
+  const [showPaydayDrawer, setShowPaydayDrawer] = useState(false)
+
+  // Payday options (1-28)
+  const PAYDAY_OPTIONS = [1, 15, 28] // Common payday options
 
   useEffect(() => {
     isMountedRef.current = true
@@ -520,6 +529,109 @@ export default function PaymentSettings() {
           </section>
         )}
 
+        {/* Salary Mode - Only show for Stripe users */}
+        {stripeIsActive && salaryMode?.available && (
+          <section className="settings-section">
+            <h3 className="section-title">Payout Schedule</h3>
+            <div className="method-card">
+              {salaryModeLoading ? (
+                <div className="method-row">
+                  <Skeleton width={200} height={20} />
+                </div>
+              ) : !salaryMode?.unlocked ? (
+                // Locked state - show progress
+                <div className="salary-mode-locked">
+                  <div className="salary-mode-locked-icon">
+                    <Lock size={24} />
+                  </div>
+                  <div className="salary-mode-locked-content">
+                    <div className="salary-mode-locked-title">Salary Mode</div>
+                    <div className="salary-mode-locked-desc">
+                      Set a fixed payday and get paid like an employee. Unlocks after 2 successful payments.
+                    </div>
+                    <div className="salary-mode-locked-progress">
+                      <div className="salary-mode-progress-bar">
+                        <div
+                          className="salary-mode-progress-fill"
+                          style={{ width: `${((salaryMode?.successfulPayments || 0) / 2) * 100}%` }}
+                        />
+                      </div>
+                      <span className="salary-mode-progress-text">
+                        {salaryMode?.successfulPayments || 0}/2 payments
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                // Unlocked state - show toggle and settings
+                <>
+                  <div className="method-row">
+                    <div className="method-icon">
+                      <Calendar size={20} color={salaryMode?.enabled ? 'var(--primary)' : undefined} />
+                    </div>
+                    <div className="method-info">
+                      <span className="method-name">Salary Mode</span>
+                      <span className="method-detail">
+                        {salaryMode?.enabled
+                          ? `Payday: ${salaryMode.preferredPayday}${getOrdinalSuffix(salaryMode.preferredPayday || 1)} of each month`
+                          : 'Get paid on a fixed date each month'}
+                      </span>
+                    </div>
+                    <Pressable
+                      className={`toggle ${salaryMode?.enabled ? 'on' : ''}`}
+                      onClick={() => {
+                        if (salaryMode?.enabled) {
+                          // Disable
+                          updateSalaryMode.mutate({ enabled: false })
+                        } else {
+                          // Enable - show payday picker if no payday set
+                          if (salaryMode?.preferredPayday) {
+                            updateSalaryMode.mutate({ enabled: true })
+                          } else {
+                            setShowPaydayDrawer(true)
+                          }
+                        }
+                      }}
+                      disabled={updateSalaryMode.isPending}
+                    >
+                      <div className="toggle-knob" />
+                    </Pressable>
+                  </div>
+
+                  {salaryMode?.enabled && (
+                    <div className="salary-mode-details">
+                      <Pressable
+                        className="salary-mode-payday-btn"
+                        onClick={() => setShowPaydayDrawer(true)}
+                      >
+                        <span>Change payday</span>
+                        <ChevronDown size={16} />
+                      </Pressable>
+                      <div className="salary-mode-info">
+                        <div className="salary-mode-info-row">
+                          <span className="salary-mode-info-label">Subscribers billed</span>
+                          <span className="salary-mode-info-value">
+                            ~{salaryMode.billingDay}{getOrdinalSuffix(salaryMode.billingDay || 1)} of each month
+                          </span>
+                        </div>
+                        <div className="salary-mode-info-row">
+                          <span className="salary-mode-info-label">Target payday</span>
+                          <span className="salary-mode-info-value">
+                            ~{salaryMode.preferredPayday}{getOrdinalSuffix(salaryMode.preferredPayday || 1)} of each month
+                          </span>
+                        </div>
+                      </div>
+                      <div className="salary-mode-note">
+                        New subscribers billed ~7 days before payday. Actual payout timing depends on your Stripe account. Existing subscribers are not affected.
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </section>
+        )}
+
         {/* Global (Stripe) */}
         <section className="settings-section">
           <h3 className="section-title">Global (Stripe)</h3>
@@ -537,7 +649,7 @@ export default function PaymentSettings() {
                       ? 'Action required to receive payouts'
                       : stripeIsPending
                         ? 'Setup in progress'
-                        : 'Accept global cards (USD, EUR, GBP)'}
+                        : `Accept global cards (${formatStripeCurrencies()})`}
                 </span>
               </div>
 
@@ -658,7 +770,7 @@ export default function PaymentSettings() {
                     ? `Connected${defaultProvider === 'paystack' ? ' · Default' : ''}`
                     : paystackIsInactive
                       ? 'Inactive subaccount (contact support)'
-                      : 'Accept local cards (NGN, KES, ZAR)'}
+                      : `Accept local cards (${formatPaystackCurrencies()})`}
                 </span>
               </div>
 
@@ -715,6 +827,64 @@ export default function PaymentSettings() {
           onClose={handleSwiftLookupClose}
         />
       )}
+
+      {/* Payday Picker Drawer */}
+      <BottomDrawer
+        open={showPaydayDrawer}
+        onClose={() => setShowPaydayDrawer(false)}
+        title="Choose your payday"
+      >
+        <div className="payday-picker">
+          <p className="payday-picker-desc">
+            When do you want to receive your payouts? Subscribers will be billed ~7 days before. Actual timing may vary based on your Stripe account settings.
+          </p>
+          <div className="payday-picker-options">
+            {PAYDAY_OPTIONS.map((day) => (
+              <Pressable
+                key={day}
+                className={`payday-option ${salaryMode?.preferredPayday === day ? 'selected' : ''}`}
+                onClick={() => {
+                  updateSalaryMode.mutate(
+                    { enabled: true, preferredPayday: day },
+                    { onSuccess: () => setShowPaydayDrawer(false) }
+                  )
+                }}
+                disabled={updateSalaryMode.isPending}
+              >
+                <span className="payday-option-day">{day}{getOrdinalSuffix(day)}</span>
+                <span className="payday-option-label">of each month</span>
+                {salaryMode?.preferredPayday === day && (
+                  <Check size={18} className="payday-option-check" />
+                )}
+              </Pressable>
+            ))}
+          </div>
+          <div className="payday-picker-custom">
+            <span className="payday-picker-custom-label">Or pick a specific day:</span>
+            <select
+              className="payday-picker-select"
+              value={salaryMode?.preferredPayday || ''}
+              onChange={(e) => {
+                const day = parseInt(e.target.value, 10)
+                if (day >= 1 && day <= 28) {
+                  updateSalaryMode.mutate(
+                    { enabled: true, preferredPayday: day },
+                    { onSuccess: () => setShowPaydayDrawer(false) }
+                  )
+                }
+              }}
+              disabled={updateSalaryMode.isPending}
+            >
+              <option value="">Select day</option>
+              {Array.from({ length: 28 }, (_, i) => i + 1).map((day) => (
+                <option key={day} value={day}>
+                  {day}{getOrdinalSuffix(day)}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </BottomDrawer>
     </div>
   )
 }

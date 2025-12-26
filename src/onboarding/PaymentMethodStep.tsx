@@ -5,19 +5,16 @@ import { useOnboardingStore, type PaymentProvider } from './store'
 import { Button, Pressable } from './components'
 import { api } from '../api'
 import { getMinimumAmount, getCurrencySymbol, getSuggestedAmounts } from '../utils/currency'
+import {
+    hasPaystack,
+    isAfricanCountry,
+    isCrossBorderCountry,
+    getPaystackCurrency,
+    getStripeDescription,
+    getPaystackDescription,
+} from '../utils/regionConfig'
 import '../Dashboard.css'
 import './onboarding.css'
-
-// Paystack is enabled for supported African countries
-const PAYSTACK_ENABLED = true
-
-// Paystack supported country codes (primary for Africa)
-const PAYSTACK_COUNTRY_CODES = ['NG', 'KE', 'ZA']
-
-// Flutterwave supported country codes (as fallback)
-const FLUTTERWAVE_COUNTRY_CODES = [
-    'NG', 'GH', 'KE', 'ZA', 'UG', 'TZ', 'RW', 'CM', 'SN', 'EG'
-]
 
 interface PaymentMethodCardProps {
     name: string
@@ -59,13 +56,6 @@ function PaymentMethodCard({ name, description, logo, recommended, disabled, sel
     )
 }
 
-// Paystack country to currency mapping
-const PAYSTACK_CURRENCIES: Record<string, string> = {
-    'NG': 'NGN',
-    'KE': 'KES',
-    'ZA': 'ZAR',
-}
-
 export default function PaymentMethodStep() {
     const navigate = useNavigate()
     const store = useOnboardingStore()
@@ -74,30 +64,27 @@ export default function PaymentMethodStep() {
     const [saving, setSaving] = useState(false)
     const [error, setError] = useState<string | null>(null)
 
-    // Removed country check effect since we allow all countries now
-
-    // Determine which payment methods to show based on country code
+    // Determine which payment methods to show based on country code (from regionConfig)
     const countryUpper = countryCode?.toUpperCase() || ''
-    const isPaystackCountry = PAYSTACK_COUNTRY_CODES.includes(countryUpper)
-    const isFlutterwaveCountry = FLUTTERWAVE_COUNTRY_CODES.includes(countryUpper)
+    const isPaystackCountry = hasPaystack(countryUpper)
+    const showAfricaSection = isAfricanCountry(countryUpper)
 
-    // Paystack currency mapping (used for auto-switch in handleContinue)
-    const expectedPaystackCurrency = PAYSTACK_CURRENCIES[countryUpper]
-    // Show Paystack for all Paystack countries - users can choose, currency will adjust
-    const canUsePaystack = PAYSTACK_ENABLED && isPaystackCountry
-    // Stripe available for all countries (cross-border payouts supported for NG/GH/KE)
+    // Paystack currency for this country (undefined if not supported)
+    const expectedPaystackCurrency = getPaystackCurrency(countryUpper)
+    // Show Paystack for supported countries
+    const canUsePaystack = isPaystackCountry
+    // Stripe available for all countries
     const canUseStripe = true
 
     const handleContinue = async () => {
         if (!selectedMethod) return
 
         // Determine final currency based on payment method selection FIRST
-        // - Stripe for cross-border countries (NG/GH/KE) → USD
+        // - Stripe for cross-border countries → USD (subscription currency)
         // - Paystack → local currency
-        const crossBorderCountries = ['NG', 'GH', 'KE']
         let finalCurrency = store.currency || 'USD'
 
-        if (selectedMethod === 'stripe' && crossBorderCountries.includes(countryUpper)) {
+        if (selectedMethod === 'stripe' && isCrossBorderCountry(countryUpper)) {
             finalCurrency = 'USD'
         } else if (selectedMethod === 'paystack' && expectedPaystackCurrency) {
             finalCurrency = expectedPaystackCurrency
@@ -297,19 +284,19 @@ export default function PaymentMethodStep() {
                     )}
 
                     <div className="payment-methods-grid">
-                        {/* 1. Stripe (Foreign Currencies) */}
+                        {/* 1. Stripe (Global) */}
                         <PaymentMethodCard
                             name="Stripe"
-                            description={canUseStripe ? "Accept USD, GBP, EUR (Global Audience)" : "Not available in your country"}
+                            description={canUseStripe ? getStripeDescription(countryUpper) : "Not available in your country"}
                             logo="/stripe-logo.svg"
-                            recommended={!isPaystackCountry && canUseStripe} // Recommend Stripe if outside Africa
+                            recommended={!isPaystackCountry && canUseStripe} // Recommend Stripe if outside Paystack regions
                             disabled={!canUseStripe}
                             selected={selectedMethod === 'stripe'}
                             onSelect={() => setSelectedMethod('stripe')}
                         />
 
-                        {/* 2. Africa Divider (Only show if we are in an African context or user is in Africa) */}
-                        {(isPaystackCountry || isFlutterwaveCountry) && (
+                        {/* 2. Africa Divider (Only show if user is in Africa) */}
+                        {showAfricaSection && (
                             <div className="paystack-divider">
                                 <span>Africa</span>
                             </div>
@@ -319,9 +306,9 @@ export default function PaymentMethodStep() {
                         {canUsePaystack && (
                             <PaymentMethodCard
                                 name="Paystack"
-                                description="Accept NGN, KES, ZAR (Local Audience)"
+                                description={getPaystackDescription(countryUpper)}
                                 logo="/paystack-logo.svg"
-                                recommended={isPaystackCountry} // Recommend Paystack if inside Africa
+                                recommended={isPaystackCountry} // Recommend Paystack if available
                                 selected={selectedMethod === 'paystack'}
                                 onSelect={() => {
                                     setSelectedMethod('paystack')

@@ -335,7 +335,7 @@ describe('SubscribeBoundary', () => {
 
       await vi.advanceTimersByTimeAsync(200)
 
-      expect(api.checkout.verifyPaystack).toHaveBeenCalledWith('pay_ref_123')
+      expect(api.checkout.verifyPaystack).toHaveBeenCalledWith('pay_ref_123', 'testcreator')
     })
   })
 

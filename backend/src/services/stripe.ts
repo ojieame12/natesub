@@ -342,6 +342,48 @@ export async function createExpressDashboardLink(stripeAccountId: string) {
 }
 
 // Create checkout session for subscription
+
+// Calculate billing cycle anchor timestamp from preferred payday
+// Uses UTC date math to ensure consistent behavior across server timezones
+//
+// Example: payday = 1st, delayDays = 7
+// - If today is Dec 15, next payday is Jan 1
+// - Billing date = Jan 1 - 7 days = Dec 25
+// - Returns Unix timestamp for Dec 25 at 00:00 UTC
+//
+// Note: delayDays defaults to 7, which is conservative for most Stripe accounts.
+// Actual payout delay varies by account age/country (2-14 days).
+export function calculateBillingAnchorFromPayday(preferredPayday: number, delayDays: number = 7): number {
+  const now = new Date()
+
+  // Use UTC to ensure consistent behavior across server timezones
+  const currentYear = now.getUTCFullYear()
+  const currentMonth = now.getUTCMonth()
+  const currentDay = now.getUTCDate()
+
+  // Find the next occurrence of the payday (in UTC)
+  let paydayDate = new Date(Date.UTC(currentYear, currentMonth, preferredPayday))
+
+  // If payday already passed this month, use next month
+  const todayUTC = new Date(Date.UTC(currentYear, currentMonth, currentDay))
+  if (paydayDate <= todayUTC) {
+    paydayDate = new Date(Date.UTC(currentYear, currentMonth + 1, preferredPayday))
+  }
+
+  // Subtract delay days to get billing date
+  // This correctly handles month boundaries (e.g., Jan 1 - 7 days = Dec 25)
+  const billingTimestamp = paydayDate.getTime() - (delayDays * 24 * 60 * 60 * 1000)
+  let billingDate = new Date(billingTimestamp)
+
+  // If billing date is in the past (edge case), push to next cycle
+  if (billingDate <= todayUTC) {
+    paydayDate = new Date(Date.UTC(paydayDate.getUTCFullYear(), paydayDate.getUTCMonth() + 1, preferredPayday))
+    billingDate = new Date(paydayDate.getTime() - (delayDays * 24 * 60 * 60 * 1000))
+  }
+
+  return Math.floor(billingDate.getTime() / 1000)
+}
+
 export async function createCheckoutSession(params: {
   creatorId: string
   tierId?: string
@@ -372,7 +414,7 @@ export async function createCheckoutSession(params: {
     checkoutAcceptLanguage: string
   }
 }) {
-  // Get creator's Stripe account
+  // Get creator's Stripe account and salary mode settings
   const creatorProfile = await db.profile.findUnique({
     where: { userId: params.creatorId },
   })
@@ -383,6 +425,19 @@ export async function createCheckoutSession(params: {
 
   // Store validated stripeAccountId for type narrowing
   const stripeAccountId = creatorProfile.stripeAccountId
+
+  // Calculate billing anchor for Salary Mode (aligned billing for predictable paydays)
+  // Only applies to monthly subscriptions when salary mode is enabled
+  let billingCycleAnchor: number | undefined
+  if (
+    params.interval === 'month' &&
+    creatorProfile.salaryModeEnabled &&
+    creatorProfile.preferredPayday
+  ) {
+    // Use actual date math to correctly handle month boundaries
+    // Default 7-day delay is conservative; actual payout timing varies by account
+    billingCycleAnchor = calculateBillingAnchorFromPayday(creatorProfile.preferredPayday)
+  }
 
   // Check for platform debit to recover (only for one-time payments)
   // SAFETY: Cap recovery at 50% of the Net Amount to ensure creator always gets paid something.
@@ -506,6 +561,14 @@ export async function createCheckoutSession(params: {
           // Billing descriptor for subscription invoices - reduces chargebacks
           // Shows "NATEPAY* CREATOR" on bank statements for renewals
           description: `Subscription to ${descriptorSuffix}`,
+          // Salary Mode: Align billing to creator's preferred schedule
+          // First charge happens immediately at signup for the full month.
+          // Subsequent charges align to billing_cycle_anchor (7 days before payday).
+          // proration_behavior: 'none' ensures full-month charges without proration surprises.
+          ...(billingCycleAnchor && {
+            billing_cycle_anchor: billingCycleAnchor,
+            proration_behavior: 'none' as const,
+          }),
         } : undefined,
         success_url: params.successUrl,
         cancel_url: params.cancelUrl,

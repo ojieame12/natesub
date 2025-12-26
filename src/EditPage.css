@@ -935,6 +935,16 @@
     flex-shrink: 0;
 }
 
+.edit-page .country-option.selected .purpose-option-icon {
+    color: var(--accent-primary);
+}
+
+.edit-page .purpose-drawer-list {
+    flex: 1;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
 /* === PURPOSE SELECTOR (inline compact) === */
 .purpose-selector {
     display: flex;

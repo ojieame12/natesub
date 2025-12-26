@@ -6,6 +6,7 @@ import { api } from './api'
 import { useProfile } from './api/hooks'
 import { useOnboardingStore } from './onboarding/store'
 import { setPaymentConfirmed } from './utils/paymentConfirmed'
+import { getReviewStepIndex } from './utils/constants'
 import { Pressable, LoadingButton } from './components'
 import './StripeComplete.css'
 
@@ -50,15 +51,6 @@ interface StripeDetails {
 }
 
 type FlowSource = 'onboarding' | 'settings' | 'unknown'
-
-// Countries that skip the address step (cross-border recipients)
-const SKIP_ADDRESS_COUNTRIES = ['NG', 'GH', 'KE']
-
-// Calculate review step based on country (6 for 7-step flow, 7 for 8-step flow)
-function getReviewStep(countryCode: string | null): number {
-  const skipAddress = SKIP_ADDRESS_COUNTRIES.includes((countryCode || '').toUpperCase())
-  return skipAddress ? 6 : 7
-}
 
 export default function StripeComplete() {
   const navigate = useNavigate()
@@ -255,12 +247,12 @@ export default function StripeComplete() {
       navigate(returnTo, { replace: true })
     } else if (source === 'onboarding') {
       // Return to Review step (dynamic based on country/flow length)
-      const reviewStep = getReviewStep(countryCode)
+      const reviewStep = getReviewStepIndex(countryCode)
       navigate(`/onboarding?step=${reviewStep}`, { replace: true })
     } else if (profile && !profile.isPublic) {
-      // Fallback: If source is unknown (lost session) but profile is not public,
+      // Fallback: If source is unknown (lost session) but profile is not public (draft),
       // assume we are in onboarding flow and need to launch.
-      const reviewStep = getReviewStep(countryCode)
+      const reviewStep = getReviewStepIndex(countryCode || profile.countryCode)
       navigate(`/onboarding?step=${reviewStep}`, { replace: true })
     } else {
       navigate('/dashboard', { replace: true })
@@ -305,7 +297,7 @@ export default function StripeComplete() {
       sessionStorage.removeItem('stripe_return_to')
       navigate(returnTo, { replace: true })
     } else if (source === 'onboarding') {
-      const reviewStep = getReviewStep(countryCode)
+      const reviewStep = getReviewStepIndex(countryCode)
       navigate(`/onboarding?step=${reviewStep}`, { replace: true })
     } else {
       navigate('/dashboard', { replace: true })

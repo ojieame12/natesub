@@ -202,6 +202,31 @@ export function useUpdateSettings() {
   })
 }
 
+// Salary Mode hooks
+export function useSalaryMode() {
+  return useQuery({
+    queryKey: ['salaryMode'],
+    queryFn: api.profile.getSalaryMode,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  })
+}
+
+export function useUpdateSalaryMode() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: api.profile.updateSalaryMode,
+    onSuccess: (data) => {
+      queryClient.setQueryData(['salaryMode'], (oldData: any) => ({
+        ...oldData,
+        enabled: data.enabled,
+        preferredPayday: data.preferredPayday,
+        billingDay: data.billingDay,
+      }))
+    },
+  })
+}
+
 export function useCheckUsername(username: string) {
   return useQuery({
     queryKey: queryKeys.checkUsername(username),

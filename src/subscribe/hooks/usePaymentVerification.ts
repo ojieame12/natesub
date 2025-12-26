@@ -51,14 +51,14 @@ export function usePaymentVerification(username: string): UsePaymentVerification
                     setError('Could not verify payment')
                 })
         } else if (paystackRef) {
-            // Paystack verification
-            api.checkout.verifyPaystack(paystackRef)
+            // Paystack verification - pass username for creator binding (anti-spoofing)
+            api.checkout.verifyPaystack(paystackRef, username)
                 .then(result => {
                     if (result.verified) {
                         setStatus('success')
                     } else {
                         setStatus('failed')
-                        setError('Payment verification failed')
+                        setError(result.error || 'Payment verification failed')
                     }
                 })
                 .catch(() => {

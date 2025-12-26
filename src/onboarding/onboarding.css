@@ -3066,6 +3066,44 @@ button.btn .spinning {
     color: var(--text-tertiary);
 }
 
+/* === PURPOSE DRAWER OPTIONS (inside BottomDrawer) === */
+.purpose-option {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-md) var(--space-lg);
+    border-radius: var(--radius-lg);
+    transition: background 0.15s ease;
+}
+
+.purpose-option.pressed {
+    background: var(--neutral-100);
+}
+
+.purpose-option.selected {
+    background: var(--neutral-100);
+}
+
+.purpose-option-icon {
+    color: var(--text-secondary);
+    flex-shrink: 0;
+}
+
+.purpose-option.selected .purpose-option-icon {
+    color: var(--accent-primary);
+}
+
+.purpose-option-name {
+    flex: 1;
+    font-size: 16px;
+    color: var(--text-primary);
+}
+
+.purpose-option-check {
+    color: var(--accent-primary);
+    flex-shrink: 0;
+}
+
 .setup-price-card {
     display: flex;
     align-items: center;

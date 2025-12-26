@@ -272,10 +272,10 @@ describe('E2E Flows', () => {
    * LAUNCH PAGE FLOW
    * ================
    * Tests the visibility toggle (isPublic) for creator pages.
-   * Note: Current implementation forces isPublic=true for all profiles.
+   * Profiles start as draft (isPublic=false) until user explicitly launches.
    */
   describe('Launch Page Flow', () => {
-    it('profile is public by default after creation', async () => {
+    it('profile is draft by default after creation', async () => {
       const { user, cookie } = await createAuthenticatedUser()
 
       const res = await authRequest('/profile', cookie, {
@@ -294,14 +294,38 @@ describe('E2E Flows', () => {
 
       expect(res.status).toBe(200)
       const body = await res.json()
+      // Profile starts as draft until "Launch My Page" step
+      expect(body.profile.isPublic).toBe(false)
+    })
+
+    it('profile becomes public when isPublic is set to true', async () => {
+      const { user, cookie } = await createAuthenticatedUser()
+
+      const res = await authRequest('/profile', cookie, {
+        method: 'PUT',
+        body: JSON.stringify({
+          username: 'launchedcreator',
+          displayName: 'Launched Creator',
+          country: 'United States',
+          countryCode: 'US',
+          currency: 'USD',
+          purpose: 'tips',
+          pricingModel: 'single',
+          singleAmount: 5.00,
+          isPublic: true, // User clicks "Launch My Page"
+        }),
+      })
+
+      expect(res.status).toBe(200)
+      const body = await res.json()
       expect(body.profile.isPublic).toBe(true)
     })
 
-    it('settings update forces isPublic to true (cannot hide page)', async () => {
+    it('settings update respects isPublic value', async () => {
       const { user, cookie } = await createAuthenticatedUser()
       await createCreatorProfile(user.id, { isPublic: true })
 
-      // Try to set isPublic to false
+      // Set isPublic to false (unpublish)
       const res = await authRequest('/profile/settings', cookie, {
         method: 'PATCH',
         body: JSON.stringify({ isPublic: false }),
@@ -309,8 +333,8 @@ describe('E2E Flows', () => {
 
       expect(res.status).toBe(200)
       const body = await res.json()
-      // Should still be true - forced public
-      expect(body.settings.isPublic).toBe(true)
+      // Settings now respects the value (can unpublish)
+      expect(body.settings.isPublic).toBe(false)
     })
 
     it('returns correct settings for creator', async () => {
@@ -609,6 +633,7 @@ describe('E2E Flows', () => {
       const { user, cookie } = await createAuthenticatedUser('newcreator@test.com')
 
       // 2. User creates profile with tiers (amounts in dollars, API converts to cents)
+      // isPublic: true simulates the "Launch My Page" step where profile becomes visible
       const createRes = await authRequest('/profile', cookie, {
         method: 'PUT',
         body: JSON.stringify({
@@ -624,6 +649,7 @@ describe('E2E Flows', () => {
             { id: 'tier-basic', name: 'Basic', amount: 5.00, perks: ['Thanks'], isPopular: true },
           ],
           paymentProvider: 'stripe',
+          isPublic: true, // Profile published (simulates "Launch My Page")
         }),
       })
 

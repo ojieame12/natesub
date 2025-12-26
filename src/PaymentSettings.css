@@ -584,3 +584,248 @@
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
 }
+
+/* ===========================================
+   SALARY MODE
+   =========================================== */
+
+/* Locked state */
+.salary-mode-locked {
+    display: flex;
+    gap: var(--space-md);
+    padding: var(--space-lg);
+}
+
+.salary-mode-locked-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: var(--radius-lg);
+    background: var(--neutral-100);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-tertiary);
+    flex-shrink: 0;
+}
+
+.salary-mode-locked-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.salary-mode-locked-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.salary-mode-locked-desc {
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+
+.salary-mode-locked-progress {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    margin-top: var(--space-xs);
+}
+
+.salary-mode-progress-bar {
+    flex: 1;
+    height: 4px;
+    background: var(--neutral-200);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.salary-mode-progress-fill {
+    height: 100%;
+    background: var(--neutral-900);
+    border-radius: 2px;
+    transition: width 0.3s ease;
+}
+
+.salary-mode-progress-text {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    white-space: nowrap;
+}
+
+/* Unlocked/Active state */
+.salary-mode-details {
+    padding: 0 var(--space-lg) var(--space-lg);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.salary-mode-payday-btn {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-sm) var(--space-md);
+    background: var(--neutral-50);
+    border-radius: var(--radius-md);
+    font-size: 14px;
+    color: var(--text-primary);
+}
+
+.salary-mode-payday-btn.pressed {
+    background: var(--neutral-100);
+}
+
+.salary-mode-info {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.salary-mode-info-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.salary-mode-info-label {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.salary-mode-info-value {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.salary-mode-note {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    line-height: 1.4;
+    padding: var(--space-sm) var(--space-md);
+    background: var(--neutral-50);
+    border-radius: var(--radius-md);
+}
+
+/* Toggle - reuse from Settings.css but define locally */
+.toggle {
+    width: 48px;
+    height: 28px;
+    border-radius: 14px;
+    background: var(--neutral-300);
+    padding: 2px;
+    cursor: pointer;
+    transition: background 0.2s ease;
+    flex-shrink: 0;
+}
+
+.toggle.on {
+    background: var(--neutral-900);
+}
+
+.toggle-knob {
+    width: 24px;
+    height: 24px;
+    border-radius: 12px;
+    background: white;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    transition: transform 0.2s ease;
+}
+
+.toggle.on .toggle-knob {
+    transform: translateX(20px);
+}
+
+/* Payday Picker Drawer */
+.payday-picker {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-lg);
+}
+
+.payday-picker-desc {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin: 0;
+    line-height: 1.5;
+}
+
+.payday-picker-options {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.payday-option {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-md) var(--space-lg);
+    background: var(--neutral-50);
+    border-radius: var(--radius-lg);
+    border: 2px solid transparent;
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.payday-option.selected {
+    border-color: var(--neutral-900);
+    background: white;
+}
+
+.payday-option.pressed {
+    background: var(--neutral-100);
+}
+
+.payday-option-day {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+    min-width: 40px;
+}
+
+.payday-option-label {
+    font-size: 14px;
+    color: var(--text-secondary);
+    flex: 1;
+}
+
+.payday-option-check {
+    color: var(--neutral-900);
+}
+
+.payday-picker-custom {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding-top: var(--space-md);
+    border-top: 1px solid var(--border-default);
+}
+
+.payday-picker-custom-label {
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+.payday-picker-select {
+    flex: 1;
+    padding: var(--space-sm) var(--space-md);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    font-size: 15px;
+    background: white;
+    color: var(--text-primary);
+    -webkit-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    padding-right: 36px;
+}
+
+.payday-picker-select:focus {
+    outline: none;
+    border-color: var(--neutral-400);
+}

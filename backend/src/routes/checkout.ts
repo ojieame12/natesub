@@ -184,10 +184,12 @@ checkout.post(
       return c.json({ error: 'Invalid amount' }, 400)
     }
 
-    // Check if this is a cross-border account (Stripe context only)
-    // For Paystack, if the country is supported (NG/KE/ZA), it's considered local/native
+    // Check if this is a cross-border transaction (Stripe only)
+    // NOTE: hasStripe/hasPaystack here mean "using X for THIS transaction" (not "creator has X account")
+    // For Paystack transactions, cross-border doesn't apply (local payment in local currency)
+    // For Stripe transactions from cross-border countries (NG/GH/KE), apply the buffer
     const isStripeCrossBorder = hasStripe && isStripeCrossBorderSupported(profile.countryCode)
-    const isCrossBorder = !hasPaystack && isStripeCrossBorder
+    const isCrossBorder = isStripeCrossBorder // Simplified: if Stripe is chosen, hasPaystack is already false
 
     // Calculate service fee using split model (4%/4%)
     // Both subscriber and creator pay 4% each
@@ -422,11 +424,13 @@ checkout.post(
 )
 
 // Verify Paystack transaction (for frontend confirmation)
+// SECURITY: Requires username param to prevent cross-creator spoofing
 checkout.get(
   '/verify/:reference',
   publicRateLimit,
   async (c) => {
     const { reference } = c.req.param()
+    const creatorUsername = c.req.query('username')
 
     if (!reference) {
       return c.json({ error: 'Reference is required' }, 400)
@@ -442,7 +446,7 @@ checkout.get(
         reference,
         paidAt: new Date().toISOString(),
         channel: 'stub',
-        metadata: { stub: true },
+        // Scrubbed response - no PII
       })
     }
 
@@ -454,6 +458,26 @@ checkout.get(
       // Check if transaction was successful
       const isSuccessful = transaction.status === 'success'
 
+      // SECURITY: Verify transaction belongs to the expected creator
+      // This prevents spoofing where attacker uses their valid reference on another creator's page
+      if (creatorUsername && transaction.metadata?.creatorId) {
+        const profile = await db.profile.findUnique({
+          where: { username: creatorUsername.toLowerCase() },
+          select: { userId: true }
+        })
+
+        if (profile && profile.userId !== transaction.metadata.creatorId) {
+          // SPOOF DETECTED: Valid Paystack transaction, but for WRONG creator
+          console.warn(`[checkout] Paystack spoof attempt: reference ${reference} belongs to ${transaction.metadata.creatorId}, not ${profile.userId}`)
+          return c.json({
+            verified: false,
+            error: 'Transaction does not belong to this creator',
+            status: 'mismatch'
+          }, 400)
+        }
+      }
+
+      // Return scrubbed response - no PII (checkoutIp, checkoutUserAgent, etc.)
       return c.json({
         verified: isSuccessful,
         status: transaction.status,
@@ -462,7 +486,8 @@ checkout.get(
         reference: transaction.reference,
         paidAt: transaction.paid_at,
         channel: transaction.channel,
-        metadata: transaction.metadata,
+        // NOTE: metadata intentionally omitted to prevent PII leakage
+        // (checkoutIp, checkoutUserAgent, checkoutAcceptLanguage)
       })
     } catch (error: any) {
       console.error('Paystack verification error:', error)

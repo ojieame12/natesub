@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Search, ChevronDown, ChevronUp, Mail, FileText, Shield, Send, X, CheckCircle } from 'lucide-react'
 import { Pressable, useToast } from './components'
 import { useAuthState } from './hooks/useAuthState'
+import { getAuthToken } from './api/client'
 import { TERMS_URL, PRIVACY_URL } from './utils/constants'
 import './HelpSupport.css'
 
@@ -60,6 +61,13 @@ export default function HelpSupport() {
     message: '',
   })
 
+  // Sync email when user loads (fixes race condition where user loads after initial render)
+  useEffect(() => {
+    if (user?.email && !formData.email) {
+      setFormData(prev => ({ ...prev, email: user.email }))
+    }
+  }, [user?.email])
+
   const filteredFaqs = faqs.filter(faq =>
     faq.question.toLowerCase().includes(searchQuery.toLowerCase()) ||
     faq.answer.toLowerCase().includes(searchQuery.toLowerCase())
@@ -88,9 +96,16 @@ export default function HelpSupport() {
     const timeoutId = setTimeout(() => controller.abort(), SUPPORT_TIMEOUT_MS)
 
     try {
+      // Build headers with auth token for user linkage in token-auth mode
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      const token = getAuthToken()
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+
       const response = await fetch(`${API_URL}/support/tickets`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         credentials: 'include',
         body: JSON.stringify(formData),
         signal: controller.signal,

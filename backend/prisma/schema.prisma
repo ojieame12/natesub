@@ -245,6 +245,12 @@ model Profile {
   // Template
   template String @default("boundary") // Subscribe page template: boundary, minimal, editorial
 
+  // Salary Mode (aligned billing for predictable paydays)
+  salaryModeEnabled         Boolean @default(false)  // OFF by default, opt-in feature
+  preferredPayday           Int?                     // 1-28, day of month for payouts
+  paydayAlignmentUnlocked   Boolean @default(false)  // Unlocked after 2 successful payments
+  totalSuccessfulPayments   Int     @default(0)      // Account-level counter for unlock gate
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -425,6 +431,7 @@ model Payment {
   @@index([type, status, createdAt])           // transfers.ts monitoring
   @@index([subscriptionId, status, createdAt]) // billing.ts retries
   @@index([creatorId, occurredAt])             // payroll.ts reporting
+  @@index([creatorId, currency, occurredAt])   // payroll.ts multi-currency aggregation
   // Admin dashboard query optimizations
   @@index([status, type, occurredAt])          // revenue aggregations (overview, daily, monthly)
   @@index([creatorId, status, occurredAt])     // per-creator revenue in user list

@@ -1,42 +1,31 @@
 import { useState, useRef } from 'react'
-import { ChevronLeft, ChevronDown, Check, Loader2, AlertCircle, Camera, RefreshCw } from 'lucide-react'
+import { ChevronLeft, ChevronDown, Check, Loader2, AlertCircle, Camera, RefreshCw, Heart, Gift, Briefcase, Star, Sparkles, Wallet, MoreHorizontal } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useOnboardingStore } from './store'
 import { Button, Pressable } from './components'
+import { BottomDrawer } from '../components'
 import { getShareableLink } from '../utils/constants'
 import { getCurrencySymbol, getSuggestedAmounts } from '../utils/currency'
+import {
+    isCrossBorderCountry,
+    getLocalCurrencyName,
+    getCrossBorderCurrencyOptions,
+} from '../utils/regionConfig'
 import { api } from '../api'
 import { uploadFile } from '../api/hooks'
 import './onboarding.css'
 
-// Purpose options
+// Purpose options with icons for visual differentiation
 type Purpose = 'tips' | 'support' | 'allowance' | 'fan_club' | 'exclusive_content' | 'service' | 'other'
-const PURPOSE_OPTIONS: { value: Purpose; label: string }[] = [
-    { value: 'support', label: 'Support Me' },
-    { value: 'tips', label: 'Tips & Appreciation' },
-    { value: 'service', label: 'Services' },
-    { value: 'fan_club', label: 'Fan Club' },
-    { value: 'exclusive_content', label: 'Exclusive Content' },
-    { value: 'allowance', label: 'Allowance' },
-    { value: 'other', label: 'Other' },
+const PURPOSE_OPTIONS: { value: Purpose; label: string; icon: React.ReactNode }[] = [
+    { value: 'support', label: 'Support Me', icon: <Heart size={20} /> },
+    { value: 'tips', label: 'Tips & Appreciation', icon: <Gift size={20} /> },
+    { value: 'service', label: 'Services', icon: <Briefcase size={20} /> },
+    { value: 'fan_club', label: 'Fan Club', icon: <Star size={20} /> },
+    { value: 'exclusive_content', label: 'Exclusive Content', icon: <Sparkles size={20} /> },
+    { value: 'allowance', label: 'Allowance', icon: <Wallet size={20} /> },
+    { value: 'other', label: 'Other', icon: <MoreHorizontal size={20} /> },
 ]
-
-// Currency options for cross-border creators
-const CROSS_BORDER_CURRENCIES = [
-    { code: 'USD', symbol: '$', label: 'USD' },
-    { code: 'GBP', symbol: '£', label: 'GBP' },
-    { code: 'EUR', symbol: '€', label: 'EUR' },
-]
-
-// Countries that receive payouts in local currency via Stripe cross-border
-const CROSS_BORDER_COUNTRIES = ['NG', 'GH', 'KE']
-
-// Local currency names for cross-border countries
-const LOCAL_CURRENCY_NAMES: Record<string, string> = {
-    'NG': 'Naira (NGN)',
-    'GH': 'Cedis (GHS)',
-    'KE': 'Shillings (KES)',
-}
 
 export default function PersonalReviewStep() {
     const navigate = useNavigate()
@@ -76,8 +65,8 @@ export default function PersonalReviewStep() {
     } = useOnboardingStore()
 
     // Determine if user is a cross-border creator using Stripe
-    const isCrossBorderStripe = paymentProvider === 'stripe' && CROSS_BORDER_COUNTRIES.includes(countryCode?.toUpperCase() || '')
-    const localCurrencyName = LOCAL_CURRENCY_NAMES[countryCode?.toUpperCase() || ''] || 'local currency'
+    const isCrossBorderStripe = paymentProvider === 'stripe' && isCrossBorderCountry(countryCode)
+    const localCurrencyName = getLocalCurrencyName(countryCode)
 
     // Construct display name from first/last name
     const displayName = `${firstName} ${lastName}`.trim()
@@ -378,36 +367,31 @@ export default function PersonalReviewStep() {
                 </div>
             </div>
 
-            {/* Purpose Drawer */}
-            {showPurposeDrawer && (
-                <>
-                    <div
-                        className="drawer-overlay"
-                        onClick={() => setShowPurposeDrawer(false)}
-                    />
-                    <div className="country-drawer">
-                        <div className="drawer-handle" />
-                        <h3 className="drawer-title">What's this for?</h3>
-                        <div className="country-list">
-                            {PURPOSE_OPTIONS.map((option) => (
-                                <Pressable
-                                    key={option.value}
-                                    className={`country-option ${resolvedPurpose === option.value ? 'selected' : ''}`}
-                                    onClick={() => {
-                                        setPurpose(option.value)
-                                        setShowPurposeDrawer(false)
-                                    }}
-                                >
-                                    <span className="country-option-name">{option.label}</span>
-                                    {resolvedPurpose === option.value && (
-                                        <Check size={20} className="country-option-check" />
-                                    )}
-                                </Pressable>
-                            ))}
-                        </div>
-                    </div>
-                </>
-            )}
+            {/* Purpose Drawer - with swipe-to-dismiss */}
+            <BottomDrawer
+                open={showPurposeDrawer}
+                onClose={() => setShowPurposeDrawer(false)}
+                title="What's this for?"
+            >
+                <div className="purpose-list">
+                    {PURPOSE_OPTIONS.map((option) => (
+                        <Pressable
+                            key={option.value}
+                            className={`purpose-option ${resolvedPurpose === option.value ? 'selected' : ''}`}
+                            onClick={() => {
+                                setPurpose(option.value)
+                                setShowPurposeDrawer(false)
+                            }}
+                        >
+                            <span className="purpose-option-icon">{option.icon}</span>
+                            <span className="purpose-option-name">{option.label}</span>
+                            {resolvedPurpose === option.value && (
+                                <Check size={20} className="purpose-option-check" />
+                            )}
+                        </Pressable>
+                    ))}
+                </div>
+            </BottomDrawer>
 
             {/* Currency Drawer - for cross-border creators */}
             {showCurrencyDrawer && (
@@ -423,7 +407,7 @@ export default function PersonalReviewStep() {
                             Payouts will be converted to {localCurrencyName}
                         </p>
                         <div className="country-list">
-                            {CROSS_BORDER_CURRENCIES.map((curr) => (
+                            {getCrossBorderCurrencyOptions().map((curr) => (
                                 <Pressable
                                     key={curr.code}
                                     className={`country-option ${currency === curr.code ? 'selected' : ''}`}

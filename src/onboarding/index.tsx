@@ -2,6 +2,7 @@ import { useRef, useEffect, useState, useMemo } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useOnboardingStore } from './store'
 import { useAuthState } from '../hooks/useAuthState'
+import { shouldSkipAddressStep } from '../utils/constants'
 import StartStep from './StartStep'
 import EmailStep from './EmailStep'
 import OtpStep from './OtpStep'
@@ -11,9 +12,6 @@ import PersonalUsernameStep from './PersonalUsernameStep'
 import PaymentMethodStep from './PaymentMethodStep'
 import PersonalReviewStep from './PersonalReviewStep'
 import './onboarding.css'
-
-// Countries where we skip address collection (cross-border recipients have simpler verification)
-const SKIP_ADDRESS_COUNTRIES = ['NG', 'GH', 'KE']
 
 export default function OnboardingFlow() {
     const location = useLocation()
@@ -27,7 +25,7 @@ export default function OnboardingFlow() {
     const shouldSkipNextAnimation = useRef(false)
 
     // Determine if we should show the address step based on country
-    const showAddressStep = countryCode && !SKIP_ADDRESS_COUNTRIES.includes(countryCode)
+    const showAddressStep = countryCode && !shouldSkipAddressStep(countryCode)
 
     // "Naked Onboarding" Steps - dynamically include AddressStep for non-cross-border countries
     const steps = useMemo(() => {

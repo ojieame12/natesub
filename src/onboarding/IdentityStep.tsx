@@ -3,52 +3,12 @@ import { ChevronLeft, ChevronDown, Check, Search } from 'lucide-react'
 import { useOnboardingStore } from './store'
 import { Button, Pressable } from './components'
 import { useSaveOnboardingProgress } from '../api/hooks'
+import { getCountryList } from '../utils/regionConfig'
 import '../Dashboard.css'
 import './onboarding.css'
 
-// Countries with payment support info
-const countries = [
-    { code: 'US', name: 'United States', flag: '🇺🇸', currency: 'USD' },
-    { code: 'GB', name: 'United Kingdom', flag: '🇬🇧', currency: 'GBP' },
-    { code: 'CA', name: 'Canada', flag: '🇨🇦', currency: 'CAD' },
-    { code: 'AU', name: 'Australia', flag: '🇦🇺', currency: 'AUD' },
-    { code: 'DE', name: 'Germany', flag: '🇩🇪', currency: 'EUR' },
-    { code: 'FR', name: 'France', flag: '🇫🇷', currency: 'EUR' },
-    { code: 'ES', name: 'Spain', flag: '🇪🇸', currency: 'EUR' },
-    { code: 'IT', name: 'Italy', flag: '🇮🇹', currency: 'EUR' },
-    { code: 'NL', name: 'Netherlands', flag: '🇳🇱', currency: 'EUR' },
-    { code: 'BE', name: 'Belgium', flag: '🇧🇪', currency: 'EUR' },
-    { code: 'IE', name: 'Ireland', flag: '🇮🇪', currency: 'EUR' },
-    { code: 'PT', name: 'Portugal', flag: '🇵🇹', currency: 'EUR' },
-    { code: 'AT', name: 'Austria', flag: '🇦🇹', currency: 'EUR' },
-    { code: 'CH', name: 'Switzerland', flag: '🇨🇭', currency: 'CHF' },
-    { code: 'SE', name: 'Sweden', flag: '🇸🇪', currency: 'SEK' },
-    { code: 'NO', name: 'Norway', flag: '🇳🇴', currency: 'NOK' },
-    { code: 'DK', name: 'Denmark', flag: '🇩🇰', currency: 'DKK' },
-    { code: 'FI', name: 'Finland', flag: '🇫🇮', currency: 'EUR' },
-    { code: 'NZ', name: 'New Zealand', flag: '🇳🇿', currency: 'NZD' },
-    { code: 'SG', name: 'Singapore', flag: '🇸🇬', currency: 'SGD' },
-    { code: 'HK', name: 'Hong Kong', flag: '🇭🇰', currency: 'HKD' },
-    { code: 'JP', name: 'Japan', flag: '🇯🇵', currency: 'JPY' },
-    { code: 'MX', name: 'Mexico', flag: '🇲🇽', currency: 'MXN' },
-    { code: 'BR', name: 'Brazil', flag: '🇧🇷', currency: 'BRL' },
-    { code: 'IN', name: 'India', flag: '🇮🇳', currency: 'INR' },
-    // African countries - default to local currency, payment method choice handles USD if needed
-    { code: 'NG', name: 'Nigeria', flag: '🇳🇬', currency: 'NGN' },
-    { code: 'KE', name: 'Kenya', flag: '🇰🇪', currency: 'KES' },
-    { code: 'GH', name: 'Ghana', flag: '🇬🇭', currency: 'GHS' },
-    // South Africa has native Stripe support - uses ZAR, NOT cross-border
-    { code: 'ZA', name: 'South Africa', flag: '🇿🇦', currency: 'ZAR' },
-    { code: 'AE', name: 'United Arab Emirates', flag: '🇦🇪', currency: 'AED' },
-    { code: 'PH', name: 'Philippines', flag: '🇵🇭', currency: 'PHP' },
-    { code: 'MY', name: 'Malaysia', flag: '🇲🇾', currency: 'MYR' },
-    { code: 'TH', name: 'Thailand', flag: '🇹🇭', currency: 'THB' },
-    { code: 'ID', name: 'Indonesia', flag: '🇮🇩', currency: 'IDR' },
-    { code: 'PL', name: 'Poland', flag: '🇵🇱', currency: 'PLN' },
-    { code: 'CZ', name: 'Czech Republic', flag: '🇨🇿', currency: 'CZK' },
-    { code: 'RO', name: 'Romania', flag: '🇷🇴', currency: 'RON' },
-    { code: 'HU', name: 'Hungary', flag: '🇭🇺', currency: 'HUF' },
-]
+// Get countries from centralized config
+const countries = getCountryList()
 
 export default function IdentityStep() {
     const { firstName, lastName, setFirstName, setLastName, country, countryCode, currency, setCountry, setCurrency, nextStep, prevStep, currentStep } = useOnboardingStore()

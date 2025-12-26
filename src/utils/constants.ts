@@ -197,3 +197,35 @@ export function getShareableLinkFull(username: string): string {
 // These open in new tabs, so we use the public domain to avoid routing issues
 export const TERMS_URL = `${PUBLIC_PAGE_URL}/terms`
 export const PRIVACY_URL = `${PUBLIC_PAGE_URL}/privacy`
+
+// ============================================
+// CROSS-BORDER / ONBOARDING CONFIGURATION
+// ============================================
+
+// Re-export from regionConfig for backwards compatibility
+// regionConfig.ts is now the SINGLE SOURCE OF TRUTH for country/currency/provider rules
+import {
+  getCrossBorderCountryCodes,
+  shouldSkipAddress,
+  isCrossBorderCountry,
+} from './regionConfig'
+
+// Countries where we skip the address step in onboarding
+// These are cross-border recipients with simpler Stripe verification
+// NOTE: This now derives from regionConfig.ts - update there to add countries
+export const SKIP_ADDRESS_COUNTRIES = getCrossBorderCountryCodes() as readonly string[]
+
+// Check if a country skips the address step
+export function shouldSkipAddressStep(countryCode: string | null | undefined): boolean {
+  return shouldSkipAddress(countryCode)
+}
+
+// Calculate the review step index based on country (for dynamic onboarding flow)
+// - With address step: 8 steps (0-7), review at step 7
+// - Without address step: 7 steps (0-6), review at step 6
+export function getReviewStepIndex(countryCode: string | null | undefined): number {
+  return shouldSkipAddress(countryCode) ? 6 : 7
+}
+
+// Re-export isCrossBorderCountry for convenience
+export { isCrossBorderCountry }

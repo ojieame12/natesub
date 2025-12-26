@@ -732,6 +732,45 @@ export async function handleAsyncPaymentSucceeded(event: Stripe.Event) {
     )
   }
 
+  // SALARY MODE: Track successful payments for unlock gate
+  // Only count real payments (amount > 0), not $0 trials
+  const paymentAmount = session.amount_total || 0
+  if (paymentAmount > 0) {
+    // Atomically increment counter and get new value
+    const updatedProfile = await db.profile.update({
+      where: { userId: creatorId },
+      data: { totalSuccessfulPayments: { increment: 1 } },
+      select: { totalSuccessfulPayments: true, paydayAlignmentUnlocked: true },
+    })
+
+    // Check if we should unlock (2+ payments AND not already unlocked)
+    if (updatedProfile.totalSuccessfulPayments >= 2 && !updatedProfile.paydayAlignmentUnlocked) {
+      // Atomic unlock: only update if still locked (prevents duplicate activities)
+      const unlockResult = await db.profile.updateMany({
+        where: {
+          userId: creatorId,
+          paydayAlignmentUnlocked: false, // Only unlock if still locked
+        },
+        data: { paydayAlignmentUnlocked: true },
+      })
+
+      // Only create activity if we actually unlocked (count > 0)
+      if (unlockResult.count > 0) {
+        console.log(`[async_payment_succeeded] Unlocked Salary Mode for creator ${creatorId} after ${updatedProfile.totalSuccessfulPayments} successful payments`)
+        await db.activity.create({
+          data: {
+            userId: creatorId,
+            type: 'salary_mode_unlocked',
+            payload: {
+              successfulPayments: updatedProfile.totalSuccessfulPayments,
+              message: 'You can now set a preferred payday for predictable monthly income.',
+            },
+          },
+        })
+      }
+    }
+  }
+
   console.log(`[async_payment_succeeded] Created subscription ${subscription.id} for async payment`)
 }
 
