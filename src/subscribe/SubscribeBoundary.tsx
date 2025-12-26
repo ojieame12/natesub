@@ -100,6 +100,7 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
         detectPayerCountry().then(setPayerCountry).catch(() => {})
 
         // Record page view (not for owners)
+        // Also mark reachedPayment since pricing UI is now visible
         if (profile.id && !isOwner && !viewIdRef.current && !verification.isVerifying) {
             recordPageView({
                 profileId: profile.id,
@@ -108,12 +109,17 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                 utmMedium: searchParams.get('utm_medium') || undefined,
                 utmCampaign: searchParams.get('utm_campaign') || undefined,
             })
-                .then(res => { viewIdRef.current = res.viewId })
+                .then(res => {
+                    viewIdRef.current = res.viewId
+                    // Mark reachedPayment when pricing UI is visible (not on subscribe click)
+                    // This separates "saw pricing" from "started checkout" for funnel analysis
+                    updatePageView({ viewId: res.viewId, data: { reachedPayment: true } }).catch(() => {})
+                })
                 .catch(console.error)
         }
 
         return () => clearTimeout(timer)
-    }, [profile.id, recordPageView, isOwner, searchParams, verification.isVerifying])
+    }, [profile.id, recordPageView, updatePageView, isOwner, searchParams, verification.isVerifying])
 
     // Handlers
     const handleShare = async () => {
@@ -147,10 +153,6 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                 }
             }
 
-            if (viewId) {
-                updatePageView({ viewId, data: { reachedPayment: true, startedCheckout: true } }).catch(() => {})
-            }
-
             const amountInCents = displayAmountToCents(pricing.currentAmount, pricing.currency)
             const result = await createCheckout({
                 creatorUsername: profile.username,
@@ -162,6 +164,11 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
             })
 
             if (result.url) {
+                // Mark startedCheckout AFTER checkout session is successfully created
+                // This separates "clicked subscribe" from "checkout session created" for funnel analysis
+                if (viewId) {
+                    updatePageView({ viewId, data: { startedCheckout: true } }).catch(() => {})
+                }
                 window.location.href = result.url
             } else {
                 setStatus('idle')

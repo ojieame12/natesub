@@ -197,6 +197,7 @@ requests.post(
           reference,
           metadata: {
             creatorId: request.creatorId,
+            requestId: request.id, // CRITICAL: Required for webhook to finalize request
             interval: request.isRecurring ? 'month' : 'one_time',
             creatorAmount: feeCalc.netCents,
             serviceFee: feeCalc.feeCents,

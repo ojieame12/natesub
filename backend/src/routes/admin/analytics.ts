@@ -45,8 +45,9 @@ analytics.get('/churn', auditSensitiveRead('analytics_churn'), async (c) => {
     },
   })
 
-  // Group by cancellation reason
+  // Group by cancellation reason and track currencies
   const byReason: Record<string, { count: number; mrrLost: number }> = {}
+  const currencies = new Set<string>()
   let totalMrrLost = 0
 
   for (const sub of cancelledSubs) {
@@ -57,7 +58,11 @@ analytics.get('/churn', auditSensitiveRead('analytics_churn'), async (c) => {
     byReason[reason].count++
     byReason[reason].mrrLost += sub.amount
     totalMrrLost += sub.amount
+    if (sub.currency) currencies.add(sub.currency)
   }
+
+  // Warn if multiple currencies are present (amounts not normalized)
+  const hasMixedCurrencies = currencies.size > 1
 
   // Get active subscriptions at start of period for churn rate calculation
   const activeAtStart = await db.subscription.count({
@@ -99,6 +104,14 @@ analytics.get('/churn', auditSensitiveRead('analytics_churn'), async (c) => {
       end: periodEnd.toISOString(),
       days: query.days,
     },
+    // Currency info for accurate interpretation of MRR figures
+    currencies: {
+      list: Array.from(currencies),
+      hasMixedCurrencies,
+      warning: hasMixedCurrencies
+        ? 'MRR figures include multiple currencies and are not normalized. Amounts shown in original currency units.'
+        : null,
+    },
     summary: {
       cancelled: cancelledSubs.length,
       mrrLost: totalMrrLost,
@@ -124,14 +137,18 @@ analytics.get('/churn', auditSensitiveRead('analytics_churn'), async (c) => {
 /**
  * GET /admin/analytics/ltv
  * Lifetime Value analysis by creator and overall
+ *
+ * Uses reportingNetCents (USD-normalized) when available, falls back to amountCents for legacy payments.
+ * This ensures multi-currency payments are properly aggregated.
  */
 analytics.get('/ltv', auditSensitiveRead('analytics_ltv'), async (c) => {
   const query = z.object({
     limit: z.coerce.number().min(1).max(100).default(20),
   }).parse(c.req.query())
 
-  // Overall LTV calculation
+  // Overall LTV calculation using USD-normalized amounts
   // LTV = Average Revenue Per User * Average Customer Lifetime
+  // COALESCE(reportingNetCents, amountCents) prefers USD-normalized when available
   const overallStats = await db.$queryRaw<Array<{
     total_payments: bigint
     total_revenue: bigint
@@ -140,7 +157,7 @@ analytics.get('/ltv', auditSensitiveRead('analytics_ltv'), async (c) => {
   }>>`
     SELECT
       COUNT(DISTINCT p.id)::bigint as total_payments,
-      SUM(p."amountCents")::bigint as total_revenue,
+      SUM(COALESCE(p."reportingNetCents", p."amountCents"))::bigint as total_revenue,
       COUNT(DISTINCT p."subscriberId")::bigint as unique_subscribers,
       AVG(
         CASE
@@ -162,7 +179,7 @@ analytics.get('/ltv', auditSensitiveRead('analytics_ltv'), async (c) => {
   const avgRevenuePerUser = totalRevenue / uniqueSubscribers
   const overallLtv = avgRevenuePerUser // Simplified: could multiply by churn adjustment
 
-  // LTV by creator
+  // LTV by creator using USD-normalized amounts
   const creatorLtv = await db.$queryRaw<Array<{
     creator_id: string
     subscriber_count: bigint
@@ -174,8 +191,8 @@ analytics.get('/ltv', auditSensitiveRead('analytics_ltv'), async (c) => {
     SELECT
       s."creatorId" as creator_id,
       COUNT(DISTINCT s."subscriberId")::bigint as subscriber_count,
-      SUM(p."amountCents")::bigint as total_revenue,
-      AVG(p."amountCents")::float as avg_revenue_per_sub,
+      SUM(COALESCE(p."reportingNetCents", p."amountCents"))::bigint as total_revenue,
+      AVG(COALESCE(p."reportingNetCents", p."amountCents"))::float as avg_revenue_per_sub,
       AVG(
         CASE
           WHEN s."canceledAt" IS NOT NULL
@@ -189,7 +206,7 @@ analytics.get('/ltv', auditSensitiveRead('analytics_ltv'), async (c) => {
     WHERE p.status = 'succeeded'
     GROUP BY s."creatorId"
     HAVING COUNT(DISTINCT s."subscriberId") >= 3
-    ORDER BY SUM(p."amountCents") DESC
+    ORDER BY SUM(COALESCE(p."reportingNetCents", p."amountCents")) DESC
     LIMIT ${query.limit}
   `
 
@@ -210,6 +227,8 @@ analytics.get('/ltv', auditSensitiveRead('analytics_ltv'), async (c) => {
   const creatorMap = new Map(creators.map(c => [c.id, c]))
 
   return c.json({
+    // All revenue figures normalized to USD cents for cross-currency comparability
+    reportingCurrency: 'USD',
     overall: {
       averageLtv: Math.round(overallLtv),
       averageRevenuePerUser: Math.round(avgRevenuePerUser),
@@ -560,6 +579,9 @@ analytics.get('/cohort/:month', auditSensitiveRead('analytics_cohort'), async (c
 /**
  * GET /admin/analytics/mrr
  * Monthly Recurring Revenue trends
+ *
+ * NOTE: MRR figures use subscription amounts in original currencies.
+ * If multiple currencies are present, a warning is included in the response.
  */
 analytics.get('/mrr', auditSensitiveRead('analytics_mrr'), async (c) => {
   const query = z.object({
@@ -567,6 +589,17 @@ analytics.get('/mrr', auditSensitiveRead('analytics_mrr'), async (c) => {
   }).parse(c.req.query())
 
   const now = new Date()
+
+  // Check for mixed currencies across all active subscriptions
+  const distinctCurrencies = await db.subscription.groupBy({
+    by: ['currency'],
+    where: {
+      status: { in: ['active', 'past_due'] },
+      canceledAt: null,
+    },
+  })
+  const currencies = distinctCurrencies.map(c => c.currency).filter(Boolean) as string[]
+  const hasMixedCurrencies = currencies.length > 1
   const monthlyData: Array<{
     month: string
     activeSubscriptions: number
@@ -636,9 +669,19 @@ analytics.get('/mrr', auditSensitiveRead('analytics_mrr'), async (c) => {
   const mrrGrowth = previousMrr > 0 ? ((currentMrr - previousMrr) / previousMrr) * 100 : 0
 
   return c.json({
+    // Currency info for accurate interpretation of MRR figures
+    currencies: {
+      list: currencies,
+      hasMixedCurrencies,
+      warning: hasMixedCurrencies
+        ? 'MRR figures include multiple currencies and are not normalized. Consider filtering by currency for accurate analysis.'
+        : null,
+    },
     current: {
       mrr: currentMrr,
-      mrrFormatted: `$${(currentMrr / 100).toLocaleString()}`,
+      mrrFormatted: hasMixedCurrencies
+        ? `${(currentMrr / 100).toLocaleString()} (mixed currencies)`
+        : `$${(currentMrr / 100).toLocaleString()}`,
       activeSubscriptions: monthlyData[monthlyData.length - 1]?.activeSubscriptions || 0,
       monthOverMonthGrowth: parseFloat(mrrGrowth.toFixed(1)),
     },

@@ -5,6 +5,7 @@ import crypto from 'crypto'
 import { db } from '../db/client.js'
 import { requireAuth } from '../middleware/auth.js'
 import { publicRateLimit } from '../middleware/rateLimit.js'
+import { cached, CACHE_TTL } from '../utils/cache.js'
 
 const analytics = new Hono()
 
@@ -151,141 +152,160 @@ analytics.get('/stats', requireAuth, async (c) => {
       return c.json({ error: 'Profile not found' }, 404)
     }
 
-    // Get date ranges
-    const now = new Date()
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-    const thisWeek = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)
-    const thisMonth = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000)
+    // Cache analytics stats for 1 minute to reduce DB load
+    // Stats don't need to be real-time accurate for dashboard display
+    const cacheKey = `analytics:stats:${profile.id}`
+    const stats = await cached(cacheKey, CACHE_TTL.SHORT, async () => {
+      // Get date ranges
+      const now = new Date()
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+      const thisWeek = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)
+      const thisMonth = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000)
+      const fourteenDaysAgo = new Date(today.getTime() - 14 * 24 * 60 * 60 * 1000)
 
-    // Get view counts
-    const [todayViews, weekViews, monthViews, totalViews] = await Promise.all([
-      db.pageView.count({
-        where: { profileId: profile.id, createdAt: { gte: today } },
-      }),
-      db.pageView.count({
-        where: { profileId: profile.id, createdAt: { gte: thisWeek } },
-      }),
-      db.pageView.count({
-        where: { profileId: profile.id, createdAt: { gte: thisMonth } },
-      }),
-      db.pageView.count({
-        where: { profileId: profile.id },
-      }),
-    ])
-
-    // Get unique visitors (by visitorHash) - use raw SQL for efficient COUNT(DISTINCT)
-    const [uniqueToday, uniqueWeek, uniqueMonth] = await Promise.all([
-      db.$queryRaw<[{ count: number }]>`
-        SELECT COUNT(DISTINCT "visitorHash")::int as count
-        FROM page_views
-        WHERE "profileId" = ${profile.id} AND "createdAt" >= ${today}
-      `.then(r => r[0]?.count ?? 0),
-      db.$queryRaw<[{ count: number }]>`
-        SELECT COUNT(DISTINCT "visitorHash")::int as count
-        FROM page_views
-        WHERE "profileId" = ${profile.id} AND "createdAt" >= ${thisWeek}
-      `.then(r => r[0]?.count ?? 0),
-      db.$queryRaw<[{ count: number }]>`
-        SELECT COUNT(DISTINCT "visitorHash")::int as count
-        FROM page_views
-        WHERE "profileId" = ${profile.id} AND "createdAt" >= ${thisMonth}
-      `.then(r => r[0]?.count ?? 0),
-    ])
-
-    // Conversion funnel (last 30 days)
-    const [reachedPayment, startedCheckout, completedCheckout] = await Promise.all([
-      db.pageView.count({
-        where: { profileId: profile.id, createdAt: { gte: thisMonth }, reachedPayment: true },
-      }),
-      db.pageView.count({
-        where: { profileId: profile.id, createdAt: { gte: thisMonth }, startedCheckout: true },
-      }),
-      db.pageView.count({
-        where: { profileId: profile.id, createdAt: { gte: thisMonth }, completedCheckout: true },
-      }),
-    ])
-
-    // Get actual conversions (subscriptions) in last 30 days
-    const conversions = await db.subscription.count({
-      where: { creatorId: userId, startedAt: { gte: thisMonth } },
-    })
-
-    // Calculate conversion rates
-    const viewToPaymentRate = monthViews > 0 ? (reachedPayment / monthViews) * 100 : 0
-    const paymentToCheckoutRate = reachedPayment > 0 ? (startedCheckout / reachedPayment) * 100 : 0
-    const checkoutToSubscribeRate = startedCheckout > 0 ? (conversions / startedCheckout) * 100 : 0
-    const overallConversionRate = monthViews > 0 ? (conversions / monthViews) * 100 : 0
-
-    // Device breakdown (last 30 days)
-    const deviceStats = await db.pageView.groupBy({
-      by: ['deviceType'],
-      where: { profileId: profile.id, createdAt: { gte: thisMonth } },
-      _count: true,
-    })
-
-    // Top referrers (last 30 days) - include null as "Direct"
-    const referrerStats = await db.pageView.groupBy({
-      by: ['referrer'],
-      where: {
-        profileId: profile.id,
-        createdAt: { gte: thisMonth },
-      },
-      _count: true,
-      orderBy: { _count: { referrer: 'desc' } },
-      take: 6, // Take 6 to account for potential "Direct" entry
-    })
-
-    // Daily views for chart (last 14 days)
-    const fourteenDaysAgo = new Date(today.getTime() - 14 * 24 * 60 * 60 * 1000)
-    const dailyViews = await db.$queryRaw<{ date: string; count: number }[]>`
-      SELECT DATE("createdAt") as date, COUNT(*)::int as count
-      FROM page_views
-      WHERE "profileId" = ${profile.id}
-        AND "createdAt" >= ${fourteenDaysAgo}
-      GROUP BY DATE("createdAt")
-      ORDER BY date ASC
-    `
-
-    return c.json({
-      views: {
-        today: todayViews,
-        week: weekViews,
-        month: monthViews,
-        total: totalViews,
-      },
-      uniqueVisitors: {
-        today: uniqueToday,
-        week: uniqueWeek,
-        month: uniqueMonth,
-      },
-      funnel: {
-        views: monthViews,
+      // Batch all queries in parallel for efficiency
+      const [
+        todayViews,
+        weekViews,
+        monthViews,
+        totalViews,
+        uniqueToday,
+        uniqueWeek,
+        uniqueMonth,
         reachedPayment,
         startedCheckout,
         completedCheckout,
         conversions,
-      },
-      rates: {
-        viewToPayment: Math.round(viewToPaymentRate * 10) / 10,
-        paymentToCheckout: Math.round(paymentToCheckoutRate * 10) / 10,
-        checkoutToSubscribe: Math.round(checkoutToSubscribeRate * 10) / 10,
-        overall: Math.round(overallConversionRate * 10) / 10,
-      },
-      devices: deviceStats.map(d => ({
-        type: d.deviceType || 'unknown',
-        count: d._count,
-      })),
-      referrers: referrerStats
-        .map(r => ({
-          source: r.referrer || 'Direct',
-          count: r._count,
-        }))
-        .slice(0, 5), // Return top 5
-      dailyViews: dailyViews.map(d => ({
-        date: d.date,
-        count: d.count,
-      })),
+        deviceStats,
+        referrerStats,
+        dailyViews,
+      ] = await Promise.all([
+        // View counts
+        db.pageView.count({
+          where: { profileId: profile.id, createdAt: { gte: today } },
+        }),
+        db.pageView.count({
+          where: { profileId: profile.id, createdAt: { gte: thisWeek } },
+        }),
+        db.pageView.count({
+          where: { profileId: profile.id, createdAt: { gte: thisMonth } },
+        }),
+        db.pageView.count({
+          where: { profileId: profile.id },
+        }),
+
+        // Unique visitors (COUNT DISTINCT)
+        db.$queryRaw<[{ count: number }]>`
+          SELECT COUNT(DISTINCT "visitorHash")::int as count
+          FROM page_views
+          WHERE "profileId" = ${profile.id} AND "createdAt" >= ${today}
+        `.then(r => r[0]?.count ?? 0),
+        db.$queryRaw<[{ count: number }]>`
+          SELECT COUNT(DISTINCT "visitorHash")::int as count
+          FROM page_views
+          WHERE "profileId" = ${profile.id} AND "createdAt" >= ${thisWeek}
+        `.then(r => r[0]?.count ?? 0),
+        db.$queryRaw<[{ count: number }]>`
+          SELECT COUNT(DISTINCT "visitorHash")::int as count
+          FROM page_views
+          WHERE "profileId" = ${profile.id} AND "createdAt" >= ${thisMonth}
+        `.then(r => r[0]?.count ?? 0),
+
+        // Conversion funnel
+        db.pageView.count({
+          where: { profileId: profile.id, createdAt: { gte: thisMonth }, reachedPayment: true },
+        }),
+        db.pageView.count({
+          where: { profileId: profile.id, createdAt: { gte: thisMonth }, startedCheckout: true },
+        }),
+        db.pageView.count({
+          where: { profileId: profile.id, createdAt: { gte: thisMonth }, completedCheckout: true },
+        }),
+
+        // Actual conversions (subscriptions)
+        db.subscription.count({
+          where: { creatorId: userId, startedAt: { gte: thisMonth } },
+        }),
+
+        // Device breakdown
+        db.pageView.groupBy({
+          by: ['deviceType'],
+          where: { profileId: profile.id, createdAt: { gte: thisMonth } },
+          _count: true,
+        }),
+
+        // Top referrers
+        db.pageView.groupBy({
+          by: ['referrer'],
+          where: {
+            profileId: profile.id,
+            createdAt: { gte: thisMonth },
+          },
+          _count: true,
+          orderBy: { _count: { referrer: 'desc' } },
+          take: 6,
+        }),
+
+        // Daily views chart
+        db.$queryRaw<{ date: string; count: number }[]>`
+          SELECT DATE("createdAt") as date, COUNT(*)::int as count
+          FROM page_views
+          WHERE "profileId" = ${profile.id}
+            AND "createdAt" >= ${fourteenDaysAgo}
+          GROUP BY DATE("createdAt")
+          ORDER BY date ASC
+        `,
+      ])
+
+      // Calculate conversion rates
+      const viewToPaymentRate = monthViews > 0 ? (reachedPayment / monthViews) * 100 : 0
+      const paymentToCheckoutRate = reachedPayment > 0 ? (startedCheckout / reachedPayment) * 100 : 0
+      const checkoutToSubscribeRate = startedCheckout > 0 ? (conversions / startedCheckout) * 100 : 0
+      const overallConversionRate = monthViews > 0 ? (conversions / monthViews) * 100 : 0
+
+      return {
+        views: {
+          today: todayViews,
+          week: weekViews,
+          month: monthViews,
+          total: totalViews,
+        },
+        uniqueVisitors: {
+          today: uniqueToday,
+          week: uniqueWeek,
+          month: uniqueMonth,
+        },
+        funnel: {
+          views: monthViews,
+          reachedPayment,
+          startedCheckout,
+          completedCheckout,
+          conversions,
+        },
+        rates: {
+          viewToPayment: Math.round(viewToPaymentRate * 10) / 10,
+          paymentToCheckout: Math.round(paymentToCheckoutRate * 10) / 10,
+          checkoutToSubscribe: Math.round(checkoutToSubscribeRate * 10) / 10,
+          overall: Math.round(overallConversionRate * 10) / 10,
+        },
+        devices: deviceStats.map(d => ({
+          type: d.deviceType || 'unknown',
+          count: d._count,
+        })),
+        referrers: referrerStats
+          .map(r => ({
+            source: r.referrer || 'Direct',
+            count: r._count,
+          }))
+          .slice(0, 5),
+        dailyViews: dailyViews.map(d => ({
+          date: d.date,
+          count: d.count,
+        })),
+      }
     })
+
+    return c.json(stats)
   } catch (error) {
     console.error('Failed to get analytics:', error)
     return c.json({ error: 'Failed to get analytics' }, 500)

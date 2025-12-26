@@ -144,15 +144,17 @@ export default function EditPage() {
     const { showSuccessToast = true } = options
 
     try {
-      // Update Profile Data
+      // Update only the fields being edited - don't spread entire profile to avoid
+      // sending tiers (already in cents) which would be double-converted by backend
+      // Also preserve existing pricingModel and isPublic unless explicitly changing
       await updateProfile({
-        ...profile,
         displayName,
         avatarUrl,
         purpose,
-        pricingModel: 'single',
-        singleAmount,
-        isPublic: true, // Force public on specific save
+        // Only set singleAmount if using single pricing model
+        ...(profile.pricingModel === 'single' || !profile.pricingModel ? { singleAmount } : {}),
+        // Preserve existing isPublic unless this is a launch flow
+        ...(isLaunchFlow ? { isPublic: true } : {}),
       })
 
       setHasChanges(false)

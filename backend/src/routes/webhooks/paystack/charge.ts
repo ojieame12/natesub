@@ -1,5 +1,6 @@
 import { db } from '../../../db/client.js'
 import { sendNewSubscriberEmail, sendSubscriptionConfirmationEmail } from '../../../services/email.js'
+import { cancelAllRemindersForEntity } from '../../../jobs/reminders.js'
 import { validatePaystackMetadata, sanitizeForLog } from '../../../utils/webhookValidation.js'
 import { calculateLegacyFee } from '../../../services/fees.js'
 import { withLock } from '../../../services/lock.js'
@@ -79,6 +80,12 @@ export async function handlePaystackChargeSuccess(data: any, eventId: string) {
         respondedAt: new Date(),
         paystackTransactionRef: reference,
       },
+    })
+
+    // Cancel any scheduled reminders for this request (parity with Stripe)
+    await cancelAllRemindersForEntity({
+      entityType: 'request',
+      entityId: requestId,
     })
 
     const request = await db.request.findUnique({ where: { id: requestId } })
