@@ -79,10 +79,16 @@ export async function generatePayrollPeriods(): Promise<PayrollJobResult> {
 
     console.log(`[payroll] Generating periods for ${periodStart.toISOString()} - ${periodEnd.toISOString()}`)
 
-    // Find all creators who have received payments in the period
-    const creatorsWithPayments = await db.payment.findMany({
+    // Find all creators who have any payment activity in the period
+    // Include successful payments, refunds, and chargebacks
+    // This ensures refund-only periods are generated for proper accounting
+    const creatorsWithActivity = await db.payment.findMany({
       where: {
-        status: 'succeeded',
+        OR: [
+          { status: 'succeeded' },
+          { status: 'refunded' },
+          { status: 'dispute_lost' },
+        ],
         occurredAt: {
           gte: periodStart,
           lte: periodEnd,
@@ -94,8 +100,8 @@ export async function generatePayrollPeriods(): Promise<PayrollJobResult> {
       distinct: ['creatorId'],
     })
 
-    const creatorIds = [...new Set(creatorsWithPayments.map((p) => p.creatorId))]
-    console.log(`[payroll] Found ${creatorIds.length} creators with payments`)
+    const creatorIds = [...new Set(creatorsWithActivity.map((p) => p.creatorId))]
+    console.log(`[payroll] Found ${creatorIds.length} creators with activity`)
 
     for (const creatorId of creatorIds) {
       result.processed++
@@ -117,7 +123,7 @@ export async function generatePayrollPeriods(): Promise<PayrollJobResult> {
 
         if (periodsGenerated === 0) {
           result.skipped++
-          console.log(`[payroll] No payments for ${creatorId} in period`)
+          console.log(`[payroll] No activity for ${creatorId} in period`)
           continue
         }
 

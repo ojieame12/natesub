@@ -189,22 +189,29 @@ export async function aggregatePayments(
     chargebacks_cents: bigint | null
   }
 
+  // Fix for legacy payments: Use grossCents/amountCents directly instead of deriving from netCents
+  // - New split model: grossCents = subscriber paid amount (creator price + subscriber fee)
+  // - Legacy model: grossCents is NULL, use amountCents (total paid by subscriber)
+  // For fees:
+  // - New split model: creatorFeeCents = creator's 4% fee
+  // - Legacy absorb: creatorFeeCents is NULL, creator pays full feeCents
+  // - Legacy pass_to_subscriber: creatorFeeCents is NULL, creator pays 0 (subscriber paid the fee)
   const totals = currency
     ? await db.$queryRaw<Array<TotalsRow>>`
         SELECT
           SUM(CASE WHEN "status" = 'succeeded' AND "type" IN ('one_time', 'recurring')
-            THEN "netCents" + COALESCE("creatorFeeCents", 0) ELSE 0 END) as gross_cents,
+            THEN COALESCE("grossCents", "amountCents") ELSE 0 END) as gross_cents,
           SUM(CASE WHEN "status" = 'succeeded' AND "type" IN ('one_time', 'recurring')
             THEN COALESCE("creatorFeeCents", "feeCents") ELSE 0 END) as fee_cents,
           SUM(CASE WHEN "status" = 'succeeded' AND "type" IN ('one_time', 'recurring')
             THEN "netCents" ELSE 0 END) as net_cents,
           COUNT(*) FILTER (WHERE "status" = 'succeeded' AND "type" IN ('one_time', 'recurring')) as payment_count,
           SUM(CASE WHEN "status" = 'refunded' AND "type" IN ('one_time', 'recurring', 'refund')
-            THEN ABS("netCents" + COALESCE("creatorFeeCents", 0)) ELSE 0 END) as refunds_cents,
+            THEN ABS(COALESCE("grossCents", "amountCents")) ELSE 0 END) as refunds_cents,
           -- Only count 'dispute_lost' as chargebacks (finalized losses)
           -- 'disputed' (open disputes) are excluded to avoid overstating losses
           SUM(CASE WHEN "status" = 'dispute_lost' AND "type" IN ('one_time', 'recurring')
-            THEN ABS("netCents" + COALESCE("creatorFeeCents", 0)) ELSE 0 END) as chargebacks_cents
+            THEN ABS(COALESCE("grossCents", "amountCents")) ELSE 0 END) as chargebacks_cents
         FROM "payments"
         WHERE "creatorId" = ${userId}
           AND "occurredAt" >= ${periodStart}
@@ -214,18 +221,18 @@ export async function aggregatePayments(
     : await db.$queryRaw<Array<TotalsRow>>`
         SELECT
           SUM(CASE WHEN "status" = 'succeeded' AND "type" IN ('one_time', 'recurring')
-            THEN "netCents" + COALESCE("creatorFeeCents", 0) ELSE 0 END) as gross_cents,
+            THEN COALESCE("grossCents", "amountCents") ELSE 0 END) as gross_cents,
           SUM(CASE WHEN "status" = 'succeeded' AND "type" IN ('one_time', 'recurring')
             THEN COALESCE("creatorFeeCents", "feeCents") ELSE 0 END) as fee_cents,
           SUM(CASE WHEN "status" = 'succeeded' AND "type" IN ('one_time', 'recurring')
             THEN "netCents" ELSE 0 END) as net_cents,
           COUNT(*) FILTER (WHERE "status" = 'succeeded' AND "type" IN ('one_time', 'recurring')) as payment_count,
           SUM(CASE WHEN "status" = 'refunded' AND "type" IN ('one_time', 'recurring', 'refund')
-            THEN ABS("netCents" + COALESCE("creatorFeeCents", 0)) ELSE 0 END) as refunds_cents,
+            THEN ABS(COALESCE("grossCents", "amountCents")) ELSE 0 END) as refunds_cents,
           -- Only count 'dispute_lost' as chargebacks (finalized losses)
           -- 'disputed' (open disputes) are excluded to avoid overstating losses
           SUM(CASE WHEN "status" = 'dispute_lost' AND "type" IN ('one_time', 'recurring')
-            THEN ABS("netCents" + COALESCE("creatorFeeCents", 0)) ELSE 0 END) as chargebacks_cents
+            THEN ABS(COALESCE("grossCents", "amountCents")) ELSE 0 END) as chargebacks_cents
         FROM "payments"
         WHERE "creatorId" = ${userId}
           AND "occurredAt" >= ${periodStart}
@@ -278,13 +285,8 @@ export async function aggregatePayments(
     const tierName = p.subscription?.tierName || null
     const paymentType: 'recurring' | 'one_time' = p.type === 'recurring' ? 'recurring' : 'one_time'
 
-    // Use base price (creator's set price) for consistency with summary
-    let baseAmount: number
-    if (p.creatorFeeCents !== null && p.creatorFeeCents !== undefined) {
-      baseAmount = p.netCents + p.creatorFeeCents
-    } else {
-      baseAmount = p.netCents
-    }
+    // Use grossCents (subscriber paid amount) or fall back to amountCents for legacy payments
+    const baseAmount = p.grossCents ?? p.amountCents
 
     return {
       id: p.id,
@@ -326,11 +328,10 @@ async function calculateYTD(
 
   // Use raw SQL to compute base price in the database
   // This avoids loading all payments into memory for high-volume creators
-  // Base price = netCents + COALESCE(creatorFeeCents, 0) for split_v1
-  // For legacy (creatorFeeCents is NULL), this equals netCents
+  // Use COALESCE(grossCents, amountCents) to handle both new split model and legacy payments
   const result = await db.$queryRaw<Array<{ grossCents: bigint | null; netCents: bigint | null }>>`
     SELECT
-      SUM("netCents" + COALESCE("creatorFeeCents", 0)) as "grossCents",
+      SUM(COALESCE("grossCents", "amountCents")) as "grossCents",
       SUM("netCents") as "netCents"
     FROM "payments"
     WHERE "creatorId" = ${userId}
@@ -611,8 +612,9 @@ export async function generatePayrollPeriod(
     periodCurrency
   )
 
-  // Skip if no payments
-  if (paymentCount === 0) {
+  // Skip if no activity (no payments, refunds, or chargebacks)
+  // Allow refund-only periods for proper accounting of losses
+  if (paymentCount === 0 && refundsCents === 0 && chargebacksCents === 0) {
     return null
   }
 
@@ -1017,36 +1019,23 @@ export async function generateCustomStatement(
     },
   })
 
-  // Calculate base price (what creator set) instead of gross (what subscriber paid)
-  // For split_v1: base = netCents + creatorFeeCents
-  // For legacy: base = netCents (consistent with line items and YTD)
+  // Use grossCents (subscriber paid) or amountCents (legacy) for gross calculation
   const grossCents = successfulPayments.reduce((sum, p) => {
-    if (p.creatorFeeCents !== null && p.creatorFeeCents !== undefined) {
-      return sum + p.netCents + p.creatorFeeCents
-    }
-    return sum + p.netCents
+    return sum + (p.grossCents ?? p.amountCents)
   }, 0)
 
   const refundsCents = refunds.reduce((sum, p) => {
-    if (p.creatorFeeCents !== null && p.creatorFeeCents !== undefined) {
-      return sum + Math.abs(p.netCents + p.creatorFeeCents)
-    }
-    return sum + Math.abs(p.netCents)
+    return sum + Math.abs(p.grossCents ?? p.amountCents)
   }, 0)
 
   const chargebacksCents = chargebacks.reduce((sum, p) => {
-    if (p.creatorFeeCents !== null && p.creatorFeeCents !== undefined) {
-      return sum + Math.abs(p.netCents + p.creatorFeeCents)
-    }
-    return sum + Math.abs(p.netCents)
+    return sum + Math.abs(p.grossCents ?? p.amountCents)
   }, 0)
 
   // Sum creator's fee portion only (4% in split model)
+  // For legacy: use feeCents (full platform fee)
   const totalFeeCents = successfulPayments.reduce((sum, p) => {
-    if (p.creatorFeeCents !== null && p.creatorFeeCents !== undefined) {
-      return sum + p.creatorFeeCents
-    }
-    return sum + p.feeCents
+    return sum + (p.creatorFeeCents ?? p.feeCents)
   }, 0)
 
   // Calculate net correctly: adjusted gross minus fees
@@ -1059,16 +1048,8 @@ export async function generateCustomStatement(
     const tierName = p.subscription?.tierName || null
     const paymentType: 'recurring' | 'one_time' = p.type === 'recurring' ? 'recurring' : 'one_time'
 
-    // Use base price (creator's set price) for consistency with summary
-    // For split_v1: base = netCents + creatorFeeCents
-    // For legacy: use amountCents (gross) or netCents if fees were absorbed
-    let baseAmount: number
-    if (p.creatorFeeCents !== null && p.creatorFeeCents !== undefined) {
-      baseAmount = p.netCents + p.creatorFeeCents
-    } else {
-      // Legacy: use netCents (what creator received)
-      baseAmount = p.netCents
-    }
+    // Use grossCents (subscriber paid) or amountCents (legacy) for consistency with summary
+    const baseAmount = p.grossCents ?? p.amountCents
 
     return {
       id: p.id,
@@ -1078,7 +1059,7 @@ export async function generateCustomStatement(
       subscriberId: p.subscription?.subscriber?.id || null,
       tierName,
       description: formatPaymentDescription(tierName, paymentType, email),
-      amount: baseAmount, // Base price matches summary's "Client Payments"
+      amount: baseAmount,
       type: paymentType,
     }
   })
