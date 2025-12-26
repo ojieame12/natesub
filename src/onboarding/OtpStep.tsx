@@ -70,7 +70,6 @@ export default function OtpStep() {
             if (result.onboardingStep && result.onboardingStep >= 3) {
                 hydrateFromServer({
                     step: result.onboardingStep,
-                    branch: result.onboardingBranch,
                     data: result.onboardingData,
                 })
             }

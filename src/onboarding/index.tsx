@@ -67,7 +67,6 @@ export default function OnboardingFlow() {
                 const clampedStep = Math.min(Math.max(parsed, 0), steps.length - 1)
                 hydrateFromServer({
                     step: clampedStep,
-                    branch: onboarding?.branch || null,
                     data: onboarding?.data,
                 })
             }
@@ -79,12 +78,14 @@ export default function OnboardingFlow() {
         if (onboarding?.step && onboarding.step > 0 && currentStep === 0) {
             hasHydratedFromServer.current = true
             shouldSkipNextAnimation.current = true
-            // Map old/out-of-bounds steps to the Username step (index 4) so they can review before creating
-            const safeStep = onboarding.step >= steps.length ? 4 : onboarding.step
+            // Map old/out-of-bounds steps to a safe step
+            // Username step is at index 4 (no address) or 5 (with address)
+            // Fallback to the username step which is 3 steps before the end
+            const usernameStepIndex = steps.length - 3
+            const safeStep = onboarding.step >= steps.length ? usernameStepIndex : onboarding.step
 
             hydrateFromServer({
                 step: safeStep,
-                branch: onboarding.branch || null,
                 data: onboarding.data,
             })
         }

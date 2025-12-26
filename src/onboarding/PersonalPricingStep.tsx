@@ -14,7 +14,6 @@ export default function PersonalPricingStep() {
         tiers,
         setPricing,
         currency,
-        branch,
         currentStep,
         nextStep,
         prevStep
@@ -23,8 +22,8 @@ export default function PersonalPricingStep() {
     const [inputValue, setInputValue] = useState(singleAmount?.toString() || '')
 
     const currencySymbol = getCurrencySymbol(currency)
-    // Get currency-aware suggested amounts (e.g., NGN shows ₦5000, not ₦5)
-    const suggestedAmounts = getSuggestedAmounts(currency, branch === 'service' ? 'service' : 'personal')
+    // Get currency-aware suggested amounts
+    const suggestedAmounts = getSuggestedAmounts(currency, 'personal')
 
     // Helper to update state via setPricing
     const updateState = (updates: { model?: 'single' | 'tiers', newAmount?: number | null, newTiers?: SubscriptionTier[] }) => {
@@ -95,7 +94,6 @@ export default function PersonalPricingStep() {
         try {
             await saveProgress({
                 step: currentStep + 1,
-                branch: branch as 'personal' | 'service',
                 data: {
                     pricingModel,
                     singleAmount: pricingModel === 'single' ? singleAmount : undefined,
@@ -125,24 +123,6 @@ export default function PersonalPricingStep() {
                 </div>
 
                 <div className="step-body">
-                    {/* Pricing model toggle - Service only */}
-                    {branch === 'service' && (
-                        <div className="pricing-model-toggle">
-                            <Pressable
-                                className={`pricing-model-btn ${pricingModel === 'single' ? 'active' : ''}`}
-                                onClick={() => updateState({ model: 'single' })}
-                            >
-                                Simple
-                            </Pressable>
-                            <Pressable
-                                className={`pricing-model-btn ${pricingModel === 'tiers' ? 'active' : ''}`}
-                                onClick={() => updateState({ model: 'tiers' })}
-                            >
-                                Packages
-                            </Pressable>
-                        </div>
-                    )}
-
                     {pricingModel === 'single' ? (
                         /* Single Amount Mode */
                         <>

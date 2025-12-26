@@ -288,7 +288,7 @@ describe('Activity API', () => {
       const json = await res.json()
       expect(json.metrics).toBeDefined()
       expect(json.metrics.subscriberCount).toBe(2)
-      expect(json.metrics.currency).toBe('USD') // Cross-border Stripe uses USD
+      expect(json.metrics.currency).toBe('USD') // Matches subscription currency
     })
   })
 

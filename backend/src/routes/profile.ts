@@ -89,16 +89,13 @@ profile.put(
     // Normalize currency for consistent handling
     const currency = data.currency.toUpperCase()
 
-    // CRITICAL: Cross-border STRIPE creators MUST use USD
-    // Prices are stored and charged in USD; payouts convert to local currency
-    // This prevents currency mismatch bugs where e.g. 5000 NGN gets charged as $5000 USD
-    // EXCEPTION: Paystack users should use local currency (NGN/KES/ZAR)
+    // Cross-border Stripe creators can use any Stripe-supported currency
+    // Stripe handles currency conversion for cross-border payouts
+    // The platform collects payments in the creator's chosen currency
     const paymentProvider = data.paymentProvider || null
-    if (isStripeCrossBorderSupported(data.countryCode) && currency !== 'USD' && paymentProvider !== 'paystack') {
-      return c.json({
-        error: 'Stripe cross-border creators must use USD pricing. Your payouts will automatically convert to your local currency.',
-      }, 400)
-    }
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const _isCrossBorder = isStripeCrossBorderSupported(data.countryCode) && paymentProvider !== 'paystack'
+    // Currency validation is now just minimum amount checks (below)
 
     // Validate minimum amounts for the currency
     if (data.singleAmount) {
@@ -211,17 +208,12 @@ profile.patch(
       return c.json({ error: 'No updates provided' }, 400)
     }
 
-    // CRITICAL: Cross-border STRIPE creators MUST use USD
-    // Check if the update would result in a cross-border country with non-USD currency
-    // EXCEPTION: Paystack users should use local currency (NGN/KES/ZAR)
+    // Cross-border Stripe creators can use any Stripe-supported currency
+    // (See PUT handler for details - Stripe handles currency conversion for payouts)
     const newCountryCode = data.countryCode?.toUpperCase() || existingProfile.countryCode
     const newCurrency = data.currency?.toUpperCase() || existingProfile.currency
-    const newPaymentProvider = data.paymentProvider !== undefined ? data.paymentProvider : existingProfile.paymentProvider
-    if (isStripeCrossBorderSupported(newCountryCode) && newCurrency !== 'USD' && newPaymentProvider !== 'paystack') {
-      return c.json({
-        error: 'Stripe cross-border creators must use USD pricing. Your payouts will automatically convert to your local currency.',
-      }, 400)
-    }
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const _newPaymentProvider = data.paymentProvider !== undefined ? data.paymentProvider : existingProfile.paymentProvider
 
     const updateData: Prisma.ProfileUpdateInput = {}
 

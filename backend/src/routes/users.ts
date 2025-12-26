@@ -132,15 +132,14 @@ users.get(
     }
 
     // Check if this is a cross-border Stripe account (e.g., Nigeria)
-    // Cross-border accounts collect payments in USD, payouts convert to local currency
+    // Cross-border flag is sent to frontend for informational purposes
     const isCrossBorder = inferredPaymentProvider === 'stripe' &&
       isStripeCrossBorderSupported(profile.countryCode)
 
     // Convert cents to display amount, handling zero-decimal currencies
     // Include profile ID for analytics, template for rendering, feeMode for fee display
-    // Cross-border accounts: display prices in USD (what subscribers pay)
-    const profileCurrency = profile.currency || 'USD'
-    const displayCurrency = isCrossBorder ? 'USD' : profileCurrency
+    // All creators display prices in their chosen currency
+    const displayCurrency = profile.currency || 'USD'
 
     const publicProfile = {
       id: profile.id, // For analytics tracking
@@ -158,7 +157,7 @@ users.get(
       })) : null,
       perks: profile.perks,
       impactItems: profile.impactItems,
-      currency: displayCurrency, // Use checkout currency (USD for cross-border)
+      currency: displayCurrency, // Profile's chosen currency
       shareUrl: profile.shareUrl,
       paymentProvider: inferredPaymentProvider,
       // Normalize legacy 'liquid' template to 'boundary'

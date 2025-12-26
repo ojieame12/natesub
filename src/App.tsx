@@ -251,7 +251,6 @@ function InitialRouteRedirect() {
       if (currentStep < 3) {
         hydrateFromServer({
           step: safeStep,
-          branch: onboarding?.branch,
           data: onboarding?.data,
         })
       }

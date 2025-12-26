@@ -54,7 +54,7 @@ export default function PersonalReviewStep() {
         setLastName,
         username,
         purpose,
-        branch,
+        pricingModel,
         singleAmount,
         country,
         countryCode,
@@ -82,7 +82,7 @@ export default function PersonalReviewStep() {
     // Construct display name from first/last name
     const displayName = `${firstName} ${lastName}`.trim()
 
-    const resolvedPurpose = branch === 'service' ? 'service' : (purpose || 'support')
+    const resolvedPurpose = purpose || 'support'
     const currencySymbol = getCurrencySymbol(currency)
 
     // Price input as string for free editing
@@ -92,7 +92,7 @@ export default function PersonalReviewStep() {
     const handleCurrencyChange = (newCurrency: string) => {
         setCurrency(newCurrency)
         // Set a sensible default price for the new currency
-        const suggestedAmounts = getSuggestedAmounts(newCurrency, branch === 'service' ? 'service' : 'personal')
+        const suggestedAmounts = getSuggestedAmounts(newCurrency, 'personal')
         const newPrice = suggestedAmounts[0] || 10
         setPriceInput(String(newPrice))
         setPricing('single', tiers, newPrice)
@@ -209,9 +209,9 @@ export default function PersonalReviewStep() {
                 currency,
                 country,
                 countryCode,
-                pricingModel: 'single',
-                singleAmount: finalAmount,
-                tiers: null,
+                pricingModel,
+                singleAmount: pricingModel === 'single' ? finalAmount : null,
+                tiers: pricingModel === 'tiers' ? tiers : null,
                 paymentProvider,
                 // Address fields for Stripe KYC prefill (trimmed for clean data)
                 address: address?.trim() || undefined,

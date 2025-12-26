@@ -69,7 +69,7 @@ const PAYSTACK_CURRENCIES: Record<string, string> = {
 export default function PaymentMethodStep() {
     const navigate = useNavigate()
     const store = useOnboardingStore()
-    const { countryCode, country, setCurrency, branch, paymentProvider, setPaymentProvider, prevStep, reset, nextStep, currentStep } = store
+    const { countryCode, country, setCurrency, paymentProvider, setPaymentProvider, prevStep, reset, nextStep, currentStep } = store
     const [selectedMethod, setSelectedMethod] = useState<string | null>(paymentProvider)
     const [saving, setSaving] = useState(false)
     const [error, setError] = useState<string | null>(null)
@@ -104,7 +104,7 @@ export default function PaymentMethodStep() {
         }
 
         // Get suggested amounts for the FINAL currency
-        const suggestedAmounts = getSuggestedAmounts(finalCurrency, store.branch === 'service' ? 'service' : 'personal')
+        const suggestedAmounts = getSuggestedAmounts(finalCurrency, 'personal')
         const minAmount = getMinimumAmount(finalCurrency)
         const currencySymbol = getCurrencySymbol(finalCurrency)
 
@@ -156,12 +156,12 @@ export default function PaymentMethodStep() {
             const profileData = {
                 username: store.username,
                 displayName,
-                bio: store.bio || store.generatedBio || null,
+                bio: store.bio || null,
                 avatarUrl: store.avatarUrl,
                 country: store.country,
                 countryCode: store.countryCode,
                 currency: finalCurrency,
-                purpose: store.branch === 'service' ? 'service' : (store.purpose || 'support'),
+                purpose: store.purpose || 'support',
                 pricingModel: store.pricingModel,
                 singleAmount: store.pricingModel === 'single' ? finalSingleAmount : null,
                 tiers: store.pricingModel === 'tiers' ? store.tiers : null,
@@ -182,7 +182,6 @@ export default function PaymentMethodStep() {
             // Save next step (Review) - backend uses countryCode to determine dynamic completion
             await api.auth.saveOnboardingProgress({
                 step: currentStep + 1,
-                branch: branch === 'service' ? 'service' : 'personal',
                 data: { paymentProvider: selectedMethod, countryCode: store.countryCode },
             }).catch(() => { })
 

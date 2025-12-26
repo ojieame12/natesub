@@ -203,7 +203,6 @@ describe('PaymentMethodStep', () => {
       // Should save currentStep + 1 (7) with countryCode for backend dynamic completion
       expect(api.auth.saveOnboardingProgress).toHaveBeenCalledWith({
         step: 7, // currentStep (6) + 1
-        branch: 'personal',
         data: { paymentProvider: 'stripe', countryCode: 'US' },
       })
     })

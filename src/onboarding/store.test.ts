@@ -15,7 +15,6 @@ describe('onboarding/store', () => {
 
     store.hydrateFromServer({
       step: 5,
-      branch: 'service',
       data: {
         firstName: 'Server',
         lastName: 'Name',
@@ -24,15 +23,12 @@ describe('onboarding/store', () => {
         currency: 'USD',
         username: 'server_user',
         bio: 'Server bio',
-        serviceDescription: 'I do consulting',
-        serviceCredential: '10 years',
         feeMode: 'pass_to_subscriber',
       },
     })
 
     const hydrated = useOnboardingStore.getState()
     expect(hydrated.currentStep).toBe(5)
-    expect(hydrated.branch).toBe('service')
     // Server wins for key fields
     expect(hydrated.firstName).toBe('Server')
     expect(hydrated.lastName).toBe('Name')
@@ -40,9 +36,6 @@ describe('onboarding/store', () => {
     expect(hydrated.countryCode).toBe('SC')
     expect(hydrated.username).toBe('server_user')
     expect(hydrated.bio).toBe('Server bio')
-    expect(hydrated.bio).toBe('Server bio')
-    expect(hydrated.serviceDescription).toBe('I do consulting')
-    expect(hydrated.serviceCredential).toBe('10 years')
     expect(hydrated.feeMode).toBe('pass_to_subscriber')
   })
 

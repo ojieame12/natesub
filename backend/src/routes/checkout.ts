@@ -370,9 +370,9 @@ checkout.post(
         }
       }
 
-      // Cross-border accounts: payments are collected in USD and converted to local currency
-      // Native accounts: use the profile's currency
-      const checkoutCurrency = isCrossBorder ? 'USD' : profile.currency
+      // All accounts use the profile's chosen currency
+      // Cross-border payouts: Stripe handles conversion to local currency
+      const checkoutCurrency = profile.currency
 
       const session = await createCheckoutSession({
         creatorId: profile.userId,

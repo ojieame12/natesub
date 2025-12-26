@@ -946,7 +946,7 @@ describe('onboarding endpoints', () => {
       expect(body.profile.singleAmount).toBe(1000) // $10 = 1000 cents
     })
 
-    it('Nigerian user with Stripe and NGN currency - SHOULD FAIL', async () => {
+    it('Nigerian user with Stripe and NGN currency - SHOULD SUCCEED', async () => {
       await createTestUserWithSession('ng-stripe-ngn@test.com')
 
       const res = await authRequest('/profile', {
@@ -956,7 +956,7 @@ describe('onboarding endpoints', () => {
           displayName: 'Nigerian Stripe NGN User',
           country: 'Nigeria',
           countryCode: 'NG',
-          currency: 'NGN', // Wrong - Stripe cross-border requires USD
+          currency: 'NGN', // Any Stripe-supported currency is allowed
           purpose: 'tips',
           pricingModel: 'single',
           singleAmount: 5000,
@@ -964,13 +964,13 @@ describe('onboarding endpoints', () => {
         }),
       })
 
-      expect(res.status).toBe(400)
+      expect(res.status).toBe(200)
       const body = await res.json()
-      expect(body.error).toContain('cross-border')
-      expect(body.error).toContain('USD')
+      expect(body.profile.currency).toBe('NGN')
+      expect(body.profile.paymentProvider).toBe('stripe')
     })
 
-    it('Kenyan user with Stripe and KES currency - SHOULD FAIL', async () => {
+    it('Kenyan user with Stripe and KES currency - SHOULD SUCCEED', async () => {
       await createTestUserWithSession('ke-stripe-kes@test.com')
 
       const res = await authRequest('/profile', {
@@ -980,7 +980,7 @@ describe('onboarding endpoints', () => {
           displayName: 'Kenyan Stripe KES User',
           country: 'Kenya',
           countryCode: 'KE',
-          currency: 'KES', // Wrong - Stripe cross-border requires USD
+          currency: 'KES', // Any Stripe-supported currency is allowed
           purpose: 'tips',
           pricingModel: 'single',
           singleAmount: 500,
@@ -988,12 +988,13 @@ describe('onboarding endpoints', () => {
         }),
       })
 
-      expect(res.status).toBe(400)
+      expect(res.status).toBe(200)
       const body = await res.json()
-      expect(body.error).toContain('USD')
+      expect(body.profile.currency).toBe('KES')
+      expect(body.profile.paymentProvider).toBe('stripe')
     })
 
-    it('Ghanaian user with Stripe and GHS currency - SHOULD FAIL', async () => {
+    it('Ghanaian user with Stripe and GHS currency - SHOULD SUCCEED', async () => {
       await createTestUserWithSession('gh-stripe-ghs@test.com')
 
       const res = await authRequest('/profile', {
@@ -1003,7 +1004,7 @@ describe('onboarding endpoints', () => {
           displayName: 'Ghanaian Stripe GHS User',
           country: 'Ghana',
           countryCode: 'GH',
-          currency: 'GHS', // Wrong - Stripe cross-border requires USD
+          currency: 'GHS', // Any Stripe-supported currency is allowed
           purpose: 'tips',
           pricingModel: 'single',
           singleAmount: 50,
@@ -1011,9 +1012,10 @@ describe('onboarding endpoints', () => {
         }),
       })
 
-      expect(res.status).toBe(400)
+      expect(res.status).toBe(200)
       const body = await res.json()
-      expect(body.error).toContain('USD')
+      expect(body.profile.currency).toBe('GHS')
+      expect(body.profile.paymentProvider).toBe('stripe')
     })
 
     // -------------------------------------------------------------------------
@@ -1093,12 +1095,11 @@ describe('onboarding endpoints', () => {
     // -------------------------------------------------------------------------
     // EDGE CASES
     // -------------------------------------------------------------------------
-    it('Nigerian user with no paymentProvider and NGN currency - SHOULD FAIL', async () => {
+    it('Nigerian user with no paymentProvider and NGN currency - SHOULD SUCCEED', async () => {
       await createTestUserWithSession('ng-no-provider@test.com')
 
-      // When no paymentProvider is specified, we still enforce the cross-border check
-      // because we don't know if they'll use Stripe or Paystack yet.
-      // Users must explicitly choose Paystack to use local currency.
+      // When no paymentProvider is specified, we allow any currency
+      // (provider will be set during payment setup)
       const res = await authRequest('/profile', {
         method: 'PUT',
         body: JSON.stringify({
@@ -1110,14 +1111,13 @@ describe('onboarding endpoints', () => {
           purpose: 'tips',
           pricingModel: 'single',
           singleAmount: 5000,
-          // paymentProvider NOT specified - should fail because we can't assume Paystack
+          // paymentProvider NOT specified - still allowed
         }),
       })
 
-      // Should fail because no provider specified means we enforce USD for safety
-      expect(res.status).toBe(400)
+      expect(res.status).toBe(200)
       const body = await res.json()
-      expect(body.error).toContain('USD')
+      expect(body.profile.currency).toBe('NGN')
     })
 
     it('Cross-border user can update profile with Paystack even if previously had no provider', async () => {
@@ -1152,7 +1152,7 @@ describe('onboarding endpoints', () => {
       expect(body.profile.currency).toBe('NGN')
     })
 
-    it('Cross-border user updating to Stripe MUST also switch to USD', async () => {
+    it('Cross-border user can switch to Stripe with any Stripe-supported currency', async () => {
       const { user } = await createTestUserWithSession('ng-switch-provider@test.com')
 
       // First create profile with Paystack and NGN
@@ -1171,18 +1171,19 @@ describe('onboarding endpoints', () => {
         },
       })
 
-      // PATCH to switch to Stripe without changing currency should FAIL
+      // PATCH to switch to Stripe without changing currency should succeed
+      // (Cross-border Stripe users can now use any Stripe-supported currency)
       const res = await authRequest('/profile', {
         method: 'PATCH',
         body: JSON.stringify({
           paymentProvider: 'stripe',
-          // Not updating currency - should fail
         }),
       })
 
-      expect(res.status).toBe(400)
+      expect(res.status).toBe(200)
       const body = await res.json()
-      expect(body.error).toContain('USD')
+      expect(body.profile.paymentProvider).toBe('stripe')
+      expect(body.profile.currency).toBe('NGN') // Currency unchanged
     })
 
     it('Cross-border user can switch to Stripe if also updating to USD', async () => {

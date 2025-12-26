@@ -214,13 +214,13 @@ export const activityWithoutPaymentId = {
 }
 
 // Fixture 10: Profile for Nigerian creator with Stripe
-// Note: Cross-border Stripe creators MUST use USD for pricing
+// Note: Cross-border Stripe creators can use any Stripe-supported currency
 // Payouts convert to local currency (NGN) via FX
 export const nigerianCreatorProfile = {
   userId: 'creator_ng_test',
   displayName: 'Test Creator NG',
   username: 'testcreatorng',
-  currency: 'USD', // Required for cross-border Stripe
+  currency: 'USD', // Can be any Stripe-supported currency
   countryCode: 'NG', // Used for cross-border detection
   paymentProvider: 'stripe',
   stripeAccountId: 'acct_ng_creator_test',

@@ -73,7 +73,6 @@ describe('onboarding/OtpStep', () => {
       hasProfile: false,
       hasActivePayment: false,
       onboardingStep: 4,
-      onboardingBranch: 'service',
       onboardingData: { name: 'Alice Smith', username: 'alice' }, // Old format
       redirectTo: '/onboarding',
     })
@@ -88,7 +87,6 @@ describe('onboarding/OtpStep', () => {
 
     expect(verifyMagicLink).toHaveBeenCalledWith({ otp: '123456', email: 'test@example.com' })
     expect(useOnboardingStore.getState().currentStep).toBe(4)
-    expect(useOnboardingStore.getState().branch).toBe('service')
     // Old 'name' field should be migrated to firstName/lastName
     expect(useOnboardingStore.getState().firstName).toBe('Alice')
     expect(useOnboardingStore.getState().lastName).toBe('Smith')
