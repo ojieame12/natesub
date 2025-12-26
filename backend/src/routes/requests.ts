@@ -540,7 +540,26 @@ requests.post(
     const tokenHash = hashToken(token)
     const tokenExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
 
-    // Update request - store both hash (for lookup) and encrypted raw token (for reminder links)
+    // Get creator profile for name
+    const profile = await db.profile.findUnique({ where: { userId } })
+    const creatorName = profile?.displayName || 'Someone'
+
+    // Build request link using PUBLIC_PAGE_URL for consistency with reminder emails
+    const requestLink = `${env.PUBLIC_PAGE_URL}/r/${token}`
+
+    // RETRY-SAFE: Send email BEFORE updating status
+    // If email fails, status stays 'draft' and user can retry
+    if (method === 'email' && request.recipientEmail) {
+      await sendRequestEmail(
+        request.recipientEmail,
+        creatorName,
+        request.message,
+        requestLink
+      )
+    }
+
+    // Update request AFTER successful email (or immediately for link method)
+    // Store both hash (for lookup) and encrypted raw token (for reminder links)
     await db.request.update({
       where: { id },
       data: {
@@ -552,23 +571,6 @@ requests.post(
         sentAt: new Date(),
       },
     })
-
-    // Get creator profile for name
-    const profile = await db.profile.findUnique({ where: { userId } })
-    const creatorName = profile?.displayName || 'Someone'
-
-    // Build request link
-    const requestLink = `${env.APP_URL}/r/${token}`
-
-    // Send email if method is email
-    if (method === 'email' && request.recipientEmail) {
-      await sendRequestEmail(
-        request.recipientEmail,
-        creatorName,
-        request.message,
-        requestLink
-      )
-    }
 
     // Schedule follow-up reminders (24h, 72h, expiring, invoice due dates)
     await scheduleRequestReminders(id)

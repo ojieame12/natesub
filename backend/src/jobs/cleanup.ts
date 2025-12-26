@@ -13,6 +13,7 @@ interface CleanupResult {
   deletedSessions: number
   deletedTokens: number
   deletedPageViews: number
+  expiredRequests: number
   errors: string[]
 }
 
@@ -76,6 +77,28 @@ export async function cleanupOldPageViews(): Promise<number> {
 }
 
 /**
+ * Mark expired requests as expired
+ * Requests with tokenExpiresAt in the past and still in 'sent' or 'pending_payment' status
+ * should be marked as 'expired' so creator dashboard shows accurate state
+ */
+export async function expireRequests(): Promise<number> {
+  const result = await db.request.updateMany({
+    where: {
+      tokenExpiresAt: { lt: new Date() },
+      status: { in: ['sent', 'pending_payment'] },
+    },
+    data: {
+      status: 'expired',
+    },
+  })
+
+  if (result.count > 0) {
+    console.log(`[cleanup] Marked ${result.count} requests as expired`)
+  }
+  return result.count
+}
+
+/**
  * Run all cleanup jobs
  * Should be scheduled to run daily
  */
@@ -84,6 +107,7 @@ export async function runCleanup(): Promise<CleanupResult> {
   let deletedSessions = 0
   let deletedTokens = 0
   let deletedPageViews = 0
+  let expiredRequests = 0
 
   try {
     deletedSessions = await cleanupExpiredSessions()
@@ -106,10 +130,18 @@ export async function runCleanup(): Promise<CleanupResult> {
     errors.push(`Page views: ${error.message}`)
   }
 
+  try {
+    expiredRequests = await expireRequests()
+  } catch (error: any) {
+    console.error('[cleanup] Failed to expire requests:', error.message)
+    errors.push(`Requests: ${error.message}`)
+  }
+
   const result = {
     deletedSessions,
     deletedTokens,
     deletedPageViews,
+    expiredRequests,
     errors,
   }
 
@@ -122,5 +154,6 @@ export default {
   cleanupExpiredSessions,
   cleanupExpiredMagicLinks,
   cleanupOldPageViews,
+  expireRequests,
   runCleanup,
 }
