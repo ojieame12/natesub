@@ -52,6 +52,7 @@ export async function initializePaystackCheckout(params: {
   metadata: {
     creatorId: string
     tierId?: string
+    requestId?: string  // For request-based payments
     interval: string
     viewId?: string
     creatorAmount: number

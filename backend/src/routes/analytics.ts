@@ -122,12 +122,15 @@ analytics.patch(
     if (startedCheckout !== undefined) updateData.startedCheckout = startedCheckout
     if (completedCheckout !== undefined) updateData.completedCheckout = completedCheckout
 
-    await db.pageView.update({
+    // Use updateMany to gracefully handle missing viewIds (returns count: 0 instead of throwing)
+    // This makes the endpoint idempotent and avoids 500s for stale/expired view IDs
+    const result = await db.pageView.updateMany({
       where: { id: viewId },
       data: updateData,
     })
 
-    return c.json({ success: true })
+    // Still return success even if view not found (idempotent, no-op is fine)
+    return c.json({ success: true, updated: result.count > 0 })
   } catch (error) {
     console.error('Failed to update page view:', error)
     return c.json({ error: 'Failed to update view' }, 500)
