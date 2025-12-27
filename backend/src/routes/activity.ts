@@ -72,7 +72,9 @@ activity.get('/metrics', requireAuth, async (c) => {
     profile,
     subscriberCount,
     mrrResult,
-    totalRevenueResult,
+    grossRevenueResult,
+    refundsResult,
+    chargebacksResult,
     tierBreakdown,
   ] = await Promise.all([
     // Profile for currency and cached balance
@@ -108,12 +110,32 @@ activity.get('/metrics', requireAuth, async (c) => {
       _sum: { amount: true },
     }),
 
-    // Get total revenue, grouped by currency
+    // Get gross revenue (succeeded payments), grouped by currency
     db.payment.groupBy({
       by: ['currency'],
       where: {
         creatorId: userId,
         status: 'succeeded',
+      },
+      _sum: { netCents: true },
+    }),
+
+    // Get refunded amounts to subtract (net revenue = gross - refunds - chargebacks)
+    db.payment.groupBy({
+      by: ['currency'],
+      where: {
+        creatorId: userId,
+        status: 'refunded',
+      },
+      _sum: { netCents: true },
+    }),
+
+    // Get chargeback/dispute losses to subtract
+    db.payment.groupBy({
+      by: ['currency'],
+      where: {
+        creatorId: userId,
+        status: 'dispute_lost',
       },
       _sum: { netCents: true },
     }),
@@ -173,7 +195,12 @@ activity.get('/metrics', requireAuth, async (c) => {
 
   // Calculate normalized totals
   const mrrCents = await normalizeToProfile(mrrResult, 'amount')
-  const totalRevenueCents = await normalizeToProfile(totalRevenueResult, 'netCents')
+
+  // Net revenue = gross - refunds - chargebacks
+  const grossCents = await normalizeToProfile(grossRevenueResult, 'netCents')
+  const refundsCents = await normalizeToProfile(refundsResult, 'netCents')
+  const chargebacksCents = await normalizeToProfile(chargebacksResult, 'netCents')
+  const totalRevenueCents = Math.max(0, grossCents - refundsCents - chargebacksCents)
 
   // If balance is stale (>5 min), trigger background refresh
   if (profile?.stripeAccountId && isBalanceStale(profile.balanceLastSyncedAt)) {
