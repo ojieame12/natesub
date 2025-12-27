@@ -584,7 +584,7 @@ export function useNotifications(limit = 10) {
   const queryClient = useQueryClient()
 
   // Fetch recent activities
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: queryKeys.notifications(limit),
     queryFn: () => api.activity.list(undefined, limit),
     staleTime: 60 * 1000, // 1 minute
@@ -630,6 +630,7 @@ export function useNotifications(limit = 10) {
   return {
     notifications,
     isLoading,
+    isError,
     unreadCount,
     markAsRead,
     markAllAsRead,

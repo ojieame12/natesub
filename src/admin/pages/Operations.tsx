@@ -13,6 +13,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getAuthToken } from '../../api/client'
 import { adminQueryKeys } from '../../api/queryKeys'
+import { useToast } from '../../components'
 import StatCard from '../components/StatCard'
 import ActionModal from '../components/ActionModal'
 
@@ -79,6 +80,7 @@ export default function Operations() {
   const [reconciliationMessage, setReconciliationMessage] = useState<string | null>(null)
   const [reconciliationError, setReconciliationError] = useState<string | null>(null)
   const queryClient = useQueryClient()
+  const toast = useToast()
 
   // Health check
   const { data: healthData, isLoading: healthLoading, refetch: refetchHealth } = useQuery({
@@ -192,6 +194,10 @@ export default function Operations() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: adminQueryKeys.webhooks.all })
       setRetryModal(null)
+      toast.success('Webhook queued for retry')
+    },
+    onError: (err: any) => {
+      toast.error(err?.message || 'Failed to retry webhook')
     },
   })
 
@@ -251,10 +257,12 @@ export default function Operations() {
       setReconciliationMessage(data.message || 'Invoice synced')
       setReconciliationError(null)
       queryClient.invalidateQueries({ queryKey: adminQueryKeys.reconciliation.all })
+      toast.success('Invoice synced successfully')
     },
     onError: (err: any) => {
       setReconciliationError(err?.message || 'Sync failed')
       setReconciliationMessage(null)
+      toast.error(err?.message || 'Failed to sync invoice')
     },
   })
 
@@ -267,6 +275,10 @@ export default function Operations() {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: adminQueryKeys.blockedSubscribers })
+      toast.success('Subscriber unblocked')
+    },
+    onError: (err: any) => {
+      toast.error(err?.message || 'Failed to unblock subscriber')
     },
   })
 
@@ -305,6 +317,10 @@ export default function Operations() {
       setBlockModal(null)
       setBlockSearchEmail('')
       setBlockSearchResult(null)
+      toast.success('Subscriber blocked')
+    },
+    onError: (err: any) => {
+      toast.error(err?.message || 'Failed to block subscriber')
     },
   })
 

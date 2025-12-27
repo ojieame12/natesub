@@ -282,7 +282,18 @@ function normalizeEmail(email: string): string {
 const API_TIMEOUT_MS = 8000
 
 // Public endpoints where 401 doesn't mean "session expired"
-const PUBLIC_ENDPOINTS = ['/users/', '/public/', '/profile/check-username']
+// These endpoints can be accessed without auth or may return 401 for unauthenticated users
+const PUBLIC_ENDPOINTS = [
+  '/users/',              // Public profile pages
+  '/public/',             // Public API routes
+  '/profile/check-username',  // Username availability check
+  '/payroll/verify/',     // Pay statement verification (public)
+  '/checkout/',           // Checkout flow (unauthenticated subscribers)
+  '/requests/r/',         // Request recipient view/accept/decline
+  '/analytics/',          // View tracking (public)
+  '/config/',             // Public config endpoints
+  '/geo',                 // Geo detection
+]
 
 // Create configured fetch client using shared layer
 const fetchClient = createFetchClient({

@@ -5,6 +5,7 @@ import { db } from '../db/client.js'
 import { redis } from '../db/redis.js'
 import { env } from '../config/env.js'
 import { sendOtpEmail } from './email.js'
+import { shouldSkipAddress } from '../utils/countryConfig.js'
 import type { OnboardingBranch, UserRole } from '@prisma/client'
 
 const OTP_EXPIRES_MS = (parseInt(env.MAGIC_LINK_EXPIRES_MINUTES, 10) || 30) * 60 * 1000
@@ -25,15 +26,12 @@ export interface OnboardingState {
   redirectTo: string
 }
 
-// Countries that skip the address step (cross-border recipients have simpler Stripe verification)
-const SKIP_ADDRESS_COUNTRIES = ['NG', 'GH', 'KE']
-
 // Dynamic completion step based on whether address step is shown
 // - With address step: 8 steps (0-7), completion at step 8
 // - Without address step: 7 steps (0-6), completion at step 7
+// Note: shouldSkipAddress is imported from countryConfig.ts (single source of truth)
 function getOnboardingCompleteStep(countryCode?: string | null): number {
-  const skipAddress = SKIP_ADDRESS_COUNTRIES.includes((countryCode || '').toUpperCase())
-  return skipAddress ? 7 : 8
+  return shouldSkipAddress(countryCode) ? 7 : 8
 }
 
 // Hash token for storage (never store raw tokens)

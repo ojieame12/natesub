@@ -8,6 +8,7 @@ vi.mock('../../src/services/email.js', () => ({
   sendMagicLinkEmail: vi.fn(),
   sendWelcomeEmail: vi.fn(),
   sendNewSubscriberEmail: vi.fn(),
+  sendSubscriptionConfirmationEmail: vi.fn(),
   sendRequestEmail: vi.fn(),
   sendUpdateEmail: vi.fn(),
 }))
@@ -192,6 +193,146 @@ describe('stripe webhooks', () => {
         where: { type: 'request_accepted' },
       })
       expect(activities.length).toBe(1)
+    })
+  })
+
+  describe('checkout.session.async_payment_succeeded', () => {
+    it('creates one-time subscription with basePrice as amount and netCents as LTV', async () => {
+      // Regression test: async one-time payments must store creator's base price
+      // (not net amount) in subscription.amount for consistent tier display
+      const creator = await db.user.create({
+        data: { email: 'asynccreator@test.com' },
+      })
+
+      await db.profile.create({
+        data: {
+          userId: creator.id,
+          username: 'asynccreator',
+          displayName: 'Async Creator',
+          country: 'NG',
+          countryCode: 'NG',
+          currency: 'USD',
+          purpose: 'tips',
+          pricingModel: 'single',
+          singleAmount: 10000, // $100 base price
+        },
+      })
+
+      // Simulate async payment (e.g., bank transfer) succeeding
+      // Base: $100, Subscriber pays: $104 (with 4% fee), Creator nets: $96
+      const event = {
+        id: 'evt_async_payment_succeeded_1',
+        type: 'checkout.session.async_payment_succeeded',
+        data: {
+          object: {
+            id: 'cs_async_test',
+            mode: 'payment', // One-time, not subscription
+            payment_status: 'paid',
+            amount_total: 10400, // $104.00 gross (base + subscriber fee)
+            currency: 'usd',
+            customer: 'cus_async_subscriber',
+            customer_details: {
+              email: 'asyncsubscriber@test.com',
+              name: 'Async Subscriber',
+            },
+            metadata: {
+              creatorId: creator.id,
+              feeModel: 'split_v1',
+              serviceFee: '800',        // 8% total fee
+              netAmount: '9600',        // $96 - what creator receives
+              subscriberFeeCents: '400',
+              creatorFeeCents: '400',
+              baseAmountCents: '10000', // $100 - creator's set price
+            },
+          },
+        },
+      }
+
+      const res = await sendWebhook(event)
+      expect(res.status).toBe(200)
+
+      // Verify subscription was created with correct amounts
+      const subscriptions = await db.subscription.findMany({
+        where: { creatorId: creator.id },
+      })
+      expect(subscriptions.length).toBe(1)
+      expect(subscriptions[0].interval).toBe('one_time')
+      // CRITICAL: amount should be basePrice ($100), not netCents ($96)
+      expect(subscriptions[0].amount).toBe(10000) // Base price for tier display
+      // LTV should be netCents (actual creator earnings)
+      expect(subscriptions[0].ltvCents).toBe(9600)
+
+      // Verify payment was created with correct fee breakdown
+      const payments = await db.payment.findMany({
+        where: { stripeEventId: 'evt_async_payment_succeeded_1' },
+      })
+      expect(payments.length).toBe(1)
+      expect(payments[0].grossCents).toBe(10400)
+      expect(payments[0].netCents).toBe(9600)
+      expect(payments[0].feeCents).toBe(800)
+      expect(payments[0].subscriberFeeCents).toBe(400)
+      expect(payments[0].creatorFeeCents).toBe(400)
+    })
+
+    it('falls back gracefully when baseAmountCents is missing', async () => {
+      // Test the fallback chain: baseAmountCents → grossCents → netCents
+      const creator = await db.user.create({
+        data: { email: 'legacyasynccreator@test.com' },
+      })
+
+      await db.profile.create({
+        data: {
+          userId: creator.id,
+          username: 'legacyasynccreator',
+          displayName: 'Legacy Async Creator',
+          country: 'US',
+          countryCode: 'US',
+          currency: 'USD',
+          purpose: 'tips',
+          pricingModel: 'single',
+          singleAmount: 5000,
+        },
+      })
+
+      // Simulate older checkout without baseAmountCents in metadata
+      const event = {
+        id: 'evt_async_legacy_fallback',
+        type: 'checkout.session.async_payment_succeeded',
+        data: {
+          object: {
+            id: 'cs_async_legacy',
+            mode: 'payment',
+            payment_status: 'paid',
+            amount_total: 5400, // $54 gross
+            currency: 'usd',
+            customer: 'cus_legacy_async',
+            customer_details: {
+              email: 'legacyasync@test.com',
+              name: 'Legacy Async',
+            },
+            metadata: {
+              creatorId: creator.id,
+              feeModel: 'split_v1',
+              serviceFee: '432',
+              netAmount: '4968',
+              subscriberFeeCents: '216',
+              creatorFeeCents: '216',
+              // NOTE: baseAmountCents intentionally missing
+            },
+          },
+        },
+      }
+
+      const res = await sendWebhook(event)
+      expect(res.status).toBe(200)
+
+      const subscriptions = await db.subscription.findMany({
+        where: { creatorId: creator.id },
+      })
+      expect(subscriptions.length).toBe(1)
+      // Fallback: should use grossCents (5400) since baseAmountCents is missing
+      expect(subscriptions[0].amount).toBe(5400)
+      expect(subscriptions[0].ltvCents).toBe(4968)
     })
   })
 

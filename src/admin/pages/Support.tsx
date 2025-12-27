@@ -8,6 +8,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getAuthToken } from '../../api/client'
 import { adminQueryKeys } from '../../api/queryKeys'
+import { useToast } from '../../components'
 import StatCard from '../components/StatCard'
 import ActionModal from '../components/ActionModal'
 
@@ -168,6 +169,7 @@ export default function Support() {
   const [replyText, setReplyText] = useState('')
   const [resolveModal, setResolveModal] = useState<string | null>(null)
   const queryClient = useQueryClient()
+  const toast = useToast()
 
   // Stats
   const { data: stats, isLoading: statsLoading } = useQuery({
@@ -201,6 +203,10 @@ export default function Support() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: adminQueryKeys.support.all })
       setReplyText('')
+      toast.success('Reply sent')
+    },
+    onError: (err: any) => {
+      toast.error(err?.message || 'Failed to send reply')
     },
   })
 
@@ -213,6 +219,10 @@ export default function Support() {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: adminQueryKeys.support.all })
+      toast.success('Ticket updated')
+    },
+    onError: (err: any) => {
+      toast.error(err?.message || 'Failed to update ticket')
     },
   })
 
@@ -226,6 +236,10 @@ export default function Support() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: adminQueryKeys.support.all })
       setResolveModal(null)
+      toast.success('Ticket resolved')
+    },
+    onError: (err: any) => {
+      toast.error(err?.message || 'Failed to resolve ticket')
     },
   })
 

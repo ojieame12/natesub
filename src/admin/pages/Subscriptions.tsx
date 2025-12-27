@@ -12,6 +12,7 @@ import {
   useAdminRefund,
 } from '../api'
 import { formatCurrency, formatDate, formatDateTime } from '../utils/format'
+import { useToast } from '../../components'
 import FilterBar from '../components/FilterBar'
 import Pagination from '../components/Pagination'
 import ActionModal from '../components/ActionModal'
@@ -38,6 +39,7 @@ export default function Subscriptions() {
   const [status, setStatus] = useState('all')
   const [page, setPage] = useState(1)
   const limit = 50
+  const toast = useToast()
 
   // Selected subscription for detail sidebar
   const [selectedSubscriptionId, setSelectedSubscriptionId] = useState<string | null>(null)
@@ -81,8 +83,10 @@ export default function Subscriptions() {
       setCancelModal(null)
       setCancelImmediate(false)
       refetch()
-    } catch (err) {
+      toast.success('Subscription canceled')
+    } catch (err: any) {
       console.error('Cancel failed:', err)
+      toast.error(err?.message || 'Failed to cancel subscription')
     }
   }
 
@@ -90,8 +94,10 @@ export default function Subscriptions() {
     try {
       await pauseMutation.mutateAsync(subscriptionId)
       refetch()
-    } catch (err) {
+      toast.success('Subscription paused')
+    } catch (err: any) {
       console.error('Pause failed:', err)
+      toast.error(err?.message || 'Failed to pause subscription')
     }
   }
 
@@ -99,8 +105,10 @@ export default function Subscriptions() {
     try {
       await resumeMutation.mutateAsync(subscriptionId)
       refetch()
-    } catch (err) {
+      toast.success('Subscription resumed')
+    } catch (err: any) {
       console.error('Resume failed:', err)
+      toast.error(err?.message || 'Failed to resume subscription')
     }
   }
 
@@ -113,8 +121,10 @@ export default function Subscriptions() {
       })
       setRefundModal(null)
       refetch()
-    } catch (err) {
+      toast.success('Refund processed successfully')
+    } catch (err: any) {
       console.error('Refund failed:', err)
+      toast.error(err?.message || 'Failed to process refund')
     }
   }
 

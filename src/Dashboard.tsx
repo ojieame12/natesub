@@ -34,7 +34,7 @@ export default function Dashboard() {
   const { data: metricsData, isLoading: metricsLoading, isError: metricsError, refetch: refetchMetrics } = useMetrics()
   const { data: activityData, isLoading: activityLoading, isError: activityError, refetch: refetchActivity } = useActivity(5)
   const { refetch: refetchAnalytics } = useAnalyticsStats()
-  const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications(10)
+  const { notifications, unreadCount, isError: notificationsError, markAsRead, markAllAsRead, refetch: refetchNotifications } = useNotifications(10)
 
   const profile = profileData?.profile
   const metrics = metricsData?.metrics
@@ -414,6 +414,8 @@ export default function Dashboard() {
         onClose={closeNotifications}
         notifications={notifications}
         unreadCount={unreadCount}
+        isError={notificationsError}
+        onRetry={refetchNotifications}
         onMarkAsRead={markAsRead}
         onMarkAllAsRead={markAllAsRead}
       />

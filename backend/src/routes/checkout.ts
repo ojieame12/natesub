@@ -9,6 +9,7 @@ import { createCheckoutSession, getAccountStatus, stripe } from '../services/str
 import { initializePaystackCheckout, generateReference, isPaystackSupported, type PaystackCountry } from '../services/paystack.js'
 import { calculateServiceFee, type FeeCalculation } from '../services/fees.js'
 import { isStripeCrossBorderSupported } from '../utils/constants.js'
+import { PAYSTACK_PAYER_COUNTRIES } from '../utils/countryConfig.js'
 import { env } from '../config/env.js'
 import { maskEmail } from '../utils/pii.js'
 
@@ -71,14 +72,13 @@ checkout.post(
     const hasPaystackAccount = Boolean(profile.paystackSubaccountCode)
     const hasBothProviders = hasStripeAccount && hasPaystackAccount
 
-    // Paystack-supported countries (local payments)
-    const PAYSTACK_COUNTRIES = ['NG', 'KE', 'ZA', 'GH']
-
     // Validate payerCountry - must be exactly 2 uppercase letters
     const validPayerCountry = payerCountry && /^[A-Z]{2}$/.test(payerCountry.toUpperCase())
       ? payerCountry.toUpperCase()
       : null
-    const payerIsLocal = validPayerCountry && PAYSTACK_COUNTRIES.includes(validPayerCountry)
+    // Use PAYSTACK_PAYER_COUNTRIES (from countryConfig.ts) for routing optimization
+    // Includes GH because Ghanaian payers can use Paystack to pay NG/KE/ZA creators
+    const payerIsLocal = validPayerCountry && (PAYSTACK_PAYER_COUNTRIES as readonly string[]).includes(validPayerCountry)
     const payerIsGlobal = validPayerCountry && !payerIsLocal
 
     // INTELLIGENT ROUTING v2:
@@ -635,11 +635,11 @@ checkout.post(
     const hasPaystackAccount = Boolean(profile.paystackSubaccountCode)
     const hasBothProviders = hasStripeAccount && hasPaystackAccount
 
-    const PAYSTACK_COUNTRIES = ['NG', 'KE', 'ZA', 'GH']
     const validPayerCountry = payerCountry && /^[A-Z]{2}$/.test(payerCountry.toUpperCase())
       ? payerCountry.toUpperCase()
       : null
-    const payerIsLocal = validPayerCountry && PAYSTACK_COUNTRIES.includes(validPayerCountry)
+    // Use PAYSTACK_PAYER_COUNTRIES (from countryConfig.ts) for routing optimization
+    const payerIsLocal = validPayerCountry && (PAYSTACK_PAYER_COUNTRIES as readonly string[]).includes(validPayerCountry)
     const payerIsGlobal = validPayerCountry && !payerIsLocal
 
     let selectedProvider: 'stripe' | 'paystack' | null = null

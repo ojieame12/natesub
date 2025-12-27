@@ -410,11 +410,12 @@ export async function handleCheckoutCompleted(event: Stripe.Event) {
     include: { profile: { select: { displayName: true, username: true, platformDebitCents: true } } },
   })
   if (creator) {
+    // Send creator their NET amount (what they earn after fees)
     await sendNewSubscriberEmail(
       creator.email,
       subscriberName || subscriberEmail || 'Someone',
       tierName,
-      session.amount_total || 0,
+      netCents,  // NET - what creator receives after platform fees
       session.currency?.toUpperCase() || 'USD'
     )
 
@@ -497,6 +498,7 @@ export async function handleAsyncPaymentSucceeded(event: Stripe.Event) {
   // Split fee fields (v2 model)
   const subscriberFeeCents = parseMetadataAmount(validatedMeta.subscriberFeeCents)
   const creatorFeeCents = parseMetadataAmount(validatedMeta.creatorFeeCents)
+  const baseAmountCents = parseMetadataAmount(validatedMeta.baseAmountCents)
 
   console.log(`[async_payment_succeeded] Processing session ${session.id} for creator ${sanitizeForLog(creatorId)}`)
 
@@ -571,25 +573,36 @@ export async function handleAsyncPaymentSucceeded(event: Stripe.Event) {
   let grossCents: number | null = null
   let subFeeCents: number | null = null
   let creatorFee: number | null = null
+  let basePrice: number  // Creator's set price - consistent with sync path
 
+  const amountTotal = session.amount_total || 0
   const hasNewFeeModel = feeModel && netAmount > 0
   if (feeModel === 'split_v1' && hasNewFeeModel) {
     // New split fee model (4%/4%)
-    grossCents = session.amount_total || 0
+    grossCents = amountTotal
     feeCents = serviceFee
     netCents = netAmount
     subFeeCents = subscriberFeeCents || null
     creatorFee = creatorFeeCents || null
+    // Robust fallback: baseAmountCents → gross → net (handles missing metadata)
+    basePrice = baseAmountCents || grossCents || netCents
   } else if (hasNewFeeModel) {
-    // Legacy fee models
-    grossCents = session.amount_total || 0
+    // Legacy fee models (flat, progressive)
+    grossCents = amountTotal
     feeCents = serviceFee
     netCents = netAmount
+    // CRITICAL: Store creator's set price for consistency
+    // Absorb mode: creator sets gross price; Pass mode: creator sets net price
+    // Fallback chain handles missing baseAmountCents gracefully
+    basePrice = baseAmountCents || (feeMode === 'absorb' ? grossCents : netCents)
   } else {
+    // Legacy model (no fee metadata) - use gross as base
     const purpose = creatorProfile?.purpose as 'personal' | 'service' | null
-    const legacyFees = calculateLegacyFee(session.amount_total || 0, purpose, session.currency?.toUpperCase() || 'USD')
+    const legacyFees = calculateLegacyFee(amountTotal, purpose, session.currency?.toUpperCase() || 'USD')
     feeCents = legacyFees.feeCents
     netCents = legacyFees.netCents
+    grossCents = amountTotal
+    basePrice = baseAmountCents || amountTotal || netCents
   }
 
   // Create or update one-time subscription record (upsert to handle repeat payments)
@@ -606,11 +619,11 @@ export async function handleAsyncPaymentSucceeded(event: Stripe.Event) {
       subscriberId: subscriber.id,
       tierId: tierId || null,
       tierName,
-      amount: netCents,
+      amount: basePrice,  // Creator's set price (consistent with sync path)
       currency: session.currency?.toUpperCase() || 'USD',
       interval: 'one_time',
       status: 'active',
-      ltvCents: netCents, // Initialize LTV with first payment
+      ltvCents: netCents, // LTV tracks actual earnings (net)
       stripeCustomerId: session.customer as string || null,
       feeModel: feeModel || null,
       feeMode: feeMode || null,
@@ -618,9 +631,9 @@ export async function handleAsyncPaymentSucceeded(event: Stripe.Event) {
     update: {
       tierId: tierId || null,
       tierName,
-      amount: netCents,
+      amount: basePrice,  // Creator's set price (consistent with sync path)
       stripeCustomerId: session.customer as string || null,
-      ltvCents: { increment: netCents }, // Increment LTV for repeat payment
+      ltvCents: { increment: netCents }, // LTV tracks actual earnings (net)
     },
   })
 
@@ -720,14 +733,14 @@ export async function handleAsyncPaymentSucceeded(event: Stripe.Event) {
     },
   })
 
-  // Send notification email to creator
+  // Send notification email to creator with NET amount (what they earn)
   const creator = await db.user.findUnique({ where: { id: creatorId } })
   if (creator) {
     await sendNewSubscriberEmail(
       creator.email,
       subscriberName || subscriberEmail || 'Someone',
       tierName,
-      session.amount_total || 0,
+      netCents,  // NET - what creator receives after platform fees
       session.currency?.toUpperCase() || 'USD'
     )
   }

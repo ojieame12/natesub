@@ -5,7 +5,7 @@ import { useOnboardingStore } from './store'
 import { Button, Pressable } from './components'
 import { BottomDrawer } from '../components'
 import { getShareableLink } from '../utils/constants'
-import { getCurrencySymbol, getSuggestedAmounts } from '../utils/currency'
+import { getCurrencySymbol, getSuggestedAmounts, getMinimumAmount } from '../utils/currency'
 import {
     isCrossBorderCountry,
     getLocalCurrencyName,
@@ -43,7 +43,6 @@ export default function PersonalReviewStep() {
         setLastName,
         username,
         purpose,
-        pricingModel,
         singleAmount,
         country,
         countryCode,
@@ -59,7 +58,6 @@ export default function PersonalReviewStep() {
         setAvatarUrl,
         setPurpose,
         setPricing,
-        tiers,
         prevStep,
         reset
     } = useOnboardingStore()
@@ -84,7 +82,7 @@ export default function PersonalReviewStep() {
         const suggestedAmounts = getSuggestedAmounts(newCurrency, 'personal')
         const newPrice = suggestedAmounts[0] || 10
         setPriceInput(String(newPrice))
-        setPricing('single', tiers, newPrice)
+        setPricing('single', [], newPrice)
         setShowCurrencyDrawer(false)
     }
 
@@ -122,7 +120,7 @@ export default function PersonalReviewStep() {
         if (rawVal === '' || /^\d*\.?\d*$/.test(rawVal)) {
             setPriceInput(rawVal)
             const numVal = parseFloat(rawVal) || 0
-            setPricing('single', tiers, numVal)
+            setPricing('single', [], numVal)
         }
     }
 
@@ -168,6 +166,9 @@ export default function PersonalReviewStep() {
         }
     }
 
+    // Get minimum amount for current currency
+    const minAmount = getMinimumAmount(currency)
+
     const handleLaunch = async () => {
         if (!displayName || !username) {
             setError('Please fill in all fields.')
@@ -179,12 +180,16 @@ export default function PersonalReviewStep() {
             return
         }
 
+        // Validate single pricing amount
         const finalAmount = parseFloat(priceInput) || 0
         if (finalAmount <= 0) {
             setError('Please set a price.')
             return
         }
-
+        if (finalAmount < minAmount) {
+            setError(`Minimum price is ${currencySymbol}${minAmount.toLocaleString()} for ${currency}.`)
+            return
+        }
         setLaunching(true)
         setError(null)
 
@@ -198,9 +203,9 @@ export default function PersonalReviewStep() {
                 currency,
                 country,
                 countryCode,
-                pricingModel,
-                singleAmount: pricingModel === 'single' ? finalAmount : null,
-                tiers: pricingModel === 'tiers' ? tiers : null,
+                pricingModel: 'single',
+                singleAmount: finalAmount,
+                tiers: null,
                 paymentProvider,
                 // Address fields for Stripe KYC prefill (trimmed for clean data)
                 address: address?.trim() || undefined,

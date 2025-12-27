@@ -9,6 +9,7 @@ import { getMinimumAmount, getCurrencySymbol, getSuggestedAmounts } from '../uti
 import { needsSwiftCodeHelp } from '../utils/swiftCodes'
 import {
     hasPaystack,
+    hasStripe,
     isAfricanCountry,
     isCrossBorderCountry,
     getPaystackCurrency,
@@ -92,8 +93,8 @@ export default function PaymentMethodStep() {
     const expectedPaystackCurrency = getPaystackCurrency(countryUpper)
     // Show Paystack for supported countries
     const canUsePaystack = isPaystackCountry
-    // Stripe available for all countries
-    const canUseStripe = true
+    // Stripe available for supported countries (via regionConfig)
+    const canUseStripe = hasStripe(countryUpper)
 
     const handleContinue = async () => {
         if (!selectedMethod) return

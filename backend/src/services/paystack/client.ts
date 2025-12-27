@@ -4,6 +4,11 @@
 import { env } from '../../config/env.js'
 import { maskAccountNumber } from '../../utils/pii.js'
 import { paystackCircuitBreaker } from '../../utils/circuitBreaker.js'
+import {
+  PAYSTACK_COUNTRIES,
+  isPaystackSupported as isPaystackSupportedFn,
+  type PaystackCountry,
+} from '../../utils/countryConfig.js'
 
 export const PAYSTACK_API_URL = 'https://api.paystack.co'
 
@@ -12,13 +17,13 @@ export function maskPathForLogging(path: string): string {
   return path.replace(/account_number=([^&]+)/gi, (_, num) => `account_number=${maskAccountNumber(num)}`)
 }
 
-// Supported countries for Paystack
-export const PAYSTACK_COUNTRIES = ['NG', 'KE', 'ZA'] as const
-export type PaystackCountry = typeof PAYSTACK_COUNTRIES[number]
+// Re-export from countryConfig (single source of truth)
+export { PAYSTACK_COUNTRIES }
+export type { PaystackCountry }
 
-// Check if a country is supported by Paystack
+// Type guard version for runtime checks
 export function isPaystackSupported(countryCode: string): countryCode is PaystackCountry {
-  return PAYSTACK_COUNTRIES.includes(countryCode as PaystackCountry)
+  return isPaystackSupportedFn(countryCode)
 }
 
 // Types

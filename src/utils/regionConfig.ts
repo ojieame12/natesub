@@ -84,19 +84,8 @@ export const COUNTRIES: CountryConfig[] = [
     skipAddress: false, // Full address required
     region: 'africa',
   },
-  // Côte d'Ivoire - Paystack extended network (no Stripe)
-  {
-    code: 'CI',
-    name: "Côte d'Ivoire",
-    flag: '🇨🇮',
-    currency: 'XOF',
-    currencyName: 'CFA Franc',
-    currencySymbol: 'CFA',
-    providers: ['paystack'],
-    crossBorder: false,
-    skipAddress: true,
-    region: 'africa',
-  },
+  // NOTE: Côte d'Ivoire (CI) removed - Paystack doesn't support subaccount creation for CI creators
+  // If Paystack adds CI support in the future, re-add with providers: ['paystack']
 
   // === AMERICAS ===
   {
