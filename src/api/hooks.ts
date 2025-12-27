@@ -845,6 +845,9 @@ async function compressImage(file: File, maxWidth = 1200, quality = 0.85): Promi
   })
 }
 
+// Upload timeout in ms (2 minutes - generous for large files on slow networks)
+const UPLOAD_TIMEOUT_MS = 120_000
+
 // Helper to upload file to S3
 export async function uploadFile(
   file: File,
@@ -895,9 +898,9 @@ export async function uploadFile(
     throw new Error(err?.error || 'Failed to prepare upload. Please try again.')
   }
 
-  // Create abort controller for timeout (30s upload limit)
+  // Create abort controller for timeout (2 min - generous for large files on slow networks)
   const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), 30000)
+  const timeoutId = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS)
 
   try {
     // Upload to R2/S3
@@ -953,20 +956,33 @@ export async function uploadBlob(
   // Get signed URL (server validates size and includes in signature)
   const { uploadUrl, publicUrl } = await api.media.getUploadUrl(type, contentType, blob.size)
 
-  // Upload to S3
-  const response = await fetch(uploadUrl, {
-    method: 'PUT',
-    body: blob,
-    headers: {
-      'Content-Type': contentType,
-    },
-  })
+  // Upload to S3 with timeout to prevent hanging on bad networks
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS)
 
-  if (!response.ok) {
-    throw new Error(`Upload failed: ${response.status}`)
+  try {
+    const response = await fetch(uploadUrl, {
+      method: 'PUT',
+      body: blob,
+      headers: {
+        'Content-Type': contentType,
+      },
+      signal: controller.signal,
+    })
+
+    if (!response.ok) {
+      throw new Error(`Upload failed: ${response.status}`)
+    }
+
+    return publicUrl
+  } catch (err: any) {
+    if (err.name === 'AbortError') {
+      throw new Error('Upload timed out. Please check your connection and try again.')
+    }
+    throw err
+  } finally {
+    clearTimeout(timeoutId)
   }
-
-  return publicUrl
 }
 
 // ============================================

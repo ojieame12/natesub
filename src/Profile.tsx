@@ -5,6 +5,7 @@ import { Pressable, Skeleton, ErrorState, useToast } from './components'
 import { useProfile, useMetrics, useLogout, useCurrentUser } from './api/hooks'
 import { useOnboardingStore } from './onboarding/store'
 import { getShareableLink, getShareableLinkFull, getPublicPageUrl } from './utils/constants'
+import { getCurrencySymbol } from './utils/currency'
 import { getAuthToken } from './api/client'
 import { adminQueryKeys } from './api/queryKeys'
 import './Profile.css'
@@ -181,7 +182,7 @@ export default function Profile() {
               </div>
               <div className="stat-divider" />
               <div className="stat">
-                <span className="stat-value">${stats.mrr}</span>
+                <span className="stat-value">{getCurrencySymbol(metrics?.currency || 'USD')}{stats.mrr.toLocaleString()}</span>
                 <span className="stat-label">MRR</span>
               </div>
               <div className="stat-divider" />
