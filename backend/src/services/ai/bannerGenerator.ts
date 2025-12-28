@@ -72,8 +72,23 @@ export async function generateBanner(
   const client = getClient()
 
   try {
-    // Fetch avatar image as base64
-    const avatarResponse = await fetch(input.avatarUrl)
+    // Fetch avatar image as base64 with timeout
+    const AVATAR_FETCH_TIMEOUT = 10000 // 10 seconds
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), AVATAR_FETCH_TIMEOUT)
+
+    let avatarResponse: Response
+    try {
+      avatarResponse = await fetch(input.avatarUrl, { signal: controller.signal })
+      clearTimeout(timeoutId)
+    } catch (err: any) {
+      clearTimeout(timeoutId)
+      if (err.name === 'AbortError') {
+        throw new Error('Avatar fetch timed out')
+      }
+      throw err
+    }
+
     if (!avatarResponse.ok) {
       throw new Error(`Failed to fetch avatar: ${avatarResponse.status}`)
     }

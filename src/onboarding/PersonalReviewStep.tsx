@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react'
-import { ChevronLeft, ChevronDown, Check, Loader2, AlertCircle, Camera, RefreshCw, Heart, Gift, Briefcase, Star, Sparkles, Wallet, MoreHorizontal, Edit3, Wand2 } from 'lucide-react'
+import { ChevronLeft, ChevronDown, Check, Loader2, AlertCircle, Camera, RefreshCw, Heart, Gift, Briefcase, Star, Sparkles, Wallet, MoreHorizontal, Edit3, Wand2, Plus, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useOnboardingStore } from './store'
 import { Button, Pressable } from './components'
@@ -39,6 +39,8 @@ export default function PersonalReviewStep() {
     // Service mode state
     const [editingPerkIndex, setEditingPerkIndex] = useState<number | null>(null)
     const [editingPerkValue, setEditingPerkValue] = useState('')
+    const [isAddingPerk, setIsAddingPerk] = useState(false)
+    const [newPerkValue, setNewPerkValue] = useState('')
     const generatePerksMutation = useGeneratePerks()
     const { data: aiConfig } = useAIConfig()
     const isAIAvailable = aiConfig?.available ?? false
@@ -233,6 +235,31 @@ export default function PersonalReviewStep() {
         setEditingPerkValue('')
     }
 
+    // Manual perk entry (when AI is unavailable or user prefers manual)
+    const handleAddPerk = () => {
+        if (!newPerkValue.trim()) return
+        if (servicePerks.length >= 3) return
+
+        const newPerk = {
+            id: `perk-${Date.now()}-${servicePerks.length}`,
+            title: newPerkValue.trim(),
+            enabled: true,
+        }
+        setServicePerks([...servicePerks, newPerk])
+        setNewPerkValue('')
+        setIsAddingPerk(false)
+    }
+
+    const cancelAddPerk = () => {
+        setNewPerkValue('')
+        setIsAddingPerk(false)
+    }
+
+    const handleDeletePerk = (index: number) => {
+        const newPerks = servicePerks.filter((_, i) => i !== index)
+        setServicePerks(newPerks)
+    }
+
     const handleLaunch = async () => {
         if (!displayName || !username) {
             setError('Please fill in all fields.')
@@ -251,7 +278,7 @@ export default function PersonalReviewStep() {
                 return
             }
             if (servicePerks.length !== 3) {
-                setError('Please generate perks for your service.')
+                setError(`Please add ${3 - servicePerks.length} more perk${3 - servicePerks.length === 1 ? '' : 's'} (${servicePerks.length}/3).`)
                 return
             }
         }
@@ -412,7 +439,7 @@ export default function PersonalReviewStep() {
                     {isServiceMode && (
                         <div className="setup-card service-perks-card">
                             <div className="service-perks-header">
-                                <span className="service-perks-title">What subscribers get</span>
+                                <span className="service-perks-title">What subscribers get ({servicePerks.length}/3)</span>
                                 {isAIAvailable && (
                                     <Pressable
                                         className="service-perks-generate"
@@ -429,7 +456,8 @@ export default function PersonalReviewStep() {
                                 )}
                             </div>
 
-                            {servicePerks.length > 0 ? (
+                            {/* Existing perks list */}
+                            {servicePerks.length > 0 && (
                                 <div className="service-perks-list">
                                     {servicePerks.map((perk, index) => (
                                         <div key={perk.id} className="service-perk-item">
@@ -454,20 +482,67 @@ export default function PersonalReviewStep() {
                                                 <>
                                                     <span className="service-perk-check">✓</span>
                                                     <span className="service-perk-title">{perk.title}</span>
-                                                    <Pressable
-                                                        className="service-perk-edit-btn"
-                                                        onClick={() => startEditingPerk(index)}
-                                                    >
-                                                        <Edit3 size={12} />
-                                                    </Pressable>
+                                                    <div className="service-perk-actions">
+                                                        <Pressable
+                                                            className="service-perk-edit-btn"
+                                                            onClick={() => startEditingPerk(index)}
+                                                        >
+                                                            <Edit3 size={12} />
+                                                        </Pressable>
+                                                        <Pressable
+                                                            className="service-perk-delete-btn"
+                                                            onClick={() => handleDeletePerk(index)}
+                                                        >
+                                                            <X size={12} />
+                                                        </Pressable>
+                                                    </div>
                                                 </>
                                             )}
                                         </div>
                                     ))}
                                 </div>
-                            ) : (
+                            )}
+
+                            {/* Add perk manually (when < 3 perks) */}
+                            {servicePerks.length < 3 && (
+                                isAddingPerk ? (
+                                    <div className="service-perk-add-form">
+                                        <input
+                                            type="text"
+                                            value={newPerkValue}
+                                            onChange={(e) => setNewPerkValue(e.target.value)}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') handleAddPerk()
+                                                if (e.key === 'Escape') cancelAddPerk()
+                                            }}
+                                            placeholder="e.g., Weekly 1-on-1 calls"
+                                            autoFocus
+                                            maxLength={60}
+                                        />
+                                        <Pressable onClick={handleAddPerk} className="service-perk-save" disabled={!newPerkValue.trim()}>
+                                            <Check size={14} />
+                                        </Pressable>
+                                        <Pressable onClick={cancelAddPerk} className="service-perk-cancel">
+                                            <X size={14} />
+                                        </Pressable>
+                                    </div>
+                                ) : (
+                                    <Pressable
+                                        className="service-perk-add-btn"
+                                        onClick={() => setIsAddingPerk(true)}
+                                    >
+                                        <Plus size={14} />
+                                        <span>Add perk{isAIAvailable ? ' manually' : ''}</span>
+                                    </Pressable>
+                                )
+                            )}
+
+                            {/* Empty state hint */}
+                            {servicePerks.length === 0 && !isAddingPerk && (
                                 <p className="service-perks-empty">
-                                    Describe your service above, then click Generate to create your perks.
+                                    {isAIAvailable
+                                        ? 'Describe your service above, then Generate or add perks manually.'
+                                        : 'Add 3 perks that describe what subscribers will receive.'}
                                 </p>
                             )}
                         </div>

@@ -3360,3 +3360,83 @@ button.btn .spinning {
     border-radius: var(--radius-md);
     margin: 0;
 }
+
+/* Perk action buttons container */
+.service-perk-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: auto;
+}
+
+.service-perk-delete-btn {
+    padding: 4px;
+    color: var(--text-tertiary);
+    opacity: 0;
+    transition: opacity 0.15s ease, color 0.15s ease;
+}
+
+.service-perk-item:hover .service-perk-delete-btn {
+    opacity: 1;
+}
+
+.service-perk-delete-btn:hover {
+    color: var(--accent-red, #ef4444);
+}
+
+/* Manual perk add button */
+.service-perk-add-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 12px;
+    margin-top: 8px;
+    border: 1px dashed var(--border-primary);
+    border-radius: var(--radius-md);
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-weight: 500;
+    background: transparent;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.service-perk-add-btn:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+    background: var(--bg-subtle);
+}
+
+/* Add perk form */
+.service-perk-add-form {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+    padding: 8px 12px;
+    background: var(--bg-subtle);
+    border-radius: var(--radius-md);
+}
+
+.service-perk-add-form input {
+    flex: 1;
+    font-size: 14px;
+    color: var(--text-primary);
+    background: var(--bg-card);
+    border: 1px solid var(--primary);
+    border-radius: var(--radius-sm);
+    padding: 8px 12px;
+    outline: none;
+    font-family: var(--font-primary);
+}
+
+.service-perk-cancel {
+    padding: 4px;
+    color: var(--text-tertiary);
+    cursor: pointer;
+}
+
+.service-perk-cancel:hover {
+    color: var(--accent-red, #ef4444);
+}

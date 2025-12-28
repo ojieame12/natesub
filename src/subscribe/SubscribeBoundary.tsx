@@ -129,8 +129,9 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
     const badgeText = isServiceMode ? 'Retainer' : 'Support'
 
     // Get enabled perks for service mode
+    // Default enabled to true for legacy perks that don't have the field
     const perks = isServiceMode
-        ? (profile.perks || []).filter(p => p.enabled)
+        ? (profile.perks || []).filter(p => p.enabled !== false)
         : []
 
     // Invalidate profile cache on successful verification
@@ -146,6 +147,7 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
     const [status, setStatus] = useState<'idle' | 'processing'>('idle')
     const [resetKey, setResetKey] = useState(0)
     const [payerCountry, setPayerCountry] = useState<string | null>(null)
+    const [bgReady, setBgReady] = useState(false)
     const [cardRevealed, setCardRevealed] = useState(false)
     const [contentVisible, setContentVisible] = useState(false)
     const [actionVisible, setActionVisible] = useState(false)
@@ -153,22 +155,26 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
     const emailInputRef = useRef<HTMLInputElement>(null)
 
     // Multi-stage entrance animation:
+    // 0. Background dither fades in
     // 1. Card appears faded at small height
     // 2. Card expands to full height (slow, premium feel)
     // 3. Content fades in
     // 4. Action section (email) reveals with slight delay, then auto-focus
     useEffect(() => {
+        // Stage 0: Background dither fades in immediately
+        const bgTimer = requestAnimationFrame(() => setBgReady(true))
         // Stage 1: Trigger height expansion after brief delay for paint
-        const revealTimer = setTimeout(() => setCardRevealed(true), 50)
+        const revealTimer = setTimeout(() => setCardRevealed(true), 100)
         // Stage 2: Fade in content after height expansion completes (800ms animation)
-        const contentTimer = setTimeout(() => setContentVisible(true), 900)
+        const contentTimer = setTimeout(() => setContentVisible(true), 950)
         // Stage 3: Reveal action section with stagger
-        const actionTimer = setTimeout(() => setActionVisible(true), 1100)
+        const actionTimer = setTimeout(() => setActionVisible(true), 1150)
         // Stage 4: Auto-focus email input for immediate typing
         const focusTimer = setTimeout(() => {
             emailInputRef.current?.focus()
-        }, 1400)
+        }, 1450)
         return () => {
+            cancelAnimationFrame(bgTimer)
             clearTimeout(revealTimer)
             clearTimeout(contentTimer)
             clearTimeout(actionTimer)
@@ -303,7 +309,7 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
     return (
         <div style={{
             minHeight: '100dvh',
-            background: 'url("/Vector87.svg") center center / cover no-repeat, linear-gradient(180deg, #FFE7A0 0%, #FFF5D6 100%)',
+            background: 'linear-gradient(180deg, #FFE7A0 0%, #FFF5D6 100%)',
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
@@ -313,6 +319,17 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
             position: 'relative',
             overflow: 'hidden',
         }}>
+            {/* Dither overlay - fades in */}
+            <div style={{
+                position: 'absolute',
+                inset: 0,
+                backgroundImage: 'url("/Vector87.svg")',
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                opacity: bgReady ? 1 : 0,
+                transition: 'opacity 0.6s ease-out',
+                pointerEvents: 'none',
+            }} />
 
             {/* Edit button (owner only) */}
             {isOwner && (
