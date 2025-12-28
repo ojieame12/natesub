@@ -148,20 +148,31 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
     const [payerCountry, setPayerCountry] = useState<string | null>(null)
     const [cardRevealed, setCardRevealed] = useState(false)
     const [contentVisible, setContentVisible] = useState(false)
+    const [actionVisible, setActionVisible] = useState(false)
     const viewIdRef = useRef<string | null>(null)
+    const emailInputRef = useRef<HTMLInputElement>(null)
 
     // Multi-stage entrance animation:
     // 1. Card appears faded at small height
     // 2. Card expands to full height (slow, premium feel)
     // 3. Content fades in
+    // 4. Action section (email) reveals with slight delay, then auto-focus
     useEffect(() => {
         // Stage 1: Trigger height expansion after brief delay for paint
         const revealTimer = setTimeout(() => setCardRevealed(true), 50)
         // Stage 2: Fade in content after height expansion completes (800ms animation)
         const contentTimer = setTimeout(() => setContentVisible(true), 900)
+        // Stage 3: Reveal action section with stagger
+        const actionTimer = setTimeout(() => setActionVisible(true), 1100)
+        // Stage 4: Auto-focus email input for immediate typing
+        const focusTimer = setTimeout(() => {
+            emailInputRef.current?.focus()
+        }, 1400)
         return () => {
             clearTimeout(revealTimer)
             clearTimeout(contentTimer)
+            clearTimeout(actionTimer)
+            clearTimeout(focusTimer)
         }
     }, [])
 
@@ -605,8 +616,14 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                     </div>
                 </div>
 
-                {/* Action Section */}
-                <div style={{ marginTop: 36, paddingBottom: 24 }}>
+                {/* Action Section - staggered reveal */}
+                <div style={{
+                    marginTop: 36,
+                    paddingBottom: 24,
+                    opacity: actionVisible ? 1 : 0,
+                    transform: actionVisible ? 'translateY(0)' : 'translateY(12px)',
+                    transition: 'opacity 0.4s ease-out, transform 0.4s cubic-bezier(0.22, 1, 0.36, 1)',
+                }}>
                     {isOwner ? (
                         /* Owner View: Share Button */
                         <button
@@ -637,6 +654,7 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                                 marginBottom: 16,
                             }}>
                                 <input
+                                    ref={emailInputRef}
                                     type="email"
                                     value={subscriberEmail}
                                     onChange={e => setSubscriberEmail(e.target.value)}

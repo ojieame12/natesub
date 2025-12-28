@@ -75,7 +75,7 @@ export async function generatePerks(input: PerksInput): Promise<Perk[]> {
 
     const response = await withTimeout(
       client.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-3-flash-preview',
         contents: [{ text: prompt }],
       }),
       AI_TIMEOUT_MS,
@@ -198,7 +198,7 @@ export async function inferServiceType(description: string): Promise<Industry> {
   try {
     const response = await withTimeout(
       client.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-3-flash-preview',
         contents: [{
           text: `Categorize this service description into ONE of these industries:
 fitness, coaching, consulting, design, tech, education, creative, business, health, finance, marketing, other

@@ -1,21 +1,26 @@
 /**
  * Banner Generation Service
  *
- * Uses Gemini's image generation to create professional banners from avatars.
+ * Uses Nano Banana Pro (Gemini 3 Pro Image) to create professional banners from avatars.
  * The banner is a stylized, expanded version of the avatar suitable for
- * a page header (16:5 aspect ratio, ~1200x375px).
+ * a page header with premium aesthetic.
+ *
+ * Model: gemini-3-pro-image-preview (Nano Banana Pro)
+ * - Supports aspect ratio: 16:9 (closest to header format)
+ * - Resolution: 2K for high quality
+ * - Advanced reasoning ("Thinking") for complex instructions
  */
 
 import { GoogleGenAI } from '@google/genai'
 import { env } from '../../config/env.js'
 import { uploadBuffer } from '../storage.js'
 
-// Banner dimensions (16:5 aspect ratio for mobile-first design)
-const BANNER_WIDTH = 1200
-const BANNER_HEIGHT = 375
+// Banner configuration for Nano Banana Pro
+const BANNER_ASPECT_RATIO = '16:9' as const  // Supported: 1:1, 2:3, 3:2, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9
+const BANNER_RESOLUTION = '2K' as const      // Supported: 1K, 2K, 4K (uppercase K required)
 
-// AI request timeout (60 seconds - banner generation is slower)
-const AI_TIMEOUT_MS = 60000
+// AI request timeout (90 seconds - Nano Banana Pro uses "Thinking" mode)
+const AI_TIMEOUT_MS = 90000
 
 // Timeout helper to prevent AI calls from hanging indefinitely
 function withTimeout<T>(promise: Promise<T>, ms: number, operation: string): Promise<T> {
@@ -82,7 +87,7 @@ export async function generateBanner(
 
     const response = await withTimeout(
       client.models.generateContent({
-        model: 'gemini-2.0-flash-exp',  // Experimental model with image generation
+        model: 'gemini-3-pro-image-preview',  // Nano Banana Pro
         contents: [
           {
             parts: [
@@ -96,6 +101,14 @@ export async function generateBanner(
             ],
           },
         ],
+        config: {
+          // Nano Banana Pro image configuration
+          responseModalities: ['IMAGE', 'TEXT'],
+          imageConfig: {
+            aspectRatio: BANNER_ASPECT_RATIO,
+            imageSize: BANNER_RESOLUTION,
+          },
+        },
       }),
       AI_TIMEOUT_MS,
       'Banner generation'

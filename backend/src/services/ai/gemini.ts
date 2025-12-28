@@ -104,7 +104,7 @@ Respond in this exact JSON format:
 Only respond with valid JSON, no other text.`
 
   const response = await client.models.generateContent({
-    model: 'gemini-2.5-flash',  // Using 2.5 Flash for speed, can upgrade to gemini-3-pro-preview
+    model: 'gemini-3-flash-preview',  // Gemini 3 Flash - fastest with Pro-level intelligence
     contents: [
       { text: prompt },
       {
@@ -146,7 +146,7 @@ export async function generatePageContent(
     : buildPersonalPrompt(input)
 
   const response = await client.models.generateContent({
-    model: 'gemini-2.5-flash',
+    model: 'gemini-3-flash-preview',
     contents: [{ text: prompt }],
   })
 
@@ -351,7 +351,7 @@ Respond in this exact JSON format:
 Only respond with valid JSON, no other text.`
 
   const response = await client.models.generateContent({
-    model: 'gemini-2.5-flash',
+    model: 'gemini-3-flash-preview',
     contents: [{ text: prompt }],
   })
 

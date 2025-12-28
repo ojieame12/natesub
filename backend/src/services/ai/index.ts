@@ -48,8 +48,11 @@ export {
   type Perk,
 } from './perksGenerator.js'
 
+// Import for local use in isAIAvailable
+import { isPerksGenerationAvailable as checkPerksAvailable } from './perksGenerator.js'
+
 // Combined AI availability check
 export function isAIAvailable(): boolean {
   // Both perks and banner generation use the same API key
-  return isPerksGenerationAvailable()
+  return checkPerksAvailable()
 }
