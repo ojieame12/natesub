@@ -272,10 +272,14 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
     // In production, this would be a separate bannerUrl field
     const bannerUrl = isServiceMode ? profile.avatarUrl : null
 
+    // Inline SVG noise for guaranteed rendering (no external file dependency)
+    const noiseSvg = `url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`
+
     return (
         <div style={{
             minHeight: '100dvh',
-            background: 'linear-gradient(180deg, #FFE7A0 0%, #FFF5D6 100%)',
+            background: `${noiseSvg}, linear-gradient(180deg, #FFE7A0 0%, #FFF5D6 100%)`,
+            backgroundBlendMode: 'overlay, normal',
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
@@ -285,18 +289,6 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
             position: 'relative',
             overflow: 'hidden',
         }}>
-            {/* Dither Texture Overlay */}
-            <div style={{
-                position: 'absolute',
-                inset: 0,
-                backgroundImage: 'url("/dither.png")',
-                backgroundRepeat: 'repeat',
-                backgroundSize: '200px 200px',
-                opacity: 0.4,
-                mixBlendMode: 'multiply',
-                pointerEvents: 'none',
-                zIndex: 0,
-            }} />
 
             {/* Edit button (owner only) */}
             {isOwner && (
