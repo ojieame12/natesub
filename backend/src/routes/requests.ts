@@ -211,7 +211,7 @@ requests.post(
           amount: feeCalc.grossCents, // What subscriber pays
           currency: request.currency,
           subaccountCode: profile.paystackSubaccountCode!,
-          callbackUrl: `${env.APP_URL}/r/${token}/success?provider=paystack`,
+          callbackUrl: `${env.PUBLIC_PAGE_URL}/r/${token}/success?provider=paystack`,
           reference,
           metadata: {
             creatorId: request.creatorId,
@@ -270,8 +270,8 @@ requests.post(
           serviceFee: feeCalc.feeCents,
           currency: request.currency,
           interval: request.isRecurring ? 'month' : 'one_time',
-          successUrl: `${env.APP_URL}/r/${token}/success`,
-          cancelUrl: `${env.APP_URL}/r/${token}?canceled=true`,
+          successUrl: `${env.PUBLIC_PAGE_URL}/r/${token}/success`,
+          cancelUrl: `${env.PUBLIC_PAGE_URL}/r/${token}?canceled=true`,
           subscriberEmail: email,
           feeMetadata: {
             feeModel: feeCalc.feeModel,

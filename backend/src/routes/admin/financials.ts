@@ -58,13 +58,26 @@ financials.get('/reconciliation', auditSensitiveRead('financial_reconciliation')
   const stripePayments = dbPayments.filter(p => p.stripePaymentIntentId)
   const paystackPayments = dbPayments.filter(p => p.paystackTransactionRef)
 
-  const stripeGross = stripePayments.reduce((sum, p) => sum + (p.grossCents || p.amountCents), 0)
-  const paystackGross = paystackPayments.reduce((sum, p) => sum + (p.grossCents || p.amountCents), 0)
+  // Group by currency to avoid mixing different currency amounts
+  type CurrencyTotals = Record<string, { gross: number; fees: number; count: number }>
 
-  const stripeFees = stripePayments.reduce((sum, p) => sum + (p.feeCents || 0), 0)
-  const paystackFees = paystackPayments.reduce((sum, p) => sum + (p.feeCents || 0), 0)
+  const groupByCurrency = (payments: typeof dbPayments): CurrencyTotals => {
+    return payments.reduce((acc, p) => {
+      const currency = (p.currency || 'USD').toUpperCase()
+      if (!acc[currency]) {
+        acc[currency] = { gross: 0, fees: 0, count: 0 }
+      }
+      acc[currency].gross += p.grossCents || p.amountCents
+      acc[currency].fees += p.feeCents || 0
+      acc[currency].count += 1
+      return acc
+    }, {} as CurrencyTotals)
+  }
 
-  // Get refunds
+  const stripeByCurrency = groupByCurrency(stripePayments)
+  const paystackByCurrency = groupByCurrency(paystackPayments)
+
+  // Get refunds grouped by currency
   const refunds = await db.payment.findMany({
     where: {
       createdAt: { gte: periodStart, lte: periodEnd },
@@ -72,12 +85,23 @@ financials.get('/reconciliation', auditSensitiveRead('financial_reconciliation')
     },
     select: {
       amountCents: true,
+      currency: true,
       stripePaymentIntentId: true,
       paystackTransactionRef: true,
     }
   })
-  const stripeRefunds = refunds.filter(r => r.stripePaymentIntentId).reduce((sum, r) => sum + r.amountCents, 0)
-  const paystackRefunds = refunds.filter(r => r.paystackTransactionRef).reduce((sum, r) => sum + r.amountCents, 0)
+
+  type RefundTotals = Record<string, number>
+  const groupRefundsByCurrency = (refundList: typeof refunds): RefundTotals => {
+    return refundList.reduce((acc, r) => {
+      const currency = (r.currency || 'USD').toUpperCase()
+      acc[currency] = (acc[currency] || 0) + r.amountCents
+      return acc
+    }, {} as RefundTotals)
+  }
+
+  const stripeRefundsByCurrency = groupRefundsByCurrency(refunds.filter(r => r.stripePaymentIntentId))
+  const paystackRefundsByCurrency = groupRefundsByCurrency(refunds.filter(r => r.paystackTransactionRef))
 
   // Get disputes
   const disputes = await db.payment.groupBy({
@@ -98,42 +122,42 @@ financials.get('/reconciliation', auditSensitiveRead('financial_reconciliation')
     lostAmount: disputes.find(d => d.status === 'dispute_lost')?._sum?.amountCents || 0,
   }
 
-  // Try to get actual balances from payment providers
-  let stripeBalance: number | null = null
-  let paystackBalance: number | null = null
+  // Try to get actual balances from payment providers (grouped by currency)
+  type BalanceByCurrency = Record<string, number>
+  let stripeBalances: BalanceByCurrency | null = null
+  let paystackBalances: BalanceByCurrency | null = null
   let balanceErrors: string[] = []
 
-  // Stripe balance
+  // Stripe balance - grouped by currency
   if (env.STRIPE_SECRET_KEY) {
     try {
       const balance = await stripe.balance.retrieve()
-      // Sum available balances (might be in multiple currencies)
-      stripeBalance = balance.available.reduce((sum, b) => {
-        // Convert to cents if needed
-        return sum + b.amount
-      }, 0)
+      stripeBalances = balance.available.reduce((acc, b) => {
+        const currency = b.currency.toUpperCase()
+        acc[currency] = (acc[currency] || 0) + b.amount
+        return acc
+      }, {} as BalanceByCurrency)
     } catch (err) {
       balanceErrors.push(`Stripe balance error: ${err instanceof Error ? err.message : 'Unknown error'}`)
     }
   }
 
-  // Paystack balance
+  // Paystack balance - grouped by currency
   if (env.PAYSTACK_SECRET_KEY) {
     try {
       const balances = await getPaystackBalance()
-      paystackBalance = balances.reduce((sum, b) => sum + b.balance, 0)
+      paystackBalances = balances.reduce((acc, b) => {
+        const currency = (b.currency || 'NGN').toUpperCase()
+        acc[currency] = (acc[currency] || 0) + b.balance
+        return acc
+      }, {} as BalanceByCurrency)
     } catch (err) {
       balanceErrors.push(`Paystack balance error: ${err instanceof Error ? err.message : 'Unknown error'}`)
     }
   }
 
-  // Calculate expected platform balance
-  // This is simplified - real calculation would need to account for:
-  // - Pending transfers to creators
-  // - Processing fees from payment providers
-  // - Chargebacks/disputes
-  const expectedPlatformFees = stripeFees + paystackFees
-  const totalRefunds = stripeRefunds + paystackRefunds
+  // Note: We no longer calculate cross-currency totals as they're mathematically meaningless
+  // Each currency's fees/amounts should be viewed independently
 
   return c.json({
     period: {
@@ -143,42 +167,31 @@ financials.get('/reconciliation', auditSensitiveRead('financial_reconciliation')
     },
     collected: {
       stripe: {
-        gross: stripeGross,
-        platformFees: stripeFees,
+        byCurrency: stripeByCurrency,
         count: stripePayments.length,
-        currency: 'USD',
       },
       paystack: {
-        gross: paystackGross,
-        platformFees: paystackFees,
+        byCurrency: paystackByCurrency,
         count: paystackPayments.length,
-        currency: 'NGN', // Note: Paystack can have multiple currencies
       },
-      total: {
-        gross: stripeGross + paystackGross,
-        platformFees: expectedPlatformFees,
-        count: dbPayments.length,
-      }
+      totalCount: dbPayments.length,
+      note: 'Amounts grouped by currency - do not sum across currencies',
     },
     refunds: {
-      stripe: stripeRefunds,
-      paystack: paystackRefunds,
-      total: totalRefunds,
+      stripe: stripeRefundsByCurrency,
+      paystack: paystackRefundsByCurrency,
       count: refunds.length,
     },
     disputes: disputeStats,
     balances: {
-      stripe: stripeBalance,
-      paystack: paystackBalance,
+      stripe: stripeBalances,
+      paystack: paystackBalances,
       errors: balanceErrors.length > 0 ? balanceErrors : undefined,
-    },
-    platformFees: {
-      expected: expectedPlatformFees,
-      note: 'Platform fees collected (before processor fees)',
+      note: 'Balances grouped by currency',
     },
     warnings: [
-      stripeBalance === null ? 'Could not fetch Stripe balance' : null,
-      paystackBalance === null ? 'Could not fetch Paystack balance' : null,
+      stripeBalances === null ? 'Could not fetch Stripe balance' : null,
+      paystackBalances === null ? 'Could not fetch Paystack balance' : null,
       disputeStats.open > 0 ? `${disputeStats.open} open disputes totaling ${disputeStats.openAmount} cents` : null,
     ].filter(Boolean),
   })
