@@ -186,7 +186,7 @@ export async function handleCheckoutCompleted(event: Stripe.Event) {
   const hasNewFeeModel = feeModel && netAmount > 0
 
   if (feeModel === 'split_v1' && hasNewFeeModel) {
-    // New split fee model (4%/4%)
+    // New split fee model (4.5%/4.5%)
     grossCents = session.amount_total || 0  // Total subscriber paid
     feeCents = serviceFee                    // Total platform fee (8%)
     netCents = netAmount                     // What creator receives
@@ -578,7 +578,7 @@ export async function handleAsyncPaymentSucceeded(event: Stripe.Event) {
   const amountTotal = session.amount_total || 0
   const hasNewFeeModel = feeModel && netAmount > 0
   if (feeModel === 'split_v1' && hasNewFeeModel) {
-    // New split fee model (4%/4%)
+    // New split fee model (4.5%/4.5%)
     grossCents = amountTotal
     feeCents = serviceFee
     netCents = netAmount

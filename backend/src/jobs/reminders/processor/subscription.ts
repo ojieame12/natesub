@@ -65,7 +65,7 @@ export async function processSubscriptionRenewalReminder(
   const isCrossBorder = countryCode ? isStripeCrossBorderSupported(countryCode) : false
 
   if (subscription.feeModel === 'split_v1') {
-    // Split model: subscriber pays base + 4% (or more for cross-border)
+    // Split model: subscriber pays base + 4.5% (or more for cross-border)
     const feeCalc = calculateServiceFee(
       baseAmount,
       subscription.currency,
@@ -75,7 +75,7 @@ export async function processSubscriptionRenewalReminder(
     )
     chargeAmount = feeCalc.grossCents
   } else if (subscription.feeModel && subscription.feeMode === 'pass_to_subscriber') {
-    // Legacy pass_to_subscriber: subscriber pays base + 8%
+    // Legacy pass_to_subscriber: subscriber pays base + 9%
     const legacyFee = calculateLegacyServiceFee(
       baseAmount,
       subscription.currency,

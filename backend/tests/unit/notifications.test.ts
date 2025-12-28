@@ -94,11 +94,11 @@ describe('Notification Jobs', () => {
 
       await sendDunningEmails()
 
-      // Split model: $50 + 4% = $52 (5200 cents)
+      // Split model: $50 + 4.5% = $52.25 (5225 cents)
       expect(mockSendPaymentFailedEmail).toHaveBeenCalledWith(
         'sub@example.com',
         'Creator',
-        5200,
+        5225,
         'USD',
         expect.any(Date) // retry date
       )

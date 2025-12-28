@@ -5,7 +5,7 @@
 // NatePay uses SUBACCOUNT SPLITS for creator payouts, not manual transfers.
 // When a subscriber pays:
 // 1. Payment goes to Paystack with subaccount parameter
-// 2. Paystack automatically splits: 8% → NatePay, 92% → Creator
+// 2. Paystack automatically splits: 9% → NatePay, 91% → Creator
 // 3. Creator receives funds via T+1 automatic settlement
 // 4. NO manual transfers, NO OTP required
 //

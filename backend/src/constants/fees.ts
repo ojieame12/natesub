@@ -2,18 +2,18 @@
  * Fee Constants - Single source of truth for all fee calculations
  *
  * Split Fee Model (v2):
- * - 4% paid by subscriber (added to price)
- * - 4% paid by creator (deducted from payout)
- * - 8% total platform fee
+ * - 4.5% paid by subscriber (added to price)
+ * - 4.5% paid by creator (deducted from payout)
+ * - 9% total platform fee
  *
- * Psychology: Neither party sees "8%" - both see 4% as reasonable.
+ * Psychology: Neither party sees "9%" - both see 4.5% as reasonable.
  */
 
-// Total platform fee rate: 8%
-export const PLATFORM_FEE_RATE = 0.08
+// Total platform fee rate: 9%
+export const PLATFORM_FEE_RATE = 0.09
 
-// Split rate: each party pays 4%
-export const SPLIT_RATE = 0.04
+// Split rate: each party pays 4.5%
+export const SPLIT_RATE = 0.045
 
 // Cross-border buffer for FX/Stripe surcharge: 1.5%
 export const CROSS_BORDER_BUFFER = 0.015

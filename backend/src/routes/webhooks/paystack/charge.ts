@@ -145,7 +145,7 @@ export async function handlePaystackChargeSuccess(data: any, eventId: string) {
 
   const hasNewFeeModel = feeModel && netAmount > 0
   if (feeModel === 'split_v1' && hasNewFeeModel) {
-    // New split fee model (4%/4%)
+    // New split fee model (4.5%/4.5%)
     grossCents = amount  // Total subscriber paid
     feeCents = serviceFee
     netCents = netAmount  // What creator receives
@@ -326,7 +326,7 @@ export async function handlePaystackChargeSuccess(data: any, eventId: string) {
   // This is acceptable because:
   // 1. Paystack has lower chargeback rates than card payments
   // 2. Paystack disputes are handled differently (direct bank debits are final)
-  // 3. The fee structure (8%) provides buffer for occasional losses
+  // 3. The fee structure (9%) provides buffer for occasional losses
   //
   // Future options if loss rate becomes significant:
   // - Adjust platform fee for Paystack creators

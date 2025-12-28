@@ -7,11 +7,11 @@ import { PLATFORM_FEE_RATE, SPLIT_RATE, CROSS_BORDER_BUFFER } from './pricing'
 const server = setupServer(
   http.get('*/config/fees', () => {
     return HttpResponse.json({
-      platformFeeRate: 0.08,
-      splitRate: 0.04,
+      platformFeeRate: 0.09,
+      splitRate: 0.045,
       crossBorderBuffer: 0.015,
-      platformFeePercent: 8,
-      splitPercent: 4,
+      platformFeePercent: 9,
+      splitPercent: 4.5,
     })
   })
 )
@@ -21,19 +21,19 @@ afterAll(() => server.close())
 
 describe('fee constants synchronization', () => {
   describe('frontend fallback values', () => {
-    it('PLATFORM_FEE_RATE is 8%', () => {
-      expect(PLATFORM_FEE_RATE).toBe(0.08)
+    it('PLATFORM_FEE_RATE is 9%', () => {
+      expect(PLATFORM_FEE_RATE).toBe(0.09)
     })
 
-    it('SPLIT_RATE is 4%', () => {
-      expect(SPLIT_RATE).toBe(0.04)
+    it('SPLIT_RATE is 4.5%', () => {
+      expect(SPLIT_RATE).toBe(0.045)
     })
 
     it('CROSS_BORDER_BUFFER is 1.5%', () => {
       expect(CROSS_BORDER_BUFFER).toBe(0.015)
     })
 
-    it('SPLIT_RATE * 2 equals PLATFORM_FEE_RATE (4% + 4% = 8%)', () => {
+    it('SPLIT_RATE * 2 equals PLATFORM_FEE_RATE (4.5% + 4.5% = 9%)', () => {
       expect(SPLIT_RATE * 2).toBe(PLATFORM_FEE_RATE)
     })
   })
@@ -61,8 +61,8 @@ describe('fee constants synchronization', () => {
       const { api } = await import('../api/client')
       const backendFees = await api.config.getFees()
 
-      // Backend should return 8, not 0.08
-      expect(backendFees?.platformFeePercent).toBe(8)
+      // Backend should return 9, not 0.09
+      expect(backendFees?.platformFeePercent).toBe(9)
     })
   })
 })

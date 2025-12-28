@@ -376,7 +376,7 @@ describe('Dispute Fee Breakdown Fallback', () => {
       creatorId: 'creator-123',
       subscriberId: 'subscriber-456',
       grossCents: 50000,
-      netCents: 46000, // After 8% fee
+      netCents: 45500, // After 9% fee
       creatorFeeCents: null, // Legacy payment
       subscriberFeeCents: null,
       feeModel: null,

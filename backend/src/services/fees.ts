@@ -2,11 +2,11 @@
  * Fee Calculation Service
  *
  * Split Fee Model (v2):
- * - 4% paid by subscriber (added to price)
- * - 4% paid by creator (deducted from payout)
- * - 8% total platform fee
+ * - 4.5% paid by subscriber (added to price)
+ * - 4.5% paid by creator (deducted from payout)
+ * - 9% total platform fee
  *
- * Psychology: Neither party sees "8%" - both see 4% as reasonable.
+ * Psychology: Neither party sees "9%" - both see 4.5% as reasonable.
  *
  * Processor Buffer: Guarantees positive margin by ensuring platform fee
  * always exceeds estimated processor costs + minimum margin.
@@ -35,10 +35,10 @@ export {
 }
 
 export interface FeeCalculation {
-  feeCents: number              // Total platform fee (8%)
-  subscriberFeeCents: number    // Subscriber's portion (4%)
-  creatorFeeCents: number       // Creator's portion (4%)
-  effectiveRate: number         // 0.04 (each side's rate)
+  feeCents: number              // Total platform fee (9%)
+  subscriberFeeCents: number    // Subscriber's portion (4.5%)
+  creatorFeeCents: number       // Creator's portion (4.5%)
+  effectiveRate: number         // 0.045 (each side's rate)
   grossCents: number            // Total subscriber pays (base + subscriber fee)
   netCents: number              // What creator receives (base - creator fee)
   baseCents: number             // Original price before split
@@ -60,7 +60,7 @@ function estimateProcessorFee(grossCents: number, currency: string): number {
 }
 
 /**
- * Calculate service fee using split model (4%/4%)
+ * Calculate service fee using split model (4.5%/4.5%)
  *
  * @param amountCents - Creator's set price in smallest currency unit (cents/kobo)
  * @param currency - ISO currency code (USD, NGN, ZAR, etc)
@@ -71,12 +71,12 @@ function estimateProcessorFee(grossCents: number, currency: string): number {
  *
  * @example
  * // Split model: $100 base price
- * // Subscriber pays: $100 + $4 (4%) = $104
- * // Creator gets: $100 - $4 (4%) = $96
- * // Platform keeps: $8 (8% total)
+ * // Subscriber pays: $100 + $4.50 (4.5%) = $104.50
+ * // Creator gets: $100 - $4.50 (4.5%) = $95.50
+ * // Platform keeps: $9 (9% total)
  * calculateServiceFee(10000, 'USD', 'personal')
- * // Returns: { feeCents: 800, subscriberFeeCents: 400, creatorFeeCents: 400,
- * //           grossCents: 10400, netCents: 9600, baseCents: 10000 }
+ * // Returns: { feeCents: 900, subscriberFeeCents: 450, creatorFeeCents: 450,
+ * //           grossCents: 10450, netCents: 9550, baseCents: 10000 }
  */
 export function calculateServiceFee(
   amountCents: number,
@@ -113,7 +113,7 @@ export function calculateServiceFee(
     }
   }
 
-  // Calculate split fees (4% each side)
+  // Calculate split fees (4.5% each side)
   let splitRate = SPLIT_RATE
 
   // Add cross-border buffer if applicable (subscriber pays more)
@@ -122,7 +122,7 @@ export function calculateServiceFee(
   }
 
   // Calculate total fee with single rounding to avoid accumulation errors
-  // Each side pays splitRate (e.g., 4%), so total = 2 * splitRate (e.g., 8%)
+  // Each side pays splitRate (e.g., 4.5%), so total = 2 * splitRate (e.g., 9%)
   const totalRate = splitRate * 2
   let totalFeeCents = Math.round(amountCents * totalRate)
   // Split deterministically: subscriber pays ceiling, creator pays remainder
@@ -228,7 +228,7 @@ export function calculateLegacyServiceFee(
     }
   }
 
-  // Legacy rate calculation (8% flat)
+  // Legacy rate calculation (9% flat)
   let rate = PLATFORM_FEE_RATE
   if (isCrossBorder) {
     rate += CROSS_BORDER_BUFFER
@@ -310,17 +310,17 @@ export function formatRate(rate: number): string {
 }
 
 /**
- * Get the platform fee rate (always 8% total, 4% each side)
+ * Get the platform fee rate (always 9% total, 4.5% each side)
  */
 export function getFeeRate(_purpose?: UserPurpose | null): number {
-  return PLATFORM_FEE_RATE // 8% flat for all purposes
+  return PLATFORM_FEE_RATE // 9% flat for all purposes
 }
 
 /**
  * Get the split rate (what each party pays)
  */
 export function getSplitRate(): number {
-  return SPLIT_RATE // 4% each
+  return SPLIT_RATE // 4.5% each
 }
 
 // Fixed fee amounts per currency (for legacy calculations)
@@ -349,7 +349,7 @@ export function calculateLegacyFee(
 ): { feeCents: number; netCents: number } {
   const normalizedCurrency = currency.toUpperCase()
   const fixedFee = LEGACY_FIXED_FEE[normalizedCurrency] || DEFAULT_LEGACY_FIXED
-  // Use 8% flat rate with currency-appropriate fixed fee
+  // Use 9% flat rate with currency-appropriate fixed fee
   const feeCents = Math.round(amountCents * PLATFORM_FEE_RATE) + fixedFee
   return {
     feeCents,

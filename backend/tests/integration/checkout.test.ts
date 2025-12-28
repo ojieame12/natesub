@@ -261,13 +261,13 @@ describe('checkout flow', () => {
       expect(res.status).toBe(200)
 
       // Verify split fee fields in the call to Stripe
-      // $100.00 base + 4% subscriber fee = $104.00 gross
-      // $100.00 base - 4% creator fee = $96.00 net
+      // $100.00 base + 4.5% subscriber fee = $104.50 gross
+      // $100.00 base - 4.5% creator fee = $95.50 net
       expect(mockCreateCheckoutSession).toHaveBeenCalledWith(
         expect.objectContaining({
-          grossAmount: 10400,
-          netAmount: 9600,
-          serviceFee: 800, // 8% total
+          grossAmount: 10450,
+          netAmount: 9550,
+          serviceFee: 900, // 9% total
         })
       )
 
@@ -275,8 +275,8 @@ describe('checkout flow', () => {
       const callArgs = mockCreateCheckoutSession.mock.calls[0][0]
       expect(callArgs.feeMetadata).toMatchObject({
         feeModel: 'split_v1',
-        subscriberFeeCents: 400,
-        creatorFeeCents: 400,
+        subscriberFeeCents: 450,
+        creatorFeeCents: 450,
         baseAmountCents: 10000,
       })
     })
@@ -317,13 +317,13 @@ describe('checkout flow', () => {
 
       expect(res.status).toBe(200)
 
-      // Verify cross-border buffer: 4.75% each (4% + 0.75%)
-      // $100.00 base + 4.75% = $104.75
+      // Verify cross-border buffer: 5.25% each (4.5% + 0.75%)
+      // $100.00 base + 5.25% = $105.25
       const callArgs = mockCreateCheckoutSession.mock.calls[0][0]
-      expect(callArgs.grossAmount).toBe(10475) // $104.75
-      expect(callArgs.serviceFee).toBe(950)    // 9.5% total (4.75% × 2)
-      expect(callArgs.feeMetadata.subscriberFeeCents).toBe(475) // 4.75%
-      expect(callArgs.feeMetadata.creatorFeeCents).toBe(475)    // 4.75%
+      expect(callArgs.grossAmount).toBe(10525) // $105.25
+      expect(callArgs.serviceFee).toBe(1050)   // 10.5% total (5.25% × 2)
+      expect(callArgs.feeMetadata.subscriberFeeCents).toBe(525) // 5.25%
+      expect(callArgs.feeMetadata.creatorFeeCents).toBe(525)    // 5.25%
     })
 
     it('passes split fee metadata to Paystack checkout', async () => {
@@ -357,14 +357,14 @@ describe('checkout flow', () => {
       expect(res.status).toBe(200)
 
       // Verify split fee fields in Paystack call
-      // ₦50,000 base + 4% = ₦52,000 gross
+      // ₦50,000 base + 4.5% = ₦52,250 gross
       const callArgs = mockInitializePaystackCheckout.mock.calls[0][0]
-      expect(callArgs.amount).toBe(5200000) // ₦52,000 in kobo (subscriber pays gross)
+      expect(callArgs.amount).toBe(5225000) // ₦52,250 in kobo (subscriber pays gross)
       expect(callArgs.subaccountCode).toBe('ACCT_123') // Subaccount for auto-split
       expect(callArgs.metadata).toMatchObject({
         feeModel: 'split_v1',
-        subscriberFee: 200000,  // 4% of ₦50,000
-        creatorFee: 200000,     // 4% of ₦50,000
+        subscriberFee: 225000,  // 4.5% of ₦50,000
+        creatorFee: 225000,     // 4.5% of ₦50,000
         baseAmount: 5000000,
       })
     })

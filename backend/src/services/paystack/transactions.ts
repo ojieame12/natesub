@@ -39,7 +39,7 @@ interface TransactionListResponse {
  * Initialize checkout with subaccount split
  *
  * Uses Paystack subaccount to automatically split payments:
- * - Platform fee (8%) retained by platform via subaccount percentage_charge
+ * - Platform fee (9%) retained by platform via subaccount percentage_charge
  * - Creator receives the rest directly from Paystack on T+1 settlement
  */
 export async function initializePaystackCheckout(params: {
@@ -69,6 +69,14 @@ export async function initializePaystackCheckout(params: {
     checkoutAcceptLanguage?: string
   }
 }): Promise<TransactionInit> {
+  // Adaptive Channels:
+  // - Subscriptions: Strict ['card'] only to ensure recurring auto-debit works
+  // - One-time: All channels (Mobile Money, USSD, etc.) to maximize conversion
+  const isSubscription = params.metadata.interval === 'month'
+  const channels = isSubscription
+    ? ['card']
+    : ['card', 'bank', 'ussd', 'qr', 'mobile_money', 'bank_transfer']
+
   const response = await paystackFetch<TransactionInit>('/transaction/initialize', {
     method: 'POST',
     body: JSON.stringify({
@@ -80,7 +88,7 @@ export async function initializePaystackCheckout(params: {
       callback_url: params.callbackUrl,
       metadata: params.metadata,
       reference: params.reference,
-      channels: ['card'],
+      channels,
     }),
   })
 
@@ -100,6 +108,14 @@ export async function initializeTransaction(params: {
   metadata: Record<string, any>
   reference?: string
 }): Promise<TransactionInit> {
+  // Legacy handler - check metadata for interval, default to card if missing
+  const interval = params.metadata?.interval
+  const isSubscription = interval === 'month' || !interval // Default to strict if unknown
+  
+  const channels = isSubscription
+    ? ['card']
+    : ['card', 'bank', 'ussd', 'qr', 'mobile_money', 'bank_transfer']
+
   const response = await paystackFetch<TransactionInit>('/transaction/initialize', {
     method: 'POST',
     body: JSON.stringify({
@@ -111,7 +127,7 @@ export async function initializeTransaction(params: {
       callback_url: params.callbackUrl,
       metadata: params.metadata,
       reference: params.reference,
-      channels: ['card'],
+      channels,
     }),
   })
 

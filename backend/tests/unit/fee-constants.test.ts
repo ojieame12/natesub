@@ -18,12 +18,12 @@ import {
 
 describe('Fee Constants', () => {
   describe('Core Fee Rates', () => {
-    it('platform fee rate should be 8%', () => {
-      expect(PLATFORM_FEE_RATE).toBe(0.08)
+    it('platform fee rate should be 9%', () => {
+      expect(PLATFORM_FEE_RATE).toBe(0.09)
     })
 
-    it('split rate should be 4% (half of platform fee)', () => {
-      expect(SPLIT_RATE).toBe(0.04)
+    it('split rate should be 4.5% (half of platform fee)', () => {
+      expect(SPLIT_RATE).toBe(0.045)
     })
 
     it('split rates should sum to platform fee', () => {

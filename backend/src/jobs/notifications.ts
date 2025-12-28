@@ -104,8 +104,8 @@ export async function sendDunningEmails(): Promise<NotificationResult> {
 
       // Calculate what the subscriber will actually pay
       // Uses subscription's feeModel to determine calculation method:
-      // - split_v1: subscriber pays base + 4%
-      // - legacy: respects profile's feeMode (absorb = no extra, pass_to_subscriber = +8%)
+      // - split_v1: subscriber pays base + 4.5%
+      // - legacy: respects profile's feeMode (absorb = no extra, pass_to_subscriber = +9%)
       const feeMode = (sub.creator.profile?.feeMode ?? 'split') as FeeMode
       const feeCalc = (sub as any).feeModel === 'split_v1'
         ? calculateServiceFee(sub.amount, sub.currency, sub.creator.profile?.purpose)

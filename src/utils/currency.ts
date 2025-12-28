@@ -451,7 +451,7 @@ export function isReasonableAmount(amount: number, currencyCode: string): boolea
 
 // ============================================
 // FEE CALCULATION (mirrors backend/services/fees.ts)
-// Split Fee Model (v2): 4% subscriber + 4% creator = 8% total
+// Split Fee Model (v2): 4.5% subscriber + 4.5% creator = 9% total
 // ============================================
 
 // Import fee constants from pricing.ts (single source of truth for frontend)
@@ -460,8 +460,8 @@ import { SPLIT_RATE, CROSS_BORDER_BUFFER, type FeeConfigOverride } from './prici
 export interface FeePreview {
     creatorReceives: number      // What creator gets (in dollars)
     subscriberPays: number       // Total subscriber pays (in dollars)
-    serviceFee: number           // Subscriber's fee portion (legacy: 4%)
-    creatorFee: number           // Creator's fee portion (legacy: 4%)
+    serviceFee: number           // Subscriber's fee portion (4.5%)
+    creatorFee: number           // Creator's fee portion (4.5%)
     totalFee: number             // Total platform fee
     effectiveRate: number        // Fee percentage
     effectiveRatePercent: string // Formatted as "X%"
@@ -473,12 +473,12 @@ export interface FeePreview {
 }
 
 /**
- * Calculate fee preview using split model (4%/4%)
- * Both subscriber and creator pay 4% each = 8% total platform fee
+ * Calculate fee preview using split model (4.5%/4.5%)
+ * Both subscriber and creator pay 4.5% each = 9% total platform fee
  *
  * @param amountDollars - Creator's set price in dollars
  * @param _currency - Currency code (unused, kept for API compatibility)
- * @param _purpose - Creator's purpose (unused - all purposes use 8% now)
+ * @param _purpose - Creator's purpose (unused - all purposes use 9% now)
  * @param _feeMode - DEPRECATED: Ignored, always uses split model
  * @param isCrossBorder - Whether subscriber is in different country
  * @param feeConfig - Optional: pass values from useFeeConfig() hook

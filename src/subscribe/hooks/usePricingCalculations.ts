@@ -15,7 +15,7 @@ interface PricingCalculations {
 /**
  * usePricingCalculations - Centralized pricing/fee calculations for subscribe page
  *
- * Uses split fee model: 4% subscriber + 4% creator = 8% total
+ * Uses split fee model: 4.5% subscriber + 4.5% creator = 9% total
  * Fee rates are sourced from backend API via useFeeConfig()
  */
 export function usePricingCalculations(profile: Profile): PricingCalculations {

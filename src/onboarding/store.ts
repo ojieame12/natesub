@@ -207,7 +207,7 @@ const initialState = {
     servicePerks: [] as ServicePerk[],
     bannerUrl: null as string | null,
     paymentProvider: null as PaymentProvider,
-    feeMode: 'split' as FeeMode, // Default: 4%/4% split between subscriber and creator
+    feeMode: 'split' as FeeMode, // Default: 4.5%/4.5% split between subscriber and creator
 }
 
 // === Store ===

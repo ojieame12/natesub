@@ -551,7 +551,7 @@ async function findPayoutForPeriod(
 /**
  * Generate a payroll period for a user for a specific currency
  * This aggregates all payments in the period and creates a snapshot
- * Fee rate is 8% for all users (split: 4% subscriber + 4% creator)
+ * Fee rate is 9% for all users (split: 4.5% subscriber + 4.5% creator)
  */
 export async function generatePayrollPeriod(
   userId: string,

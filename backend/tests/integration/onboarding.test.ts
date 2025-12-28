@@ -187,6 +187,58 @@ describe('onboarding endpoints', () => {
       expect(body.profile.impactItems).toEqual(impactItems)
     })
 
+    it('rejects service profile with fewer than 3 perks', async () => {
+      await createTestUserWithSession('service-no-perks@test.com')
+
+      const res = await authRequest('/profile', {
+        method: 'PUT',
+        body: JSON.stringify({
+          username: 'servicenoperks',
+          displayName: 'Service No Perks',
+          country: 'United States',
+          countryCode: 'US',
+          currency: 'USD',
+          purpose: 'service',
+          pricingModel: 'single',
+          singleAmount: 50,
+          perks: [
+            { id: 'perk-1', title: 'Only one perk', enabled: true },
+          ],
+        }),
+      })
+
+      expect(res.status).toBe(400)
+      const body = await res.json()
+      expect(body.error).toContain('at least 3 perks')
+    })
+
+    it('accepts service profile with 3 perks', async () => {
+      await createTestUserWithSession('service-with-perks@test.com')
+
+      const res = await authRequest('/profile', {
+        method: 'PUT',
+        body: JSON.stringify({
+          username: 'servicewithperks',
+          displayName: 'Service With Perks',
+          country: 'United States',
+          countryCode: 'US',
+          currency: 'USD',
+          purpose: 'service',
+          pricingModel: 'single',
+          singleAmount: 50,
+          perks: [
+            { id: 'perk-1', title: 'Perk 1', enabled: true },
+            { id: 'perk-2', title: 'Perk 2', enabled: true },
+            { id: 'perk-3', title: 'Perk 3', enabled: true },
+          ],
+        }),
+      })
+
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.profile.perks).toHaveLength(3)
+    })
+
     it('stores paymentProvider selection', async () => {
       await createTestUserWithSession()
 
@@ -1326,6 +1378,13 @@ describe('onboarding endpoints', () => {
     async function createProfileForPatch(email: string, purpose = 'tips') {
       const { user, rawToken } = await createTestUserWithSession(email)
 
+      // Service users require at least 3 perks
+      const perks = purpose === 'service' ? [
+        { id: 'perk-1', title: 'Perk 1', enabled: true },
+        { id: 'perk-2', title: 'Perk 2', enabled: true },
+        { id: 'perk-3', title: 'Perk 3', enabled: true },
+      ] : undefined
+
       await authRequest('/profile', {
         method: 'PUT',
         body: JSON.stringify({
@@ -1338,6 +1397,7 @@ describe('onboarding endpoints', () => {
           pricingModel: 'single',
           singleAmount: 10,
           paymentProvider: 'stripe',
+          perks,
         }),
       }, rawToken)
 

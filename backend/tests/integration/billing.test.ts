@@ -174,10 +174,10 @@ describe('Billing Jobs', () => {
       expect(payments[0].status).toBe('succeeded')
       // grossCents includes subscriber fee + processor buffer
       expect(payments[0].amountCents).toBeGreaterThan(500000)
-      // Fee should be ~8% of base + buffer
-      expect(payments[0].feeCents).toBeGreaterThan(30000)
+      // Fee should be ~9% of base + buffer
+      expect(payments[0].feeCents).toBeGreaterThan(35000)
       expect(payments[0].feeCents).toBeLessThan(60000)
-      // Net should be ~96% of base (after creator's 4% fee)
+      // Net should be ~95.5% of base (after creator's 4.5% fee)
       expect(payments[0].netCents).toBeGreaterThan(450000)
       expect(payments[0].netCents).toBeLessThan(500000)
 

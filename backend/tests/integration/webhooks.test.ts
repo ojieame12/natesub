@@ -228,7 +228,7 @@ describe('stripe webhooks', () => {
             id: 'cs_async_test',
             mode: 'payment', // One-time, not subscription
             payment_status: 'paid',
-            amount_total: 10400, // $104.00 gross (base + subscriber fee)
+            amount_total: 10450, // $104.50 gross (base + subscriber fee)
             currency: 'usd',
             customer: 'cus_async_subscriber',
             customer_details: {
@@ -238,10 +238,10 @@ describe('stripe webhooks', () => {
             metadata: {
               creatorId: creator.id,
               feeModel: 'split_v1',
-              serviceFee: '800',        // 8% total fee
-              netAmount: '9600',        // $96 - what creator receives
-              subscriberFeeCents: '400',
-              creatorFeeCents: '400',
+              serviceFee: '900',        // 9% total fee
+              netAmount: '9550',        // $95.50 - what creator receives
+              subscriberFeeCents: '450',
+              creatorFeeCents: '450',
               baseAmountCents: '10000', // $100 - creator's set price
             },
           },
@@ -257,21 +257,21 @@ describe('stripe webhooks', () => {
       })
       expect(subscriptions.length).toBe(1)
       expect(subscriptions[0].interval).toBe('one_time')
-      // CRITICAL: amount should be basePrice ($100), not netCents ($96)
+      // CRITICAL: amount should be basePrice ($100), not netCents ($95.50)
       expect(subscriptions[0].amount).toBe(10000) // Base price for tier display
       // LTV should be netCents (actual creator earnings)
-      expect(subscriptions[0].ltvCents).toBe(9600)
+      expect(subscriptions[0].ltvCents).toBe(9550)
 
       // Verify payment was created with correct fee breakdown
       const payments = await db.payment.findMany({
         where: { stripeEventId: 'evt_async_payment_succeeded_1' },
       })
       expect(payments.length).toBe(1)
-      expect(payments[0].grossCents).toBe(10400)
-      expect(payments[0].netCents).toBe(9600)
-      expect(payments[0].feeCents).toBe(800)
-      expect(payments[0].subscriberFeeCents).toBe(400)
-      expect(payments[0].creatorFeeCents).toBe(400)
+      expect(payments[0].grossCents).toBe(10450)
+      expect(payments[0].netCents).toBe(9550)
+      expect(payments[0].feeCents).toBe(900)
+      expect(payments[0].subscriberFeeCents).toBe(450)
+      expect(payments[0].creatorFeeCents).toBe(450)
     })
 
     it('falls back gracefully when baseAmountCents is missing', async () => {
@@ -564,7 +564,7 @@ describe('stripe webhooks', () => {
             id: 'cs_split_test',
             mode: 'payment',
             payment_status: 'paid',
-            amount_total: 10400, // $104.00 (base + 4% subscriber fee)
+            amount_total: 10450, // $104.50 (base + 4.5% subscriber fee)
             currency: 'usd',
             customer: 'cus_split_subscriber',
             customer_details: {
@@ -574,10 +574,10 @@ describe('stripe webhooks', () => {
             metadata: {
               creatorId: creator.id,
               feeModel: 'split_v1',
-              serviceFee: '800', // Total platform fee (8%)
-              netAmount: '9600', // What creator receives
-              subscriberFeeCents: '400',
-              creatorFeeCents: '400',
+              serviceFee: '900', // Total platform fee (9%)
+              netAmount: '9550', // What creator receives
+              subscriberFeeCents: '450',
+              creatorFeeCents: '450',
               baseAmountCents: '10000',
             },
           },
@@ -592,11 +592,11 @@ describe('stripe webhooks', () => {
         where: { stripeEventId: 'evt_split_checkout' },
       })
       expect(payments.length).toBe(1)
-      expect(payments[0].grossCents).toBe(10400)
-      expect(payments[0].netCents).toBe(9600)
-      expect(payments[0].feeCents).toBe(800) // 4% + 4% = 8%
-      expect(payments[0].subscriberFeeCents).toBe(400)
-      expect(payments[0].creatorFeeCents).toBe(400)
+      expect(payments[0].grossCents).toBe(10450)
+      expect(payments[0].netCents).toBe(9550)
+      expect(payments[0].feeCents).toBe(900) // 4.5% + 4.5% = 9%
+      expect(payments[0].subscriberFeeCents).toBe(450)
+      expect(payments[0].creatorFeeCents).toBe(450)
     })
 
     it('handles legacy subscriptions without split fee fields', async () => {
@@ -646,7 +646,7 @@ describe('stripe webhooks', () => {
           object: {
             id: 'inv_legacy_123',
             subscription: 'sub_legacy_renewal',
-            amount_paid: 10800, // Original price with 8% fee ($108)
+            amount_paid: 10900, // Original price with 9% fee ($109)
             currency: 'usd',
             lines: {
               data: [{ period: { end: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60 } }],
@@ -663,10 +663,10 @@ describe('stripe webhooks', () => {
         where: { subscriptionId: subscription.id },
       })
       expect(payments.length).toBe(1)
-      // Legacy fee: 8% of invoice.amount_paid + 30¢ buffer
-      // Note: Legacy calculation uses the gross amount (10800), not base (10000)
-      // feeCents = round(10800 * 0.08) + 30 = 864 + 30 = 894
-      expect(payments[0].feeCents).toBe(894)
+      // Legacy fee: 9% of invoice.amount_paid + 30¢ buffer
+      // Note: Legacy calculation uses the gross amount (10900), not base (10000)
+      // feeCents = round(10900 * 0.09) + 30 = 981 + 30 = 1011
+      expect(payments[0].feeCents).toBe(1011)
       // Legacy doesn't use split fields
       expect(payments[0].subscriberFeeCents).toBeNull()
       expect(payments[0].creatorFeeCents).toBeNull()
@@ -718,9 +718,9 @@ describe('stripe webhooks', () => {
           object: {
             id: 'inv_split_123',
             subscription: 'sub_split_renewal',
-            amount_paid: 10400, // $104.00 gross
+            amount_paid: 10450, // $104.50 gross
             currency: 'usd',
-            application_fee_amount: 800, // 8% fee
+            application_fee_amount: 900, // 9% fee
             lines: {
               data: [{ period: { end: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60 } }],
             },
@@ -736,11 +736,11 @@ describe('stripe webhooks', () => {
         where: { subscriptionId: subscription.id },
       })
       expect(payments.length).toBe(1)
-      expect(payments[0].feeCents).toBe(800) // 8% total
-      expect(payments[0].subscriberFeeCents).toBe(400) // 4%
-      expect(payments[0].creatorFeeCents).toBe(400) // 4%
-      expect(payments[0].grossCents).toBe(10400)
-      expect(payments[0].netCents).toBe(9600)
+      expect(payments[0].feeCents).toBe(900) // 9% total
+      expect(payments[0].subscriberFeeCents).toBe(450) // 4.5%
+      expect(payments[0].creatorFeeCents).toBe(450) // 4.5%
+      expect(payments[0].grossCents).toBe(10450)
+      expect(payments[0].netCents).toBe(9550)
     })
   })
 })

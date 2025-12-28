@@ -29,7 +29,7 @@ vi.mock('../api/hooks', () => ({
     mutateAsync: mockUpdatePageView,
   })),
   useFeeConfig: vi.fn(() => ({
-    data: { platformFeeRate: 0.08, splitRate: 0.04, crossBorderBuffer: 0.015 },
+    data: { platformFeeRate: 0.09, splitRate: 0.045, crossBorderBuffer: 0.015 },
     isLoading: false,
   })),
 }))

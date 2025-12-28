@@ -26,12 +26,12 @@ config.get('/fees', (c) => {
   c.header('Cache-Control', 'public, max-age=3600') // 1 hour
 
   return c.json({
-    platformFeeRate: PLATFORM_FEE_RATE,     // 0.08 (8%)
-    splitRate: SPLIT_RATE,                   // 0.04 (4% each party)
+    platformFeeRate: PLATFORM_FEE_RATE,     // 0.09 (9%)
+    splitRate: SPLIT_RATE,                   // 0.045 (4.5% each party)
     crossBorderBuffer: CROSS_BORDER_BUFFER,  // 0.015 (1.5%)
     // Derived values for convenience
-    platformFeePercent: PLATFORM_FEE_RATE * 100,  // 8
-    splitPercent: SPLIT_RATE * 100,               // 4
+    platformFeePercent: PLATFORM_FEE_RATE * 100,  // 9
+    splitPercent: SPLIT_RATE * 100,               // 4.5
   })
 })
 

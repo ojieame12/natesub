@@ -192,8 +192,8 @@ checkout.post(
     const isStripeCrossBorder = hasStripe && isStripeCrossBorderSupported(profile.countryCode)
     const isCrossBorder = isStripeCrossBorder // Simplified: if Stripe is chosen, hasPaystack is already false
 
-    // Calculate service fee using split model (4%/4%)
-    // Both subscriber and creator pay 4% each
+    // Calculate service fee using split model (4.5%/4.5%)
+    // Both subscriber and creator pay 4.5% each
     const feeCalc = calculateServiceFee(
       amount,
       profile.currency,
@@ -627,11 +627,11 @@ checkout.get(
 function buildBreakdown(feeCalc: FeeCalculation, currency: string) {
   return {
     baseAmount: feeCalc.baseCents,         // Creator's set price
-    creatorAmount: feeCalc.netCents,       // What creator receives (after their 4%)
-    totalAmount: feeCalc.grossCents,       // What subscriber pays (base + their 4%)
-    serviceFee: feeCalc.feeCents,          // Total platform fee (8%)
-    subscriberFee: feeCalc.subscriberFeeCents, // Subscriber's portion (4%)
-    creatorFee: feeCalc.creatorFeeCents,   // Creator's portion (4%)
+    creatorAmount: feeCalc.netCents,       // What creator receives (after their 4.5%)
+    totalAmount: feeCalc.grossCents,       // What subscriber pays (base + their 4.5%)
+    serviceFee: feeCalc.feeCents,          // Total platform fee (9%)
+    subscriberFee: feeCalc.subscriberFeeCents, // Subscriber's portion (4.5%)
+    creatorFee: feeCalc.creatorFeeCents,   // Creator's portion (4.5%)
     effectiveRate: feeCalc.effectiveRate,
     currency,
     feeModel: feeCalc.feeModel,

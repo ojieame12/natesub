@@ -4,15 +4,15 @@ import { calculateServiceFee, calculateLegacyServiceFee } from '../../src/servic
 describe('calculateServiceFee (split model v2)', () => {
   it('should split fee 50/50 between subscriber and creator', () => {
     // $100 base price
-    // Subscriber pays: $100 + $4 (4%) = $104
-    // Creator gets: $100 - $4 (4%) = $96
-    // Platform keeps: $8 (8% total)
+    // Subscriber pays: $100 + $4.50 (4.5%) = $104.50
+    // Creator gets: $100 - $4.50 (4.5%) = $95.50
+    // Platform keeps: $9 (9% total)
     const result = calculateServiceFee(10000, 'USD', 'personal')
-    expect(result.subscriberFeeCents).toBe(400)  // 4%
-    expect(result.creatorFeeCents).toBe(400)     // 4%
-    expect(result.feeCents).toBe(800)            // 8% total
-    expect(result.grossCents).toBe(10400)        // $104
-    expect(result.netCents).toBe(9600)           // $96
+    expect(result.subscriberFeeCents).toBe(450)  // 4.5%
+    expect(result.creatorFeeCents).toBe(450)     // 4.5%
+    expect(result.feeCents).toBe(900)            // 9% total
+    expect(result.grossCents).toBe(10450)        // $104.50
+    expect(result.netCents).toBe(9550)           // $95.50
     expect(result.baseCents).toBe(10000)         // Original price
     expect(result.feeMode).toBe('split')
     expect(result.feeModel).toBe('split_v1')
@@ -20,13 +20,13 @@ describe('calculateServiceFee (split model v2)', () => {
 
   it('should apply processor buffer on small transactions', () => {
     // $5 base price
-    // Naive 4% each = $0.20 subscriber + $0.20 creator = $0.40 total
-    // But processor fee (~2.9% + $0.30) ≈ $0.45 would exceed platform fee
+    // Naive 4.5% each = $0.225 subscriber + $0.225 creator = $0.45 total
+    // But processor fee (~2.9% + $0.30) ≈ $0.45 would match platform fee
     // So buffer kicks in to ensure positive margin
     const result = calculateServiceFee(500, 'USD', 'personal')
     expect(result.feeWasCapped).toBe(true)
     expect(result.estimatedMargin).toBeGreaterThan(0)
-    expect(result.feeCents).toBeGreaterThan(40) // More than naive 8%
+    expect(result.feeCents).toBeGreaterThan(45) // More than naive 9%
   })
 
   it('should guarantee positive margin on all transactions', () => {
@@ -43,20 +43,20 @@ describe('calculateServiceFee (split model v2)', () => {
 
   it('should add cross-border buffer (1.5% split between parties)', () => {
     // $100 base price with cross-border
-    // Base rate: 4% each + 0.75% each = 4.75% each
-    // Subscriber: ~$4.75, Creator: ~$4.75
+    // Base rate: 4.5% each + 0.75% each = 5.25% each
+    // Subscriber: ~$5.25, Creator: ~$5.25
     const result = calculateServiceFee(10000, 'USD', 'personal', undefined, true)
-    expect(result.subscriberFeeCents).toBe(475) // 4.75%
-    expect(result.creatorFeeCents).toBe(475)    // 4.75%
-    expect(result.feeCents).toBe(950)           // 9.5% total
+    expect(result.subscriberFeeCents).toBe(525) // 5.25%
+    expect(result.creatorFeeCents).toBe(525)    // 5.25%
+    expect(result.feeCents).toBe(1050)          // 10.5% total
   })
 
   it('should ignore legacy feeMode parameter', () => {
     // Even if we pass 'absorb', it should use split model
     const result = calculateServiceFee(10000, 'USD', 'personal', 'absorb')
     expect(result.feeMode).toBe('split')
-    expect(result.subscriberFeeCents).toBe(400) // 4%
-    expect(result.creatorFeeCents).toBe(400)    // 4%
+    expect(result.subscriberFeeCents).toBe(450) // 4.5%
+    expect(result.creatorFeeCents).toBe(450)    // 4.5%
   })
 
   it('should handle zero amount', () => {
@@ -69,17 +69,17 @@ describe('calculateServiceFee (split model v2)', () => {
 
   it('should handle NGN currency correctly', () => {
     // ₦10,000 (1,000,000 kobo)
-    // 4% subscriber = ₦400, 4% creator = ₦400
+    // 4.5% subscriber = ₦450, 4.5% creator = ₦450
     const result = calculateServiceFee(1000000, 'NGN', 'personal')
-    expect(result.subscriberFeeCents).toBe(40000)  // ₦400
-    expect(result.creatorFeeCents).toBe(40000)     // ₦400
-    expect(result.feeCents).toBe(80000)            // ₦800 total
+    expect(result.subscriberFeeCents).toBe(45000)  // ₦450
+    expect(result.creatorFeeCents).toBe(45000)     // ₦450
+    expect(result.feeCents).toBe(90000)            // ₦900 total
     expect(result.currency).toBe('NGN')
   })
 
   describe('processor buffer edge cases', () => {
     it('should ensure minimum margin on $1 micro-transaction (USD)', () => {
-      // $1 transaction - processor would eat all of naive 8% ($0.08)
+      // $1 transaction - processor would eat all of naive 9% ($0.09)
       // Stripe: 2.9% + $0.30 = ~$0.33 processor cost
       // Without buffer: negative margin!
       const result = calculateServiceFee(100, 'USD', 'personal')
@@ -91,7 +91,7 @@ describe('calculateServiceFee (split model v2)', () => {
     it('should ensure minimum margin on ₦500 micro-transaction (NGN)', () => {
       // ₦500 (50000 kobo) - very small for NGN
       // Paystack: 1.5% + ₦100 = ~₦107.50 processor cost
-      // Naive 8% = ₦40 fee - would be negative!
+      // Naive 9% = ₦45 fee - would be negative!
       const result = calculateServiceFee(50000, 'NGN', 'personal')
       expect(result.feeWasCapped).toBe(true)
       expect(result.estimatedMargin).toBeGreaterThanOrEqual(25000) // ₦250 min margin
@@ -117,12 +117,12 @@ describe('calculateServiceFee (split model v2)', () => {
       }
     })
 
-    it('should not apply buffer on large transactions where 8% exceeds processor costs', () => {
-      // $500 transaction - 8% = $40, processor ~$14.80
+    it('should not apply buffer on large transactions where 9% exceeds processor costs', () => {
+      // $500 transaction - 9% = $45, processor ~$14.80
       // No buffer needed
       const result = calculateServiceFee(50000, 'USD', 'personal')
       expect(result.feeWasCapped).toBe(false)
-      expect(result.feeCents).toBe(4000) // Exact 8%
+      expect(result.feeCents).toBe(4500) // Exact 9%
       expect(result.estimatedMargin).toBeGreaterThan(0)
     })
   })
@@ -130,27 +130,27 @@ describe('calculateServiceFee (split model v2)', () => {
 
 describe('calculateLegacyServiceFee (backward compatibility)', () => {
   it('should handle absorb mode for legacy subscriptions', () => {
-    // $100 price, creator absorbs 8%
+    // $100 price, creator absorbs 9%
     const result = calculateLegacyServiceFee(10000, 'USD', 'personal', 'absorb')
     expect(result.subscriberFeeCents).toBe(0)       // Subscriber pays nothing extra
-    expect(result.creatorFeeCents).toBe(800)        // Creator pays 8%
+    expect(result.creatorFeeCents).toBe(900)        // Creator pays 9%
     expect(result.grossCents).toBe(10000)           // Subscriber pays $100
-    expect(result.netCents).toBe(9200)              // Creator gets $92
+    expect(result.netCents).toBe(9100)              // Creator gets $91
   })
 
   it('should handle pass_to_subscriber mode for legacy subscriptions', () => {
-    // $100 price, subscriber pays 8%
+    // $100 price, subscriber pays 9%
     const result = calculateLegacyServiceFee(10000, 'USD', 'personal', 'pass_to_subscriber')
-    expect(result.subscriberFeeCents).toBe(800)     // Subscriber pays 8%
+    expect(result.subscriberFeeCents).toBe(900)     // Subscriber pays 9%
     expect(result.creatorFeeCents).toBe(0)          // Creator pays nothing
-    expect(result.grossCents).toBe(10800)           // Subscriber pays $108
+    expect(result.grossCents).toBe(10900)           // Subscriber pays $109
     expect(result.netCents).toBe(10000)             // Creator gets $100
   })
 
   it('should redirect to split model when feeMode is split', () => {
     const result = calculateLegacyServiceFee(10000, 'USD', 'personal', 'split')
     expect(result.feeMode).toBe('split')
-    expect(result.subscriberFeeCents).toBe(400)
-    expect(result.creatorFeeCents).toBe(400)
+    expect(result.subscriberFeeCents).toBe(450)
+    expect(result.creatorFeeCents).toBe(450)
   })
 })

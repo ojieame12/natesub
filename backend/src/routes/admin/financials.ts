@@ -252,7 +252,7 @@ financials.get('/fee-audit', auditSensitiveRead('fee_audit'), async (c) => {
     const purpose = payment.subscription?.creator?.profile?.purpose
     const paymentAmount = payment.grossCents || payment.amountCents
 
-    // Expected fee rate: 8% for all users (split model: 4% + 4%)
+    // Expected fee rate: 9% for all users (split model: 4.5% + 4.5%)
     const expectedRate = PLATFORM_FEE_RATE
     const expectedFee = Math.round(paymentAmount * expectedRate)
 
@@ -281,8 +281,8 @@ financials.get('/fee-audit', auditSensitiveRead('fee_audit'), async (c) => {
     discrepancies: discrepancies.length,
     discrepancyList: discrepancies,
     feeRates: {
-      personal: '10%',
-      service: '8%',
+      personal: '9%',
+      service: '9%',
     },
     note: 'Discrepancies flagged if variance > 1% of payment or > $1',
   })

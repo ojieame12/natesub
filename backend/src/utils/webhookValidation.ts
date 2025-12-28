@@ -27,7 +27,7 @@ export const stripeCheckoutMetadataSchema = z.object({
   feeMode: z.enum(['absorb', 'pass_to_subscriber', 'split']).optional(),
   feeEffectiveRate: z.string().optional(),
   feeWasCapped: z.enum(['true', 'false']).optional(),
-  // Split fee fields (v2 model: 4%/4%)
+  // Split fee fields (v2 model: 4.5%/4.5%)
   subscriberFeeCents: z.string().regex(/^\d+$/, 'subscriberFeeCents must be numeric string').optional(),
   creatorFeeCents: z.string().regex(/^\d+$/, 'creatorFeeCents must be numeric string').optional(),
   baseAmountCents: z.string().regex(/^\d+$/, 'baseAmountCents must be numeric string').optional(),

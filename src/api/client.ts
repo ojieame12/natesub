@@ -723,7 +723,7 @@ export interface CheckoutBreakdown {
   creatorAmount: number      // What creator receives (cents)
   serviceFee: number         // Platform fee (cents)
   totalAmount: number        // What subscriber pays (cents)
-  effectiveRate: number      // Fee percentage (0.10 = 10%, 0.08 = 8%)
+  effectiveRate: number      // Fee percentage (0.10 = 10%, 0.09 = 9%)
   currency: string
   feeModel: string
   purposeType: 'service' | 'personal'
@@ -1100,7 +1100,7 @@ const mapPayPeriod = (backend: BackendPayPeriod): PayPeriod => ({
   endDate: backend.periodEnd,
   currency: backend.currency || 'USD',
   grossAmount: backend.grossCents, // Keep in cents, frontend divides by 100
-  platformFee: backend.platformFeeCents ?? Math.round(backend.grossCents * 0.08),
+  platformFee: backend.platformFeeCents ?? Math.round(backend.grossCents * 0.09),
   netAmount: backend.netCents,
   status: backend.status,
   payoutDate: backend.payoutDate,

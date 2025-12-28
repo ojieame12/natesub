@@ -24,24 +24,24 @@ describe('utils/pricing', () => {
   })
 
   it('calculates fee + net amounts (personal vs service)', () => {
-    // $10.00 gross - both personal and service use 8% fee
-    expect(calculateFee(1000, 'personal')).toBe(80) // 8%
-    expect(calculateNet(1000, 'personal')).toBe(920)
+    // $10.00 gross - both personal and service use 9% fee
+    expect(calculateFee(1000, 'personal')).toBe(90) // 9%
+    expect(calculateNet(1000, 'personal')).toBe(910)
 
-    expect(calculateFee(1000, 'service')).toBe(80) // 8%
-    expect(calculateNet(1000, 'service')).toBe(920)
+    expect(calculateFee(1000, 'service')).toBe(90) // 9%
+    expect(calculateNet(1000, 'service')).toBe(910)
   })
 
   it('calculates fee preview using split model (ignores legacy feeMode)', () => {
-    // Split model: 4% subscriber + 4% creator = 8% total
-    // $10.00 base -> subscriber pays $10.40, creator receives $9.60
+    // Split model: 4.5% subscriber + 4.5% creator = 9% total
+    // $10.00 base -> subscriber pays $10.45, creator receives $9.55
     const preview = calculateFeePreview(1000, 'service', 'absorb') // feeMode ignored
-    expect(preview.subscriberPays).toBe(1040)    // base + 4%
-    expect(preview.creatorReceives).toBe(960)    // base - 4%
-    expect(preview.subscriberFee).toBe(40)       // 4% of 1000
-    expect(preview.creatorFee).toBe(40)          // 4% of 1000
-    expect(preview.feeAmount).toBe(80)           // total 8%
-    expect(preview.feePercent).toBe(8)
+    expect(preview.subscriberPays).toBe(1045)    // base + 4.5%
+    expect(preview.creatorReceives).toBe(955)    // base - 4.5%
+    expect(preview.subscriberFee).toBe(45)       // 4.5% of 1000
+    expect(preview.creatorFee).toBe(45)          // 4.5% of 1000
+    expect(preview.feeAmount).toBe(90)           // total 9%
+    expect(preview.feePercent).toBe(9)
   })
 
   it('calculates split fee preview for all purpose types', () => {
@@ -50,10 +50,10 @@ describe('utils/pricing', () => {
     const servicePreview = calculateFeePreview(1000, 'service')
 
     // Same split for both
-    expect(personalPreview.subscriberPays).toBe(1040)
-    expect(personalPreview.creatorReceives).toBe(960)
-    expect(servicePreview.subscriberPays).toBe(1040)
-    expect(servicePreview.creatorReceives).toBe(960)
+    expect(personalPreview.subscriberPays).toBe(1045)
+    expect(personalPreview.creatorReceives).toBe(955)
+    expect(servicePreview.subscriberPays).toBe(1045)
+    expect(servicePreview.creatorReceives).toBe(955)
   })
 })
 

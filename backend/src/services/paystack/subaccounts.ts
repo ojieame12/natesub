@@ -25,7 +25,7 @@ export async function createSubaccount(params: {
     return { subaccountCode: profile.paystackSubaccountCode }
   }
 
-  // Calculate platform fee based on creator's purpose (8% for all users)
+  // Calculate platform fee based on creator's purpose (9% for all users)
   const platformFeePercent = getPlatformFeePercent(params.purpose || profile?.purpose as UserPurpose)
 
   // Log creation attempt with masked PII

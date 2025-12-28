@@ -74,25 +74,26 @@ export default function Terms() {
                     </p>
                     <h3>Fee Structure (Split Model)</h3>
                     <p>
-                        NatePay uses a split fee model where the 8% service fee is shared equally
+                        NatePay uses a split fee model where the 9% service fee is shared equally
                         between subscribers and creators:
                     </p>
                     <ul>
-                        <li>Subscribers pay 4% on top of the creator's set price</li>
-                        <li>Creators pay 4% deducted from their payout</li>
+                        <li>Subscribers pay 4.5% on top of the creator's set price</li>
+                        <li>Creators pay 4.5% deducted from their payout</li>
                     </ul>
                     <h3>Service Providers</h3>
                     <p>
-                        8% split service fee, plus a $5/month platform subscription after the
+                        9% split service fee, plus a $5/month platform subscription after the
                         first month free trial.
                     </p>
                     <h3>Personal Users</h3>
                     <p>
-                        8% split service fee, no monthly subscription required.
+                        9% split service fee, no monthly subscription required.
                     </p>
                     <p>
-                        Payment processing fees charged by our payment partners (Stripe, Paystack)
-                        are separate and handled by those providers.
+                        For international transactions, an additional 1.5% processing buffer may apply
+                        to cover cross-border payment costs. Payment processing fees are included in the
+                        platform fee and are not charged separately.
                     </p>
                 </section>
 

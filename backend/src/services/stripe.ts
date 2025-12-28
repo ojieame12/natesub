@@ -580,12 +580,12 @@ export async function createCheckoutSession(params: {
           // Shows "NATEPAY* CREATOR" on bank statements for renewals
           description: `Subscription to ${descriptorSuffix}`,
           // Salary Mode: Align billing to creator's preferred schedule
-          // First charge happens immediately at signup for the full month.
+          // First charge happens immediately at signup (prorated to anchor).
           // Subsequent charges align to billing_cycle_anchor (7 days before payday).
-          // proration_behavior: 'none' ensures full-month charges without proration surprises.
+          // NOTE: We do NOT set proration_behavior: 'none' because that creates a $0 trial
+          // until the anchor date, which is NOT what we want for subscriber payments.
           ...(billingCycleAnchor && {
             billing_cycle_anchor: billingCycleAnchor,
-            proration_behavior: 'none' as const,
           }),
         } : undefined,
         success_url: params.successUrl,

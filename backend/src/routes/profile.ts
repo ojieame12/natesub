@@ -124,6 +124,13 @@ profile.put(
       }
     }
 
+    // Service users must have at least 3 perks
+    if (data.purpose === 'service') {
+      if (!data.perks || data.perks.length < 3) {
+        return c.json({ error: 'Service profiles require at least 3 perks' }, 400)
+      }
+    }
+
     // Convert amounts to cents for storage (handles zero-decimal currencies like JPY, KRW)
     // Use Prisma.JsonNull for null JSON values, or the actual value
     const tiersData = data.tiers
@@ -151,7 +158,7 @@ profile.put(
       impactItems: impactItemsData,
       paymentProvider: data.paymentProvider || null,
       template: normalizeTemplate(data.template) || 'boundary',
-      feeMode: 'split' as const, // Always split (4%/4% model)
+      feeMode: 'split' as const, // Always split (4.5%/4.5% model)
       isPublic: data.isPublic ?? false, // Default to draft until user explicitly publishes
       shareUrl: `${env.PUBLIC_PAGE_URL || 'https://natepay.co'}/${data.username.toLowerCase()}`,
       address: data.address || null,
@@ -257,7 +264,7 @@ profile.patch(
     if (data.purpose !== undefined) updateData.purpose = data.purpose
     if (data.pricingModel !== undefined) updateData.pricingModel = data.pricingModel
     if (data.paymentProvider !== undefined) updateData.paymentProvider = data.paymentProvider || null
-    // Note: feeMode is ignored - always 'split' (4%/4% model)
+    // Note: feeMode is ignored - always 'split' (4.5%/4.5% model)
 
     // Address fields
     if (data.address !== undefined) updateData.address = data.address || null
@@ -475,7 +482,7 @@ const notificationPrefsSchema = z.object({
 })
 
 // Settings update schema (partial updates)
-// Note: feeMode removed - now always 'split' (4%/4% model)
+// Note: feeMode removed - now always 'split' (4.5%/4.5% model)
 const settingsSchema = z.object({
   notificationPrefs: notificationPrefsSchema.optional(),
   isPublic: z.boolean().optional(),
@@ -563,7 +570,7 @@ profile.get('/settings', requireAuth, async (c) => {
   return c.json({
     notificationPrefs: userProfile?.notificationPrefs || defaultPrefs,
     isPublic: userProfile?.isPublic ?? true,
-    feeMode: 'split', // Always split now (4%/4% model)
+    feeMode: 'split', // Always split now (4.5%/4.5% model)
   })
 })
 
