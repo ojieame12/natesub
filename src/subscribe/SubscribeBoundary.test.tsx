@@ -137,8 +137,8 @@ describe('SubscribeBoundary', () => {
         ...mockProfile,
         purpose: 'service',
         perks: [
-          { id: '1', title: 'Daily Coaching sessions' },
-          { id: '2', title: 'Custom Dieting Plans' },
+          { id: '1', title: 'Daily Coaching sessions', enabled: true },
+          { id: '2', title: 'Custom Dieting Plans', enabled: true },
         ],
       }
 

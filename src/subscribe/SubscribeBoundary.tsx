@@ -127,8 +127,10 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
     const isServiceMode = profile.purpose === 'service'
     const badgeText = isServiceMode ? 'Retainer' : 'Support'
 
-    // Mock perks for service mode (will come from profile.perks later)
-    const perks = isServiceMode ? (profile as any).perks || [] : []
+    // Get enabled perks for service mode
+    const perks = isServiceMode
+        ? (profile.perks || []).filter(p => p.enabled)
+        : []
 
     // Invalidate profile cache on successful verification
     useEffect(() => {
@@ -272,7 +274,6 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
 
     return (
         <div style={{
-            minHeight: '100vh',
             minHeight: '100dvh',
             background: COLORS.white,
             display: 'flex',
@@ -471,7 +472,7 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                 {/* Perks List (Service Mode Only) */}
                 {isServiceMode && perks.length > 0 && (
                     <div style={{ marginTop: 28 }}>
-                        {perks.map((perk: { id: string; title: string }, index: number) => (
+                        {perks.map((perk, index) => (
                             <div key={perk.id}>
                                 <div style={{
                                     display: 'flex',
