@@ -106,7 +106,10 @@ export interface TransactionData {
   metadata: Record<string, any>
 }
 
-// Base fetch wrapper with circuit breaker protection
+// Timeout for Paystack API calls (prevents hanging public page loads)
+const PAYSTACK_TIMEOUT_MS = 10000 // 10 seconds
+
+// Base fetch wrapper with circuit breaker protection and timeout
 export async function paystackFetch<T>(
   path: string,
   options: RequestInit = {}
@@ -118,23 +121,39 @@ export async function paystackFetch<T>(
   }
 
   return paystackCircuitBreaker(async () => {
-    const response = await fetch(`${PAYSTACK_API_URL}${path}`, {
-      ...options,
-      headers: {
-        Authorization: `Bearer ${secretKey}`,
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
-    })
+    // Add timeout via AbortController to prevent hanging requests
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), PAYSTACK_TIMEOUT_MS)
 
-    const data = await response.json()
+    try {
+      const response = await fetch(`${PAYSTACK_API_URL}${path}`, {
+        ...options,
+        signal: controller.signal,
+        headers: {
+          Authorization: `Bearer ${secretKey}`,
+          'Content-Type': 'application/json',
+          ...options.headers,
+        },
+      })
 
-    if (!response.ok || !data.status) {
-      console.error(`[paystack] API error on ${maskPathForLogging(path)}: ${data.message || 'Unknown error'}`)
-      throw new Error(data.message || 'Paystack API error')
+      const data = await response.json()
+
+      if (!response.ok || !data.status) {
+        console.error(`[paystack] API error on ${maskPathForLogging(path)}: ${data.message || 'Unknown error'}`)
+        throw new Error(data.message || 'Paystack API error')
+      }
+
+      return data
+    } catch (err: any) {
+      // Convert AbortError to a more descriptive timeout error
+      if (err.name === 'AbortError') {
+        console.error(`[paystack] Request timeout on ${maskPathForLogging(path)} after ${PAYSTACK_TIMEOUT_MS}ms`)
+        throw new Error(`Paystack API timeout after ${PAYSTACK_TIMEOUT_MS}ms`)
+      }
+      throw err
+    } finally {
+      clearTimeout(timeoutId)
     }
-
-    return data
   })
 }
 

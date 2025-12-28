@@ -118,32 +118,37 @@ export function rateLimit(options: Partial<RateLimitOptions> = {}) {
 
       await next()
     } catch (error) {
-      // If Redis fails, log and decide whether to fail open or closed
-      console.error('Rate limit error:', error)
+      // If Redis fails, log and fail closed by default (security-first)
+      console.error('[rateLimit] Redis error, failing closed:', error)
 
-      // In pre-production, allow failing open to prevent total outage
-      // Set REDIS_FAIL_OPEN=true in Railway when Redis quota is exceeded
-      const failOpen = process.env.REDIS_FAIL_OPEN === 'true'
+      // SECURITY: Default to fail-closed to prevent abuse when Redis is down
+      // Only fail open if explicitly configured AND endpoint is non-critical
+      const failOpenOverride = process.env.REDIS_FAIL_OPEN === 'true'
 
-      if (failOpen) {
-        console.warn(`[rateLimit] Redis unavailable, failing OPEN for ${config.keyPrefix}`)
-        await next()
-        return
-      }
-
-      // Check if this is a security-critical endpoint that should fail closed
-      // Admin sensitive routes (payouts, refunds, deletes) must fail closed to prevent abuse
-      const criticalPrefixes = ['auth_verify', 'auth_magic', 'payment', 'checkout', 'admin_sensitive']
+      // Security-critical endpoints ALWAYS fail closed regardless of override
+      const criticalPrefixes = ['auth_verify', 'auth_magic', 'payment', 'checkout', 'admin_sensitive', 'webhook']
       const isCritical = criticalPrefixes.some(p => config.keyPrefix.startsWith(p))
 
       if (isCritical) {
+        // Critical endpoints never fail open
         return c.json({
           error: 'Service temporarily unavailable. Please try again in a moment.',
         }, 503)
       }
 
-      // Non-critical endpoints fail open (allow request)
-      await next()
+      if (failOpenOverride) {
+        // Non-critical endpoints can fail open ONLY if explicitly overridden
+        // This is a temporary measure for development/early production
+        console.warn(`[rateLimit] Redis unavailable, failing OPEN for ${config.keyPrefix} (override enabled)`)
+        await next()
+        return
+      }
+
+      // Default: fail closed for all endpoints when Redis is down
+      // This protects against abuse during Redis outages
+      return c.json({
+        error: 'Service temporarily unavailable. Please try again in a moment.',
+      }, 503)
     }
   }
 }

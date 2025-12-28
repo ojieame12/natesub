@@ -17,6 +17,8 @@ const pageViewSchema = z.object({
   utmSource: z.string().max(100).optional().nullable(),
   utmMedium: z.string().max(100).optional().nullable(),
   utmCampaign: z.string().max(100).optional().nullable(),
+  // ISO 3166-1 alpha-2 country code (detected on frontend via geo detection)
+  country: z.string().length(2).optional().nullable(),
 })
 
 const updateViewSchema = z.object({
@@ -57,7 +59,7 @@ analytics.post(
   zValidator('json', pageViewSchema),
   async (c) => {
   try {
-    const { profileId, referrer, utmSource, utmMedium, utmCampaign } = c.req.valid('json')
+    const { profileId, referrer, utmSource, utmMedium, utmCampaign, country } = c.req.valid('json')
 
     // Get visitor info from headers
     const ip = c.req.header('x-forwarded-for')?.split(',')[0] ||
@@ -92,6 +94,7 @@ analytics.post(
         utmMedium: utmMedium || null,
         utmCampaign: utmCampaign || null,
         deviceType,
+        country: country?.toUpperCase() || null, // Normalize to uppercase
       },
     })
 

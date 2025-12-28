@@ -141,3 +141,21 @@ export async function invalidateAdminRevenueCache(): Promise<void> {
     await invalidateCache(pattern)
   }
 }
+
+/**
+ * Generate a cache key for public profile data
+ * Used by GET /users/:username to cache base profile without viewer-specific data
+ */
+export function publicProfileKey(username: string): string {
+  return `public_profile:${username.toLowerCase()}`
+}
+
+/**
+ * Invalidate a creator's public profile cache
+ *
+ * Call this after profile mutations (edit, payout status change, etc.)
+ * to ensure public pages show fresh data.
+ */
+export async function invalidatePublicProfileCache(username: string): Promise<void> {
+  await invalidateCache(publicProfileKey(username))
+}

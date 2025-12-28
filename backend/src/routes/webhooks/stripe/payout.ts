@@ -3,6 +3,7 @@ import { db } from '../../../db/client.js'
 import { notifyPayoutFailed } from '../../../services/notifications.js'
 import { alertPayoutFailed } from '../../../services/slack.js'
 import { syncCreatorBalance, PAYOUT_STATUS } from '../../../services/balanceSync.js'
+import { invalidatePublicProfileCache } from '../../../utils/cache.js'
 
 // Handle payout.created - when Stripe initiates a payout to connected account
 // This creates visibility into "money on the way" state
@@ -122,6 +123,11 @@ export async function handlePayoutPaid(event: Stripe.Event) {
     },
   })
 
+  // Invalidate public profile cache (payoutStatus affects paymentsReady)
+  if (profile.username) {
+    await invalidatePublicProfileCache(profile.username)
+  }
+
   // Sync balance to reflect completed payout (force = true bypasses cooldown)
   await syncCreatorBalance(profile.userId, true).catch(err =>
     console.error(`[payout.paid] Balance sync failed:`, err)
@@ -195,6 +201,11 @@ export async function handlePayoutFailed(event: Stripe.Event) {
       lastPayoutStatus: PAYOUT_STATUS.FAILED,
     },
   })
+
+  // Invalidate public profile cache (payoutStatus affects paymentsReady)
+  if (profile.username) {
+    await invalidatePublicProfileCache(profile.username)
+  }
 
   // Send real-time notification (WhatsApp/SMS/Email)
   notifyPayoutFailed(

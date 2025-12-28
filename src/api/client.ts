@@ -1327,6 +1327,7 @@ export const analytics = {
     utmSource?: string
     utmMedium?: string
     utmCampaign?: string
+    country?: string // ISO 3166-1 alpha-2 country code (from geo detection)
   }) =>
     apiFetch<{ viewId: string; existing?: boolean }>('/analytics/view', {
       method: 'POST',

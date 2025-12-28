@@ -38,7 +38,12 @@ const replySchema = z.object({
  * Rate limited to 5 tickets per hour per IP to prevent spam
  */
 support.post('/tickets', supportTicketRateLimit, optionalAuth, async (c) => {
-  const body = await c.req.json()
+  let body
+  try {
+    body = await c.req.json()
+  } catch {
+    return c.json({ error: 'Invalid JSON' }, 400)
+  }
   const parsed = createTicketSchema.safeParse(body)
 
   if (!parsed.success) {
@@ -102,16 +107,38 @@ support.post('/tickets', supportTicketRateLimit, optionalAuth, async (c) => {
   })
 })
 
+// Schema for pagination query params
+const paginationSchema = z.object({
+  cursor: z.string().uuid().optional(),
+  limit: z.coerce.number().min(1).max(100).default(20),
+})
+
 /**
  * GET /support/tickets
- * List my tickets (auth required)
+ * List my tickets with cursor-based pagination (auth required)
+ * Query params: cursor (ticket ID), limit (1-100, default 20)
  */
 support.get('/tickets', requireAuth, async (c) => {
   const userId = c.get('userId')
 
+  // Parse pagination params
+  const queryParsed = paginationSchema.safeParse({
+    cursor: c.req.query('cursor'),
+    limit: c.req.query('limit'),
+  })
+
+  const { cursor, limit } = queryParsed.success
+    ? queryParsed.data
+    : { cursor: undefined, limit: 20 }
+
   const tickets = await db.supportTicket.findMany({
     where: { userId },
     orderBy: { createdAt: 'desc' },
+    take: limit + 1, // Fetch one extra to detect hasMore
+    ...(cursor && {
+      cursor: { id: cursor },
+      skip: 1, // Skip the cursor item itself
+    }),
     select: {
       id: true,
       category: true,
@@ -127,7 +154,16 @@ support.get('/tickets', requireAuth, async (c) => {
     },
   })
 
-  return c.json({ tickets })
+  // Determine if there are more results
+  const hasMore = tickets.length > limit
+  const results = hasMore ? tickets.slice(0, limit) : tickets
+  const nextCursor = hasMore ? results[results.length - 1]?.id : null
+
+  return c.json({
+    tickets: results,
+    hasMore,
+    nextCursor,
+  })
 })
 
 /**
@@ -165,7 +201,12 @@ support.post('/tickets/:id/reply', requireAuth, async (c) => {
   const userId = c.get('userId')
   const ticketId = c.req.param('id')
 
-  const body = await c.req.json()
+  let body
+  try {
+    body = await c.req.json()
+  } catch {
+    return c.json({ error: 'Invalid JSON' }, 400)
+  }
   const parsed = replySchema.safeParse(body)
 
   if (!parsed.success) {

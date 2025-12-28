@@ -6,6 +6,7 @@ import { optionalAuth } from '../middleware/auth.js'
 import { publicRateLimit } from '../middleware/rateLimit.js'
 import { centsToDisplayAmount } from '../utils/currency.js'
 import { isStripeCrossBorderSupported } from '../utils/constants.js'
+import { cached, publicProfileKey, CACHE_TTL } from '../utils/cache.js'
 
 const users = new Hono()
 
@@ -23,36 +24,41 @@ users.get(
     const normalizedUsername = username.toLowerCase()
     const viewerId = c.get('userId') // Optional - set by optionalAuth if logged in
 
-    const profile = await db.profile.findUnique({
-      where: { username: normalizedUsername },
-      select: {
-        id: true, // Profile ID for analytics
-        userId: true, // Need this to check subscriptions
-        username: true,
-        displayName: true,
-        bio: true,
-        avatarUrl: true,
-        voiceIntroUrl: true,
-        purpose: true,
-        pricingModel: true,
-        singleAmount: true,
-        tiers: true,
-        perks: true,
-        impactItems: true,
-        currency: true,
-        shareUrl: true,
-        paymentProvider: true,
-        template: true, // For rendering correct template
-        feeMode: true, // For fee breakdown display
-        countryCode: true, // For cross-border detection
-        isPublic: true, // Privacy setting
-        // Check payment readiness without exposing IDs
-        stripeAccountId: true,
-        paystackSubaccountCode: true,
-        payoutStatus: true,
-        platformDebitCents: true,
-        platformSubscriptionStatus: true, // Service providers need active subscription
-      },
+    // Cache profile data to reduce DB load on viral public pages
+    // Viewer-specific data (isOwner, subscription) is computed after cache hit
+    const cacheKey = publicProfileKey(normalizedUsername)
+    const profile = await cached(cacheKey, CACHE_TTL.MEDIUM, async () => {
+      return db.profile.findUnique({
+        where: { username: normalizedUsername },
+        select: {
+          id: true, // Profile ID for analytics
+          userId: true, // Need this to check subscriptions
+          username: true,
+          displayName: true,
+          bio: true,
+          avatarUrl: true,
+          voiceIntroUrl: true,
+          purpose: true,
+          pricingModel: true,
+          singleAmount: true,
+          tiers: true,
+          perks: true,
+          impactItems: true,
+          currency: true,
+          shareUrl: true,
+          paymentProvider: true,
+          template: true, // For rendering correct template
+          feeMode: true, // For fee breakdown display
+          countryCode: true, // For cross-border detection
+          isPublic: true, // Privacy setting
+          // Check payment readiness without exposing IDs
+          stripeAccountId: true,
+          paystackSubaccountCode: true,
+          payoutStatus: true,
+          platformDebitCents: true,
+          platformSubscriptionStatus: true, // Service providers need active subscription
+        },
+      })
     })
 
     if (!profile) {

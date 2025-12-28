@@ -108,25 +108,47 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
     // Mount animation and geo detection
     useEffect(() => {
         const timer = setTimeout(() => setMount(true), 50)
-        detectPayerCountry().then(setPayerCountry).catch(() => {})
 
-        // Record page view (not for owners)
-        // Also mark reachedPayment since pricing UI is now visible
+        // Record page view (not for owners) with country data for geo analytics
+        // Wait for country detection to include geo data in the page view
         if (profile.id && !isOwner && !viewIdRef.current && !verification.isVerifying) {
-            recordPageView({
-                profileId: profile.id,
-                referrer: document.referrer || undefined,
-                utmSource: searchParams.get('utm_source') || undefined,
-                utmMedium: searchParams.get('utm_medium') || undefined,
-                utmCampaign: searchParams.get('utm_campaign') || undefined,
-            })
+            detectPayerCountry()
+                .then(country => {
+                    setPayerCountry(country)
+                    return recordPageView({
+                        profileId: profile.id,
+                        referrer: document.referrer || undefined,
+                        utmSource: searchParams.get('utm_source') || undefined,
+                        utmMedium: searchParams.get('utm_medium') || undefined,
+                        utmCampaign: searchParams.get('utm_campaign') || undefined,
+                        country: country || undefined, // Pass detected country for geo analytics
+                    })
+                })
                 .then(res => {
                     viewIdRef.current = res.viewId
                     // Mark reachedPayment when pricing UI is visible (not on subscribe click)
                     // This separates "saw pricing" from "started checkout" for funnel analysis
                     updatePageView({ viewId: res.viewId, data: { reachedPayment: true } }).catch(() => {})
                 })
-                .catch(console.error)
+                .catch(err => {
+                    // Still record page view even if country detection fails
+                    console.warn('Country detection failed, recording without geo:', err)
+                    recordPageView({
+                        profileId: profile.id,
+                        referrer: document.referrer || undefined,
+                        utmSource: searchParams.get('utm_source') || undefined,
+                        utmMedium: searchParams.get('utm_medium') || undefined,
+                        utmCampaign: searchParams.get('utm_campaign') || undefined,
+                    })
+                        .then(res => {
+                            viewIdRef.current = res.viewId
+                            updatePageView({ viewId: res.viewId, data: { reachedPayment: true } }).catch(() => {})
+                        })
+                        .catch(console.error)
+                })
+        } else {
+            // Still detect country for payment provider routing even if not recording view
+            detectPayerCountry().then(setPayerCountry).catch(() => {})
         }
 
         return () => clearTimeout(timer)

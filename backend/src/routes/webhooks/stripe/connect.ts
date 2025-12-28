@@ -2,6 +2,7 @@ import Stripe from 'stripe'
 import { db } from '../../../db/client.js'
 import { isStripeCrossBorderSupported } from '../../../utils/constants.js'
 import { sendPaymentSetupCompleteEmail } from '../../../services/email.js'
+import { invalidatePublicProfileCache } from '../../../utils/cache.js'
 
 // Handle Connect account updated
 export async function handleAccountUpdated(event: Stripe.Event) {
@@ -45,6 +46,11 @@ export async function handleAccountUpdated(event: Stripe.Event) {
     where: { id: profile.id },
     data: { payoutStatus },
   })
+
+  // Invalidate public profile cache (payoutStatus affects paymentsReady)
+  if (profile.username) {
+    await invalidatePublicProfileCache(profile.username)
+  }
 
   // Send email notification when status changes to active (verification complete)
   if (payoutStatus === 'active' && previousStatus !== 'active' && profile.user?.email) {

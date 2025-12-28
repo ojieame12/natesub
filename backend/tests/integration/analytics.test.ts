@@ -242,6 +242,88 @@ describe('analytics routes', () => {
 
       expect(res.status).toBe(400)
     })
+
+    it('stores country code on page view', async () => {
+      const { profile } = await createTestUserWithSession()
+
+      const res = await publicRequest('/analytics/view', {
+        method: 'POST',
+        body: JSON.stringify({
+          profileId: profile.id,
+          country: 'NG', // Nigeria
+        }),
+      }, {
+        'x-forwarded-for': '192.168.1.200',
+        'user-agent': 'Chrome',
+      })
+
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.viewId).toBeDefined()
+
+      const pageView = await db.pageView.findUnique({ where: { id: body.viewId } })
+      expect(pageView?.country).toBe('NG')
+    })
+
+    it('normalizes country code to uppercase', async () => {
+      const { profile } = await createTestUserWithSession()
+
+      const res = await publicRequest('/analytics/view', {
+        method: 'POST',
+        body: JSON.stringify({
+          profileId: profile.id,
+          country: 'gb', // lowercase
+        }),
+      }, {
+        'x-forwarded-for': '192.168.1.201',
+        'user-agent': 'Chrome',
+      })
+
+      expect(res.status).toBe(200)
+      const body = await res.json()
+
+      const pageView = await db.pageView.findUnique({ where: { id: body.viewId } })
+      expect(pageView?.country).toBe('GB')
+    })
+
+    it('handles missing country gracefully', async () => {
+      const { profile } = await createTestUserWithSession()
+
+      const res = await publicRequest('/analytics/view', {
+        method: 'POST',
+        body: JSON.stringify({
+          profileId: profile.id,
+          // No country provided
+        }),
+      }, {
+        'x-forwarded-for': '192.168.1.202',
+        'user-agent': 'Chrome',
+      })
+
+      expect(res.status).toBe(200)
+      const body = await res.json()
+
+      const pageView = await db.pageView.findUnique({ where: { id: body.viewId } })
+      expect(pageView?.country).toBeNull()
+    })
+
+    it('validates country code length', async () => {
+      const { profile } = await createTestUserWithSession()
+
+      const res = await publicRequest('/analytics/view', {
+        method: 'POST',
+        body: JSON.stringify({
+          profileId: profile.id,
+          country: 'USA', // 3 chars - invalid
+        }),
+      }, {
+        'x-forwarded-for': '192.168.1.203',
+        'user-agent': 'Chrome',
+      })
+
+      // Should fail validation
+      expect(res.status).toBe(400)
+    })
   })
 
   describe('PATCH /analytics/view/:viewId', () => {

@@ -25,6 +25,7 @@ import {
   type Profile,
   type ProfilePatch
 } from '../schemas/profile.js'
+import { invalidatePublicProfileCache } from '../utils/cache.js'
 
 const profile = new Hono()
 
@@ -163,6 +164,9 @@ profile.put(
       create: profileData,
       update: profileData,
     })
+
+    // Invalidate public profile cache so public pages show fresh data
+    await invalidatePublicProfileCache(updatedProfile.username)
 
     // Send welcome email only when profile is first published (not on creation)
     // This ensures users don't get the welcome email until they click "Launch My Page"
@@ -320,6 +324,9 @@ profile.patch(
       data: updateData,
     })
 
+    // Invalidate public profile cache so public pages show fresh data
+    await invalidatePublicProfileCache(updatedProfile.username)
+
     return c.json({
       profile: {
         ...updatedProfile,
@@ -473,6 +480,9 @@ profile.patch(
       where: { userId },
       data: updateData,
     })
+
+    // Invalidate public profile cache (isPublic affects visibility)
+    await invalidatePublicProfileCache(existingProfile.username)
 
     // Send welcome email on first publish (fire-and-forget)
     if (isPublishTransition) {
