@@ -18,6 +18,7 @@ import {
 import { rotateSessionToken } from '../services/auth.js'
 import { isStripeSupported, isStripeCrossBorderSupported, getStripeSupportedCountries } from '../utils/constants.js'
 import { env } from '../config/env.js'
+import { invalidatePublicProfileCache } from '../utils/cache.js'
 
 // Lock TTL for Stripe connect operations (prevents double-click race conditions)
 const CONNECT_LOCK_TTL_SECONDS = 30
@@ -295,6 +296,11 @@ stripeRoutes.get('/connect/status', requireAuth, async (c) => {
         where: { userId },
         data: { payoutStatus },
       })
+
+      // Invalidate public profile cache - payoutStatus affects paymentsReady
+      if (profile.username) {
+        await invalidatePublicProfileCache(profile.username)
+      }
     }
 
     // SECURITY: Rotate session token when payment account becomes active

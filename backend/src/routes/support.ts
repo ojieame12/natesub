@@ -168,21 +168,20 @@ support.get('/tickets', requireAuth, async (c) => {
 
 /**
  * GET /support/tickets/:id
- * Get ticket details with messages (auth required)
+ * Get ticket details with paginated messages (auth required)
+ * Query params: cursor (message ID), limit (1-100, default 50)
  */
 support.get('/tickets/:id', requireAuth, async (c) => {
   const userId = c.get('userId')
   const ticketId = c.req.param('id')
+  const cursor = c.req.query('cursor')
+  const limit = Math.min(parseInt(c.req.query('limit') || '50', 10), 100)
 
+  // First get the ticket without messages to check ownership
   const ticket = await db.supportTicket.findFirst({
     where: {
       id: ticketId,
       userId, // Only allow viewing own tickets
-    },
-    include: {
-      messages: {
-        orderBy: { createdAt: 'asc' },
-      },
     },
   })
 
@@ -190,7 +189,27 @@ support.get('/tickets/:id', requireAuth, async (c) => {
     return c.json({ error: 'Ticket not found' }, 404)
   }
 
-  return c.json({ ticket })
+  // Fetch paginated messages
+  const messages = await db.supportMessage.findMany({
+    where: { ticketId },
+    orderBy: { createdAt: 'asc' },
+    take: limit + 1, // Fetch one extra to detect hasMore
+    ...(cursor && {
+      cursor: { id: cursor },
+      skip: 1, // Skip the cursor item itself
+    }),
+  })
+
+  // Determine if there are more messages
+  const hasMore = messages.length > limit
+  const items = hasMore ? messages.slice(0, limit) : messages
+  const nextCursor = hasMore ? items[items.length - 1]?.id : null
+
+  return c.json({
+    ticket,
+    messages: items,
+    nextCursor,
+  })
 })
 
 /**

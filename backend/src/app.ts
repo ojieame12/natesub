@@ -183,11 +183,16 @@ app.get('/geo', async (c) => {
     return c.json({ country: cdnCountry, source: 'cdn' })
   }
 
-  // 2. Check Redis cache for this IP
+  // 2. Get client IP - don't cache if unknown
   const clientIp = c.req.header('x-forwarded-for')?.split(',')[0]?.trim()
     || c.req.header('x-real-ip')
-    || 'unknown'
 
+  // Don't cache unknown IPs - can't reliably determine geo
+  if (!clientIp) {
+    return c.json({ country: null, source: 'unknown', fallback: 'US' })
+  }
+
+  // 3. Check Redis cache for this IP
   const cacheKey = `geo:${clientIp}`
   try {
     const cached = await redis.get(cacheKey)
@@ -198,10 +203,10 @@ app.get('/geo', async (c) => {
     // Redis unavailable, continue to fallback
   }
 
-  // 3. Fallback to ipapi.co (server-side, with timeout)
+  // 4. Fallback to ipapi.co (server-side, with shorter timeout)
   try {
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 3000) // 3s timeout
+    const timeoutId = setTimeout(() => controller.abort(), 2000) // 2s timeout
 
     const response = await fetch('https://ipapi.co/country/', {
       signal: controller.signal,
@@ -216,7 +221,7 @@ app.get('/geo', async (c) => {
       const country = text.trim().toUpperCase()
 
       if (/^[A-Z]{2}$/.test(country)) {
-        // Cache for 24 hours
+        // Cache successful lookups for 24 hours
         try {
           await redis.set(cacheKey, country, 'EX', 86400)
         } catch {
@@ -226,11 +231,12 @@ app.get('/geo', async (c) => {
       }
     }
   } catch {
-    // ipapi.co failed or timed out
+    // ipapi.co failed or timed out - don't cache, let next request retry
   }
 
-  // 4. Default to US (most common for global apps)
-  return c.json({ country: 'US', source: 'default' })
+  // 5. Return unknown with US fallback (but don't cache failure)
+  // Frontend can decide how to handle country: null
+  return c.json({ country: null, source: 'lookup_failed', fallback: 'US' })
 })
 
 // Metrics endpoint for monitoring dashboards

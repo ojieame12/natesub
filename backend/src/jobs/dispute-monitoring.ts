@@ -21,6 +21,7 @@
 
 import { db } from '../db/client.js'
 import { alertDisputeRatioWarning, alertSimple } from '../services/slack.js'
+import { invalidatePublicProfileCache } from '../utils/cache.js'
 import {
   sendPayoutsPausedEmail,
   sendAccountSuspendedEmail,
@@ -256,6 +257,7 @@ export async function enforceCreatorDisputeLimits(): Promise<CreatorEnforcementR
         select: {
           displayName: true,
           payoutStatus: true,
+          username: true,
         },
       },
     },
@@ -281,6 +283,11 @@ export async function enforceCreatorDisputeLimits(): Promise<CreatorEnforcementR
           where: { userId: creator.id },
           data: { payoutStatus: 'disabled' },
         })
+
+        // Invalidate public profile cache - payoutStatus affects paymentsReady
+        if (creator.profile.username) {
+          await invalidatePublicProfileCache(creator.profile.username)
+        }
 
         await sendAccountSuspendedEmail(
           creator.email,
@@ -320,6 +327,11 @@ export async function enforceCreatorDisputeLimits(): Promise<CreatorEnforcementR
           data: { payoutStatus: 'restricted' },
         })
 
+        // Invalidate public profile cache - payoutStatus affects paymentsReady
+        if (creator.profile.username) {
+          await invalidatePublicProfileCache(creator.profile.username)
+        }
+
         await sendPayoutsPausedEmail(
           creator.email,
           creator.profile.displayName || 'Creator',
@@ -357,6 +369,11 @@ export async function enforceCreatorDisputeLimits(): Promise<CreatorEnforcementR
         where: { userId: creator.id },
         data: { payoutStatus: 'active' },
       })
+
+      // Invalidate public profile cache - payoutStatus affects paymentsReady
+      if (creator.profile.username) {
+        await invalidatePublicProfileCache(creator.profile.username)
+      }
 
       await sendPayoutsResumedEmail(
         creator.email,

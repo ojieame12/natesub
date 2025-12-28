@@ -11,6 +11,7 @@ import { db } from '../../db/client.js'
 import { stripe, getAccountStatus } from '../../services/stripe.js'
 import { adminSensitiveRateLimit } from '../../middleware/rateLimit.js'
 import { requireRole, requireFreshSession } from '../../middleware/adminAuth.js'
+import { invalidatePublicProfileCache } from '../../utils/cache.js'
 
 const stripeRoutes = new Hono()
 
@@ -496,6 +497,11 @@ stripeRoutes.post('/accounts/:accountId/disable-payouts', adminSensitiveRateLimi
       where: { stripeAccountId: accountId }
     })
     if (profile) {
+      // Invalidate public profile cache - payoutStatus affects paymentsReady
+      if (profile.username) {
+        await invalidatePublicProfileCache(profile.username)
+      }
+
       await db.activity.create({
         data: {
           userId: profile.userId,
@@ -539,6 +545,11 @@ stripeRoutes.post('/accounts/:accountId/enable-payouts', adminSensitiveRateLimit
       where: { stripeAccountId: accountId }
     })
     if (profile) {
+      // Invalidate public profile cache - payoutStatus affects paymentsReady
+      if (profile.username) {
+        await invalidatePublicProfileCache(profile.username)
+      }
+
       await db.activity.create({
         data: {
           userId: profile.userId,

@@ -6,6 +6,7 @@ import { maskAccountNumber } from '../../utils/pii.js'
 import { encryptAccountNumber } from '../../utils/encryption.js'
 import { getPlatformFeePercent, type UserPurpose } from '../pricing.js'
 import { paystackFetch, type Subaccount } from './client.js'
+import { invalidatePublicProfileCache } from '../../utils/cache.js'
 
 // Create subaccount for a creator
 export async function createSubaccount(params: {
@@ -46,7 +47,7 @@ export async function createSubaccount(params: {
   const subaccountCode = response.data.subaccount_code
 
   // Save to profile (encrypt sensitive account number)
-  await db.profile.update({
+  const updatedProfile = await db.profile.update({
     where: { userId: params.userId },
     data: {
       paystackSubaccountCode: subaccountCode,
@@ -56,6 +57,11 @@ export async function createSubaccount(params: {
       payoutStatus: 'active',
     },
   })
+
+  // Invalidate public profile cache - payoutStatus affects paymentsReady
+  if (updatedProfile.username) {
+    await invalidatePublicProfileCache(updatedProfile.username)
+  }
 
   return { subaccountCode }
 }

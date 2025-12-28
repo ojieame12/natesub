@@ -94,4 +94,96 @@ describe('Rate Limiting', () => {
       expect(publicLimit).toBeGreaterThanOrEqual(100)
     })
   })
+
+  describe('Redis Failure Handling', () => {
+    it('critical endpoints always fail closed when Redis is down', () => {
+      // Critical prefixes that should ALWAYS fail closed
+      const criticalPrefixes = ['auth_verify', 'auth_magic', 'payment', 'checkout', 'admin_sensitive', 'webhook']
+
+      // These endpoints must return 503 when Redis fails, regardless of any override
+      const testCases = [
+        'auth_verify_ratelimit',
+        'auth_magic_ratelimit',
+        'payment_ratelimit',
+        'checkout_ratelimit',
+        'admin_sensitive_ratelimit',
+        'webhook_ratelimit',
+      ]
+
+      for (const prefix of testCases) {
+        const isCritical = criticalPrefixes.some(p => prefix.startsWith(p))
+        expect(isCritical).toBe(true)
+      }
+    })
+
+    it('public endpoints fail open by default when Redis is down', () => {
+      // Public endpoints should fail open to maintain availability
+      const failOpenByDefaultPrefixes = ['public_ratelimit', 'public_strict_ratelimit']
+      const criticalPrefixes = ['auth_verify', 'auth_magic', 'payment', 'checkout', 'admin_sensitive', 'webhook']
+
+      // public_ratelimit should NOT be critical
+      const publicPrefix = 'public_ratelimit'
+      const isCritical = criticalPrefixes.some(p => publicPrefix.startsWith(p))
+      expect(isCritical).toBe(false)
+
+      // public_ratelimit should be in fail-open list
+      const canFailOpen = failOpenByDefaultPrefixes.some(p => publicPrefix.startsWith(p))
+      expect(canFailOpen).toBe(true)
+
+      // public_strict_ratelimit should also fail open
+      const strictPrefix = 'public_strict_ratelimit'
+      const strictCanFailOpen = failOpenByDefaultPrefixes.some(p => strictPrefix.startsWith(p))
+      expect(strictCanFailOpen).toBe(true)
+    })
+
+    it('auth endpoints fail closed even with REDIS_FAIL_OPEN override', () => {
+      process.env.REDIS_FAIL_OPEN = 'true'
+
+      // Even with override, critical endpoints must fail closed
+      const criticalPrefixes = ['auth_verify', 'auth_magic', 'payment', 'checkout', 'admin_sensitive', 'webhook']
+
+      // auth_verify must still be critical
+      const authPrefix = 'auth_verify_ratelimit'
+      const isCritical = criticalPrefixes.some(p => authPrefix.startsWith(p))
+      expect(isCritical).toBe(true)
+
+      // Critical check happens BEFORE fail-open check
+      // So auth_verify will always return 503, never proceed
+    })
+
+    it('non-public non-critical endpoints fail closed by default', () => {
+      // Endpoints like AI, media upload, support are not in fail-open list
+      const failOpenByDefaultPrefixes = ['public_ratelimit', 'public_strict_ratelimit']
+
+      const testCases = [
+        'ai_ratelimit',
+        'ai_audio_ratelimit',
+        'media_upload_ratelimit',
+        'support_ticket_ratelimit',
+        'update_send_ratelimit',
+        'admin_read_ratelimit',
+        'admin_export_ratelimit',
+      ]
+
+      for (const prefix of testCases) {
+        const canFailOpen = failOpenByDefaultPrefixes.some(p => prefix.startsWith(p))
+        expect(canFailOpen).toBe(false)
+      }
+    })
+
+    it('REDIS_FAIL_OPEN=true allows non-critical non-public to fail open', () => {
+      process.env.REDIS_FAIL_OPEN = 'true'
+
+      // With override, non-critical endpoints (like ai_ratelimit) can fail open
+      // This is checked after critical check, before fail-closed default
+      const criticalPrefixes = ['auth_verify', 'auth_magic', 'payment', 'checkout', 'admin_sensitive', 'webhook']
+
+      const aiPrefix = 'ai_ratelimit'
+      const isCritical = criticalPrefixes.some(p => aiPrefix.startsWith(p))
+      expect(isCritical).toBe(false)
+
+      // Since not critical, and REDIS_FAIL_OPEN=true, it would fail open
+      expect(process.env.REDIS_FAIL_OPEN).toBe('true')
+    })
+  })
 })

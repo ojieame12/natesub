@@ -92,127 +92,134 @@ describe('SubscribeBoundary', () => {
   })
 
   describe('Rendering', () => {
-    it('renders profile information correctly', async () => {
-      vi.useFakeTimers()
-
+    it('renders profile information correctly in Support mode', async () => {
       renderWithProviders(<SubscribeBoundary profile={mockProfile} />, {
         route: '/testcreator',
         routePath: '/:username',
       })
 
-      // Advance timers for mount animation
-      await vi.advanceTimersByTimeAsync(100)
+      // Wait for render
+      await waitFor(() => {
+        expect(screen.getByText('Test Creator')).toBeInTheDocument()
+      })
 
-      expect(screen.getByText('TEST CREATOR')).toBeInTheDocument()
-      expect(screen.getByText('TIPS')).toBeInTheDocument()
-      expect(screen.getByText('$10.00/mo')).toBeInTheDocument()
+      // Support badge for non-service users
+      expect(screen.getByText('Support')).toBeInTheDocument()
+      // Price display (appears multiple times - header and pricing card)
+      expect(screen.getAllByText(/\$10\.00/).length).toBeGreaterThan(0)
     })
 
-    it('shows SERVICE badge for service profiles', async () => {
-      vi.useFakeTimers()
-
+    it('shows Retainer badge for service profiles', async () => {
       renderWithProviders(
         <SubscribeBoundary profile={{ ...mockProfile, purpose: 'service' }} />,
         { route: '/testcreator', routePath: '/:username' }
       )
 
-      await vi.advanceTimersByTimeAsync(100)
-
-      expect(screen.getByText('SERVICE')).toBeInTheDocument()
+      await waitFor(() => {
+        expect(screen.getByText('Retainer')).toBeInTheDocument()
+      })
     })
 
     it('shows secure payment fee with split model', async () => {
-      vi.useFakeTimers()
-
       renderWithProviders(<SubscribeBoundary profile={mockProfile} />, {
         route: '/testcreator',
         routePath: '/:username',
       })
 
-      await vi.advanceTimersByTimeAsync(100)
+      await waitFor(() => {
+        // Should show secure payment fee (subscriber's portion)
+        expect(screen.getByText('Secure payment Fee')).toBeInTheDocument()
+      })
+    })
 
-      // Should show secure payment fee (subscriber's portion)
-      expect(screen.getByText('Secure payment')).toBeInTheDocument()
+    it('renders perks list for service mode', async () => {
+      const serviceProfile = {
+        ...mockProfile,
+        purpose: 'service',
+        perks: [
+          { id: '1', title: 'Daily Coaching sessions' },
+          { id: '2', title: 'Custom Dieting Plans' },
+        ],
+      }
+
+      renderWithProviders(<SubscribeBoundary profile={serviceProfile} />, {
+        route: '/testcreator',
+        routePath: '/:username',
+      })
+
+      await waitFor(() => {
+        expect(screen.getByText('Daily Coaching sessions')).toBeInTheDocument()
+        expect(screen.getByText('Custom Dieting Plans')).toBeInTheDocument()
+      })
     })
   })
 
   describe('Email validation', () => {
-    it('disables slide to pay when email is too short', async () => {
-      vi.useFakeTimers()
-
+    it('disables slide to pay when email is invalid', async () => {
       renderWithProviders(<SubscribeBoundary profile={mockProfile} />, {
         route: '/testcreator',
         routePath: '/:username',
       })
 
-      await vi.advanceTimersByTimeAsync(100)
+      await waitFor(() => {
+        expect(screen.getByText('Slide to Pay')).toBeInTheDocument()
+      })
 
-      const emailInput = screen.getByPlaceholderText('user@example.com')
-      fireEvent.change(emailInput, { target: { value: 'ab' } })
-
-      // Slide button should be disabled (cursor: not-allowed indicates disabled)
-      const slideContainer = screen.getByText('SLIDE TO PAY').parentElement
-      expect(slideContainer).toHaveStyle({ cursor: 'not-allowed' })
+      // The container should have opacity: 0.6 when disabled (no email)
+      const slideContainer = screen.getByText('Slide to Pay').closest('div[style*="border-radius"]')
+      expect(slideContainer).toHaveStyle({ opacity: '0.6' })
     })
 
     it('enables slide to pay when email is valid', async () => {
-      vi.useFakeTimers()
-
       renderWithProviders(<SubscribeBoundary profile={mockProfile} />, {
         route: '/testcreator',
         routePath: '/:username',
       })
 
-      await vi.advanceTimersByTimeAsync(100)
+      await waitFor(() => {
+        expect(screen.getByPlaceholderText('Customer Email')).toBeInTheDocument()
+      })
 
-      const emailInput = screen.getByPlaceholderText('user@example.com')
+      const emailInput = screen.getByPlaceholderText('Customer Email')
       fireEvent.change(emailInput, { target: { value: 'test@example.com' } })
 
-      // Slide button should be enabled (cursor: pointer indicates enabled)
-      const slideContainer = screen.getByText('SLIDE TO PAY').parentElement
-      expect(slideContainer).toHaveStyle({ cursor: 'pointer' })
+      // Slide button should be enabled (opacity: 1)
+      const slideContainer = screen.getByText('Slide to Pay').closest('div[style*="border-radius"]')
+      expect(slideContainer).toHaveStyle({ opacity: '1' })
     })
   })
 
   describe('Owner view', () => {
-    it('shows edit page button for owner', async () => {
-      vi.useFakeTimers()
-
+    it('shows edit button for owner', async () => {
       renderWithProviders(<SubscribeBoundary profile={mockProfile} isOwner />, {
         route: '/testcreator',
         routePath: '/:username',
       })
 
-      await vi.advanceTimersByTimeAsync(100)
-
-      expect(screen.getByText('Edit Page')).toBeInTheDocument()
+      await waitFor(() => {
+        expect(screen.getByText('Edit')).toBeInTheDocument()
+      })
     })
 
-    it('shows fee breakdown for owner', async () => {
-      vi.useFakeTimers()
-
+    it('shows Share button for owner', async () => {
       renderWithProviders(<SubscribeBoundary profile={mockProfile} isOwner />, {
         route: '/testcreator',
         routePath: '/:username',
       })
 
-      await vi.advanceTimersByTimeAsync(100)
-
-      // Owner should see subscription price and what they receive
-      expect(screen.getByText('Subscription price')).toBeInTheDocument()
-      expect(screen.getByText('You receive')).toBeInTheDocument()
-      expect(screen.getByText('after 4% platform fee')).toBeInTheDocument()
+      await waitFor(() => {
+        expect(screen.getByText('Share')).toBeInTheDocument()
+      })
     })
 
     it('does not record page view for owner', async () => {
-      vi.useFakeTimers()
-
       renderWithProviders(<SubscribeBoundary profile={mockProfile} isOwner />, {
         route: '/testcreator',
         routePath: '/:username',
       })
 
-      await vi.advanceTimersByTimeAsync(200)
+      // Wait a bit
+      await new Promise(resolve => setTimeout(resolve, 100))
 
       // Page view should not be recorded for owner
       expect(mockRecordPageView).not.toHaveBeenCalled()
@@ -221,47 +228,47 @@ describe('SubscribeBoundary', () => {
 
   describe('Page view analytics', () => {
     it('captures UTM parameters from URL', async () => {
-      vi.useFakeTimers()
-
       renderWithProviders(<SubscribeBoundary profile={mockProfile} />, {
         route: '/testcreator?utm_source=twitter&utm_medium=social',
         routePath: '/:username',
       })
 
-      // Component reads UTM params on mount
-      await vi.advanceTimersByTimeAsync(200)
+      // Wait for the page view to be recorded
+      await waitFor(() => {
+        expect(mockRecordPageView).toHaveBeenCalled()
+      })
 
-      // The component should have recorded a page view with UTM params
-      // Note: The actual call happens in useEffect, we verify it was attempted
-      expect(mockRecordPageView).toHaveBeenCalled()
+      expect(mockRecordPageView).toHaveBeenCalledWith(
+        expect.objectContaining({
+          utmSource: 'twitter',
+          utmMedium: 'social',
+        })
+      )
     })
   })
 
   describe('Checkout flow', () => {
     it('shows slide to pay button with correct label', async () => {
-      vi.useFakeTimers()
-
       renderWithProviders(<SubscribeBoundary profile={mockProfile} />, {
         route: '/testcreator',
         routePath: '/:username',
       })
 
-      await vi.advanceTimersByTimeAsync(100)
-
-      expect(screen.getByText('SLIDE TO PAY')).toBeInTheDocument()
+      await waitFor(() => {
+        expect(screen.getByText('Slide to Pay')).toBeInTheDocument()
+      })
     })
 
     it('shows email input for subscriber', async () => {
-      vi.useFakeTimers()
-
       renderWithProviders(<SubscribeBoundary profile={mockProfile} />, {
         route: '/testcreator',
         routePath: '/:username',
       })
 
-      await vi.advanceTimersByTimeAsync(100)
-
-      expect(screen.getByPlaceholderText('user@example.com')).toBeInTheDocument()
+      await waitFor(() => {
+        // Placeholder text when empty
+        expect(screen.getByPlaceholderText('Customer Email')).toBeInTheDocument()
+      })
     })
 
     it('passes payerCountry from geo detection to createCheckout', async () => {
@@ -272,34 +279,36 @@ describe('SubscribeBoundary', () => {
         routePath: '/:username',
       })
 
-      // Wait for detectPayerCountry promise to resolve (it returns 'US' from mock)
-      // Need to flush microtasks to resolve the Promise.then()
-      await new Promise(resolve => setTimeout(resolve, 0))
+      // Wait for detectPayerCountry promise to resolve
+      await new Promise(resolve => setTimeout(resolve, 50))
 
-      const emailInput = screen.getByPlaceholderText('user@example.com')
+      const emailInput = screen.getByPlaceholderText('Customer Email')
       fireEvent.change(emailInput, { target: { value: 'sub@example.com' } })
 
-      const slideContainer = screen.getByText('SLIDE TO PAY').parentElement as HTMLElement
+      // Find the slider container
+      const slideText = screen.getByText('Slide to Pay')
+      const slideContainer = slideText.closest('div[style*="border-radius"]') as HTMLElement
       if (!slideContainer) throw new Error('Missing slide container')
 
       vi.spyOn(slideContainer, 'getBoundingClientRect').mockReturnValue({
         width: 300,
-        height: 48,
+        height: 56,
         top: 0,
         left: 0,
         right: 300,
-        bottom: 48,
+        bottom: 56,
         x: 0,
         y: 0,
         toJSON: () => { },
       } as any)
 
-      const thumb = slideContainer.querySelector('div[style*="cursor: grab"]') as HTMLElement | null
-      if (!thumb) throw new Error('Missing slider thumb')
+      // Find the handle (circular element)
+      const handle = slideContainer.querySelector('div[style*="border-radius: 50%"]') as HTMLElement
+      if (!handle) throw new Error('Missing slider handle')
 
-      fireEvent.touchStart(thumb, { touches: [{ clientX: 0 }] })
-      fireEvent.touchMove(thumb, { touches: [{ clientX: 1000 }] })
-      fireEvent.touchEnd(thumb)
+      fireEvent.touchStart(handle, { touches: [{ clientX: 0 }] })
+      fireEvent.touchMove(handle, { touches: [{ clientX: 1000 }] })
+      fireEvent.touchEnd(handle)
 
       await waitFor(() => expect(mockCreateCheckout).toHaveBeenCalled())
 
@@ -313,36 +322,30 @@ describe('SubscribeBoundary', () => {
 
   describe('Session verification', () => {
     it('verifies Stripe session on success return', async () => {
-      vi.useFakeTimers()
-
       renderWithProviders(<SubscribeBoundary profile={mockProfile} />, {
         route: '/testcreator?success=true&session_id=cs_test_123',
         routePath: '/:username',
       })
 
-      await vi.advanceTimersByTimeAsync(200)
-
-      expect(api.checkout.verifySession).toHaveBeenCalledWith('cs_test_123', 'testcreator')
+      await waitFor(() => {
+        expect(api.checkout.verifySession).toHaveBeenCalledWith('cs_test_123', 'testcreator')
+      })
     })
 
     it('verifies Paystack reference on success return', async () => {
-      vi.useFakeTimers()
-
       renderWithProviders(<SubscribeBoundary profile={mockProfile} />, {
         route: '/testcreator?success=true&reference=pay_ref_123',
         routePath: '/:username',
       })
 
-      await vi.advanceTimersByTimeAsync(200)
-
-      expect(api.checkout.verifyPaystack).toHaveBeenCalledWith('pay_ref_123', 'testcreator')
+      await waitFor(() => {
+        expect(api.checkout.verifyPaystack).toHaveBeenCalledWith('pay_ref_123', 'testcreator')
+      })
     })
   })
 
   describe('Geo detection', () => {
     it('calls detectPayerCountry for geo-based provider selection', async () => {
-      vi.useFakeTimers()
-
       // Import the mocked function to verify it was called
       const { detectPayerCountry } = await import('../api/client')
 
@@ -351,40 +354,64 @@ describe('SubscribeBoundary', () => {
         routePath: '/:username',
       })
 
-      await vi.advanceTimersByTimeAsync(200)
-
-      // Should call server-side geo detection
-      expect(detectPayerCountry).toHaveBeenCalled()
+      await waitFor(() => {
+        // Should call server-side geo detection
+        expect(detectPayerCountry).toHaveBeenCalled()
+      })
     })
   })
 
   describe('Payment readiness', () => {
     it('shows unavailable message when payments not ready', async () => {
-      vi.useFakeTimers()
-
       renderWithProviders(
         <SubscribeBoundary profile={{ ...mockProfile, payoutStatus: 'pending', paymentsReady: false }} />,
         { route: '/testcreator', routePath: '/:username' }
       )
 
-      await vi.advanceTimersByTimeAsync(100)
-
-      // Should show unavailable state instead of slide button
-      expect(screen.getByText('Payments Unavailable')).toBeInTheDocument()
+      await waitFor(() => {
+        // Should show unavailable state instead of slide button
+        expect(screen.getByText('Payments Unavailable')).toBeInTheDocument()
+      })
     })
 
     it('shows payment form when payments are ready', async () => {
-      vi.useFakeTimers()
-
       renderWithProviders(
         <SubscribeBoundary profile={mockProfile} />,
         { route: '/testcreator', routePath: '/:username' }
       )
 
-      await vi.advanceTimersByTimeAsync(100)
+      await waitFor(() => {
+        // Should show slide to pay button
+        expect(screen.getByText('Slide to Pay')).toBeInTheDocument()
+      })
+    })
+  })
 
-      // Should show slide to pay button
-      expect(screen.getByText('SLIDE TO PAY')).toBeInTheDocument()
+  describe('Service vs Support mode', () => {
+    it('shows banner for service mode', async () => {
+      renderWithProviders(
+        <SubscribeBoundary profile={{ ...mockProfile, purpose: 'service' }} />,
+        { route: '/testcreator', routePath: '/:username' }
+      )
+
+      await waitFor(() => {
+        // Service mode shows banner (180px height container)
+        const banner = document.querySelector('div[style*="height: 180px"]')
+        expect(banner).toBeInTheDocument()
+      })
+    })
+
+    it('shows small avatar for support mode', async () => {
+      renderWithProviders(
+        <SubscribeBoundary profile={mockProfile} />,
+        { route: '/testcreator', routePath: '/:username' }
+      )
+
+      await waitFor(() => {
+        // Support mode shows small avatar (64px)
+        const avatar = document.querySelector('div[style*="width: 64px"]')
+        expect(avatar).toBeInTheDocument()
+      })
     })
   })
 })

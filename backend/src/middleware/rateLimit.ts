@@ -122,7 +122,7 @@ export function rateLimit(options: Partial<RateLimitOptions> = {}) {
       console.error('[rateLimit] Redis error, failing closed:', error)
 
       // SECURITY: Default to fail-closed to prevent abuse when Redis is down
-      // Only fail open if explicitly configured AND endpoint is non-critical
+      // Public read-only endpoints can fail open to maintain availability
       const failOpenOverride = process.env.REDIS_FAIL_OPEN === 'true'
 
       // Security-critical endpoints ALWAYS fail closed regardless of override
@@ -136,15 +136,19 @@ export function rateLimit(options: Partial<RateLimitOptions> = {}) {
         }, 503)
       }
 
-      if (failOpenOverride) {
-        // Non-critical endpoints can fail open ONLY if explicitly overridden
-        // This is a temporary measure for development/early production
-        console.warn(`[rateLimit] Redis unavailable, failing OPEN for ${config.keyPrefix} (override enabled)`)
+      // Public read-only endpoints fail open by default to maintain availability
+      // These are low-risk since they don't mutate data or access sensitive info
+      const failOpenByDefaultPrefixes = ['public_ratelimit', 'public_strict_ratelimit']
+      const canFailOpen = failOpenByDefaultPrefixes.some(p => config.keyPrefix.startsWith(p))
+
+      if (canFailOpen || failOpenOverride) {
+        // Public endpoints fail open to prevent 503 errors during Redis outages
+        console.warn(`[rateLimit] Redis unavailable, failing OPEN for ${config.keyPrefix}`)
         await next()
         return
       }
 
-      // Default: fail closed for all endpoints when Redis is down
+      // Default: fail closed for all other endpoints when Redis is down
       // This protects against abuse during Redis outages
       return c.json({
         error: 'Service temporarily unavailable. Please try again in a moment.',

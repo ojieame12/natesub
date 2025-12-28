@@ -8,6 +8,7 @@ import { db } from '../db/client.js'
 import { PLATFORM_SUBSCRIPTION_PRICE_CENTS } from './pricing.js'
 import { sendPlatformDebitNotification, sendPlatformDebitCapReachedNotification } from './email.js'
 import { withLock } from './lock.js'
+import { invalidatePublicProfileCache } from '../utils/cache.js'
 
 // Platform debit cap in cents ($30 = 6 months of $5/mo)
 const PLATFORM_DEBIT_CAP_CENTS = 3000
@@ -392,6 +393,12 @@ export async function handlePlatformSubscriptionEvent(
             platformTrialEndsAt: trialEndsAt,
           },
         })
+
+        // Invalidate public profile cache - subscription status affects paymentsReady
+        if (profile.username) {
+          await invalidatePublicProfileCache(profile.username)
+        }
+
         console.log(`[platform] Subscription ${subscription.id} updated: ${subscription.status}`)
       }
       break
@@ -412,6 +419,12 @@ export async function handlePlatformSubscriptionEvent(
             platformSubscriptionStatus: 'canceled',
           },
         })
+
+        // Invalidate public profile cache - subscription status affects paymentsReady
+        if (profile.username) {
+          await invalidatePublicProfileCache(profile.username)
+        }
+
         console.log(`[platform] Subscription ${subscription.id} canceled`)
       }
       break

@@ -2,6 +2,7 @@ import { db } from '../../../db/client.js'
 import { scheduleReminder } from '../../../jobs/reminders.js'
 import { notifyPayoutCompleted, notifyPayoutFailed } from '../../../services/notifications.js'
 import { alertPayoutFailed } from '../../../services/slack.js'
+import { invalidatePublicProfileCache } from '../../../utils/cache.js'
 
 // Handle Paystack transfer.success - update payout record
 export async function handlePaystackTransferSuccess(data: any) {
@@ -155,6 +156,11 @@ export async function handlePaystackTransferFailed(data: any) {
       where: { id: creatorProfile.id },
       data: { payoutStatus: 'restricted' },
     })
+
+    // Invalidate public profile cache - payoutStatus affects paymentsReady
+    if (creatorProfile.username) {
+      await invalidatePublicProfileCache(creatorProfile.username)
+    }
   }
 
   // Schedule payout failed email notification (sends immediately)

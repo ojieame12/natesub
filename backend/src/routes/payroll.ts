@@ -589,6 +589,7 @@ payroll.get('/verify/:code', publicStrictRateLimit, async (c) => {
 })
 
 // GET /payroll/verify/:code/pdf - Download verification PDF (public)
+// Caches generated PDFs in R2 to avoid regeneration on every request
 payroll.get('/verify/:code/pdf', publicStrictRateLimit, async (c) => {
   const code = c.req.param('code')
 
@@ -603,8 +604,24 @@ payroll.get('/verify/:code/pdf', publicStrictRateLimit, async (c) => {
   }
 
   // Import dynamically to avoid circular dependency
-  const { generateVerificationPdf } = await import('../services/pdf.js')
+  const {
+    generateVerificationPdf,
+    verificationPdfExists,
+    getVerificationPdfSignedUrl,
+    uploadVerificationPdf,
+  } = await import('../services/pdf.js')
 
+  // Check if PDF already exists in R2 (cached)
+  const existingKey = await verificationPdfExists(code)
+  if (existingKey) {
+    const signedUrl = await getVerificationPdfSignedUrl(existingKey)
+    if (signedUrl) {
+      return c.redirect(signedUrl)
+    }
+  }
+
+  // Generate new PDF - use stored createdAt for consistency
+  // This ensures the PDF is identical across requests
   const pdfBuffer = await generateVerificationPdf({
     creatorName: result.creatorName,
     periodStart: result.periodStart,
@@ -616,9 +633,18 @@ payroll.get('/verify/:code/pdf', publicStrictRateLimit, async (c) => {
     payoutDate: result.payoutDate,
     payoutMethod: result.payoutMethod,
     verificationCode: result.verificationCode,
-    verifiedAt: new Date(),
+    verifiedAt: result.createdAt, // Use stored timestamp, not new Date()
   })
 
+  // Upload to R2 for future requests
+  const key = await uploadVerificationPdf(code, pdfBuffer)
+  const signedUrl = await getVerificationPdfSignedUrl(key)
+
+  if (signedUrl) {
+    return c.redirect(signedUrl)
+  }
+
+  // Fallback: return buffer directly if R2 signing fails
   return new Response(new Uint8Array(pdfBuffer), {
     headers: {
       'Content-Type': 'application/pdf',

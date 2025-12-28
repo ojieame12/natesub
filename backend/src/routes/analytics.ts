@@ -70,35 +70,41 @@ analytics.post(
     const deviceType = getDeviceType(userAgent)
 
     // Check for recent view from same visitor (debounce - 30 min window)
+    // Use transaction to make read-check-write atomic and prevent race conditions
     const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000)
-    const recentView = await db.pageView.findFirst({
-      where: {
-        profileId,
-        visitorHash,
-        createdAt: { gte: thirtyMinutesAgo },
-      },
+
+    const result = await db.$transaction(async (tx) => {
+      const existing = await tx.pageView.findFirst({
+        where: {
+          profileId,
+          visitorHash,
+          createdAt: { gte: thirtyMinutesAgo },
+        },
+      })
+
+      if (existing) {
+        // Return existing view ID for conversion tracking updates
+        return { viewId: existing.id, existing: true }
+      }
+
+      // Create new page view
+      const created = await tx.pageView.create({
+        data: {
+          profileId,
+          visitorHash,
+          referrer: referrer || null,
+          utmSource: utmSource || null,
+          utmMedium: utmMedium || null,
+          utmCampaign: utmCampaign || null,
+          deviceType,
+          country: country?.toUpperCase() || null, // Normalize to uppercase
+        },
+      })
+
+      return { viewId: created.id, existing: false }
     })
 
-    if (recentView) {
-      // Return existing view ID for conversion tracking updates
-      return c.json({ viewId: recentView.id, existing: true })
-    }
-
-    // Create new page view
-    const pageView = await db.pageView.create({
-      data: {
-        profileId,
-        visitorHash,
-        referrer: referrer || null,
-        utmSource: utmSource || null,
-        utmMedium: utmMedium || null,
-        utmCampaign: utmCampaign || null,
-        deviceType,
-        country: country?.toUpperCase() || null, // Normalize to uppercase
-      },
-    })
-
-    return c.json({ viewId: pageView.id })
+    return c.json(result)
   } catch (error) {
     console.error('Failed to record page view:', error)
     return c.json({ error: 'Failed to record view' }, 500)

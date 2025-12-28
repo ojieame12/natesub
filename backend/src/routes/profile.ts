@@ -319,12 +319,19 @@ profile.patch(
       updateData.isPublic = data.isPublic
     }
 
+    // Capture old username before update for cache invalidation
+    const oldUsername = existingProfile.username
+
     const updatedProfile = await db.profile.update({
       where: { userId },
       data: updateData,
     })
 
     // Invalidate public profile cache so public pages show fresh data
+    // If username changed, invalidate BOTH old and new cache keys
+    if (oldUsername && oldUsername !== updatedProfile.username) {
+      await invalidatePublicProfileCache(oldUsername)
+    }
     await invalidatePublicProfileCache(updatedProfile.username)
 
     return c.json({

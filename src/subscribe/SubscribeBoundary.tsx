@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { Banknote, Briefcase, Pencil, ArrowLeft, AlertCircle, Heart, Users, Star, Wallet } from 'lucide-react'
+import { Pencil, AlertCircle, Check } from 'lucide-react'
 import { useToast } from '../components'
 import { useCreateCheckout, useRecordPageView, useUpdatePageView } from '../api/hooks'
 import { detectPayerCountry } from '../api/client'
@@ -14,45 +14,95 @@ import { queryKeys } from '../api/queryKeys'
 import { SlideToPay } from './components'
 import { usePricingCalculations, usePaymentVerification } from './hooks'
 
-// Purpose display mapping
-const PURPOSE_CONFIG: Record<string, { label: string; icon: typeof Banknote }> = {
-    support: { label: 'SUPPORT', icon: Heart },
-    tips: { label: 'TIPS', icon: Banknote },
-    service: { label: 'SERVICE', icon: Briefcase },
-    fan_club: { label: 'FAN CLUB', icon: Users },
-    exclusive_content: { label: 'EXCLUSIVE', icon: Star },
-    allowance: { label: 'ALLOWANCE', icon: Wallet },
-    other: { label: 'SUPPORT', icon: Heart },
+// Colors matching design system
+const COLORS = {
+    neutral50: '#FAFAF9',
+    neutral100: '#F5F5F4',
+    neutral200: '#E7E5E4',
+    neutral400: '#A8A29E',
+    neutral500: '#78716C',
+    neutral600: '#57534E',
+    neutral700: '#44403C',
+    neutral900: '#1C1917',
+    white: '#FFFFFF',
 }
 
 // Success overlay component
 function SuccessOverlay({ email, onReset }: { email: string; onReset: () => void }) {
     return (
         <div style={{
-            position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
-            textAlign: 'center', animation: 'lg-fadeInUp 0.5s ease-out 0.3s both'
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(255,255,255,0.98)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 100,
+            animation: 'fadeIn 0.3s ease-out',
         }}>
             <div style={{
-                width: 80, height: 80, background: '#10b981', borderRadius: '50%',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                margin: '0 auto 20px', color: 'white', boxShadow: '0 10px 30px rgba(16, 185, 129, 0.4)'
+                width: 80,
+                height: 80,
+                background: '#10b981',
+                borderRadius: '50%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginBottom: 24,
+                color: 'white',
+                boxShadow: '0 10px 30px rgba(16, 185, 129, 0.3)',
             }}>
-                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <polyline points="20 6 9 17 4 12" />
-                </svg>
+                <Check size={40} strokeWidth={2.5} />
             </div>
-            <h2 style={{ fontSize: 24, fontWeight: 'bold' }}>Payment Complete</h2>
-            <p style={{ opacity: 0.6, marginTop: 10 }}>Receipt sent to {email || 'your email'}</p>
+            <h2 style={{ fontSize: 24, fontWeight: 700, color: COLORS.neutral900, margin: 0 }}>
+                Payment Complete
+            </h2>
+            <p style={{ fontSize: 15, color: COLORS.neutral500, marginTop: 8 }}>
+                Receipt sent to {email || 'your email'}
+            </p>
             <button
                 onClick={onReset}
-                style={{ marginTop: 30, textDecoration: 'underline', opacity: 0.6, border: 'none', background: 'transparent', cursor: 'pointer' }}
+                style={{
+                    marginTop: 32,
+                    fontSize: 14,
+                    color: COLORS.neutral500,
+                    textDecoration: 'underline',
+                    border: 'none',
+                    background: 'transparent',
+                    cursor: 'pointer',
+                }}
             >
                 Start New
             </button>
-            <div style={{ marginTop: 40, opacity: 0.5 }}>
-                <img src="/logo.svg" alt="NatePay" style={{ height: 24 }} />
-            </div>
+            <img
+                src="/logo.svg"
+                alt="NatePay"
+                style={{ height: 24, marginTop: 48, opacity: 0.6 }}
+            />
+            <style>{`
+                @keyframes fadeIn {
+                    from { opacity: 0; }
+                    to { opacity: 1; }
+                }
+            `}</style>
         </div>
+    )
+}
+
+// Perk checkmark icon (shield style)
+function PerkIcon() {
+    return (
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <path
+                d="M12 2L4 5.5V11.5C4 16.19 7.4 20.55 12 22C16.6 20.55 20 16.19 20 11.5V5.5L12 2Z"
+                fill={COLORS.neutral900}
+            />
+            <path
+                d="M10 14.2L7.5 11.7L8.91 10.29L10 11.38L14.59 6.79L16 8.2L10 14.2Z"
+                fill="white"
+            />
+        </svg>
     )
 }
 
@@ -73,16 +123,21 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
     const pricing = usePricingCalculations(profile)
     const verification = usePaymentVerification(profile.username)
 
-    // Invalidate profile cache on successful verification so "Already subscribed" renders
+    // Determine if this is service mode (Retainer) vs support mode
+    const isServiceMode = profile.purpose === 'service'
+    const badgeText = isServiceMode ? 'Retainer' : 'Support'
+
+    // Mock perks for service mode (will come from profile.perks later)
+    const perks = isServiceMode ? (profile as any).perks || [] : []
+
+    // Invalidate profile cache on successful verification
     useEffect(() => {
         if (verification.isSuccess) {
-            // Refetch public profile to update subscription state
             queryClient.invalidateQueries({ queryKey: queryKeys.publicProfile(profile.username) })
         }
     }, [verification.isSuccess, queryClient, profile.username])
 
     // State
-    const [mount, setMount] = useState(false)
     const [subscriberEmail, setSubscriberEmail] = useState('')
     const [emailFocused, setEmailFocused] = useState(false)
     const [status, setStatus] = useState<'idle' | 'processing'>('idle')
@@ -97,6 +152,7 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
 
     // Email validation
     const isValidEmail = subscriberEmail.trim().length > 3 && subscriberEmail.includes('@')
+    const hasEmailValue = subscriberEmail.trim().length > 0
 
     // Show verification errors via toast
     useEffect(() => {
@@ -105,12 +161,8 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
         }
     }, [verification.error, toast])
 
-    // Mount animation and geo detection
+    // Geo detection and page view tracking
     useEffect(() => {
-        const timer = setTimeout(() => setMount(true), 50)
-
-        // Record page view (not for owners) with country data for geo analytics
-        // Wait for country detection to include geo data in the page view
         if (profile.id && !isOwner && !viewIdRef.current && !verification.isVerifying) {
             detectPayerCountry()
                 .then(country => {
@@ -121,18 +173,15 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                         utmSource: searchParams.get('utm_source') || undefined,
                         utmMedium: searchParams.get('utm_medium') || undefined,
                         utmCampaign: searchParams.get('utm_campaign') || undefined,
-                        country: country || undefined, // Pass detected country for geo analytics
+                        country: country || undefined,
                     })
                 })
                 .then(res => {
                     viewIdRef.current = res.viewId
-                    // Mark reachedPayment when pricing UI is visible (not on subscribe click)
-                    // This separates "saw pricing" from "started checkout" for funnel analysis
                     updatePageView({ viewId: res.viewId, data: { reachedPayment: true } }).catch(() => {})
                 })
                 .catch(err => {
-                    // Still record page view even if country detection fails
-                    console.warn('Country detection failed, recording without geo:', err)
+                    console.warn('Country detection failed:', err)
                     recordPageView({
                         profileId: profile.id,
                         referrer: document.referrer || undefined,
@@ -147,11 +196,8 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                         .catch(console.error)
                 })
         } else {
-            // Still detect country for payment provider routing even if not recording view
             detectPayerCountry().then(setPayerCountry).catch(() => {})
         }
-
-        return () => clearTimeout(timer)
     }, [profile.id, recordPageView, updatePageView, isOwner, searchParams, verification.isVerifying])
 
     // Handlers
@@ -168,7 +214,6 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
     const handleSubscribe = async () => {
         setStatus('processing')
         try {
-            // Ensure we have a viewId for conversion attribution
             let viewId = viewIdRef.current
             if (!viewId && profile.id && !isOwner) {
                 try {
@@ -197,8 +242,6 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
             })
 
             if (result.url) {
-                // Mark startedCheckout AFTER checkout session is successfully created
-                // This separates "clicked subscribe" from "checkout session created" for funnel analysis
                 if (viewId) {
                     updatePageView({ viewId, data: { startedCheckout: true } }).catch(() => {})
                 }
@@ -216,8 +259,6 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
     }
 
     const handleReset = () => {
-        setMount(false)
-        setTimeout(() => setMount(true), 100)
         navigate(0)
     }
 
@@ -225,225 +266,438 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
     const isSuccess = verification.isSuccess
     const isProcessing = status === 'processing' || verification.isVerifying
 
-    // --- STYLES ---
-    const containerStyle: React.CSSProperties = {
-        minHeight: '100vh',
-        background: '#fffcf8',
-        backgroundImage: `
-            radial-gradient(at 80% 0%, rgba(255, 210, 8, 0.15) 0px, transparent 50%),
-            radial-gradient(at 0% 50%, rgba(255, 148, 26, 0.12) 0px, transparent 50%),
-            radial-gradient(at 80% 100%, rgba(255, 210, 8, 0.1) 0px, transparent 50%)
-        `,
-        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-        padding: '20px', position: 'relative', overflow: 'hidden',
-        fontFamily: 'var(--font-primary)'
-    }
-
-    const receiptStyle: React.CSSProperties = {
-        width: '100%', maxWidth: 350,
-        backgroundColor: '#ffffff',
-        borderRadius: '16px 16px 0 0',
-        maskImage: `radial-gradient(circle at 10px calc(100% + 5px), transparent 12px, black 13px)`,
-        WebkitMaskImage: `radial-gradient(circle at 10px calc(100% + 5px), transparent 12px, black 13px)`,
-        WebkitMaskSize: '20px 100%', WebkitMaskPosition: '-10px 0', WebkitMaskRepeat: 'repeat-x',
-        padding: '30px 24px 50px',
-        boxShadow: '0 8px 16px -4px rgba(0, 0, 0, 0.15), 0 35px 60px -15px rgba(0, 0, 0, 0.35), 0 60px 120px -25px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(0, 0, 0, 0.03)',
-        transform: mount ? 'translateY(0) scale(1)' : 'translateY(-20px) scale(0.98)',
-        clipPath: mount ? 'inset(-100px -300px -300px -300px)' : 'inset(0 0 100% 0)',
-        opacity: mount ? 1 : 0,
-        transition: 'clip-path 1s cubic-bezier(0.16, 1, 0.3, 1), transform 1s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.8s ease-out',
-        ...(isSuccess && { transform: 'translateY(150%) rotate(2deg)', opacity: 0, transition: 'all 0.6s ease-in' })
-    }
-
-    const canGoBack = typeof window !== 'undefined' && window.history.length > 1 && document.referrer.includes(window.location.host)
+    // Generate banner URL from avatar for service mode
+    // In production, this would be a separate bannerUrl field
+    const bannerUrl = isServiceMode ? profile.avatarUrl : null
 
     return (
-        <div style={containerStyle}>
-            {/* Noise texture */}
-            <div style={{ position: 'fixed', inset: 0, opacity: 0.03, pointerEvents: 'none', backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")` }} />
-
-            {/* Back button */}
-            {(isOwner || canGoBack) && (
-                <div style={{ position: 'absolute', top: 20, left: 20, zIndex: 10 }}>
-                    <button
-                        onClick={() => isOwner ? navigate('/dashboard') : navigate(-1)}
-                        style={{
-                            background: 'rgba(255,255,255,0.8)', backdropFilter: 'blur(10px)',
-                            border: '1px solid rgba(0,0,0,0.05)', borderRadius: '50%',
-                            width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer'
-                        }}
-                    >
-                        <ArrowLeft size={20} color="#444" />
-                    </button>
-                </div>
-            )}
-
+        <div style={{
+            minHeight: '100vh',
+            minHeight: '100dvh',
+            background: COLORS.white,
+            display: 'flex',
+            flexDirection: 'column',
+            fontFamily: 'var(--font-primary, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif)',
+        }}>
             {/* Edit button (owner only) */}
             {isOwner && (
-                <div style={{ position: 'absolute', top: 20, right: 20, zIndex: 10 }}>
+                <div style={{
+                    position: 'absolute',
+                    top: 16,
+                    right: 16,
+                    zIndex: 10,
+                }}>
                     <button
                         onClick={() => navigate('/edit-page')}
                         style={{
-                            background: 'white', border: 'none', borderRadius: 20,
-                            padding: '10px 15px', display: 'flex', alignItems: 'center', gap: 6,
-                            boxShadow: '0 4px 12px rgba(0,0,0,0.08)', fontWeight: 600, fontSize: 13, cursor: 'pointer'
+                            background: COLORS.white,
+                            border: `1px solid ${COLORS.neutral200}`,
+                            borderRadius: 20,
+                            padding: '8px 14px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+                            fontWeight: 600,
+                            fontSize: 13,
+                            cursor: 'pointer',
+                            color: COLORS.neutral700,
                         }}
                     >
-                        <Pencil size={14} /> Edit Page
+                        <Pencil size={14} /> Edit
                     </button>
                 </div>
             )}
 
-            {/* RECEIPT CARD */}
-            <div style={receiptStyle}>
-                {/* Header */}
-                <div style={{ textAlign: 'center', marginBottom: 30 }}>
-                    <div style={{ position: 'relative', width: 72, height: 72, margin: '0 auto 20px' }}>
-                        {profile.avatarUrl ? (
-                            <div style={{
-                                width: '100%', height: '100%', borderRadius: '50%',
-                                backgroundImage: `url(${profile.avatarUrl})`, backgroundSize: 'cover',
-                                filter: 'grayscale(100%) contrast(110%)', border: '1px solid #e5e5e5',
-                                boxShadow: '0 4px 10px rgba(0,0,0,0.1)'
-                            }} />
-                        ) : (
-                            <div style={{
-                                width: '100%', height: '100%', borderRadius: '50%',
-                                background: 'linear-gradient(135deg, #FFD208 0%, #FF941A 100%)',
-                                border: '1px solid #e5e5e5', boxShadow: '0 4px 10px rgba(0,0,0,0.1)',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                fontSize: 28, fontWeight: 700, color: 'white'
-                            }}>
-                                {(profile.displayName || profile.username || 'U').charAt(0).toUpperCase()}
-                            </div>
-                        )}
-                    </div>
-
-                    <div style={{ fontSize: 11, fontWeight: 'bold', letterSpacing: 1, textTransform: 'uppercase', color: '#999' }}>PAID TO</div>
-                    <div style={{ fontSize: 22, fontWeight: 'bold', marginTop: 4 }}>{(profile.displayName || profile.username || 'User').toUpperCase()}</div>
-
-                    <div style={{ display: 'flex', justifyContent: 'center', marginTop: 8 }}>
-                        {(() => {
-                            const config = PURPOSE_CONFIG[profile.purpose || 'support'] || PURPOSE_CONFIG.support
-                            const Icon = config.icon
-                            return (
-                                <div style={{
-                                    background: '#000', color: 'white', padding: '3px 8px', borderRadius: 4,
-                                    fontSize: 10, fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 4, letterSpacing: 0.5
-                                }}>
-                                    <Icon size={10} />
-                                    {config.label}
-                                </div>
-                            )
-                        })()}
-                    </div>
-                </div>
-
-                {/* Pricing breakdown */}
-                <div style={{ fontSize: 13, marginBottom: 25 }}>
-                    {isOwner ? (
-                        <>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12, alignItems: 'center' }}>
-                                <span>Subscription price</span>
-                                <span style={{ fontWeight: 600 }}>{formatCurrency(pricing.currentAmount, pricing.currency)}/mo</span>
-                            </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 12, borderTop: '1px solid #eee' }}>
-                                <span style={{ fontWeight: 'bold', fontSize: 14 }}>You receive</span>
-                                <div style={{ fontWeight: 'bold', fontSize: 24, letterSpacing: -1 }}>{formatCurrency(pricing.feePreview.creatorReceives, pricing.currency)}</div>
-                            </div>
-                            <div style={{ fontSize: 11, color: '#888', marginTop: 8, textAlign: 'right' }}>after 4% platform fee</div>
-                        </>
-                    ) : (
-                        <>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, alignItems: 'center' }}>
-                                <span>Subscription</span>
-                                <span>{formatCurrency(pricing.currentAmount, pricing.currency)}/mo</span>
-                            </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, opacity: 0.7 }}>
-                                <span>Secure payment</span>
-                                <span>+{formatCurrency(pricing.feePreview.serviceFee, pricing.currency)}</span>
-                            </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 15 }}>
-                                <span style={{ fontWeight: 'bold', fontSize: 14, textTransform: 'uppercase' }}>Total Due</span>
-                                <div style={{ fontWeight: 'bold', fontSize: 24, letterSpacing: -1 }}>{formatCurrency(pricing.total, pricing.currency)}</div>
-                            </div>
-                        </>
-                    )}
-                </div>
-
-                <div style={{ borderBottom: '1px dashed #ccc', marginBottom: 25 }} />
-
-                {/* Email input (subscribers only) */}
-                {!isOwner && (
-                    <div style={{ marginBottom: 30 }}>
-                        <label style={{
-                            fontSize: 10, textTransform: 'uppercase', display: 'block', marginBottom: 8,
-                            opacity: emailFocused ? 1 : 0.6,
-                            color: emailFocused ? '#FF941A' : '#222',
-                            transition: 'all 0.2s ease', fontWeight: 'bold'
+            {/* Main Content */}
+            <div style={{
+                flex: 1,
+                display: 'flex',
+                flexDirection: 'column',
+                maxWidth: 480,
+                width: '100%',
+                margin: '0 auto',
+                padding: '0 24px',
+            }}>
+                {/* Header Section - Different for Service vs Support */}
+                {isServiceMode ? (
+                    /* SERVICE MODE: Banner Header */
+                    <div style={{ paddingTop: 16 }}>
+                        <div style={{
+                            width: '100%',
+                            height: 180,
+                            borderRadius: 12,
+                            overflow: 'hidden',
+                            background: COLORS.neutral900,
+                            position: 'relative',
                         }}>
-                            Customer Email
-                        </label>
-                        <input
-                            type="email"
-                            placeholder="user@example.com"
-                            value={subscriberEmail}
-                            onChange={e => setSubscriberEmail(e.target.value)}
-                            onFocus={() => setEmailFocused(true)}
-                            onBlur={() => setEmailFocused(false)}
-                            style={{
-                                width: '100%',
-                                border: emailFocused ? '1px solid #000' : '1px solid #e0e0e0',
-                                padding: '14px', background: emailFocused ? '#fff' : '#f9f9f9',
-                                fontFamily: 'inherit', fontSize: 14, outline: 'none', color: '#222', borderRadius: 0,
-                                boxShadow: emailFocused ? '0 0 0 4px rgba(255, 148, 26, 0.1)' : 'inset 0 1px 3px rgba(0,0,0,0.02)',
-                                transition: 'all 0.2s ease'
-                            }}
-                        />
+                            {bannerUrl ? (
+                                <img
+                                    src={bannerUrl}
+                                    alt=""
+                                    style={{
+                                        width: '100%',
+                                        height: '100%',
+                                        objectFit: 'cover',
+                                        objectPosition: 'center top',
+                                    }}
+                                />
+                            ) : (
+                                <div style={{
+                                    width: '100%',
+                                    height: '100%',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    fontSize: 64,
+                                    fontWeight: 700,
+                                    color: COLORS.white,
+                                    opacity: 0.3,
+                                }}>
+                                    {(profile.displayName || profile.username || 'U').charAt(0).toUpperCase()}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                ) : (
+                    /* SUPPORT MODE: Avatar + Badge Header */
+                    <div style={{
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        justifyContent: 'space-between',
+                        paddingTop: 24,
+                    }}>
+                        {/* Small Avatar */}
+                        <div style={{
+                            width: 64,
+                            height: 64,
+                            borderRadius: '50%',
+                            overflow: 'hidden',
+                            background: COLORS.neutral100,
+                            flexShrink: 0,
+                        }}>
+                            {profile.avatarUrl ? (
+                                <img
+                                    src={profile.avatarUrl}
+                                    alt=""
+                                    style={{
+                                        width: '100%',
+                                        height: '100%',
+                                        objectFit: 'cover',
+                                    }}
+                                />
+                            ) : (
+                                <div style={{
+                                    width: '100%',
+                                    height: '100%',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    background: 'linear-gradient(135deg, #FFD208 0%, #FF941A 100%)',
+                                    fontSize: 24,
+                                    fontWeight: 700,
+                                    color: COLORS.white,
+                                }}>
+                                    {(profile.displayName || profile.username || 'U').charAt(0).toUpperCase()}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Badge */}
+                        <div style={{
+                            background: COLORS.neutral100,
+                            padding: '6px 14px',
+                            borderRadius: 20,
+                            fontSize: 14,
+                            fontWeight: 500,
+                            color: COLORS.neutral700,
+                        }}>
+                            {badgeText}
+                        </div>
                     </div>
                 )}
 
-                {/* Action button */}
-                <div style={{ marginBottom: 35 }}>
+                {/* Name, Price, Badge Row */}
+                <div style={{
+                    marginTop: isServiceMode ? 20 : 24,
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    justifyContent: 'space-between',
+                }}>
+                    <div>
+                        {/* Creator Name */}
+                        <div style={{
+                            fontSize: 16,
+                            color: COLORS.neutral500,
+                            fontWeight: 400,
+                        }}>
+                            {profile.displayName || profile.username || 'Creator'}
+                        </div>
+
+                        {/* Price */}
+                        <div style={{
+                            fontSize: 36,
+                            fontWeight: 700,
+                            color: COLORS.neutral900,
+                            letterSpacing: -1,
+                            lineHeight: 1.1,
+                            marginTop: 2,
+                        }}>
+                            {formatCurrency(pricing.currentAmount, pricing.currency)}
+                            <span style={{
+                                fontSize: 18,
+                                fontWeight: 400,
+                                color: COLORS.neutral700,
+                            }}>/month</span>
+                        </div>
+                    </div>
+
+                    {/* Badge (only for Service mode - Support mode shows in header) */}
+                    {isServiceMode && (
+                        <div style={{
+                            background: COLORS.neutral100,
+                            padding: '6px 14px',
+                            borderRadius: 20,
+                            fontSize: 14,
+                            fontWeight: 500,
+                            color: COLORS.neutral700,
+                            marginTop: 4,
+                        }}>
+                            {badgeText}
+                        </div>
+                    )}
+                </div>
+
+                {/* Perks List (Service Mode Only) */}
+                {isServiceMode && perks.length > 0 && (
+                    <div style={{ marginTop: 28 }}>
+                        {perks.map((perk: { id: string; title: string }, index: number) => (
+                            <div key={perk.id}>
+                                <div style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 12,
+                                    padding: '16px 0',
+                                }}>
+                                    <PerkIcon />
+                                    <span style={{
+                                        fontSize: 16,
+                                        fontWeight: 500,
+                                        color: COLORS.neutral600,
+                                    }}>
+                                        {perk.title}
+                                    </span>
+                                </div>
+                                {index < perks.length - 1 && (
+                                    <div style={{
+                                        height: 1,
+                                        background: COLORS.neutral200,
+                                    }} />
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                )}
+
+                {/* Spacer for Support mode (where perks would be) */}
+                {!isServiceMode && (
+                    <div style={{ flex: 1, minHeight: 40 }} />
+                )}
+
+                {/* Pricing Card */}
+                <div style={{
+                    marginTop: isServiceMode ? 28 : 0,
+                    background: COLORS.neutral50,
+                    borderRadius: 12,
+                    padding: '20px',
+                }}>
+                    {/* Subscription Row */}
+                    <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                    }}>
+                        <span style={{ fontSize: 15, color: COLORS.neutral600 }}>
+                            Subscription
+                        </span>
+                        <span style={{ fontSize: 15, color: COLORS.neutral700, fontWeight: 500 }}>
+                            {formatCurrency(pricing.currentAmount, pricing.currency)}/month
+                        </span>
+                    </div>
+
+                    {/* Dashed Separator */}
+                    <div style={{
+                        borderBottom: `1px dashed ${COLORS.neutral200}`,
+                        margin: '14px 0',
+                    }} />
+
+                    {/* Fee Row */}
+                    <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                    }}>
+                        <span style={{ fontSize: 15, color: COLORS.neutral600 }}>
+                            Secure payment Fee
+                        </span>
+                        <span style={{ fontSize: 15, color: COLORS.neutral700 }}>
+                            +{formatCurrency(pricing.feePreview.serviceFee, pricing.currency)}
+                        </span>
+                    </div>
+
+                    {/* Dashed Separator */}
+                    <div style={{
+                        borderBottom: `1px dashed ${COLORS.neutral200}`,
+                        margin: '14px 0',
+                    }} />
+
+                    {/* Total Row */}
+                    <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                    }}>
+                        <span style={{ fontSize: 15, fontWeight: 600, color: COLORS.neutral900 }}>
+                            Total
+                        </span>
+                        <span style={{ fontSize: 18, fontWeight: 700, color: COLORS.neutral900 }}>
+                            {formatCurrency(pricing.total, pricing.currency)}/month
+                        </span>
+                    </div>
+                </div>
+
+                {/* Action Section */}
+                <div style={{ marginTop: 24, paddingBottom: 24 }}>
                     {isOwner ? (
+                        /* Owner View: Share Button */
                         <button
                             onClick={handleShare}
                             style={{
-                                width: '100%', height: 48, background: 'black', color: 'white', border: 'none',
-                                fontWeight: 'bold', fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8
+                                width: '100%',
+                                height: 56,
+                                background: COLORS.neutral900,
+                                color: COLORS.white,
+                                border: 'none',
+                                borderRadius: 28,
+                                fontWeight: 600,
+                                fontSize: 16,
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
                             }}
                         >
-                            Share Page
+                            Share
                         </button>
                     ) : pricing.isReadyToPay ? (
-                        <SlideToPay
-                            key={resetKey}
-                            onComplete={handleSubscribe}
-                            disabled={!isValidEmail || isProcessing}
-                        />
+                        /* Client View: Email + SlideToPay */
+                        <>
+                            {/* Email Input with Floating Label */}
+                            <div style={{
+                                position: 'relative',
+                                marginBottom: 16,
+                            }}>
+                                <input
+                                    type="email"
+                                    value={subscriberEmail}
+                                    onChange={e => setSubscriberEmail(e.target.value)}
+                                    onFocus={() => setEmailFocused(true)}
+                                    onBlur={() => setEmailFocused(false)}
+                                    placeholder={emailFocused || hasEmailValue ? '' : 'Customer Email'}
+                                    style={{
+                                        width: '100%',
+                                        height: 56,
+                                        padding: hasEmailValue || emailFocused ? '24px 16px 8px' : '0 16px',
+                                        background: COLORS.neutral100,
+                                        border: emailFocused ? `2px solid ${COLORS.neutral900}` : `2px solid transparent`,
+                                        borderRadius: 12,
+                                        fontSize: 16,
+                                        color: COLORS.neutral900,
+                                        outline: 'none',
+                                        transition: 'all 0.2s ease',
+                                        boxSizing: 'border-box',
+                                    }}
+                                />
+                                {/* Floating Label */}
+                                {(hasEmailValue || emailFocused) && (
+                                    <label style={{
+                                        position: 'absolute',
+                                        left: 16,
+                                        top: 8,
+                                        fontSize: 12,
+                                        color: COLORS.neutral500,
+                                        pointerEvents: 'none',
+                                        transition: 'all 0.2s ease',
+                                    }}>
+                                        Customer Email
+                                    </label>
+                                )}
+                            </div>
+
+                            {/* Slide to Pay */}
+                            <SlideToPay
+                                key={resetKey}
+                                onComplete={handleSubscribe}
+                                disabled={!isValidEmail || isProcessing}
+                            />
+                        </>
                     ) : (
+                        /* Payments Unavailable */
                         <div style={{
-                            width: '100%', height: 48, background: '#f3f4f6', color: '#9ca3af',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                            fontSize: 13, fontWeight: 500, borderRadius: 0, border: '1px solid #e5e7eb'
+                            width: '100%',
+                            height: 56,
+                            background: COLORS.neutral100,
+                            color: COLORS.neutral400,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: 8,
+                            fontSize: 15,
+                            fontWeight: 500,
+                            borderRadius: 28,
                         }}>
-                            <AlertCircle size={16} /> Payments Unavailable
+                            <AlertCircle size={18} /> Payments Unavailable
                         </div>
                     )}
                 </div>
 
                 {/* Footer */}
-                <div style={{ marginTop: 20, textAlign: 'center', opacity: 0.8 }}>
-                    <div style={{ fontSize: 9, marginBottom: 12, letterSpacing: 1.5, textTransform: 'uppercase' }}>Powered By</div>
-                    <img src="/logo.svg" alt="NatePay" style={{ height: 28 }} />
-                    <div style={{ marginTop: 15, fontSize: 9, opacity: 0.6 }}>
-                        <a href={TERMS_URL} target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', textDecoration: 'none', marginRight: 10 }}>Terms</a>
-                        <a href={PRIVACY_URL} target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', textDecoration: 'none' }}>Privacy</a>
+                <div style={{
+                    marginTop: 'auto',
+                    paddingBottom: 24,
+                    textAlign: 'center',
+                }}>
+                    <img
+                        src="/logo.svg"
+                        alt="NatePay"
+                        style={{ height: 28 }}
+                    />
+                    <div style={{
+                        marginTop: 12,
+                        fontSize: 12,
+                        color: COLORS.neutral400,
+                    }}>
+                        <a
+                            href={TERMS_URL}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ color: 'inherit', textDecoration: 'none', marginRight: 16 }}
+                        >
+                            Terms
+                        </a>
+                        <a
+                            href={PRIVACY_URL}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ color: 'inherit', textDecoration: 'none' }}
+                        >
+                            Privacy
+                        </a>
                     </div>
                 </div>
             </div>
 
-            {/* Success overlay */}
+            {/* Success Overlay */}
             {isSuccess && <SuccessOverlay email={subscriberEmail} onReset={handleReset} />}
         </div>
     )

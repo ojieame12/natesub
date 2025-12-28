@@ -3,7 +3,7 @@
 
 import PDFDocument from 'pdfkit'
 import QRCode from 'qrcode'
-import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3'
+import { S3Client, PutObjectCommand, GetObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { env } from '../config/env.js'
 import { fileURLToPath } from 'url'
@@ -653,6 +653,59 @@ export interface VerificationPdfData {
   payoutMethod: string | null
   verificationCode: string
   verifiedAt: Date
+}
+
+// Upload verification PDF to R2
+export async function uploadVerificationPdf(
+  verificationCode: string,
+  pdfBuffer: Buffer
+): Promise<string> {
+  const key = `verification-pdfs/${verificationCode}.pdf`
+
+  const command = new PutObjectCommand({
+    Bucket: env.R2_BUCKET,
+    Key: key,
+    Body: pdfBuffer,
+    ContentType: 'application/pdf',
+    // Public verification PDFs can be cached longer since they're immutable
+    CacheControl: 'public, max-age=31536000',
+  })
+
+  await r2.send(command)
+  return key
+}
+
+// Get signed URL for verification PDF (returns null if not found)
+export async function getVerificationPdfSignedUrl(key: string): Promise<string | null> {
+  try {
+    // Check if object exists first
+    const command = new GetObjectCommand({
+      Bucket: env.R2_BUCKET,
+      Key: key,
+      ResponseContentDisposition: 'inline; filename="verification.pdf"',
+    })
+
+    const signedUrl = await getSignedUrl(r2, command, { expiresIn: 900 }) // 15 min
+    return signedUrl
+  } catch {
+    return null
+  }
+}
+
+// Check if verification PDF exists in R2
+export async function verificationPdfExists(verificationCode: string): Promise<string | null> {
+  const key = `verification-pdfs/${verificationCode}.pdf`
+  try {
+    // HeadObject checks existence without downloading the file
+    const command = new HeadObjectCommand({
+      Bucket: env.R2_BUCKET,
+      Key: key,
+    })
+    await r2.send(command)
+    return key
+  } catch {
+    return null
+  }
 }
 
 export async function generateVerificationPdf(data: VerificationPdfData): Promise<Buffer> {

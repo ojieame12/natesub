@@ -19,6 +19,7 @@ import { rotateSessionToken } from '../services/auth.js'
 import { maskAccountNumber } from '../utils/pii.js'
 import { decryptAccountNumber, encryptAccountNumber } from '../utils/encryption.js'
 import { env } from '../config/env.js'
+import { invalidatePublicProfileCache } from '../utils/cache.js'
 
 const paystackRoutes = new Hono()
 
@@ -256,7 +257,7 @@ paystackRoutes.post(
       const encryptedAccountNumber = encryptAccountNumber(data.accountNumber)
 
       // Store verified account details
-      await db.profile.update({
+      const profile = await db.profile.update({
         where: { userId },
         data: {
           paystackSubaccountCode: result.subaccountCode,
@@ -267,6 +268,11 @@ paystackRoutes.post(
           payoutStatus: 'active', // Mark as active
         },
       })
+
+      // Invalidate public profile cache - payoutStatus affects paymentsReady
+      if (profile.username) {
+        await invalidatePublicProfileCache(profile.username)
+      }
 
       // SECURITY: Rotate session token after connecting payment account
       const newToken = await rotateTokenOnSuccess(c)
@@ -339,7 +345,7 @@ paystackRoutes.post('/disconnect', requireAuth, async (c) => {
 
   try {
     // Clear Paystack data from profile
-    await db.profile.update({
+    const updatedProfile = await db.profile.update({
       where: { userId },
       data: {
         paystackSubaccountCode: null,
@@ -350,6 +356,11 @@ paystackRoutes.post('/disconnect', requireAuth, async (c) => {
         payoutStatus: 'pending',
       },
     })
+
+    // Invalidate public profile cache - payoutStatus affects paymentsReady
+    if (updatedProfile.username) {
+      await invalidatePublicProfileCache(updatedProfile.username)
+    }
 
     // SECURITY: Rotate session token after disconnecting payment account
     const newToken = await rotateTokenOnSuccess(c)
