@@ -694,6 +694,19 @@ export function useSendRequest() {
   })
 }
 
+export function useResendRequest() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ id, method }: { id: string; method: 'email' | 'link' }) =>
+      api.requests.resend(id, method),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.requests.all })
+      queryClient.invalidateQueries({ queryKey: queryKeys.activity.all })
+    },
+  })
+}
+
 // Public request hooks (for recipients)
 export function usePublicRequest(token: string) {
   return useQuery({

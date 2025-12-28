@@ -12,7 +12,7 @@ import {
     Filter,
 } from 'lucide-react'
 import { Pressable, useToast, SkeletonList, ErrorState, LoadingButton } from './components'
-import { useRequests, useCurrentUser } from './api/hooks'
+import { useRequests, useResendRequest } from './api/hooks'
 import { getCurrencySymbol, formatCompactNumber } from './utils/currency'
 import './SentRequests.css'
 
@@ -79,8 +79,6 @@ export default function SentRequests() {
     const toast = useToast()
     const [filter, setFilter] = useState<FilterType>('all')
     const [showFilters, setShowFilters] = useState(false)
-    const { data: userData } = useCurrentUser()
-    const currencySymbol = getCurrencySymbol(userData?.profile?.currency || 'USD')
 
     // Real API hook - fetch requests based on filter
     const {
@@ -92,6 +90,9 @@ export default function SentRequests() {
         hasNextPage,
         isFetchingNextPage,
     } = useRequests(mapFilterToApiStatus(filter))
+
+    // Resend mutation
+    const resendMutation = useResendRequest()
 
     // Flatten paginated data
     const allRequests = useMemo(() => {
@@ -109,9 +110,22 @@ export default function SentRequests() {
         }
     }, [allRequests])
 
-    const handleResend = (_id: string) => {
-        // TODO: Implement resend via API - would need to create new draft and send
-        toast.info('Resend coming soon')
+    const handleResend = async (id: string, hasEmail: boolean) => {
+        try {
+            const result = await resendMutation.mutateAsync({
+                id,
+                method: hasEmail ? 'email' : 'link',
+            })
+            if (hasEmail) {
+                toast.success('Request resent!')
+            } else {
+                // Copy link to clipboard
+                await navigator.clipboard.writeText(result.requestLink)
+                toast.success('New link copied to clipboard!')
+            }
+        } catch (err: any) {
+            toast.error(err?.error || 'Failed to resend request')
+        }
     }
 
     const loadData = () => {
@@ -219,7 +233,7 @@ export default function SentRequests() {
                                             <div className="request-top-row">
                                                 <span className="request-recipient">{request.recipientName}</span>
                                                 <span className="request-amount">
-                                                    {currencySymbol}{formatCompactNumber(request.amount)}{request.isRecurring ? '/mo' : ''}
+                                                    {getCurrencySymbol(request.currency || 'USD')}{formatCompactNumber(request.amount)}{request.isRecurring ? '/mo' : ''}
                                                 </span>
                                             </div>
                                             <div className="request-bottom-row">
@@ -237,10 +251,11 @@ export default function SentRequests() {
                                         </div>
 
                                         <div className="request-actions">
-                                            {(displayStatus === 'declined' || displayStatus === 'expired') && (
+                                            {displayStatus === 'pending' && (
                                                 <Pressable
                                                     className="request-action-btn"
-                                                    onClick={() => handleResend(request.id)}
+                                                    onClick={() => handleResend(request.id, !!request.recipientEmail)}
+                                                    disabled={resendMutation.isPending}
                                                 >
                                                     <RefreshCw size={14} />
                                                     <span>Resend</span>

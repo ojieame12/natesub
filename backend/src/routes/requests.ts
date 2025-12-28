@@ -597,4 +597,94 @@ requests.post(
   }
 )
 
+// Resend request (regenerate token, optionally resend email)
+requests.post(
+  '/:id/resend',
+  requireAuth,
+  zValidator('param', z.object({ id: z.string().uuid() })),
+  zValidator('json', z.object({
+    method: z.enum(['email', 'link']),
+  })),
+  async (c) => {
+    const userId = c.get('userId')
+    const { id } = c.req.valid('param')
+    const { method } = c.req.valid('json')
+
+    const request = await db.request.findFirst({
+      where: { id, creatorId: userId },
+    })
+
+    if (!request) {
+      return c.json({ error: 'Request not found' }, 404)
+    }
+
+    // Only allow resending if still pending (sent status)
+    // Don't resend completed, declined, or expired requests
+    if (request.status !== 'sent') {
+      return c.json({ error: 'Can only resend pending requests' }, 400)
+    }
+
+    // Rate limit resends: max 3 per request per day
+    const resendRateLimitKey = `resend:${id}:${new Date().toISOString().slice(0, 10)}`
+    const resendCount = await redis.incr(resendRateLimitKey)
+    if (resendCount === 1) {
+      await redis.expire(resendRateLimitKey, 86400)
+    }
+    if (resendCount > 3) {
+      return c.json({ error: 'Too many resends for this request today' }, 429)
+    }
+
+    // Generate new public token
+    const token = generateToken()
+    const tokenHash = hashToken(token)
+    const tokenExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
+
+    // Get creator profile for name
+    const profile = await db.profile.findUnique({ where: { userId } })
+    const creatorName = profile?.displayName || 'Someone'
+
+    // Build request link
+    const requestLink = `${env.PUBLIC_PAGE_URL}/r/${token}`
+
+    // Send email if method is email and recipient has email
+    if (method === 'email' && request.recipientEmail) {
+      await sendRequestEmail(
+        request.recipientEmail,
+        creatorName,
+        request.message,
+        requestLink
+      )
+    }
+
+    // Update request with new token (extends expiry)
+    await db.request.update({
+      where: { id },
+      data: {
+        publicToken: encrypt(token),
+        publicTokenHash: tokenHash,
+        tokenExpiresAt,
+      },
+    })
+
+    // Create activity
+    await db.activity.create({
+      data: {
+        userId,
+        type: 'request_resent',
+        payload: {
+          requestId: id,
+          recipientName: request.recipientName,
+          method,
+        },
+      },
+    })
+
+    return c.json({
+      success: true,
+      requestLink,
+      method,
+    })
+  }
+)
+
 export default requests

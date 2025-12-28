@@ -849,6 +849,15 @@ export const requests = {
       }
     ),
 
+  resend: (id: string, method: 'email' | 'link') =>
+    apiFetch<{ success: boolean; requestLink: string; method: string }>(
+      `/requests/${id}/resend`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ method }),
+      }
+    ),
+
   // Public routes for recipients
   view: (token: string) =>
     apiFetch<{ request: any }>(`/requests/r/${token}`),
