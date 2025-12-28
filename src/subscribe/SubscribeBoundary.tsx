@@ -289,10 +289,13 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
             <div style={{
                 position: 'absolute',
                 inset: 0,
-                backgroundImage: 'url("/dither-2.png")',
+                backgroundImage: 'url("/dither.png")',
                 backgroundRepeat: 'repeat',
-                opacity: 0.15,
+                backgroundSize: '200px 200px',
+                opacity: 0.4,
+                mixBlendMode: 'multiply',
                 pointerEvents: 'none',
+                zIndex: 0,
             }} />
 
             {/* Edit button (owner only) */}
