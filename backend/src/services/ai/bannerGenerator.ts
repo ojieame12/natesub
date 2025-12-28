@@ -147,42 +147,74 @@ export async function generateBanner(
 
 /**
  * Build the prompt for banner generation.
- * Engineered for professional, clean output.
+ * Engineered for premium, professional output using Nano Banana Pro's advanced capabilities.
  */
 function buildBannerPrompt(input: BannerGenerationInput): string {
+  // Industry-specific styling hints
+  const industryStyles: Record<string, string> = {
+    fitness: 'energetic, dynamic lighting with warm orange/gold accents, gym or outdoor sports aesthetic',
+    coaching: 'warm, inviting atmosphere with soft natural lighting, inspirational and approachable',
+    consulting: 'corporate elegance, cool blue/grey tones, minimalist office or city skyline backdrop',
+    design: 'creative studio aesthetic, artistic lighting, modern and stylish with subtle color gradients',
+    tech: 'futuristic, clean lines, subtle tech elements like code patterns or circuit motifs, blue/purple tones',
+    education: 'academic warmth, library or study environment feel, welcoming and knowledgeable',
+    creative: 'artistic flair, bold yet sophisticated, creative studio or gallery aesthetic',
+    business: 'executive presence, premium corporate feel, subtle luxury with clean lines',
+    health: 'calming, wellness-focused, soft greens or blues, clean and trustworthy',
+    finance: 'sophisticated luxury, premium materials feel, dark tones with gold accents',
+    marketing: 'bold and confident, dynamic energy, modern and trend-forward aesthetic',
+  }
+
+  const serviceType = input.serviceType?.toLowerCase() || ''
+  const styleHint = industryStyles[serviceType] || 'professional, modern, trustworthy aesthetic'
+
   const serviceContext = input.serviceType
-    ? `This person is a ${input.serviceType}.`
-    : 'This is a professional service provider.'
+    ? `INDUSTRY: ${input.serviceType}\nSTYLE DIRECTION: ${styleHint}`
+    : 'STYLE DIRECTION: Premium professional service provider aesthetic'
 
-  return `Create a professional banner image for a subscription page header.
+  return `You are a professional graphic designer creating a premium banner for a high-end subscription service.
 
-INPUT: A portrait/headshot photo of a person.
-OUTPUT: A wide banner image (${BANNER_WIDTH}x${BANNER_HEIGHT} pixels, 16:5 aspect ratio).
+TASK: Transform this headshot into a stunning wide banner that looks like it belongs on a premium SaaS landing page or executive speaker profile.
+
+REFERENCE IMAGE: The attached photo shows the person who needs to appear in the banner.
 
 CRITICAL REQUIREMENTS:
-1. PRESERVE the person's face and likeness EXACTLY from the input photo - do not alter their appearance
-2. Extend the image horizontally to banner dimensions (wide format)
-3. Use a SOLID DARK background - black, charcoal (#1a1a1a), or very dark navy (#0a0a1a)
-4. Center the person in the frame
-5. The person should be visible from roughly chest/shoulders up
-6. Professional, clean aesthetic - like a LinkedIn banner or speaker page hero
+1. PRESERVE IDENTITY: The person's face, features, and likeness must be EXACTLY preserved
+2. WIDE FORMAT: 16:9 aspect ratio banner suitable for a page header
+3. PREMIUM AESTHETIC: This should look like a $10,000 photoshoot result
+4. PROFESSIONAL COMPOSITION: Person positioned in the left third or center, with intentional negative space
 
-MUST NOT INCLUDE:
-- NO text, watermarks, or overlays
-- NO busy patterns or distracting elements
-- NO filters that alter skin tone or facial features
-- NO cartoonish or illustrated styles - keep it photorealistic
+VISUAL STYLE:
+- ${styleHint}
+- Studio-quality lighting with depth and dimension
+- Rich, cinematic color grading (not flat or washed out)
+- Subtle depth of field for professional photography feel
+- Clean, uncluttered composition with breathing room
 
-STYLE GUIDANCE:
-- Modern, minimal, professional
-- Think: executive headshot meets speaker page hero
-- Subtle professional lighting
-- Slight vignette effect is acceptable
-- The mood should convey expertise and trust
+BACKGROUND TREATMENT:
+- Dark, sophisticated backdrop (deep charcoal #1C1C1E, rich navy #0A1628, or elegant black)
+- Can include subtle gradient or atmospheric lighting effects
+- Optional: very subtle, abstract environmental elements matching the industry
+- NO distracting patterns, NO text, NO logos
 
-CONTEXT: ${serviceContext}
+PHOTOGRAPHY QUALITY:
+- Looks like shot with a Sony A7R IV or Hasselblad
+- Professional retouching (subtle skin smoothing, not plastic)
+- Catch lights in eyes preserved
+- Natural, flattering shadow placement
 
-Generate the banner image only.`
+${serviceContext}
+${input.displayName ? `PERSON: ${input.displayName}` : ''}
+
+PROHIBITED:
+❌ Text overlays or watermarks
+❌ Cartoon or illustrated styles
+❌ Artificial or uncanny valley appearance
+❌ Over-filtered or Instagram-style processing
+❌ Stock photo generic look
+❌ Altering facial features, skin tone, or identity
+
+OUTPUT: Generate ONE premium banner image. Think "Apple keynote speaker banner" or "Y Combinator founder profile".`
 }
 
 /**

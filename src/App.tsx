@@ -460,13 +460,16 @@ function AppShell() {
 
   // Show splash while checking auth (except for public routes after min time)
   // When splash is exiting, render content underneath so exit animation overlays it
-  const showSplashOverlay = showSplash && !bypassSplash && !splashExiting
+  // NEVER show splash for public creator pages - check window.location directly to avoid React Router timing issues
+  const isPublicCreatorDirect = typeof window !== 'undefined' && isPublicCreatorPage(window.location.pathname)
+  const showSplashOverlay = showSplash && !bypassSplash && !splashExiting && !isPublicCreatorDirect
 
   return (
     <>
       {/* Splash overlay - shown during auth check, fades out when ready */}
+      {/* NEVER show for public creator pages */}
       {showSplashOverlay && <SplashScreen />}
-      {showSplash && splashExiting && <SplashScreen exiting />}
+      {showSplash && splashExiting && !isPublicCreatorDirect && <SplashScreen exiting />}
 
       {/* Global "Liquid Glass" Atmosphere - persists across all routes except public creator pages */}
       {!isPublicCreator && <AmbientBackground />}

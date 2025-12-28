@@ -117,7 +117,7 @@ export async function generatePerks(input: PerksInput): Promise<Perk[]> {
 
 /**
  * Build the prompt for perks generation.
- * Heavily engineered to ensure exactly 3 high-quality perks.
+ * Heavily engineered to ensure exactly 3 high-quality, industry-specific perks.
  */
 function buildPerksPrompt(input: PerksInput): string {
   // Determine tier based on price
@@ -125,67 +125,113 @@ function buildPerksPrompt(input: PerksInput): string {
     : input.pricePerMonth >= 100 ? 'mid-tier'
     : 'entry-level'
 
-  const industryContext = input.industry
-    ? `Industry: ${input.industry}`
+  // Industry-specific perk templates
+  const industryTemplates: Record<string, { examples: string[]; deliverables: string[] }> = {
+    fitness: {
+      examples: ['Custom workout programs', 'Weekly form check videos', 'Nutrition plan updates', 'Direct trainer messaging', 'Progress tracking calls'],
+      deliverables: ['workout plans', 'meal plans', 'form corrections', 'check-ins', 'body composition reviews'],
+    },
+    coaching: {
+      examples: ['Weekly 1-on-1 sessions', 'Voice memo feedback', 'Goal-setting workshops', 'Accountability check-ins', 'Resource library access'],
+      deliverables: ['coaching calls', 'action plans', 'feedback sessions', 'mindset exercises', 'journal prompts'],
+    },
+    consulting: {
+      examples: ['Monthly strategy sessions', 'Pitch deck reviews', 'Investor introductions', 'Market analysis reports', 'Board meeting prep'],
+      deliverables: ['strategy sessions', 'document reviews', 'network introductions', 'analysis reports', 'implementation guides'],
+    },
+    design: {
+      examples: ['Unlimited design revisions', 'Priority project queue', 'Brand guideline updates', 'Source file access', 'Weekly design reviews'],
+      deliverables: ['design iterations', 'brand assets', 'mockups', 'style guides', 'creative direction'],
+    },
+    tech: {
+      examples: ['Weekly code reviews', 'Architecture consultations', 'Pair programming sessions', 'Tech stack guidance', 'Slack/Discord access'],
+      deliverables: ['code reviews', 'technical mentorship', 'debugging sessions', 'architecture plans', 'best practices guides'],
+    },
+    education: {
+      examples: ['Live weekly classes', 'Homework feedback', 'Office hours access', 'Course materials library', 'Certificate of completion'],
+      deliverables: ['lessons', 'assignments', 'feedback', 'study materials', 'practice exercises'],
+    },
+    creative: {
+      examples: ['Monthly content reviews', 'Creative direction calls', 'Asset library access', 'Collaboration sessions', 'Portfolio feedback'],
+      deliverables: ['creative feedback', 'content reviews', 'creative assets', 'brainstorm sessions', 'style guidance'],
+    },
+    business: {
+      examples: ['Monthly advisory calls', 'Strategic planning sessions', 'Network introductions', 'Financial review meetings', 'Growth strategy docs'],
+      deliverables: ['advisory sessions', 'strategy documents', 'introductions', 'business reviews', 'action plans'],
+    },
+    health: {
+      examples: ['Personalized protocols', 'Weekly wellness check-ins', 'Lab result reviews', 'Supplement guidance', 'Direct practitioner access'],
+      deliverables: ['health protocols', 'check-ins', 'result interpretations', 'lifestyle recommendations', 'progress tracking'],
+    },
+    finance: {
+      examples: ['Monthly portfolio reviews', 'Investment strategy calls', 'Tax planning sessions', 'Market insight reports', 'Financial planning docs'],
+      deliverables: ['portfolio reviews', 'investment advice', 'financial plans', 'market analysis', 'tax strategies'],
+    },
+    marketing: {
+      examples: ['Campaign strategy sessions', 'Content calendar reviews', 'Analytics deep-dives', 'Ad creative feedback', 'Growth tactic reports'],
+      deliverables: ['campaign reviews', 'content strategies', 'performance reports', 'creative feedback', 'optimization tips'],
+    },
+  }
+
+  const industry = input.industry?.toLowerCase() || input.serviceType?.toLowerCase() || ''
+  const template = industryTemplates[industry]
+
+  const industryGuidance = template
+    ? `\nINDUSTRY-SPECIFIC GUIDANCE (${industry.toUpperCase()}):
+- Common deliverables in this field: ${template.deliverables.join(', ')}
+- Example perks that work well: "${template.examples.slice(0, 3).join('", "')}"`
     : ''
 
-  const serviceContext = input.serviceType
-    ? `Service type: ${input.serviceType}`
-    : ''
+  // Build context strings
+  const serviceTypeStr = input.serviceType ? `- Service type: ${input.serviceType}\n` : ''
+  const industryStr = input.industry ? `- Industry: ${input.industry}\n` : ''
 
-  return `You are a subscription page copywriter. Generate EXACTLY 3 perks for a ${tier} service subscription.
+  return `You are an expert subscription page copywriter who understands what makes subscribers convert. Generate EXACTLY 3 perks that feel valuable and specific.
 
-CONTEXT:
+SERVICE CONTEXT:
 - Description: "${input.serviceDescription}"
-${serviceContext}
-${industryContext}
-- Price: $${input.pricePerMonth}/month
-- Creator: ${input.displayName || 'Service provider'}
+${serviceTypeStr}${industryStr}- Price point: $${input.pricePerMonth}/month (${tier} tier)
+- Provider: ${input.displayName || 'Expert'}
+${industryGuidance}
 
-STRICT RULES - FOLLOW EXACTLY:
-1. Generate EXACTLY 3 perks - not 2, not 4, not 5. COUNT: THREE.
-2. Each perk: 2-6 words maximum
-3. Start with action verbs OR tangible nouns
-4. Be SPECIFIC to the service (no generic "24/7 support" or "access to resources")
-5. Match the value to the price tier (${tier})
-6. Use sentence case (capitalize first word only)
+YOUR TASK: Create 3 perks that answer "What do I actually GET for my money?"
 
-PRICE TIER GUIDANCE:
-- Entry-level ($10-99): Basic access (e.g., "Weekly check-ins", "Resource library access", "Email support")
-- Mid-tier ($100-499): Active engagement (e.g., "Bi-weekly strategy calls", "Custom action plans", "Priority responses")
-- Premium ($500+): High-touch (e.g., "Daily coaching sessions", "On-call access 24/7", "Personalized programs")
+PERK REQUIREMENTS:
+✓ EXACTLY 3 perks (not 2, not 4)
+✓ Each perk: 3-7 words
+✓ Must describe a TANGIBLE deliverable or access
+✓ Must be SPECIFIC to this service (not generic)
+✓ Match the value expectation of ${tier} tier ($${input.pricePerMonth}/mo)
 
-EXCELLENT EXAMPLES by industry:
-- Fitness: "Custom meal plans", "Weekly workout updates", "Direct messaging access"
-- Business consulting: "Monthly strategy calls", "Pitch deck reviews", "Investor introductions"
-- Design: "Unlimited revision rounds", "Priority project slots", "Brand asset library"
-- Tech/Dev: "Code reviews weekly", "Architecture consultations", "Slack channel access"
-- Coaching: "Weekly 1-on-1 calls", "Personalized roadmap", "Voice memo feedback"
+TIER EXPECTATIONS:
+${tier === 'premium' ? '- PREMIUM ($500+): High-touch, exclusive access, personalized everything, VIP treatment' :
+  tier === 'mid-tier' ? '- MID-TIER ($100-499): Active engagement, regular 1-on-1 time, customized deliverables' :
+  '- ENTRY ($10-99): Access-based, community/group format, structured content or check-ins'}
 
-BAD EXAMPLES (too vague - DO NOT USE):
-- "Support" ❌
-- "Help when you need it" ❌
-- "Access to resources" ❌
-- "Regular updates" ❌
-- "Ongoing guidance" ❌
+FORMULA FOR GREAT PERKS:
+[Frequency/Quantity] + [Specific Deliverable] + [Optional: Method/Access]
+Examples: "Weekly 1-on-1 coaching calls", "Custom meal plans monthly", "Direct WhatsApp access"
 
-OUTPUT FORMAT - JSON ONLY:
+❌ BANNED PHRASES (too vague):
+- "Support", "Help", "Guidance", "Resources", "Updates", "Access to content"
+- "Ongoing", "Regular", "Continuous", "Dedicated"
+- Any perk without a SPECIFIC deliverable
+
+OUTPUT (JSON only):
 {
   "perks": [
-    "First perk here",
-    "Second perk here",
-    "Third perk here"
+    "First specific perk here",
+    "Second specific perk here",
+    "Third specific perk here"
   ]
 }
 
-CRITICAL CHECKLIST BEFORE RESPONDING:
-□ Exactly 3 perks? (not 2, not 4)
-□ Each perk 2-6 words?
-□ Specific to the service?
-□ Appropriate for ${tier} tier?
-□ Valid JSON format?
+FINAL CHECK:
+□ Would a skeptical buyer say "ok, I know exactly what I'm getting"?
+□ Is each perk distinctly different from the others?
+□ Does the value feel right for $${input.pricePerMonth}/month?
 
-Respond with ONLY the JSON object. No other text.`
+Respond with ONLY valid JSON.`
 }
 
 /**
