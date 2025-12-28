@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef } from 'react'
 import { ChevronLeft, ChevronDown, Check, Loader2, AlertCircle, Camera, RefreshCw, Heart, Gift, Briefcase, Star, Sparkles, Wallet, MoreHorizontal, Edit3, Wand2 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useOnboardingStore } from './store'
@@ -12,7 +12,7 @@ import {
     getCrossBorderCurrencyOptions,
 } from '../utils/regionConfig'
 import { api } from '../api'
-import { uploadFile, useGeneratePerks, useGenerateBanner, useAIConfig } from '../api/hooks'
+import { uploadFile, useGeneratePerks, useAIConfig } from '../api/hooks'
 import './onboarding.css'
 
 // Purpose options with icons for visual differentiation
@@ -40,7 +40,6 @@ export default function PersonalReviewStep() {
     const [editingPerkIndex, setEditingPerkIndex] = useState<number | null>(null)
     const [editingPerkValue, setEditingPerkValue] = useState('')
     const generatePerksMutation = useGeneratePerks()
-    const generateBannerMutation = useGenerateBanner()
     const { data: aiConfig } = useAIConfig()
     const isAIAvailable = aiConfig?.available ?? false
 
@@ -74,7 +73,6 @@ export default function PersonalReviewStep() {
         servicePerks,
         setServicePerks,
         bannerUrl,
-        setBannerUrl,
     } = useOnboardingStore()
 
     // Check if we're in service mode
@@ -208,24 +206,7 @@ export default function PersonalReviewStep() {
         }
     }
 
-    // Service mode: Generate banner from avatar
-    const handleGenerateBanner = async () => {
-        if (!avatarUrl) {
-            setError('Please upload an avatar first')
-            return
-        }
-        try {
-            const result = await generateBannerMutation.mutateAsync()
-            setBannerUrl(result.bannerUrl)
-            setError(null)
-        } catch (err: any) {
-            console.error('Failed to generate banner:', err)
-            // Non-critical - banner is optional
-        }
-    }
-
-    // Note: Auto-banner generation removed - users click "Generate" explicitly
-    // This prevents hidden latency/cost hits on mode toggle
+    // Note: Banner generation available in EditPage after onboarding
 
     // Handle perk inline editing
     const startEditingPerk = (index: number) => {
