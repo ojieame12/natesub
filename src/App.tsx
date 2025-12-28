@@ -363,12 +363,25 @@ function AppShell() {
       return false
     }
   })()
-  const [showSplash, setShowSplash] = useState(!hasShownSplash && !isPublicCreator)
+  // Never show splash for public creator pages (check both initial state AND current pathname)
+  const [showSplash, setShowSplash] = useState(() => {
+    // Check window.location directly for SSR/hydration safety
+    const pathname = typeof window !== 'undefined' ? window.location.pathname : '/'
+    const isPublicOnInit = isPublicCreatorPage(pathname)
+    return !hasShownSplash && !isPublicOnInit
+  })
   const [splashExiting, setSplashExiting] = useState(false)
   const [minTimeElapsed, setMinTimeElapsed] = useState(false)
   const hasPrefetched = useRef(false)
   const enableMockRoutes =
     import.meta.env.DEV || import.meta.env.VITE_ENABLE_MOCK_ROUTES === 'true'
+
+  // Immediately hide splash for public creator pages (handles late route resolution)
+  useEffect(() => {
+    if (isPublicCreator && showSplash) {
+      setShowSplash(false)
+    }
+  }, [isPublicCreator, showSplash])
 
   // Mark splash as shown when it's hidden (persists across remounts within session)
   useEffect(() => {

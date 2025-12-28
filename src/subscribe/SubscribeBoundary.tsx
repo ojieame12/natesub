@@ -152,15 +152,15 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
 
     // Multi-stage entrance animation:
     // 1. Card appears faded at small height
-    // 2. Card expands to full height
+    // 2. Card expands to full height (slow, premium feel)
     // 3. Content fades in
     useEffect(() => {
-        // Stage 1: Trigger height expansion after first paint
-        const revealTimer = requestAnimationFrame(() => setCardRevealed(true))
-        // Stage 2: Fade in content after height expansion completes
-        const contentTimer = setTimeout(() => setContentVisible(true), 400)
+        // Stage 1: Trigger height expansion after brief delay for paint
+        const revealTimer = setTimeout(() => setCardRevealed(true), 50)
+        // Stage 2: Fade in content after height expansion completes (800ms animation)
+        const contentTimer = setTimeout(() => setContentVisible(true), 900)
         return () => {
-            cancelAnimationFrame(revealTimer)
+            clearTimeout(revealTimer)
             clearTimeout(contentTimer)
         }
     }, [])
@@ -344,15 +344,17 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                 position: 'relative',
                 zIndex: 1,
                 overflow: 'hidden',
-                // Height reveal animation
-                maxHeight: cardRevealed ? 1200 : 15,
-                opacity: cardRevealed ? 1 : 0.6,
-                transition: 'max-height 0.5s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease-out',
+                // Height reveal animation - slow, premium feel
+                maxHeight: cardRevealed ? 1200 : 20,
+                opacity: cardRevealed ? 1 : 0.4,
+                transform: cardRevealed ? 'scale(1)' : 'scale(0.98)',
+                transition: 'max-height 0.8s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.6s ease-out, transform 0.8s cubic-bezier(0.22, 1, 0.36, 1)',
             }}>
                 {/* Content wrapper for fade-in */}
                 <div style={{
                     opacity: contentVisible ? 1 : 0,
-                    transition: 'opacity 0.4s ease-out',
+                    transform: contentVisible ? 'translateY(0)' : 'translateY(8px)',
+                    transition: 'opacity 0.5s ease-out, transform 0.5s cubic-bezier(0.22, 1, 0.36, 1)',
                 }}>
                 {/* Header Section - Different for Service vs Support */}
                 {isServiceMode ? (
