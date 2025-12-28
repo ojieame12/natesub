@@ -25,6 +25,7 @@ import { validateSession } from '../../services/auth.js'
 
 import { redis } from '../../db/redis.js'
 import { cached, CACHE_TTL, adminDashboardKey } from '../../utils/cache.js'
+import { isStripeCrossBorder } from '../../utils/countryConfig.js'
 
 const system = new Hono()
 
@@ -1480,8 +1481,6 @@ system.post('/migration/cross-border-profiles/:id', adminSensitiveRateLimit, req
   // currency amounts would create wildly incorrect USD prices (e.g., ₦5000 → $5000).
   // pricingModel is also set to 'single' to ensure UI consistency.
 
-  const crossBorderCountries = ['NG', 'GH', 'KE']
-
   // Find the profile
   const profile = await db.profile.findUnique({
     where: { id },
@@ -1495,7 +1494,8 @@ system.post('/migration/cross-border-profiles/:id', adminSensitiveRateLimit, req
   }
 
   // Validate it's actually a cross-border profile with wrong currency
-  if (!crossBorderCountries.includes(profile.countryCode || '')) {
+  // Uses shared config instead of hardcoded list
+  if (!isStripeCrossBorder(profile.countryCode)) {
     return c.json({
       error: `Profile is not in a cross-border country (${profile.countryCode}). No migration needed.`,
     }, 400)

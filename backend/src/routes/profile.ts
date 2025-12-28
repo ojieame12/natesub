@@ -642,18 +642,19 @@ profile.get('/salary-mode', requireAuth, async (c) => {
     return c.json({ error: 'Profile not found' }, 404)
   }
 
-  // Calculate billing day using actual date math
+  // Calculate billing day using actual date math (UTC for consistency with other financial ops)
   // Find next payday, subtract 7 days, get day of month
   let billingDay: number | null = null
   if (userProfile.preferredPayday) {
     const now = new Date()
-    let paydayDate = new Date(now.getFullYear(), now.getMonth(), userProfile.preferredPayday)
+    // Use UTC to avoid timezone-dependent billing day shifts
+    let paydayDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), userProfile.preferredPayday))
     if (paydayDate <= now) {
-      paydayDate.setMonth(paydayDate.getMonth() + 1)
+      paydayDate.setUTCMonth(paydayDate.getUTCMonth() + 1)
     }
     const billingDate = new Date(paydayDate)
-    billingDate.setDate(billingDate.getDate() - 7)
-    billingDay = billingDate.getDate()
+    billingDate.setUTCDate(billingDate.getUTCDate() - 7)
+    billingDay = billingDate.getUTCDate()
   }
 
   return c.json({
