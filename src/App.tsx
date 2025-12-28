@@ -460,7 +460,12 @@ function AppShell() {
       <ScrollRestoration />
       <InitialRouteRedirect />
       <AuthErrorHandler />
-      <Suspense fallback={<PageSkeleton />}>
+      <Suspense fallback={isPublicCreator ? (
+        <div style={{
+          minHeight: '100dvh',
+          background: 'url("/Vector87.svg") center center / cover no-repeat, linear-gradient(180deg, #FFE7A0 0%, #FFF5D6 100%)',
+        }} />
+      ) : <PageSkeleton />}>
         <Routes>
           {/* Root redirect - Smart redirect based on auth state */}
           <Route path="/" element={<RootRedirect />} />

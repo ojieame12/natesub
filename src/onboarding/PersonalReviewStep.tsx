@@ -12,7 +12,7 @@ import {
     getCrossBorderCurrencyOptions,
 } from '../utils/regionConfig'
 import { api } from '../api'
-import { uploadFile, useGeneratePerks, useGenerateBanner } from '../api/hooks'
+import { uploadFile, useGeneratePerks, useGenerateBanner, useAIConfig } from '../api/hooks'
 import './onboarding.css'
 
 // Purpose options with icons for visual differentiation
@@ -41,6 +41,8 @@ export default function PersonalReviewStep() {
     const [editingPerkValue, setEditingPerkValue] = useState('')
     const generatePerksMutation = useGeneratePerks()
     const generateBannerMutation = useGenerateBanner()
+    const { data: aiConfig } = useAIConfig()
+    const isAIAvailable = aiConfig?.available ?? false
 
     const {
         firstName,
@@ -222,12 +224,8 @@ export default function PersonalReviewStep() {
         }
     }
 
-    // Auto-generate banner when switching to service mode with avatar
-    useEffect(() => {
-        if (isServiceMode && avatarUrl && !bannerUrl && !generateBannerMutation.isPending) {
-            handleGenerateBanner()
-        }
-    }, [isServiceMode, avatarUrl])
+    // Note: Auto-banner generation removed - users click "Generate" explicitly
+    // This prevents hidden latency/cost hits on mode toggle
 
     // Handle perk inline editing
     const startEditingPerk = (index: number) => {
@@ -434,18 +432,20 @@ export default function PersonalReviewStep() {
                         <div className="setup-card service-perks-card">
                             <div className="service-perks-header">
                                 <span className="service-perks-title">What subscribers get</span>
-                                <Pressable
-                                    className="service-perks-generate"
-                                    onClick={handleGeneratePerks}
-                                    disabled={generatePerksMutation.isPending || !serviceDescription.trim()}
-                                >
-                                    {generatePerksMutation.isPending ? (
-                                        <Loader2 size={14} className="spin" />
-                                    ) : (
-                                        <Wand2 size={14} />
-                                    )}
-                                    <span>{servicePerks.length > 0 ? 'Regenerate' : 'Generate'}</span>
-                                </Pressable>
+                                {isAIAvailable && (
+                                    <Pressable
+                                        className="service-perks-generate"
+                                        onClick={handleGeneratePerks}
+                                        disabled={generatePerksMutation.isPending || !serviceDescription.trim()}
+                                    >
+                                        {generatePerksMutation.isPending ? (
+                                            <Loader2 size={14} className="spin" />
+                                        ) : (
+                                            <Wand2 size={14} />
+                                        )}
+                                        <span>{servicePerks.length > 0 ? 'Regenerate' : 'Generate'}</span>
+                                    </Pressable>
+                                )}
                             </div>
 
                             {servicePerks.length > 0 ? (

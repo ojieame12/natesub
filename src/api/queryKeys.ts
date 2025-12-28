@@ -94,6 +94,7 @@ export const queryKeys = {
   config: {
     all: ['config'] as const,
     fees: ['config', 'fees'] as const,
+    ai: ['config', 'ai'] as const,
   },
 } as const
 

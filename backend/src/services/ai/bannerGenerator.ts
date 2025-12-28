@@ -14,6 +14,19 @@ import { uploadBuffer } from '../storage.js'
 const BANNER_WIDTH = 1200
 const BANNER_HEIGHT = 375
 
+// AI request timeout (60 seconds - banner generation is slower)
+const AI_TIMEOUT_MS = 60000
+
+// Timeout helper to prevent AI calls from hanging indefinitely
+function withTimeout<T>(promise: Promise<T>, ms: number, operation: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`${operation} timed out after ${ms}ms`)), ms)
+    ),
+  ])
+}
+
 interface BannerGenerationInput {
   avatarUrl: string
   userId: string
@@ -67,22 +80,26 @@ export async function generateBanner(
     // Craft the prompt for professional banner generation
     const prompt = buildBannerPrompt(input)
 
-    const response = await client.models.generateContent({
-      model: 'gemini-2.0-flash-exp',  // Experimental model with image generation
-      contents: [
-        {
-          parts: [
-            { text: prompt },
-            {
-              inlineData: {
-                mimeType,
-                data: avatarBase64,
+    const response = await withTimeout(
+      client.models.generateContent({
+        model: 'gemini-2.0-flash-exp',  // Experimental model with image generation
+        contents: [
+          {
+            parts: [
+              { text: prompt },
+              {
+                inlineData: {
+                  mimeType,
+                  data: avatarBase64,
+                },
               },
-            },
-          ],
-        },
-      ],
-    })
+            ],
+          },
+        ],
+      }),
+      AI_TIMEOUT_MS,
+      'Banner generation'
+    )
 
     // Extract generated image from response
     const candidate = response.candidates?.[0]

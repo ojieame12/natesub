@@ -31,6 +31,19 @@ interface PerksInput {
 type Industry = 'fitness' | 'coaching' | 'consulting' | 'design' | 'tech' |
   'education' | 'creative' | 'business' | 'health' | 'finance' | 'marketing' | 'other'
 
+// AI request timeout (30 seconds)
+const AI_TIMEOUT_MS = 30000
+
+// Timeout helper to prevent AI calls from hanging indefinitely
+function withTimeout<T>(promise: Promise<T>, ms: number, operation: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`${operation} timed out after ${ms}ms`)), ms)
+    ),
+  ])
+}
+
 // Initialize client (lazy - only when needed)
 let aiClient: GoogleGenAI | null = null
 
@@ -60,10 +73,14 @@ export async function generatePerks(input: PerksInput): Promise<Perk[]> {
   try {
     const prompt = buildPerksPrompt(input)
 
-    const response = await client.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: [{ text: prompt }],
-    })
+    const response = await withTimeout(
+      client.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: [{ text: prompt }],
+      }),
+      AI_TIMEOUT_MS,
+      'Perks generation'
+    )
 
     const text = response.text?.trim() || ''
 
@@ -179,10 +196,11 @@ export async function inferServiceType(description: string): Promise<Industry> {
   const client = getClient()
 
   try {
-    const response = await client.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: [{
-        text: `Categorize this service description into ONE of these industries:
+    const response = await withTimeout(
+      client.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: [{
+          text: `Categorize this service description into ONE of these industries:
 fitness, coaching, consulting, design, tech, education, creative, business, health, finance, marketing, other
 
 Description: "${description}"
@@ -193,8 +211,11 @@ Rules:
 - No punctuation or extra text
 
 Category:`
-      }],
-    })
+        }],
+      }),
+      AI_TIMEOUT_MS,
+      'Service type inference'
+    )
 
     const result = response.text?.trim().toLowerCase() || 'other'
 
@@ -263,4 +284,12 @@ export function validatePerks(perks: unknown): perks is Perk[] {
     perk.title.length <= 100 &&
     typeof perk.enabled === 'boolean'
   )
+}
+
+/**
+ * Check if perks generation is available.
+ * Used to determine if we should show perks-related UI.
+ */
+export function isPerksGenerationAvailable(): boolean {
+  return !!env.GOOGLE_AI_API_KEY
 }

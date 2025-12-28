@@ -1247,5 +1247,19 @@ export function useFeeConfig() {
   })
 }
 
+/**
+ * Check if AI features (perks/banner generation) are available.
+ * Used to gate service mode UI elements when API key is not configured.
+ */
+export function useAIConfig() {
+  return useQuery({
+    queryKey: queryKeys.config.ai,
+    queryFn: api.config.getAI,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    gcTime: 60 * 60 * 1000, // 1 hour cache
+    retry: 1,
+  })
+}
+
 // Re-export for convenience
 export { api } from './client'

@@ -11,6 +11,7 @@ import {
   SPLIT_RATE,
   CROSS_BORDER_BUFFER,
 } from '../constants/fees.js'
+import { isAIAvailable } from '../services/ai/index.js'
 
 const config = new Hono()
 
@@ -31,6 +32,20 @@ config.get('/fees', (c) => {
     // Derived values for convenience
     platformFeePercent: PLATFORM_FEE_RATE * 100,  // 8
     splitPercent: SPLIT_RATE * 100,               // 4
+  })
+})
+
+/**
+ * GET /config/ai
+ * Returns AI feature availability for service mode (perks/banner generation)
+ *
+ * Response is cacheable (5 minutes) since AI availability rarely changes.
+ */
+config.get('/ai', (c) => {
+  c.header('Cache-Control', 'public, max-age=300') // 5 minutes
+
+  return c.json({
+    available: isAIAvailable(),
   })
 })
 

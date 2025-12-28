@@ -1375,12 +1375,23 @@ export interface FeeConfig {
   splitPercent: number
 }
 
+// AI availability config
+export interface AIConfig {
+  available: boolean
+}
+
 const config = {
   // Get fee configuration from backend (source of truth)
   getFees: () =>
     fetch(`${API_URL}/config/fees`)
       .then(res => res.ok ? res.json() as Promise<FeeConfig> : null)
       .catch(() => null),
+
+  // Get AI feature availability (for service mode perks/banner generation)
+  getAI: () =>
+    fetch(`${API_URL}/config/ai`)
+      .then(res => res.ok ? res.json() as Promise<AIConfig> : { available: false })
+      .catch(() => ({ available: false })),
 }
 
 // Export all

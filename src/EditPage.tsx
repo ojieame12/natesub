@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Camera, Loader2, ExternalLink, ChevronDown, Check, Heart, Gift, Briefcase, Star, Sparkles, Wallet, MoreHorizontal, Edit3, Wand2, ImageIcon } from 'lucide-react'
 import { Pressable, useToast, Skeleton, LoadingButton, BottomDrawer } from './components'
-import { useProfile, useUpdateProfile, uploadFile, useGeneratePerks, useGenerateBanner } from './api/hooks'
+import { useProfile, useUpdateProfile, uploadFile, useGeneratePerks, useGenerateBanner, useAIConfig } from './api/hooks'
 import { getCurrencySymbol, centsToDisplayAmount } from './utils/currency'
 import type { Perk } from './api/client'
 import './EditPage.css'
@@ -30,6 +30,8 @@ export default function EditPage() {
   const { mutateAsync: updateProfile, isPending: isSaving } = useUpdateProfile()
   const generatePerksMutation = useGeneratePerks()
   const generateBannerMutation = useGenerateBanner()
+  const { data: aiConfig } = useAIConfig()
+  const isAIAvailable = aiConfig?.available ?? false
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const profile = profileData?.profile
@@ -225,6 +227,11 @@ export default function EditPage() {
   const saveProfileAndSettings = async (options: { showSuccessToast?: boolean } = {}) => {
     if (!profile) return
     const { showSuccessToast = true } = options
+
+    // Warn if service mode user has fewer than 3 perks (non-blocking)
+    if (isServiceMode && perks.length > 0 && perks.length < 3) {
+      toast.warning(`Only ${perks.length} perk${perks.length === 1 ? '' : 's'} - subscribers see 3 on your page`)
+    }
 
     try {
       // Update only the fields being edited - don't spread entire profile to avoid
@@ -426,18 +433,20 @@ export default function EditPage() {
           <section className="edit-section">
             <div className="section-header-row">
               <h3 className="section-title">What Subscribers Get</h3>
-              <Pressable
-                className="generate-btn"
-                onClick={handleGeneratePerks}
-                disabled={generatePerksMutation.isPending || !bio.trim()}
-              >
-                {generatePerksMutation.isPending ? (
-                  <Loader2 size={14} className="animate-spin" />
-                ) : (
-                  <Wand2 size={14} />
-                )}
-                <span>{perks.length > 0 ? 'Regenerate' : 'Generate'}</span>
-              </Pressable>
+              {isAIAvailable && (
+                <Pressable
+                  className="generate-btn"
+                  onClick={handleGeneratePerks}
+                  disabled={generatePerksMutation.isPending || !bio.trim()}
+                >
+                  {generatePerksMutation.isPending ? (
+                    <Loader2 size={14} className="animate-spin" />
+                  ) : (
+                    <Wand2 size={14} />
+                  )}
+                  <span>{perks.length > 0 ? 'Regenerate' : 'Generate'}</span>
+                </Pressable>
+              )}
             </div>
             {perks.length > 0 ? (
               <div className="perks-list">
@@ -489,18 +498,20 @@ export default function EditPage() {
           <section className="edit-section">
             <div className="section-header-row">
               <h3 className="section-title">Banner Image</h3>
-              <Pressable
-                className="generate-btn"
-                onClick={handleGenerateBanner}
-                disabled={generateBannerMutation.isPending || !avatarUrl}
-              >
-                {generateBannerMutation.isPending ? (
-                  <Loader2 size={14} className="animate-spin" />
-                ) : (
-                  <ImageIcon size={14} />
-                )}
-                <span>{bannerUrl ? 'Regenerate' : 'Generate'}</span>
-              </Pressable>
+              {isAIAvailable && (
+                <Pressable
+                  className="generate-btn"
+                  onClick={handleGenerateBanner}
+                  disabled={generateBannerMutation.isPending || !avatarUrl}
+                >
+                  {generateBannerMutation.isPending ? (
+                    <Loader2 size={14} className="animate-spin" />
+                  ) : (
+                    <ImageIcon size={14} />
+                  )}
+                  <span>{bannerUrl ? 'Regenerate' : 'Generate'}</span>
+                </Pressable>
+              )}
             </div>
             {bannerUrl ? (
               <div className="banner-preview">

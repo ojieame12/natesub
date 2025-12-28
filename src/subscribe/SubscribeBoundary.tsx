@@ -124,7 +124,8 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
     const verification = usePaymentVerification(profile.username)
 
     // Determine if this is service mode (Retainer) vs support mode
-    const isServiceMode = profile.purpose === 'service'
+    // Use displayMode from backend (authoritative) with purpose fallback for backwards compat
+    const isServiceMode = profile.displayMode === 'retainer' || profile.purpose === 'service'
     const badgeText = isServiceMode ? 'Retainer' : 'Support'
 
     // Get enabled perks for service mode
@@ -145,13 +146,23 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
     const [status, setStatus] = useState<'idle' | 'processing'>('idle')
     const [resetKey, setResetKey] = useState(0)
     const [payerCountry, setPayerCountry] = useState<string | null>(null)
-    const [cardVisible, setCardVisible] = useState(false)
+    const [cardRevealed, setCardRevealed] = useState(false)
+    const [contentVisible, setContentVisible] = useState(false)
     const viewIdRef = useRef<string | null>(null)
 
-    // Trigger card entrance animation after mount
+    // Multi-stage entrance animation:
+    // 1. Card appears faded at small height
+    // 2. Card expands to full height
+    // 3. Content fades in
     useEffect(() => {
-        const timer = requestAnimationFrame(() => setCardVisible(true))
-        return () => cancelAnimationFrame(timer)
+        // Stage 1: Trigger height expansion after first paint
+        const revealTimer = requestAnimationFrame(() => setCardRevealed(true))
+        // Stage 2: Fade in content after height expansion completes
+        const contentTimer = setTimeout(() => setContentVisible(true), 400)
+        return () => {
+            cancelAnimationFrame(revealTimer)
+            clearTimeout(contentTimer)
+        }
     }, [])
 
     // Hooks for checkout
@@ -332,11 +343,17 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                 padding: '24px',
                 position: 'relative',
                 zIndex: 1,
-                // Entrance animation
-                opacity: cardVisible ? 1 : 0,
-                transform: cardVisible ? 'translateY(0)' : 'translateY(20px)',
-                transition: 'opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1), transform 0.5s cubic-bezier(0.16, 1, 0.3, 1)',
+                overflow: 'hidden',
+                // Height reveal animation
+                maxHeight: cardRevealed ? 1200 : 15,
+                opacity: cardRevealed ? 1 : 0.6,
+                transition: 'max-height 0.5s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease-out',
             }}>
+                {/* Content wrapper for fade-in */}
+                <div style={{
+                    opacity: contentVisible ? 1 : 0,
+                    transition: 'opacity 0.4s ease-out',
+                }}>
                 {/* Header Section - Different for Service vs Support */}
                 {isServiceMode ? (
                     /* SERVICE MODE: Banner Header */
@@ -353,6 +370,8 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                                 <img
                                     src={bannerUrl}
                                     alt=""
+                                    loading="lazy"
+                                    decoding="async"
                                     style={{
                                         width: '100%',
                                         height: '100%',
@@ -713,6 +732,7 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                         </a>
                     </div>
                 </div>
+                </div>{/* End content wrapper */}
             </div>
 
             {/* Success Overlay */}
