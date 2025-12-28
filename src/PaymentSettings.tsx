@@ -622,7 +622,7 @@ export default function PaymentSettings() {
                         </div>
                       </div>
                       <div className="salary-mode-note">
-                        New subscribers billed ~7 days before payday. Actual payout timing depends on your Stripe account. Existing subscribers are not affected.
+                        New subscribers pay immediately on signup, then renew ~7 days before your payday each month. Existing subscribers keep their current billing date.
                       </div>
                     </div>
                   )}
@@ -836,7 +836,7 @@ export default function PaymentSettings() {
       >
         <div className="payday-picker">
           <p className="payday-picker-desc">
-            When do you want to receive your payouts? Subscribers will be billed ~7 days before. Actual timing may vary based on your Stripe account settings.
+            Choose when you want to get paid each month. New subscribers pay immediately on signup, then renew ~7 days before your chosen payday.
           </p>
           <div className="payday-picker-options">
             {PAYDAY_OPTIONS.map((day) => (

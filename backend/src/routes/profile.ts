@@ -658,7 +658,7 @@ profile.get('/salary-mode', requireAuth, async (c) => {
   if (userProfile.preferredPayday) {
     const now = new Date()
     // Use UTC to avoid timezone-dependent billing day shifts
-    let paydayDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), userProfile.preferredPayday))
+    const paydayDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), userProfile.preferredPayday))
     if (paydayDate <= now) {
       paydayDate.setUTCMonth(paydayDate.getUTCMonth() + 1)
     }
@@ -745,17 +745,18 @@ profile.patch(
       data: updateData,
     })
 
-    // Calculate billing day using actual date math
+    // Calculate billing day using actual date math (UTC for consistency with GET endpoint)
     let billingDay: number | null = null
     if (updatedProfile.preferredPayday) {
       const now = new Date()
-      let paydayDate = new Date(now.getFullYear(), now.getMonth(), updatedProfile.preferredPayday)
+      // Use UTC to match GET /salary-mode and avoid timezone-dependent billing day shifts
+      const paydayDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), updatedProfile.preferredPayday))
       if (paydayDate <= now) {
-        paydayDate.setMonth(paydayDate.getMonth() + 1)
+        paydayDate.setUTCMonth(paydayDate.getUTCMonth() + 1)
       }
       const billingDate = new Date(paydayDate)
-      billingDate.setDate(billingDate.getDate() - 7)
-      billingDay = billingDate.getDate()
+      billingDate.setUTCDate(billingDate.getUTCDate() - 7)
+      billingDay = billingDate.getUTCDate()
     }
 
     return c.json({
