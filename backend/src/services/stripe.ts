@@ -429,6 +429,15 @@ export async function createCheckoutSession(params: {
   // Calculate billing anchor for Salary Mode (aligned billing for predictable paydays)
   // Only applies to monthly subscriptions when salary mode is enabled
   let billingCycleAnchor: number | undefined
+
+  // DEBUG: Log salary mode check
+  console.log(`[stripe] Salary mode check for ${creatorProfile.username || params.creatorId}:`, {
+    interval: params.interval,
+    salaryModeEnabled: creatorProfile.salaryModeEnabled,
+    preferredPayday: creatorProfile.preferredPayday,
+    willSetAnchor: params.interval === 'month' && creatorProfile.salaryModeEnabled && creatorProfile.preferredPayday,
+  })
+
   if (
     params.interval === 'month' &&
     creatorProfile.salaryModeEnabled &&
@@ -437,6 +446,7 @@ export async function createCheckoutSession(params: {
     // Use actual date math to correctly handle month boundaries
     // Default 7-day delay is conservative; actual payout timing varies by account
     billingCycleAnchor = calculateBillingAnchorFromPayday(creatorProfile.preferredPayday)
+    console.log(`[stripe] Setting billing_cycle_anchor to ${billingCycleAnchor} (${new Date(billingCycleAnchor * 1000).toISOString()})`)
   }
 
   // Check for platform debit to recover (only for one-time payments)
