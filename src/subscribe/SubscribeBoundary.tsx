@@ -272,6 +272,9 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
     // In production, this would be a separate bannerUrl field
     const bannerUrl = isServiceMode ? profile.avatarUrl : null
 
+    // Noise texture SVG for dither effect (same as AmbientBackground)
+    const noiseTexture = "data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.03'/%3E%3C/svg%3E"
+
     return (
         <div style={{
             minHeight: '100dvh',
@@ -285,6 +288,15 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
             position: 'relative',
             overflow: 'hidden',
         }}>
+            {/* Dither/Noise Texture Overlay */}
+            <div style={{
+                position: 'absolute',
+                inset: 0,
+                backgroundImage: `url("${noiseTexture}")`,
+                opacity: 0.6,
+                mixBlendMode: 'overlay',
+                pointerEvents: 'none',
+            }} />
 
             {/* Edit button (owner only) */}
             {isOwner && (
