@@ -142,7 +142,7 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
 
     // State
     const [subscriberEmail, setSubscriberEmail] = useState('')
-    const [emailFocused, setEmailFocused] = useState(false)
+    const [emailFocused, setEmailFocused] = useState(true) // Start active so user knows what to do
     const [status, setStatus] = useState<'idle' | 'processing'>('idle')
     const [resetKey, setResetKey] = useState(0)
     const [payerCountry, setPayerCountry] = useState<string | null>(null)
@@ -606,7 +606,7 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                 </div>
 
                 {/* Action Section */}
-                <div style={{ marginTop: 24, paddingBottom: 24 }}>
+                <div style={{ marginTop: 36, paddingBottom: 24 }}>
                     {isOwner ? (
                         /* Owner View: Share Button */
                         <button
