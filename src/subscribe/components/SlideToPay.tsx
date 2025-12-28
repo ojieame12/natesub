@@ -135,8 +135,8 @@ export default function SlideToPay({ onComplete, disabled }: SlideToPayProps) {
                         height: '100%',
                         // End at center of handle so the handle covers the edge
                         width: dragX + TRACK_PADDING + (HANDLE_SIZE / 2),
-                        // Gradient fades slightly at the right edge for smoother look
-                        background: 'linear-gradient(90deg, #FFD208 0%, #FF941A 70%, rgba(255,148,26,0.6) 100%)',
+                        // Gradient fades to transparent at the right edge for smooth look
+                        background: 'linear-gradient(90deg, #FFD208 0%, #FF941A 60%, transparent 100%)',
                         // Only round the left side - right edge hidden by handle
                         borderTopLeftRadius: TRACK_HEIGHT / 2,
                         borderBottomLeftRadius: TRACK_HEIGHT / 2,

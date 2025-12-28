@@ -277,6 +277,10 @@ requests.post(
             feeModel: feeCalc.feeModel,
             feeMode: feeCalc.feeMode,
             feeEffectiveRate: feeCalc.effectiveRate,
+            feeWasCapped: feeCalc.feeWasCapped,
+            subscriberFeeCents: feeCalc.subscriberFeeCents,
+            creatorFeeCents: feeCalc.creatorFeeCents,
+            baseAmountCents: feeCalc.baseCents,
           },
         })
 

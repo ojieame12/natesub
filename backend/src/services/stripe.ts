@@ -472,9 +472,8 @@ export async function createCheckoutSession(params: {
   }
 
   // Generate idempotency key
-  // Use viewId for anonymous visitors to prevent double-checkout on same page session
-  // Falls back to random UUID only if no viewId (shouldn't happen in normal flow)
-  const visitorIdentifier = params.subscriberEmail || params.viewId || crypto.randomUUID()
+  // Use requestId for request checkouts, viewId for public page, email, or fallback to random UUID
+  const visitorIdentifier = params.requestId || params.subscriberEmail || params.viewId || crypto.randomUUID()
   const idempotencyKey = generateIdempotencyKey(
     'checkout',
     params.creatorId,
@@ -485,29 +484,46 @@ export async function createCheckoutSession(params: {
   )
 
   // Metadata for tracking fees through the system
-  const metadata = {
+  // IMPORTANT: Only include fields with valid values - empty strings fail webhook validation regex
+  const metadata: Record<string, string> = {
     creatorId: params.creatorId,
-    tierId: params.tierId || '',
-    requestId: params.requestId || '',
-    viewId: params.viewId || '', // Analytics: page view ID for conversion tracking
-    // Fee tracking (flat model with creator-chosen fee mode)
-    grossAmount: params.grossAmount.toString(),   // What subscriber paid
-    netAmount: params.netAmount.toString(),       // What creator receives (was creatorAmount)
-    serviceFee: params.serviceFee.toString(),     // Platform fee
+    grossAmount: params.grossAmount.toString(),
+    netAmount: params.netAmount.toString(),
+    serviceFee: params.serviceFee.toString(),
     feeModel: params.feeMetadata?.feeModel || 'split_v1',
     feeMode: params.feeMetadata?.feeMode || 'split',
-    feeEffectiveRate: params.feeMetadata?.feeEffectiveRate?.toString() || '',
-    feeWasCapped: params.feeMetadata?.feeWasCapped ? 'true' : 'false',
-    // Split fee fields (v2 model)
-    subscriberFeeCents: params.feeMetadata?.subscriberFeeCents?.toString() || '',
-    creatorFeeCents: params.feeMetadata?.creatorFeeCents?.toString() || '',
-    baseAmountCents: params.feeMetadata?.baseAmountCents?.toString() || '',
-    // Platform debit recovery tracking
     platformDebitRecovered: platformDebitToRecover.toString(),
-    // Dispute evidence (for chargeback defense)
-    checkoutIp: params.evidenceMetadata?.checkoutIp || '',
-    checkoutUserAgent: params.evidenceMetadata?.checkoutUserAgent || '',
-    checkoutAcceptLanguage: params.evidenceMetadata?.checkoutAcceptLanguage || '',
+  }
+
+  // Optional fields - only include if they have valid values
+  if (params.tierId) metadata.tierId = params.tierId
+  if (params.requestId) metadata.requestId = params.requestId
+  if (params.viewId) metadata.viewId = params.viewId
+  if (params.feeMetadata?.feeEffectiveRate !== undefined) {
+    metadata.feeEffectiveRate = params.feeMetadata.feeEffectiveRate.toString()
+  }
+  if (params.feeMetadata?.feeWasCapped !== undefined) {
+    metadata.feeWasCapped = params.feeMetadata.feeWasCapped ? 'true' : 'false'
+  }
+  // Split fee fields - only include if present (avoids empty string failing regex)
+  if (params.feeMetadata?.subscriberFeeCents !== undefined) {
+    metadata.subscriberFeeCents = params.feeMetadata.subscriberFeeCents.toString()
+  }
+  if (params.feeMetadata?.creatorFeeCents !== undefined) {
+    metadata.creatorFeeCents = params.feeMetadata.creatorFeeCents.toString()
+  }
+  if (params.feeMetadata?.baseAmountCents !== undefined) {
+    metadata.baseAmountCents = params.feeMetadata.baseAmountCents.toString()
+  }
+  // Dispute evidence - only include if present
+  if (params.evidenceMetadata?.checkoutIp) {
+    metadata.checkoutIp = params.evidenceMetadata.checkoutIp
+  }
+  if (params.evidenceMetadata?.checkoutUserAgent) {
+    metadata.checkoutUserAgent = params.evidenceMetadata.checkoutUserAgent
+  }
+  if (params.evidenceMetadata?.checkoutAcceptLanguage) {
+    metadata.checkoutAcceptLanguage = params.evidenceMetadata.checkoutAcceptLanguage
   }
 
   // Total application fee = service fee + debit recovery
@@ -544,6 +560,8 @@ export async function createCheckoutSession(params: {
           },
           // Billing descriptor for card statements - helps prevent chargebacks
           statement_descriptor_suffix: descriptorSuffix,
+          // Include metadata so payment_intent.payment_failed can attribute failures
+          metadata,
         } : undefined,
         // Subscriptions: set application_fee_percent for platform fee
         // IMPORTANT: application_fee_percent applies to the TOTAL charge amount,
