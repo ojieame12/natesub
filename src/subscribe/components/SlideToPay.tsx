@@ -118,20 +118,23 @@ export default function SlideToPay({ onComplete, disabled }: SlideToPayProps) {
                 opacity: disabled ? 0.6 : 1,
             }}
         >
-            {/* Gradient fill that follows the drag */}
-            <div
-                style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    height: '100%',
-                    width: dragX + HANDLE_SIZE + TRACK_PADDING,
-                    background: 'linear-gradient(90deg, #1C1917 0%, #44403C 100%)',
-                    borderRadius: TRACK_HEIGHT / 2,
-                    transition: isDragging ? 'none' : 'width 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)',
-                    pointerEvents: 'none',
-                }}
-            />
+            {/* Gradient fill that follows the drag - only shows when actively sliding */}
+            {dragX > 0 && (
+                <div
+                    style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        height: '100%',
+                        width: dragX + HANDLE_SIZE + TRACK_PADDING,
+                        background: 'linear-gradient(90deg, #FFD208 0%, #FF941A 100%)',
+                        borderRadius: TRACK_HEIGHT / 2,
+                        opacity: 0.9,
+                        transition: isDragging ? 'none' : 'width 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.3s ease',
+                        pointerEvents: 'none',
+                    }}
+                />
+            )}
 
             {/* Label */}
             <div

@@ -161,6 +161,18 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
     // 3. Content fades in
     // 4. Action section (email) reveals with slight delay, then auto-focus
     useEffect(() => {
+        // Skip animations in test environment for faster tests
+        // Check both Vite's import.meta.env and Node's process.env
+        const isTest = import.meta.env.MODE === 'test' ||
+            (typeof process !== 'undefined' && process.env?.NODE_ENV === 'test')
+        if (isTest) {
+            setBgReady(true)
+            setCardRevealed(true)
+            setContentVisible(true)
+            setActionVisible(true)
+            return
+        }
+
         // Stage 0: Background dither fades in immediately
         const bgTimer = requestAnimationFrame(() => setBgReady(true))
         // Stage 1: Trigger height expansion after brief delay for paint

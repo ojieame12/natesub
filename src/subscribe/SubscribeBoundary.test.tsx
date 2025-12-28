@@ -70,6 +70,9 @@ const mockProfile = {
   feeMode: 'split' as const,
 }
 
+// Note: Animations are skipped in test mode (import.meta.env.MODE === 'test')
+// See SubscribeBoundary.tsx useEffect
+
 describe('SubscribeBoundary', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -176,11 +179,8 @@ describe('SubscribeBoundary', () => {
         routePath: '/:username',
       })
 
-      await waitFor(() => {
-        expect(screen.getByPlaceholderText('Customer Email')).toBeInTheDocument()
-      })
-
-      const emailInput = screen.getByPlaceholderText('Customer Email')
+      // Email input uses floating label (not placeholder) when focused
+      const emailInput = screen.getByRole('textbox')
       fireEvent.change(emailInput, { target: { value: 'test@example.com' } })
 
       // Slide button should be enabled (opacity: 1)
@@ -265,10 +265,8 @@ describe('SubscribeBoundary', () => {
         routePath: '/:username',
       })
 
-      await waitFor(() => {
-        // Placeholder text when empty
-        expect(screen.getByPlaceholderText('Customer Email')).toBeInTheDocument()
-      })
+      // Placeholder text when empty (animations skipped in test mode)
+      expect(screen.getByPlaceholderText('Customer Email')).toBeInTheDocument()
     })
 
     it('passes payerCountry from geo detection to createCheckout', async () => {
@@ -278,9 +276,6 @@ describe('SubscribeBoundary', () => {
         route: '/testcreator',
         routePath: '/:username',
       })
-
-      // Wait for detectPayerCountry promise to resolve
-      await new Promise(resolve => setTimeout(resolve, 50))
 
       const emailInput = screen.getByPlaceholderText('Customer Email')
       fireEvent.change(emailInput, { target: { value: 'sub@example.com' } })
