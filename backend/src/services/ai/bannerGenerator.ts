@@ -145,10 +145,14 @@ export async function generateBanner(
       return generateFallbackBanner(input)
     }
 
-    // Upload to R2
+    // Use actual MIME type from response, fallback to JPEG
+    const responseMime = imagePart.inlineData.mimeType || 'image/jpeg'
+    const extension = responseMime.includes('png') ? 'png' : 'jpg'
+
+    // Upload to R2 with correct MIME type
     const imageBuffer = Buffer.from(imagePart.inlineData.data, 'base64')
-    const filename = `banners/${input.userId}-${Date.now()}.jpg`
-    const bannerUrl = await uploadBuffer(imageBuffer, filename, 'image/jpeg')
+    const filename = `banners/${input.userId}-${Date.now()}.${extension}`
+    const bannerUrl = await uploadBuffer(imageBuffer, filename, responseMime)
 
     return {
       bannerUrl,

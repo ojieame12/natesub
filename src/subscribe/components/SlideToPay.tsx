@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Check, ChevronsRight } from 'lucide-react'
+import { Check } from 'lucide-react'
 
 // Colors matching design system
 const COLORS = {
@@ -8,6 +8,16 @@ const COLORS = {
     neutral400: '#A8A29E',
     neutral900: '#1C1917',
     white: '#FFFFFF',
+}
+
+// Filled double arrow icon
+function FilledArrows({ color }: { color: string }) {
+    return (
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <path d="M6 4L12 10L6 16" fill={color} />
+            <path d="M10 4L16 10L10 16" fill={color} />
+        </svg>
+    )
 }
 
 interface SlideToPayProps {
@@ -108,6 +118,21 @@ export default function SlideToPay({ onComplete, disabled }: SlideToPayProps) {
                 opacity: disabled ? 0.6 : 1,
             }}
         >
+            {/* Gradient fill that follows the drag */}
+            <div
+                style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    height: '100%',
+                    width: dragX + HANDLE_SIZE + TRACK_PADDING,
+                    background: 'linear-gradient(90deg, #1C1917 0%, #44403C 100%)',
+                    borderRadius: TRACK_HEIGHT / 2,
+                    transition: isDragging ? 'none' : 'width 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)',
+                    pointerEvents: 'none',
+                }}
+            />
+
             {/* Label */}
             <div
                 style={{
@@ -163,7 +188,7 @@ export default function SlideToPay({ onComplete, disabled }: SlideToPayProps) {
                     {completed ? (
                         <Check size={20} color="#10b981" strokeWidth={2.5} />
                     ) : (
-                        <ChevronsRight size={20} color={iconColor} />
+                        <FilledArrows color={iconColor} />
                     )}
                 </div>
             </div>
