@@ -39,6 +39,8 @@ export default function SlideToPay({ onComplete, disabled }: SlideToPayProps) {
     const [completed, setCompleted] = useState(false)
     const containerRef = useRef<HTMLDivElement>(null)
     const startX = useRef(0)
+    // Use ref to prevent multiple onComplete calls (state updates are async)
+    const completedRef = useRef(false)
 
     const HANDLE_SIZE = 48
     const TRACK_HEIGHT = 64
@@ -51,15 +53,17 @@ export default function SlideToPay({ onComplete, disabled }: SlideToPayProps) {
     }
 
     const handleMove = (clientX: number) => {
-        if (!isDragging || !containerRef.current) return
+        // Check ref synchronously to prevent duplicate calls
+        if (!isDragging || !containerRef.current || completedRef.current) return
 
         const rect = containerRef.current.getBoundingClientRect()
         const maxDrag = rect.width - HANDLE_SIZE - (TRACK_PADDING * 2)
         const newX = Math.max(0, Math.min(clientX - startX.current, maxDrag))
         setDragX(newX)
 
-        // Complete at 90% threshold
+        // Complete at 90% threshold - use ref to guarantee single execution
         if (newX > maxDrag * 0.9) {
+            completedRef.current = true // Set immediately to block concurrent calls
             setIsDragging(false)
             setCompleted(true)
             setDragX(maxDrag)
@@ -83,17 +87,20 @@ export default function SlideToPay({ onComplete, disabled }: SlideToPayProps) {
         const onMouseMove = (e: MouseEvent) => handleMove(e.clientX)
         const onMouseUp = () => handleEnd()
         const onTouchEnd = () => handleEnd()
+        const onTouchCancel = () => handleEnd() // Handle touch interruption (e.g., notification)
 
         if (isDragging) {
             window.addEventListener('mousemove', onMouseMove)
             window.addEventListener('mouseup', onMouseUp)
             window.addEventListener('touchend', onTouchEnd)
+            window.addEventListener('touchcancel', onTouchCancel)
         }
 
         return () => {
             window.removeEventListener('mousemove', onMouseMove)
             window.removeEventListener('mouseup', onMouseUp)
             window.removeEventListener('touchend', onTouchEnd)
+            window.removeEventListener('touchcancel', onTouchCancel)
         }
     }, [isDragging])
 
@@ -126,11 +133,16 @@ export default function SlideToPay({ onComplete, disabled }: SlideToPayProps) {
                         top: 0,
                         left: 0,
                         height: '100%',
-                        width: dragX + HANDLE_SIZE + TRACK_PADDING,
-                        background: 'linear-gradient(90deg, #FFD208 0%, #FF941A 100%)',
-                        borderRadius: TRACK_HEIGHT / 2,
-                        opacity: 0.9,
-                        transition: isDragging ? 'none' : 'width 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.3s ease',
+                        // End at center of handle so the handle covers the edge
+                        width: dragX + TRACK_PADDING + (HANDLE_SIZE / 2),
+                        // Gradient fades slightly at the right edge for smoother look
+                        background: 'linear-gradient(90deg, #FFD208 0%, #FF941A 70%, rgba(255,148,26,0.6) 100%)',
+                        // Only round the left side - right edge hidden by handle
+                        borderTopLeftRadius: TRACK_HEIGHT / 2,
+                        borderBottomLeftRadius: TRACK_HEIGHT / 2,
+                        borderTopRightRadius: 0,
+                        borderBottomRightRadius: 0,
+                        transition: isDragging ? 'none' : 'width 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)',
                         pointerEvents: 'none',
                     }}
                 />

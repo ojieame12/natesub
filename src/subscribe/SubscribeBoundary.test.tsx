@@ -265,19 +265,29 @@ describe('SubscribeBoundary', () => {
         routePath: '/:username',
       })
 
-      // Placeholder text when empty (animations skipped in test mode)
-      expect(screen.getByPlaceholderText('Customer Email')).toBeInTheDocument()
+      // Email input with floating label (starts focused so placeholder is empty)
+      expect(screen.getByRole('textbox')).toBeInTheDocument()
+      expect(screen.getByText('Customer Email')).toBeInTheDocument() // Floating label
     })
 
     it('passes payerCountry from geo detection to createCheckout', async () => {
       mockCreateCheckout.mockResolvedValueOnce({ url: 'https://checkout.example.com' })
+
+      // Import the mocked function to wait for it
+      const { detectPayerCountry } = await import('../api/client')
 
       renderWithProviders(<SubscribeBoundary profile={mockProfile} />, {
         route: '/testcreator',
         routePath: '/:username',
       })
 
-      const emailInput = screen.getByPlaceholderText('Customer Email')
+      // Wait for geo detection to complete
+      await waitFor(() => expect(detectPayerCountry).toHaveBeenCalled())
+      // Allow the state update to propagate
+      await new Promise(resolve => setTimeout(resolve, 10))
+
+      // Email input uses floating label when focused
+      const emailInput = screen.getByRole('textbox')
       fireEvent.change(emailInput, { target: { value: 'sub@example.com' } })
 
       // Find the slider container

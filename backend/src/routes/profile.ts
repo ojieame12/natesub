@@ -309,6 +309,13 @@ profile.patch(
     }
 
     if (data.perks !== undefined) {
+      // Service users must have at least 3 perks
+      const effectivePurpose = data.purpose || existingProfile.purpose
+      if (effectivePurpose === 'service' && data.perks !== null) {
+        if (data.perks.length < 3) {
+          return c.json({ error: 'Service profiles require at least 3 perks' }, 400)
+        }
+      }
       updateData.perks = data.perks === null ? Prisma.JsonNull : data.perks
     }
 
@@ -321,8 +328,9 @@ profile.patch(
       updateData.isPublic = data.isPublic
     }
 
-    // Capture old username before update for cache invalidation
+    // Capture old username and purpose before update
     const oldUsername = existingProfile.username
+    const oldPurpose = existingProfile.purpose
 
     const updatedProfile = await db.profile.update({
       where: { userId },
@@ -335,6 +343,23 @@ profile.patch(
       await invalidatePublicProfileCache(oldUsername)
     }
     await invalidatePublicProfileCache(updatedProfile.username)
+
+    // Start platform trial when purpose changes to 'service'
+    // This ensures service users get their trial regardless of how they set purpose
+    if (data.purpose === 'service' && oldPurpose !== 'service') {
+      try {
+        const user = await db.user.findUnique({ where: { id: userId }, select: { email: true } })
+        if (user?.email) {
+          const trialId = await startPlatformTrial(userId, user.email)
+          if (trialId) {
+            console.log(`[profile] Started platform trial ${trialId} for user ${userId} (purpose changed to service)`)
+          }
+        }
+      } catch (err) {
+        // Log but don't fail - they can subscribe later
+        console.error(`[profile] Failed to start platform trial on purpose change for ${userId}:`, err)
+      }
+    }
 
     return c.json({
       profile: {

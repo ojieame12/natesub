@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Camera, Loader2, ExternalLink, ChevronDown, Check, Heart, Gift, Briefcase, Star, Sparkles, Wallet, MoreHorizontal, Edit3, Wand2, ImageIcon } from 'lucide-react'
+import { ArrowLeft, Camera, Loader2, ExternalLink, ChevronDown, Check, Heart, Gift, Briefcase, Star, Sparkles, Wallet, MoreHorizontal, Edit3, Wand2, ImageIcon, Plus, X } from 'lucide-react'
 import { Pressable, useToast, Skeleton, LoadingButton, BottomDrawer } from './components'
 import { useProfile, useUpdateProfile, uploadFile, useGeneratePerks, useGenerateBanner, useAIConfig } from './api/hooks'
 import { getCurrencySymbol, centsToDisplayAmount } from './utils/currency'
@@ -54,6 +54,8 @@ export default function EditPage() {
   const [bannerUrl, setBannerUrl] = useState<string | null>(null)
   const [editingPerkIndex, setEditingPerkIndex] = useState<number | null>(null)
   const [editingPerkValue, setEditingPerkValue] = useState('')
+  const [isAddingPerk, setIsAddingPerk] = useState(false)
+  const [newPerkValue, setNewPerkValue] = useState('')
 
   // Check if in service mode
   const isServiceMode = purpose === 'service'
@@ -168,6 +170,27 @@ export default function EditPage() {
   const cancelPerkEdit = () => {
     setEditingPerkIndex(null)
     setEditingPerkValue('')
+  }
+
+  // Add new perk manually
+  const handleAddPerk = () => {
+    if (!newPerkValue.trim()) return
+    const newPerk: Perk = {
+      id: `perk-${Date.now()}-${perks.length}`,
+      title: newPerkValue.trim(),
+      enabled: true,
+    }
+    setPerks([...perks, newPerk])
+    setNewPerkValue('')
+    setIsAddingPerk(false)
+    setHasChanges(true)
+  }
+
+  // Delete a perk
+  const handleDeletePerk = (index: number) => {
+    const newPerks = perks.filter((_, i) => i !== index)
+    setPerks(newPerks)
+    setHasChanges(true)
   }
 
   const handlePriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -474,20 +497,68 @@ export default function EditPage() {
                       <>
                         <span className="perk-check">✓</span>
                         <span className="perk-title">{perk.title}</span>
-                        <Pressable
-                          className="perk-edit-btn"
-                          onClick={() => startEditingPerk(index)}
-                        >
-                          <Edit3 size={12} />
-                        </Pressable>
+                        <div className="perk-actions">
+                          <Pressable
+                            className="perk-edit-btn"
+                            onClick={() => startEditingPerk(index)}
+                          >
+                            <Edit3 size={12} />
+                          </Pressable>
+                          <Pressable
+                            className="perk-delete-btn"
+                            onClick={() => handleDeletePerk(index)}
+                          >
+                            <X size={12} />
+                          </Pressable>
+                        </div>
                       </>
                     )}
                   </div>
                 ))}
               </div>
-            ) : (
-              <p className="perks-empty">
-                Add a description above, then click Generate to create your perks.
+            ) : null}
+
+            {/* Add perk manually */}
+            {isAddingPerk ? (
+              <div className="perk-add-form">
+                <input
+                  type="text"
+                  value={newPerkValue}
+                  onChange={(e) => setNewPerkValue(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleAddPerk()
+                    if (e.key === 'Escape') {
+                      setIsAddingPerk(false)
+                      setNewPerkValue('')
+                    }
+                  }}
+                  placeholder="Enter perk description..."
+                  autoFocus
+                  maxLength={60}
+                  className="perk-add-input"
+                />
+                <Pressable onClick={handleAddPerk} className="perk-save-btn" disabled={!newPerkValue.trim()}>
+                  <Check size={14} />
+                </Pressable>
+                <Pressable onClick={() => { setIsAddingPerk(false); setNewPerkValue('') }} className="perk-cancel-btn">
+                  <X size={14} />
+                </Pressable>
+              </div>
+            ) : perks.length < 5 ? (
+              <Pressable
+                className="perk-add-btn"
+                onClick={() => setIsAddingPerk(true)}
+              >
+                <Plus size={14} />
+                <span>Add perk</span>
+              </Pressable>
+            ) : null}
+
+            {perks.length === 0 && !isAddingPerk && (
+              <p className="perks-empty-hint">
+                {isAIAvailable
+                  ? 'Add a description above, then click Generate to create your perks.'
+                  : 'Click "Add perk" above to add perks manually.'}
               </p>
             )}
           </section>
@@ -519,7 +590,9 @@ export default function EditPage() {
               </div>
             ) : (
               <p className="banner-empty">
-                Upload an avatar above, then click Generate to create your banner.
+                {isAIAvailable
+                  ? 'Upload an avatar above, then click Generate to create your banner.'
+                  : 'AI is temporarily unavailable. Your avatar will be used as the banner.'}
               </p>
             )}
           </section>

@@ -6,6 +6,7 @@ import { redis } from '../db/redis.js'
 import { optionalAuth } from '../middleware/auth.js'
 import { checkoutRateLimit, publicRateLimit } from '../middleware/rateLimit.js'
 import { createCheckoutSession, getAccountStatus, stripe } from '../services/stripe.js'
+import { CircuitBreakerError } from '../utils/circuitBreaker.js'
 import { initializePaystackCheckout, generateReference, isPaystackSupported, type PaystackCountry } from '../services/paystack.js'
 import { calculateServiceFee, type FeeCalculation } from '../services/fees.js'
 import { isStripeCrossBorderSupported } from '../utils/constants.js'
@@ -415,7 +416,38 @@ checkout.post(
         breakdown,
       })
     } catch (error) {
-      console.error('Checkout error:', error)
+      // Enhanced error logging for debugging
+      console.error('[checkout] Session creation failed:', {
+        error: error instanceof Error ? error.message : error,
+        stack: error instanceof Error ? error.stack : undefined,
+        creatorUsername,
+        tierId,
+        interval,
+        amount,
+      })
+
+      // Handle specific error types
+      if (error instanceof CircuitBreakerError) {
+        return c.json({ error: 'Payment service temporarily unavailable. Please try again in a minute.' }, 503)
+      }
+
+      // Stripe account disconnected/revoked
+      if (error instanceof Error && (
+        error.message.includes('does not have access to account') ||
+        error.message.includes('account does not exist') ||
+        error.message.includes('Application access may have been revoked')
+      )) {
+        return c.json({
+          error: 'Creator payment account needs to be reconnected. Please try again later.',
+          code: 'CREATOR_ACCOUNT_DISCONNECTED'
+        }, 400)
+      }
+
+      // Stripe-specific errors
+      if (error instanceof Error && error.message.includes('Stripe')) {
+        return c.json({ error: 'Payment provider error. Please try again.' }, 502)
+      }
+
       return c.json({ error: 'Failed to create checkout session' }, 500)
     }
   }
