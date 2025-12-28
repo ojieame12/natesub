@@ -297,7 +297,7 @@ checkout.post(
           amount: feeCalc.grossCents, // Total subscriber pays - Paystack splits via subaccount
           currency: profile.currency,
           subaccountCode: profile.paystackSubaccountCode!, // Split to creator's subaccount
-          callbackUrl: `${env.APP_URL}/payment/success?creator=${profile.username}`,
+          callbackUrl: `${env.PUBLIC_PAGE_URL}/${profile.username}?success=true&provider=paystack`,
           reference,
           metadata: {
             creatorId: profile.userId,
@@ -386,8 +386,8 @@ checkout.post(
         currency: checkoutCurrency,
         interval,
         // IMPORTANT: include session_id in URL to prevent spoofing
-        successUrl: `${env.APP_URL}/${profile.username}?success=true&provider=stripe&session_id={CHECKOUT_SESSION_ID}`,
-        cancelUrl: `${env.APP_URL}/${profile.username}?canceled=true`,
+        successUrl: `${env.PUBLIC_PAGE_URL}/${profile.username}?success=true&provider=stripe&session_id={CHECKOUT_SESSION_ID}`,
+        cancelUrl: `${env.PUBLIC_PAGE_URL}/${profile.username}?canceled=true`,
         subscriberEmail,
         viewId, // Analytics: page view ID for conversion tracking
         feeMetadata: {

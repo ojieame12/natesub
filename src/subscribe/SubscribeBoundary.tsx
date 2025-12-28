@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import { Banknote, Briefcase, Pencil, ArrowLeft, AlertCircle, Heart, Users, Star, Wallet } from 'lucide-react'
 import { useToast } from '../components'
 import { useCreateCheckout, useRecordPageView, useUpdatePageView } from '../api/hooks'
@@ -7,6 +8,7 @@ import { detectPayerCountry } from '../api/client'
 import type { Profile } from '../api/client'
 import { displayAmountToCents, formatCurrency } from '../utils/currency'
 import { TERMS_URL, PRIVACY_URL } from '../utils/constants'
+import { queryKeys } from '../api/queryKeys'
 
 // Extracted components and hooks
 import { SlideToPay } from './components'
@@ -64,11 +66,20 @@ interface SubscribeBoundaryProps {
 export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundaryProps) {
     const navigate = useNavigate()
     const toast = useToast()
+    const queryClient = useQueryClient()
     const [searchParams] = useSearchParams()
 
     // Use extracted hooks
     const pricing = usePricingCalculations(profile)
     const verification = usePaymentVerification(profile.username)
+
+    // Invalidate profile cache on successful verification so "Already subscribed" renders
+    useEffect(() => {
+        if (verification.isSuccess) {
+            // Refetch public profile to update subscription state
+            queryClient.invalidateQueries({ queryKey: queryKeys.publicProfile(profile.username) })
+        }
+    }, [verification.isSuccess, queryClient, profile.username])
 
     // State
     const [mount, setMount] = useState(false)
