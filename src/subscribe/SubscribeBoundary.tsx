@@ -268,9 +268,8 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
     const isSuccess = verification.isSuccess
     const isProcessing = status === 'processing' || verification.isVerifying
 
-    // Generate banner URL from avatar for service mode
-    // In production, this would be a separate bannerUrl field
-    const bannerUrl = isServiceMode ? profile.avatarUrl : null
+    // Use AI-generated banner for service mode, fallback to avatar
+    const bannerUrl = isServiceMode ? (profile.bannerUrl || profile.avatarUrl) : null
 
     return (
         <div style={{
@@ -322,7 +321,7 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                 maxWidth: 420,
                 background: COLORS.white,
                 borderRadius: 24,
-                boxShadow: '0 4px 24px rgba(0, 0, 0, 0.08), 0 12px 48px rgba(0, 0, 0, 0.04)',
+                boxShadow: '0 8px 32px rgba(0, 0, 0, 0.08), 0 24px 64px rgba(0, 0, 0, 0.06), 0 0 0 1px rgba(0, 0, 0, 0.02)',
                 padding: '24px',
                 position: 'relative',
                 zIndex: 1,

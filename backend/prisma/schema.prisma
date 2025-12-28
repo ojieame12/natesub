@@ -179,6 +179,7 @@ model Profile {
   displayName   String
   bio           String?
   avatarUrl     String?
+  bannerUrl     String?  // Generated banner for service mode (from avatar)
   voiceIntroUrl String?
   phone         String?  // Phone number for SMS notifications (E.164 format)
 

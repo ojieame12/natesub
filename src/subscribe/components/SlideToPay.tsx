@@ -31,8 +31,8 @@ export default function SlideToPay({ onComplete, disabled }: SlideToPayProps) {
     const startX = useRef(0)
 
     const HANDLE_SIZE = 48
-    const TRACK_HEIGHT = 56
-    const TRACK_PADDING = 4
+    const TRACK_HEIGHT = 64
+    const TRACK_PADDING = 8
 
     const handleStart = (clientX: number) => {
         if (completed || disabled) return
@@ -148,8 +148,8 @@ export default function SlideToPay({ onComplete, disabled }: SlideToPayProps) {
                     justifyContent: 'center',
                     cursor: disabled ? 'not-allowed' : 'grab',
                     boxShadow: isActive
-                        ? '0 2px 8px rgba(0,0,0,0.15)'
-                        : '0 1px 3px rgba(0,0,0,0.08)',
+                        ? '0 4px 16px rgba(0,0,0,0.2), 0 8px 24px rgba(0,0,0,0.1)'
+                        : '0 2px 8px rgba(0,0,0,0.1)',
                     zIndex: 2,
                 }}
             >

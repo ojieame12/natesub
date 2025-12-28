@@ -54,6 +54,7 @@ export const profileSchema = z.object({
   displayName: z.string().min(2).max(50),
   bio: z.string().max(500).optional().nullable(),
   avatarUrl: httpsUrl.optional().nullable(),
+  bannerUrl: httpsUrl.optional().nullable(), // AI-generated banner for service mode
   voiceIntroUrl: httpsUrl.optional().nullable(),
   phone: e164Phone.optional().nullable(), // SMS notifications
   country: z.string(),

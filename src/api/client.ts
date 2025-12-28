@@ -90,12 +90,14 @@ export interface Profile {
   displayName: string
   bio: string | null
   avatarUrl: string | null
+  bannerUrl?: string | null  // AI-generated banner for service mode
   voiceIntroUrl: string | null
   phone?: string | null  // SMS notifications (E.164 format)
   country: string
   countryCode: string
   currency: string
   purpose: string
+  displayMode?: 'retainer' | 'support'  // Render mode: 'retainer' for service, 'support' for others
   pricingModel: 'single' | 'tiers'
   singleAmount: number | null
   tiers: Tier[] | null
@@ -506,6 +508,24 @@ export const profile = {
     apiFetch<{ success: boolean; enabled: boolean; preferredPayday: number | null; billingDay: number | null }>('/profile/salary-mode', {
       method: 'PATCH',
       body: JSON.stringify(data),
+    }),
+
+  // Service Mode - AI-generated perks and banner
+  generatePerks: (data: { description: string; serviceType?: string; industry?: string; pricePerMonth: number; displayName?: string }) =>
+    apiFetch<{ perks: Array<{ id: string; title: string; enabled: boolean }> }>('/profile/generate-perks', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  generateBanner: () =>
+    apiFetch<{ bannerUrl: string; wasGenerated: boolean }>('/profile/generate-banner', {
+      method: 'POST',
+    }),
+
+  updatePerks: (perks: Array<{ id: string; title: string; enabled: boolean }>) =>
+    apiFetch<{ perks: Array<{ id: string; title: string; enabled: boolean }> }>('/profile/perks', {
+      method: 'PATCH',
+      body: JSON.stringify({ perks }),
     }),
 }
 

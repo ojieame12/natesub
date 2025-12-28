@@ -111,3 +111,20 @@ export function getKeyFromUrl(publicUrl: string): string | null {
   }
   return publicUrl.replace(`${env.R2_PUBLIC_URL}/`, '')
 }
+
+// Direct upload (for server-side generated content like banners)
+export async function uploadBuffer(
+  buffer: Buffer,
+  key: string,
+  contentType: string
+): Promise<string> {
+  const command = new PutObjectCommand({
+    Bucket: env.R2_BUCKET,
+    Key: key,
+    Body: buffer,
+    ContentType: contentType,
+  })
+
+  await r2.send(command)
+  return `${env.R2_PUBLIC_URL}/${key}`
+}

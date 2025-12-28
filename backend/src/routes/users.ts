@@ -37,6 +37,7 @@ users.get(
           displayName: true,
           bio: true,
           avatarUrl: true,
+          bannerUrl: true, // For service mode (Retainer) pages
           voiceIntroUrl: true,
           purpose: true,
           pricingModel: true,
@@ -147,21 +148,30 @@ users.get(
     // All creators display prices in their chosen currency
     const displayCurrency = profile.currency || 'USD'
 
+    // Service mode (purpose: 'service') gets banner and perks displayed
+    // All other purposes get standard Support mode (avatar only)
+    const isServiceMode = profile.purpose === 'service'
+
     const publicProfile = {
       id: profile.id, // For analytics tracking
       username: profile.username,
       displayName: profile.displayName,
       bio: profile.bio,
       avatarUrl: profile.avatarUrl,
+      // Banner and perks only returned for service mode
+      bannerUrl: isServiceMode ? profile.bannerUrl : null,
       voiceIntroUrl: profile.voiceIntroUrl,
       purpose: profile.purpose,
+      // Display mode: 'retainer' for service users, 'support' for all others
+      displayMode: isServiceMode ? 'retainer' : 'support',
       pricingModel: profile.pricingModel,
       singleAmount: profile.singleAmount ? centsToDisplayAmount(profile.singleAmount, displayCurrency) : null,
       tiers: profile.tiers ? (profile.tiers as any[]).map(t => ({
         ...t,
         amount: centsToDisplayAmount(t.amount, displayCurrency),
       })) : null,
-      perks: profile.perks,
+      // Perks only shown for service mode (Retainer)
+      perks: isServiceMode ? profile.perks : null,
       impactItems: profile.impactItems,
       currency: displayCurrency, // Profile's chosen currency
       shareUrl: profile.shareUrl,

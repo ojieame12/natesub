@@ -227,6 +227,55 @@ export function useUpdateSalaryMode() {
   })
 }
 
+// Service Mode hooks - AI-generated perks and banner
+export function useGeneratePerks() {
+  return useMutation({
+    mutationFn: api.profile.generatePerks,
+  })
+}
+
+export function useGenerateBanner() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: api.profile.generateBanner,
+    onSuccess: (data) => {
+      // Update profile cache with new banner URL
+      queryClient.setQueryData(queryKeys.profile, (oldData: any) => {
+        if (!oldData?.profile) return oldData
+        return {
+          ...oldData,
+          profile: {
+            ...oldData.profile,
+            bannerUrl: data.bannerUrl,
+          },
+        }
+      })
+    },
+  })
+}
+
+export function useUpdatePerks() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: api.profile.updatePerks,
+    onSuccess: (data) => {
+      // Update profile cache with new perks
+      queryClient.setQueryData(queryKeys.profile, (oldData: any) => {
+        if (!oldData?.profile) return oldData
+        return {
+          ...oldData,
+          profile: {
+            ...oldData.profile,
+            perks: data.perks,
+          },
+        }
+      })
+    },
+  })
+}
+
 export function useCheckUsername(username: string) {
   return useQuery({
     queryKey: queryKeys.checkUsername(username),

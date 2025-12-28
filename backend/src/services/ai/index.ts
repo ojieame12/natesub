@@ -5,6 +5,8 @@
  * - Gemini: Voice transcription + content generation
  * - Perplexity: Market research + pricing insights
  * - Page Generator: Orchestrates all AI services
+ * - Banner Generator: AI-powered banner creation from avatars
+ * - Perks Generator: Service perk generation (always 3 perks)
  */
 
 // Main orchestrator (recommended entry point)
@@ -31,3 +33,16 @@ export {
   suggestPrice,
   type MarketContext,
 } from './perplexity.js'
+
+// Service Mode assets (banner + perks)
+export {
+  generateBanner,
+  isBannerGenerationAvailable,
+} from './bannerGenerator.js'
+
+export {
+  generatePerks,
+  inferServiceType,
+  validatePerks,
+  type Perk,
+} from './perksGenerator.js'

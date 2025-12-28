@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Camera, Loader2, ExternalLink, ChevronDown, Check, Heart, Gift, Briefcase, Star, Sparkles, Wallet, MoreHorizontal } from 'lucide-react'
+import { ArrowLeft, Camera, Loader2, ExternalLink, ChevronDown, Check, Heart, Gift, Briefcase, Star, Sparkles, Wallet, MoreHorizontal, Edit3, Wand2, ImageIcon } from 'lucide-react'
 import { Pressable, useToast, Skeleton, LoadingButton, BottomDrawer } from './components'
-import { useProfile, useUpdateProfile, uploadFile } from './api/hooks'
+import { useProfile, useUpdateProfile, uploadFile, useGeneratePerks, useGenerateBanner } from './api/hooks'
 import { getCurrencySymbol, centsToDisplayAmount } from './utils/currency'
+import type { Perk } from './api/client'
 import './EditPage.css'
 
 // Purpose options with labels and icons for visual differentiation
@@ -27,6 +28,8 @@ export default function EditPage() {
   const toast = useToast()
   const { data: profileData, isLoading, error } = useProfile()
   const { mutateAsync: updateProfile, isPending: isSaving } = useUpdateProfile()
+  const generatePerksMutation = useGeneratePerks()
+  const generateBannerMutation = useGenerateBanner()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const profile = profileData?.profile
@@ -43,6 +46,16 @@ export default function EditPage() {
   const [isUploading, setIsUploading] = useState(false)
   const [isContinuing, setIsContinuing] = useState(false)
 
+  // Service mode state
+  const [bio, setBio] = useState('')
+  const [perks, setPerks] = useState<Perk[]>([])
+  const [bannerUrl, setBannerUrl] = useState<string | null>(null)
+  const [editingPerkIndex, setEditingPerkIndex] = useState<number | null>(null)
+  const [editingPerkValue, setEditingPerkValue] = useState('')
+
+  // Check if in service mode
+  const isServiceMode = purpose === 'service'
+
   // When navigating from the dashboard "Launch My Page" card, we enter a guided flow
   const isLaunchFlow = new URLSearchParams(location.search).get('launch') === '1'
 
@@ -58,6 +71,11 @@ export default function EditPage() {
       const amt = profile.singleAmount ? centsToDisplayAmount(profile.singleAmount, currency) : 10
       setSingleAmount(amt)
       setPriceInput(amt.toString())
+
+      // Service mode fields
+      setBio(profile.bio || '')
+      setPerks(profile.perks || [])
+      setBannerUrl(profile.bannerUrl || null)
     }
   }, [profile])
 
@@ -72,18 +90,83 @@ export default function EditPage() {
     // Parse current input for comparison
     const currentVal = parseFloat(priceInput) || 0
 
+    // Check if perks have changed (compare titles)
+    const perksChanged = JSON.stringify(perks.map(p => p.title)) !==
+      JSON.stringify((profile.perks || []).map(p => p.title))
+
     const changed =
       displayName !== (profile.displayName || '') ||
       avatarUrl !== (profile.avatarUrl || null) ||
       purpose !== (profile.purpose || 'support') ||
-      currentVal !== profileAmountDisplay
+      currentVal !== profileAmountDisplay ||
+      // Service mode changes
+      bio !== (profile.bio || '') ||
+      perksChanged ||
+      bannerUrl !== (profile.bannerUrl || null)
     setHasChanges(changed)
 
     // Sync numeric state for validation usage elsewhere
     setSingleAmount(currentVal)
-  }, [displayName, avatarUrl, priceInput, purpose, profile])
+  }, [displayName, avatarUrl, priceInput, purpose, profile, bio, perks, bannerUrl])
 
-  // ... (avatar handlers unchanged) ...
+  // Service mode: Generate perks
+  const handleGeneratePerks = async () => {
+    if (!bio.trim()) {
+      toast.error('Please add a service description first')
+      return
+    }
+    try {
+      const result = await generatePerksMutation.mutateAsync({
+        description: bio.trim(),
+        pricePerMonth: singleAmount,
+        displayName: displayName || undefined,
+      })
+      setPerks(result.perks)
+      toast.success('Perks generated')
+    } catch (err: any) {
+      toast.error(err?.error || 'Failed to generate perks')
+    }
+  }
+
+  // Service mode: Generate banner
+  const handleGenerateBanner = async () => {
+    if (!avatarUrl) {
+      toast.error('Please upload an avatar first')
+      return
+    }
+    try {
+      const result = await generateBannerMutation.mutateAsync()
+      setBannerUrl(result.bannerUrl)
+      toast.success(result.wasGenerated ? 'Banner generated' : 'Using avatar as banner')
+    } catch (err: any) {
+      toast.error(err?.error || 'Failed to generate banner')
+    }
+  }
+
+  // Service mode: Edit perk inline
+  const startEditingPerk = (index: number) => {
+    setEditingPerkIndex(index)
+    setEditingPerkValue(perks[index]?.title || '')
+  }
+
+  const savePerkEdit = () => {
+    if (editingPerkIndex === null) return
+    const newPerks = [...perks]
+    if (newPerks[editingPerkIndex]) {
+      newPerks[editingPerkIndex] = {
+        ...newPerks[editingPerkIndex],
+        title: editingPerkValue.trim() || newPerks[editingPerkIndex].title,
+      }
+      setPerks(newPerks)
+    }
+    setEditingPerkIndex(null)
+    setEditingPerkValue('')
+  }
+
+  const cancelPerkEdit = () => {
+    setEditingPerkIndex(null)
+    setEditingPerkValue('')
+  }
 
   const handlePriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value
@@ -155,6 +238,12 @@ export default function EditPage() {
         ...(profile.pricingModel === 'single' || !profile.pricingModel ? { singleAmount } : {}),
         // Preserve existing isPublic unless this is a launch flow
         ...(isLaunchFlow ? { isPublic: true } : {}),
+        // Service mode fields
+        ...(isServiceMode && {
+          bio,
+          bannerUrl: bannerUrl || undefined,
+          perks: perks as any,
+        }),
       })
 
       setHasChanges(false)
@@ -315,6 +404,115 @@ export default function EditPage() {
             </div>
           </div>
         </section>
+
+        {/* Service Mode: Description Section */}
+        {isServiceMode && (
+          <section className="edit-section">
+            <h3 className="section-title">Service Description</h3>
+            <div className="service-description-card">
+              <textarea
+                className="service-description-textarea"
+                value={bio}
+                onChange={(e) => setBio(e.target.value)}
+                placeholder="Describe what you offer to subscribers..."
+                rows={3}
+              />
+            </div>
+          </section>
+        )}
+
+        {/* Service Mode: Perks Section */}
+        {isServiceMode && (
+          <section className="edit-section">
+            <div className="section-header-row">
+              <h3 className="section-title">What Subscribers Get</h3>
+              <Pressable
+                className="generate-btn"
+                onClick={handleGeneratePerks}
+                disabled={generatePerksMutation.isPending || !bio.trim()}
+              >
+                {generatePerksMutation.isPending ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <Wand2 size={14} />
+                )}
+                <span>{perks.length > 0 ? 'Regenerate' : 'Generate'}</span>
+              </Pressable>
+            </div>
+            {perks.length > 0 ? (
+              <div className="perks-list">
+                {perks.map((perk, index) => (
+                  <div key={perk.id} className="perk-item">
+                    {editingPerkIndex === index ? (
+                      <div className="perk-edit-row">
+                        <input
+                          type="text"
+                          value={editingPerkValue}
+                          onChange={(e) => setEditingPerkValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') savePerkEdit()
+                            if (e.key === 'Escape') cancelPerkEdit()
+                          }}
+                          autoFocus
+                          maxLength={60}
+                          className="perk-edit-input"
+                        />
+                        <Pressable onClick={savePerkEdit} className="perk-save-btn">
+                          <Check size={14} />
+                        </Pressable>
+                      </div>
+                    ) : (
+                      <>
+                        <span className="perk-check">✓</span>
+                        <span className="perk-title">{perk.title}</span>
+                        <Pressable
+                          className="perk-edit-btn"
+                          onClick={() => startEditingPerk(index)}
+                        >
+                          <Edit3 size={12} />
+                        </Pressable>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="perks-empty">
+                Add a description above, then click Generate to create your perks.
+              </p>
+            )}
+          </section>
+        )}
+
+        {/* Service Mode: Banner Section */}
+        {isServiceMode && (
+          <section className="edit-section">
+            <div className="section-header-row">
+              <h3 className="section-title">Banner Image</h3>
+              <Pressable
+                className="generate-btn"
+                onClick={handleGenerateBanner}
+                disabled={generateBannerMutation.isPending || !avatarUrl}
+              >
+                {generateBannerMutation.isPending ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <ImageIcon size={14} />
+                )}
+                <span>{bannerUrl ? 'Regenerate' : 'Generate'}</span>
+              </Pressable>
+            </div>
+            {bannerUrl ? (
+              <div className="banner-preview">
+                <img src={bannerUrl} alt="Banner" className="banner-image" />
+              </div>
+            ) : (
+              <p className="banner-empty">
+                Upload an avatar above, then click Generate to create your banner.
+              </p>
+            )}
+          </section>
+        )}
 
         {/* Pricing Section */}
         <section className="edit-section">

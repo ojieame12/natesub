@@ -26,6 +26,8 @@ import {
   type ProfilePatch
 } from '../schemas/profile.js'
 import { invalidatePublicProfileCache } from '../utils/cache.js'
+import { generateBanner } from '../services/ai/bannerGenerator.js'
+import { generatePerks, inferServiceType, validatePerks, type Perk } from '../services/ai/perksGenerator.js'
 
 const profile = new Hono()
 
@@ -772,6 +774,155 @@ profile.patch(
       preferredPayday: updatedProfile.preferredPayday,
       billingDay,
     })
+  }
+)
+
+// ============================================
+// SERVICE MODE ASSETS (Banner + Perks)
+// ============================================
+
+// Generate banner from avatar (for service users)
+profile.post('/generate-banner', requireAuth, async (c) => {
+  const userId = c.get('userId')
+
+  const userProfile = await db.profile.findUnique({
+    where: { userId },
+    select: { avatarUrl: true, purpose: true, displayName: true },
+  })
+
+  if (!userProfile) {
+    return c.json({ error: 'Profile not found' }, 404)
+  }
+
+  if (!userProfile.avatarUrl) {
+    return c.json({ error: 'Avatar required to generate banner' }, 400)
+  }
+
+  try {
+    const result = await generateBanner({
+      avatarUrl: userProfile.avatarUrl,
+      userId,
+      displayName: userProfile.displayName || undefined,
+    })
+
+    // Save to profile
+    await db.profile.update({
+      where: { userId },
+      data: { bannerUrl: result.bannerUrl },
+    })
+
+    // Invalidate cache
+    const updatedProfile = await db.profile.findUnique({
+      where: { userId },
+      select: { username: true },
+    })
+    if (updatedProfile?.username) {
+      await invalidatePublicProfileCache(updatedProfile.username)
+    }
+
+    return c.json({
+      bannerUrl: result.bannerUrl,
+      wasGenerated: result.wasGenerated,
+    })
+  } catch (error) {
+    console.error('[banner] Generation failed:', error)
+    return c.json({ error: 'Failed to generate banner' }, 500)
+  }
+})
+
+// Generate perks schema
+const generatePerksSchema = z.object({
+  description: z.string().min(10).max(1000),
+  pricePerMonth: z.number().positive(),
+})
+
+// Generate perks for service mode
+profile.post(
+  '/generate-perks',
+  requireAuth,
+  zValidator('json', generatePerksSchema),
+  async (c) => {
+    const userId = c.get('userId')
+    const { description, pricePerMonth } = c.req.valid('json')
+
+    const userProfile = await db.profile.findUnique({
+      where: { userId },
+      select: { displayName: true, username: true },
+    })
+
+    if (!userProfile) {
+      return c.json({ error: 'Profile not found' }, 404)
+    }
+
+    try {
+      // Infer service type from description
+      const serviceType = await inferServiceType(description)
+
+      // Generate exactly 3 perks
+      const perks = await generatePerks({
+        serviceDescription: description,
+        serviceType,
+        pricePerMonth,
+        displayName: userProfile.displayName || undefined,
+      })
+
+      // Save to profile (cast to Json for Prisma)
+      await db.profile.update({
+        where: { userId },
+        data: { perks: perks as any },
+      })
+
+      // Invalidate cache
+      if (userProfile.username) {
+        await invalidatePublicProfileCache(userProfile.username)
+      }
+
+      return c.json({ perks, serviceType })
+    } catch (error) {
+      console.error('[perks] Generation failed:', error)
+      return c.json({ error: 'Failed to generate perks' }, 500)
+    }
+  }
+)
+
+// Update perks schema - always exactly 3 perks
+const updatePerksSchema = z.object({
+  perks: z.array(z.object({
+    id: z.string(),
+    title: z.string().min(1).max(100),
+    enabled: z.boolean(),
+  })).length(3, 'Exactly 3 perks required'),
+})
+
+// Update perks manually
+profile.patch(
+  '/perks',
+  requireAuth,
+  zValidator('json', updatePerksSchema),
+  async (c) => {
+    const userId = c.get('userId')
+    const { perks } = c.req.valid('json')
+
+    const userProfile = await db.profile.findUnique({
+      where: { userId },
+      select: { username: true },
+    })
+
+    if (!userProfile) {
+      return c.json({ error: 'Profile not found' }, 404)
+    }
+
+    await db.profile.update({
+      where: { userId },
+      data: { perks },
+    })
+
+    // Invalidate cache
+    if (userProfile.username) {
+      await invalidatePublicProfileCache(userProfile.username)
+    }
+
+    return c.json({ success: true, perks })
   }
 )
 

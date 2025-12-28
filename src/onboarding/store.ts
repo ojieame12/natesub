@@ -83,6 +83,13 @@ export interface SubscriptionTier {
     isPopular?: boolean
 }
 
+// Service mode perk (simplified, always 3)
+export interface ServicePerk {
+    id: string
+    title: string
+    enabled: boolean  // All generated perks are enabled by default
+}
+
 
 
 // === Store Interface ===
@@ -123,6 +130,11 @@ interface OnboardingStore {
     avatarUrl: string | null
     avatarFile: Blob | null
 
+    // Service Mode (purpose: 'service')
+    serviceDescription: string  // Description for perk generation
+    servicePerks: ServicePerk[] // AI-generated perks (always 3)
+    bannerUrl: string | null    // AI-generated banner from avatar
+
     // Payment provider
     paymentProvider: PaymentProvider
 
@@ -146,6 +158,9 @@ interface OnboardingStore {
     setUsername: (username: string) => void
     setAvatarUrl: (url: string | null) => void
     setAvatarFile: (file: Blob | null) => void
+    setServiceDescription: (description: string) => void
+    setServicePerks: (perks: ServicePerk[]) => void
+    setBannerUrl: (url: string | null) => void
     setPaymentProvider: (provider: PaymentProvider) => void
     setFeeMode: (mode: FeeMode) => void
     nextStep: () => void
@@ -188,6 +203,9 @@ const initialState = {
     username: '',
     avatarUrl: null as string | null,
     avatarFile: null as Blob | null,
+    serviceDescription: '',
+    servicePerks: [] as ServicePerk[],
+    bannerUrl: null as string | null,
     paymentProvider: null as PaymentProvider,
     feeMode: 'split' as FeeMode, // Default: 4%/4% split between subscriber and creator
 }
@@ -226,6 +244,11 @@ export const useOnboardingStore = create<OnboardingStore>()(
             setUsername: (username) => set({ username }),
             setAvatarUrl: (avatarUrl) => set({ avatarUrl }),
             setAvatarFile: (avatarFile) => set({ avatarFile }),
+
+            // Service Mode
+            setServiceDescription: (serviceDescription) => set({ serviceDescription }),
+            setServicePerks: (servicePerks) => set({ servicePerks }),
+            setBannerUrl: (bannerUrl) => set({ bannerUrl }),
 
             // Payment provider
             setPaymentProvider: (provider) => set({ paymentProvider: provider }),
@@ -283,6 +306,10 @@ export const useOnboardingStore = create<OnboardingStore>()(
                 city: '',
                 state: '',
                 zip: '',
+                // Reset service mode fields
+                serviceDescription: '',
+                servicePerks: [],
+                bannerUrl: null,
             }),
 
             // Hydrate from server data (for resume flows)
@@ -323,6 +350,10 @@ export const useOnboardingStore = create<OnboardingStore>()(
                     // Content
                     if (d.bio) updates.bio = d.bio
                     if (d.avatarUrl) updates.avatarUrl = d.avatarUrl
+                    // Service Mode
+                    if (d.serviceDescription) updates.serviceDescription = d.serviceDescription
+                    if (d.servicePerks) updates.servicePerks = d.servicePerks
+                    if (d.bannerUrl) updates.bannerUrl = d.bannerUrl
                     // Payment
                     if (d.paymentProvider) updates.paymentProvider = d.paymentProvider
                     if (d.feeMode) updates.feeMode = d.feeMode
@@ -358,6 +389,10 @@ export const useOnboardingStore = create<OnboardingStore>()(
                 bio: state.bio,
                 username: state.username,
                 avatarUrl: state.avatarUrl,
+                // Service mode fields
+                serviceDescription: state.serviceDescription,
+                servicePerks: state.servicePerks,
+                bannerUrl: state.bannerUrl,
                 paymentProvider: state.paymentProvider,
                 feeMode: state.feeMode,
                 // Track when state was last updated for TTL

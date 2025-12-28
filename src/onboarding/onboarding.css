@@ -3199,3 +3199,164 @@ button.btn .spinning {
     color: var(--error);
     font-size: 14px;
 }
+
+/* === SERVICE MODE STYLES === */
+
+/* Service Description */
+.service-description-card {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: var(--space-lg);
+}
+
+.service-description-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.service-description-input {
+    width: 100%;
+    font-size: 15px;
+    line-height: 1.5;
+    color: var(--text-primary);
+    background: var(--bg-subtle);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: 12px;
+    resize: none;
+    font-family: var(--font-primary);
+    outline: none;
+    transition: border-color 0.15s ease;
+}
+
+.service-description-input:focus {
+    border-color: var(--primary);
+}
+
+.service-description-input::placeholder {
+    color: var(--text-tertiary);
+}
+
+/* Service Perks */
+.service-perks-card {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: var(--space-lg);
+}
+
+.service-perks-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.service-perks-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.service-perks-generate {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--primary);
+    background: var(--bg-subtle);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-full);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.service-perks-generate:hover:not(:disabled) {
+    background: var(--bg-hover);
+    border-color: var(--primary);
+}
+
+.service-perks-generate:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.service-perks-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.service-perk-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    background: var(--bg-subtle);
+    border-radius: var(--radius-md);
+}
+
+.service-perk-check {
+    font-size: 12px;
+    color: var(--accent-green);
+    flex-shrink: 0;
+}
+
+.service-perk-title {
+    flex: 1;
+    font-size: 14px;
+    color: var(--text-primary);
+}
+
+.service-perk-edit-btn {
+    padding: 4px;
+    color: var(--text-tertiary);
+    opacity: 0;
+    transition: opacity 0.15s ease, color 0.15s ease;
+}
+
+.service-perk-item:hover .service-perk-edit-btn {
+    opacity: 1;
+}
+
+.service-perk-edit-btn:hover {
+    color: var(--primary);
+}
+
+.service-perk-edit {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+}
+
+.service-perk-edit input {
+    flex: 1;
+    font-size: 14px;
+    color: var(--text-primary);
+    background: var(--bg-card);
+    border: 1px solid var(--primary);
+    border-radius: var(--radius-sm);
+    padding: 6px 10px;
+    outline: none;
+    font-family: var(--font-primary);
+}
+
+.service-perk-save {
+    padding: 4px;
+    color: var(--accent-green);
+    cursor: pointer;
+}
+
+.service-perks-empty {
+    font-size: 13px;
+    color: var(--text-tertiary);
+    text-align: center;
+    padding: 16px;
+    background: var(--bg-subtle);
+    border-radius: var(--radius-md);
+    margin: 0;
+}

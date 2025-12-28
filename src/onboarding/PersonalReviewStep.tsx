@@ -1,5 +1,5 @@
-import { useState, useRef } from 'react'
-import { ChevronLeft, ChevronDown, Check, Loader2, AlertCircle, Camera, RefreshCw, Heart, Gift, Briefcase, Star, Sparkles, Wallet, MoreHorizontal } from 'lucide-react'
+import { useState, useRef, useEffect } from 'react'
+import { ChevronLeft, ChevronDown, Check, Loader2, AlertCircle, Camera, RefreshCw, Heart, Gift, Briefcase, Star, Sparkles, Wallet, MoreHorizontal, Edit3, Wand2 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useOnboardingStore } from './store'
 import { Button, Pressable } from './components'
@@ -12,7 +12,7 @@ import {
     getCrossBorderCurrencyOptions,
 } from '../utils/regionConfig'
 import { api } from '../api'
-import { uploadFile } from '../api/hooks'
+import { uploadFile, useGeneratePerks, useGenerateBanner } from '../api/hooks'
 import './onboarding.css'
 
 // Purpose options with icons for visual differentiation
@@ -35,6 +35,12 @@ export default function PersonalReviewStep() {
     const [error, setError] = useState<string | null>(null)
     const [showPurposeDrawer, setShowPurposeDrawer] = useState(false)
     const [showCurrencyDrawer, setShowCurrencyDrawer] = useState(false)
+
+    // Service mode state
+    const [editingPerkIndex, setEditingPerkIndex] = useState<number | null>(null)
+    const [editingPerkValue, setEditingPerkValue] = useState('')
+    const generatePerksMutation = useGeneratePerks()
+    const generateBannerMutation = useGenerateBanner()
 
     const {
         firstName,
@@ -59,8 +65,18 @@ export default function PersonalReviewStep() {
         setPurpose,
         setPricing,
         prevStep,
-        reset
+        reset,
+        // Service mode fields
+        serviceDescription,
+        setServiceDescription,
+        servicePerks,
+        setServicePerks,
+        bannerUrl,
+        setBannerUrl,
     } = useOnboardingStore()
+
+    // Check if we're in service mode
+    const isServiceMode = purpose === 'service'
 
     // Determine if user is a cross-border creator using Stripe
     const isCrossBorderStripe = paymentProvider === 'stripe' && isCrossBorderCountry(countryCode)
@@ -169,6 +185,75 @@ export default function PersonalReviewStep() {
     // Get minimum amount for current currency
     const minAmount = getMinimumAmount(currency)
 
+    // Service mode: Generate perks when description changes and we have enough context
+    const handleGeneratePerks = async () => {
+        if (!serviceDescription.trim()) {
+            setError('Please describe your service first')
+            return
+        }
+        const price = parseFloat(priceInput) || 10
+        try {
+            const result = await generatePerksMutation.mutateAsync({
+                description: serviceDescription.trim(),
+                pricePerMonth: price,
+                displayName: displayName || undefined,
+            })
+            setServicePerks(result.perks)
+            setError(null)
+        } catch (err: any) {
+            console.error('Failed to generate perks:', err)
+            setError('Failed to generate perks. Please try again.')
+        }
+    }
+
+    // Service mode: Generate banner from avatar
+    const handleGenerateBanner = async () => {
+        if (!avatarUrl) {
+            setError('Please upload an avatar first')
+            return
+        }
+        try {
+            const result = await generateBannerMutation.mutateAsync()
+            setBannerUrl(result.bannerUrl)
+            setError(null)
+        } catch (err: any) {
+            console.error('Failed to generate banner:', err)
+            // Non-critical - banner is optional
+        }
+    }
+
+    // Auto-generate banner when switching to service mode with avatar
+    useEffect(() => {
+        if (isServiceMode && avatarUrl && !bannerUrl && !generateBannerMutation.isPending) {
+            handleGenerateBanner()
+        }
+    }, [isServiceMode, avatarUrl])
+
+    // Handle perk inline editing
+    const startEditingPerk = (index: number) => {
+        setEditingPerkIndex(index)
+        setEditingPerkValue(servicePerks[index]?.title || '')
+    }
+
+    const savePerkEdit = () => {
+        if (editingPerkIndex === null) return
+        const newPerks = [...servicePerks]
+        if (newPerks[editingPerkIndex]) {
+            newPerks[editingPerkIndex] = {
+                ...newPerks[editingPerkIndex],
+                title: editingPerkValue.trim() || newPerks[editingPerkIndex].title,
+            }
+            setServicePerks(newPerks)
+        }
+        setEditingPerkIndex(null)
+        setEditingPerkValue('')
+    }
+
+    const cancelPerkEdit = () => {
+        setEditingPerkIndex(null)
+        setEditingPerkValue('')
+    }
+
     const handleLaunch = async () => {
         if (!displayName || !username) {
             setError('Please fill in all fields.')
@@ -178,6 +263,18 @@ export default function PersonalReviewStep() {
         if (!avatarUrl) {
             setError('Please add a profile photo.')
             return
+        }
+
+        // Service mode validation
+        if (isServiceMode) {
+            if (!serviceDescription.trim()) {
+                setError('Please describe your service.')
+                return
+            }
+            if (servicePerks.length !== 3) {
+                setError('Please generate perks for your service.')
+                return
+            }
         }
 
         // Validate single pricing amount
@@ -212,6 +309,12 @@ export default function PersonalReviewStep() {
                 city: city?.trim() || undefined,
                 state: state?.trim() || undefined,
                 zip: zip?.trim() || undefined,
+                // Service mode fields
+                ...(isServiceMode && {
+                    bio: serviceDescription.trim(),
+                    bannerUrl: bannerUrl || undefined,
+                    perks: servicePerks as any,
+                }),
             })
 
             // 2. Publish Page
@@ -309,6 +412,85 @@ export default function PersonalReviewStep() {
                             <ChevronDown size={16} className="setup-purpose-chevron" />
                         </Pressable>
                     </div>
+
+                    {/* Service Mode: Service Description */}
+                    {isServiceMode && (
+                        <div className="setup-card service-description-card">
+                            <label className="service-description-label">
+                                What do you offer?
+                            </label>
+                            <textarea
+                                className="service-description-input"
+                                value={serviceDescription}
+                                onChange={(e) => setServiceDescription(e.target.value)}
+                                placeholder="e.g., I help entrepreneurs build their personal brand through 1-on-1 coaching sessions..."
+                                rows={3}
+                            />
+                        </div>
+                    )}
+
+                    {/* Service Mode: Perks */}
+                    {isServiceMode && (
+                        <div className="setup-card service-perks-card">
+                            <div className="service-perks-header">
+                                <span className="service-perks-title">What subscribers get</span>
+                                <Pressable
+                                    className="service-perks-generate"
+                                    onClick={handleGeneratePerks}
+                                    disabled={generatePerksMutation.isPending || !serviceDescription.trim()}
+                                >
+                                    {generatePerksMutation.isPending ? (
+                                        <Loader2 size={14} className="spin" />
+                                    ) : (
+                                        <Wand2 size={14} />
+                                    )}
+                                    <span>{servicePerks.length > 0 ? 'Regenerate' : 'Generate'}</span>
+                                </Pressable>
+                            </div>
+
+                            {servicePerks.length > 0 ? (
+                                <div className="service-perks-list">
+                                    {servicePerks.map((perk, index) => (
+                                        <div key={perk.id} className="service-perk-item">
+                                            {editingPerkIndex === index ? (
+                                                <div className="service-perk-edit">
+                                                    <input
+                                                        type="text"
+                                                        value={editingPerkValue}
+                                                        onChange={(e) => setEditingPerkValue(e.target.value)}
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === 'Enter') savePerkEdit()
+                                                            if (e.key === 'Escape') cancelPerkEdit()
+                                                        }}
+                                                        autoFocus
+                                                        maxLength={60}
+                                                    />
+                                                    <Pressable onClick={savePerkEdit} className="service-perk-save">
+                                                        <Check size={14} />
+                                                    </Pressable>
+                                                </div>
+                                            ) : (
+                                                <>
+                                                    <span className="service-perk-check">✓</span>
+                                                    <span className="service-perk-title">{perk.title}</span>
+                                                    <Pressable
+                                                        className="service-perk-edit-btn"
+                                                        onClick={() => startEditingPerk(index)}
+                                                    >
+                                                        <Edit3 size={12} />
+                                                    </Pressable>
+                                                </>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <p className="service-perks-empty">
+                                    Describe your service above, then click Generate to create your perks.
+                                </p>
+                            )}
+                        </div>
+                    )}
 
                     {/* Pricing Card */}
                     <div className="setup-price-card">
