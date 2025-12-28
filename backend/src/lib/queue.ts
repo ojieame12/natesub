@@ -1,8 +1,14 @@
 import { Queue, Worker, type Processor } from 'bullmq'
 import { env } from '../config/env.js'
 
+type JobOptions = {
+  jobId?: string
+  attempts?: number
+  delay?: number
+}
+
 type QueueLike = {
-  add: (name: string, data: any) => Promise<any>
+  add: (name: string, data: any, opts?: JobOptions) => Promise<any>
   close: () => Promise<void>
 }
 
@@ -11,12 +17,18 @@ type WorkerLike = {
 }
 
 class InMemoryQueue implements QueueLike {
-  private jobs: Array<{ name: string; data: any }> = []
+  private jobs: Map<string, { name: string; data: any }> = new Map()
+  private autoId = 0
   constructor(public readonly queueName: string) {}
 
-  async add(name: string, data: any) {
-    this.jobs.push({ name, data })
-    return { name, data }
+  async add(name: string, data: any, opts?: JobOptions) {
+    const id = opts?.jobId || `auto-${++this.autoId}`
+    // Skip if job with this ID already exists (idempotency)
+    if (this.jobs.has(id)) {
+      return { id, name, data, duplicate: true }
+    }
+    this.jobs.set(id, { name, data })
+    return { id, name, data }
   }
 
   async close() {}

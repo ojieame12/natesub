@@ -458,7 +458,7 @@ updates.post(
         }
 
         // Use a unique job ID for idempotency (prevents duplicate sends on retry)
-        await updateEmailQueue.add('update-email', jobData)
+        await updateEmailQueue.add('update-email', jobData, { jobId: deliveryId })
       }
 
       console.log(`[updates] Enqueued ${eligibleSubscribers.length} email jobs for update ${id}`)
