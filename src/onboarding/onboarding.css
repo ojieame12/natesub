@@ -3380,8 +3380,13 @@ button.btn .spinning {
     opacity: 1;
 }
 
-.service-perk-delete-btn:hover {
+.service-perk-delete-btn:hover:not([aria-disabled="true"]) {
     color: var(--accent-red, #ef4444);
+}
+
+.service-perk-delete-btn[aria-disabled="true"] {
+    opacity: 0.3 !important;
+    cursor: not-allowed;
 }
 
 /* Manual perk add button */

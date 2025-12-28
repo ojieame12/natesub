@@ -10,12 +10,24 @@ const COLORS = {
     white: '#FFFFFF',
 }
 
-// Filled double arrow icon
-function FilledArrows({ color }: { color: string }) {
+// Rounded double chevron icon - softer, more modern look
+function RoundedChevrons({ color }: { color: string }) {
     return (
         <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-            <path d="M6 4L12 10L6 16" fill={color} />
-            <path d="M10 4L16 10L10 16" fill={color} />
+            <path
+                d="M6 6L10 10L6 14"
+                stroke={color}
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+            />
+            <path
+                d="M11 6L15 10L11 14"
+                stroke={color}
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+            />
         </svg>
     )
 }
@@ -203,7 +215,7 @@ export default function SlideToPay({ onComplete, disabled }: SlideToPayProps) {
                     {completed ? (
                         <Check size={20} color="#10b981" strokeWidth={2.5} />
                     ) : (
-                        <FilledArrows color={iconColor} />
+                        <RoundedChevrons color={iconColor} />
                     )}
                 </div>
             </div>

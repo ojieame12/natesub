@@ -213,5 +213,33 @@ describe('EditPage', () => {
         expect(screen.getByText(/Click "Add perk" above to add perks manually/)).toBeInTheDocument()
       })
     })
+
+    it('disables delete button when service user has 3 or fewer perks', async () => {
+      profileReturn = {
+        data: {
+          profile: {
+            ...mockProfile,
+            perks: [
+              { id: 'perk-1', title: 'Perk 1', enabled: true },
+              { id: 'perk-2', title: 'Perk 2', enabled: true },
+              { id: 'perk-3', title: 'Perk 3', enabled: true },
+            ],
+          },
+        },
+        isLoading: false,
+        error: null,
+      }
+
+      renderWithProviders(<EditPage />, { route: '/edit' })
+
+      await waitFor(() => {
+        // Delete buttons should be disabled (aria-disabled="true")
+        const deleteButtons = document.querySelectorAll('.perk-delete-btn')
+        expect(deleteButtons.length).toBe(3)
+        deleteButtons.forEach(btn => {
+          expect(btn.getAttribute('aria-disabled')).toBe('true')
+        })
+      })
+    })
   })
 })

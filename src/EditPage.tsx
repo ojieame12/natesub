@@ -507,6 +507,8 @@ export default function EditPage() {
                           <Pressable
                             className="perk-delete-btn"
                             onClick={() => handleDeletePerk(index)}
+                            disabled={isServiceMode && perks.length <= 3}
+                            title={isServiceMode && perks.length <= 3 ? 'Service profiles require at least 3 perks' : undefined}
                           >
                             <X size={12} />
                           </Pressable>

@@ -1127,8 +1127,13 @@
     opacity: 1;
 }
 
-.perk-delete-btn:hover {
+.perk-delete-btn:hover:not([aria-disabled="true"]) {
     color: var(--accent-error, #ef4444);
+}
+
+.perk-delete-btn[aria-disabled="true"] {
+    opacity: 0.3;
+    cursor: not-allowed;
 }
 
 .perk-add-btn {
