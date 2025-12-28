@@ -20,9 +20,47 @@
   font-display: swap;
 }
 
+/* SF Pro Rounded - for marketing/landing headlines */
+@font-face {
+  font-family: 'SF Pro Rounded';
+  src: url('SF-Pro-Rounded-Light.woff2') format('woff2'),
+       url('SF-Pro-Rounded-Light.woff') format('woff');
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'SF Pro Rounded';
+  src: url('SF-Pro-Rounded-Regular.woff2') format('woff2'),
+       url('SF-Pro-Rounded-Regular.woff') format('woff');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'SF Pro Rounded';
+  src: url('SF-Pro-Rounded-Medium.woff2') format('woff2'),
+       url('SF-Pro-Rounded-Medium.woff') format('woff');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'SF Pro Rounded';
+  src: url('SF-Pro-Rounded-Bold.woff2') format('woff2'),
+       url('SF-Pro-Rounded-Bold.woff') format('woff');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 /* === TOKENS === */
 :root {
   --font-primary: 'SF Compact Rounded', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-display: 'SF Pro Rounded', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   --font-mono: 'SF Mono', 'Menlo', monospace;
 
   --bg: #FFFFFF;

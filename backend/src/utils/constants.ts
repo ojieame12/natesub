@@ -26,7 +26,6 @@ export const RESERVED_USERNAMES = [
   'unsubscribe',       // email unsubscribe
   'verify',            // payroll verification /verify/:id
   'r',                 // public request pages /r/:token
-  'payment',           // /payment/success
 
   // System/reserved words
   'admin',

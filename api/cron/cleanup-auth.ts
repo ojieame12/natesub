@@ -23,6 +23,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   console.log('[cron/cleanup-auth] Starting daily auth cleanup job')
 
+  // 8s timeout to prevent hanging if Railway is slow
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 8000)
+
   try {
     const response = await fetch(`${API_URL}/jobs/cleanup-auth`, {
       method: 'POST',
@@ -30,7 +34,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         'Content-Type': 'application/json',
         'x-jobs-api-key': JOBS_API_KEY,
       },
+      signal: controller.signal,
     })
+    clearTimeout(timeout)
 
     const data = await response.json()
 
@@ -46,6 +52,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ...data,
     })
   } catch (error: any) {
+    clearTimeout(timeout)
+    if (error.name === 'AbortError') {
+      console.error('[cron/cleanup-auth] Request timed out after 8s')
+      return res.status(504).json({ error: 'Railway request timeout' })
+    }
     console.error('[cron/cleanup-auth] Error:', error.message)
     return res.status(500).json({
       error: 'Failed to run auth cleanup job',

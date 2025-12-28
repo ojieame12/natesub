@@ -49,7 +49,6 @@ const PayrollDetail = lazy(() => import('./payroll/PayrollDetail'))
 const PayrollVerify = lazy(() => import('./payroll/PayrollVerify'))
 const StripeComplete = lazy(() => import('./StripeComplete'))
 const StripeRefresh = lazy(() => import('./StripeRefresh'))
-const PaystackComplete = lazy(() => import('./PaystackComplete'))
 const PublicRequestPage = lazy(() => import('./request/PublicRequestPage'))
 const Terms = lazy(() => import('./legal/Terms'))
 const Privacy = lazy(() => import('./legal/Privacy'))
@@ -87,7 +86,6 @@ function isPublicRoute(pathname: string): boolean {
     pathname === '/terms' ||
     pathname === '/privacy' ||
     pathname === '/unsubscribe' ||
-    pathname === '/payment/success' ||
     pathname.startsWith('/onboarding/') ||
     pathname.startsWith('/r/') || // Public request pages
     pathname.startsWith('/verify/') || // Payroll verification pages
@@ -498,7 +496,6 @@ function AppShell() {
           <Route path="/settings/payments/complete" element={<RequireAuth><StripeComplete /></RequireAuth>} />
           <Route path="/settings/payments/refresh" element={<RequireAuth><StripeRefresh /></RequireAuth>} />
           <Route path="/settings/payouts" element={<RequireAuth><PayoutHistory /></RequireAuth>} />
-          <Route path="/payment/success" element={<PaystackComplete />} />
           <Route path="/settings/billing" element={<RequireAuth><Billing /></RequireAuth>} />
           <Route path="/settings" element={<RequireAuth><Settings /></RequireAuth>} />
           <Route path="/settings/help" element={<RequireAuth><HelpSupport /></RequireAuth>} />

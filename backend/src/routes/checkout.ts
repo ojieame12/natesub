@@ -209,12 +209,10 @@ checkout.post(
       const provider = isPaystack ? 'paystack' : 'stripe'
       const reference = `stub_${Date.now()}_${Math.random().toString(36).substring(7)}`
       
-      // Stub URL that immediately redirects to the success page
-      // Paystack expects: /payment/success?reference=...
-      // Stripe expects: /:username?success=true&session_id=...
+      // Stub URL that redirects to the success page (same format as production)
       let stubUrl: string
       if (provider === 'paystack') {
-        stubUrl = `${env.APP_URL}/payment/success?creator=${profile.username}&reference=${reference}&stub=true`
+        stubUrl = `${env.APP_URL}/${profile.username}?success=true&provider=paystack&reference=${reference}&stub=true`
       } else {
         stubUrl = `${env.APP_URL}/${profile.username}?success=true&provider=stripe&session_id=stub_cs_${reference}`
       }

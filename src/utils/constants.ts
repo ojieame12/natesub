@@ -27,7 +27,6 @@ export const RESERVED_ROUTES = [
   'unsubscribe',       // email unsubscribe
   'verify',            // payroll verification /verify/:id
   'r',                 // public request pages /r/:token
-  'payment',           // /payment/success
   'scan',              // previously used, reserved to prevent username collision
   'mocks',             // screenshot/marketing mock routes
 
