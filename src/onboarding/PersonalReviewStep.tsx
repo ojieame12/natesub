@@ -493,7 +493,6 @@ export default function PersonalReviewStep() {
                                                             className="service-perk-delete-btn"
                                                             onClick={() => handleDeletePerk(index)}
                                                             disabled={servicePerks.length <= 3}
-                                                            title={servicePerks.length <= 3 ? 'At least 3 perks required' : undefined}
                                                         >
                                                             <X size={12} />
                                                         </Pressable>
