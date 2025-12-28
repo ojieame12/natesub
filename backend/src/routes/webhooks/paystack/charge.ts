@@ -316,8 +316,22 @@ export async function handlePaystackChargeSuccess(data: any, eventId: string) {
   // Creator receives the rest directly from Paystack on T+1 settlement
   // No manual transfer needed
 
-  // TODO: Platform debit recovery for Paystack needs alternative approach with subaccounts
-  // Options: 1) Separate invoice, 2) Adjust pricing, 3) Post-settlement recovery
+  // PLATFORM DEBIT RECOVERY - NOT APPLICABLE FOR PAYSTACK SUBACCOUNTS
+  //
+  // Unlike Stripe (where we hold funds and can debit the connected account for
+  // refunds/chargebacks), Paystack subaccounts receive funds directly via T+1
+  // settlement. The platform cannot "claw back" funds after settlement.
+  //
+  // Current approach: Platform absorbs the loss for Paystack refunds/chargebacks.
+  // This is acceptable because:
+  // 1. Paystack has lower chargeback rates than card payments
+  // 2. Paystack disputes are handled differently (direct bank debits are final)
+  // 3. The fee structure (8%) provides buffer for occasional losses
+  //
+  // Future options if loss rate becomes significant:
+  // - Adjust platform fee for Paystack creators
+  // - Implement creator balance tracking and withhold from future settlements
+  // - Use Paystack's dedicated refund API to refund from platform account
 
   // Send notification email to creator
   const creator = await db.user.findUnique({
@@ -333,7 +347,7 @@ export async function handlePaystackChargeSuccess(data: any, eventId: string) {
       currency?.toUpperCase() || 'NGN'
     )
 
-    // Send confirmation email to subscriber with manage subscription link
+    // Send confirmation email to subscriber with GROSS amount (what they paid)
     if (customer?.email) {
       try {
         await sendSubscriptionConfirmationEmail(
@@ -342,7 +356,7 @@ export async function handlePaystackChargeSuccess(data: any, eventId: string) {
           creator.profile?.displayName || creator.email,
           creator.profile?.username || '',
           tierName,
-          netCents,
+          grossCents || amount,  // GROSS - what subscriber actually paid
           currency?.toUpperCase() || 'NGN'
         )
       } catch (emailErr) {
