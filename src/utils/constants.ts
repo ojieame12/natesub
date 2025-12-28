@@ -219,11 +219,37 @@ export function shouldSkipAddressStep(countryCode: string | null | undefined): b
   return shouldSkipAddress(countryCode)
 }
 
-// Calculate the review step index based on country (for dynamic onboarding flow)
-// - With address step: 8 steps (0-7), review at step 7
-// - Without address step: 7 steps (0-6), review at step 6
-export function getReviewStepIndex(countryCode: string | null | undefined): number {
-  return shouldSkipAddress(countryCode) ? 6 : 7
+// Calculate the review step index based on country and purpose (for dynamic onboarding flow)
+// Flow: Start → Email → OTP → Identity → [Address] → Purpose → Avatar → Username → Payment → [ServiceDesc → AIGen] → Review
+//
+// Step counts:
+// - No address, non-service: 9 steps (0-8), review at step 8
+// - With address, non-service: 10 steps (0-9), review at step 9
+// - No address, service: 11 steps (0-10), review at step 10
+// - With address, service: 12 steps (0-11), review at step 11
+export function getReviewStepIndex(
+  countryCode: string | null | undefined,
+  purpose?: string | null
+): number {
+  // Base: 8 steps without address (review at index 8)
+  // Add 1 if address step is shown
+  // Add 2 if service mode (ServiceDesc + AIGen steps)
+  const hasAddressStep = !shouldSkipAddress(countryCode)
+  const isServiceMode = purpose === 'service'
+
+  let reviewIndex = 8 // Base: review at step 8 (9 steps)
+  if (hasAddressStep) reviewIndex += 1
+  if (isServiceMode) reviewIndex += 2
+
+  return reviewIndex
+}
+
+// Calculate total onboarding step count based on country and purpose
+export function getOnboardingStepCount(
+  countryCode: string | null | undefined,
+  purpose?: string | null
+): number {
+  return getReviewStepIndex(countryCode, purpose) + 1
 }
 
 // Re-export isCrossBorderCountry for convenience
