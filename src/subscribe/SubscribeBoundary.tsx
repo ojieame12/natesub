@@ -145,7 +145,14 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
     const [status, setStatus] = useState<'idle' | 'processing'>('idle')
     const [resetKey, setResetKey] = useState(0)
     const [payerCountry, setPayerCountry] = useState<string | null>(null)
+    const [cardVisible, setCardVisible] = useState(false)
     const viewIdRef = useRef<string | null>(null)
+
+    // Trigger card entrance animation after mount
+    useEffect(() => {
+        const timer = requestAnimationFrame(() => setCardVisible(true))
+        return () => cancelAnimationFrame(timer)
+    }, [])
 
     // Hooks for checkout
     const { mutateAsync: createCheckout } = useCreateCheckout()
@@ -325,6 +332,10 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                 padding: '24px',
                 position: 'relative',
                 zIndex: 1,
+                // Entrance animation
+                opacity: cardVisible ? 1 : 0,
+                transform: cardVisible ? 'translateY(0)' : 'translateY(20px)',
+                transition: 'opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1), transform 0.5s cubic-bezier(0.16, 1, 0.3, 1)',
             }}>
                 {/* Header Section - Different for Service vs Support */}
                 {isServiceMode ? (

@@ -28,10 +28,13 @@ export default function UserPage() {
     return <Navigate to="/onboarding" replace />
   }
 
-  // Loading state - minimal to avoid jarring skeleton flash
+  // Loading state - matches SubscribeBoundary background for seamless transition
   if (isLoading) {
     return (
-      <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #fff8f0 0%, #fff 50%)' }} />
+      <div style={{
+        minHeight: '100dvh',
+        background: 'url("/Vector87.svg") center center / cover no-repeat, linear-gradient(180deg, #FFE7A0 0%, #FFF5D6 100%)',
+      }} />
     )
   }
 

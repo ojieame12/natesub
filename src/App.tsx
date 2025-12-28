@@ -354,6 +354,8 @@ function AppShell() {
 
   // Only show splash on true cold start - not on remounts (HMR, error recovery, etc.)
   // Safe sessionStorage access - handles Safari private mode, in-app browsers
+  // SKIP splash entirely for public creator pages - they have their own loading state
+  const isPublicCreator = isPublicCreatorPage(location.pathname)
   const hasShownSplash = (() => {
     try {
       return sessionStorage.getItem('splash_shown') === 'true'
@@ -361,7 +363,7 @@ function AppShell() {
       return false
     }
   })()
-  const [showSplash, setShowSplash] = useState(!hasShownSplash)
+  const [showSplash, setShowSplash] = useState(!hasShownSplash && !isPublicCreator)
   const [splashExiting, setSplashExiting] = useState(false)
   const [minTimeElapsed, setMinTimeElapsed] = useState(false)
   const hasPrefetched = useRef(false)
@@ -453,8 +455,8 @@ function AppShell() {
       {showSplashOverlay && <SplashScreen />}
       {showSplash && splashExiting && <SplashScreen exiting />}
 
-      {/* Global "Liquid Glass" Atmosphere - persists across all routes */}
-      <AmbientBackground />
+      {/* Global "Liquid Glass" Atmosphere - persists across all routes except public creator pages */}
+      {!isPublicCreator && <AmbientBackground />}
       <ScrollRestoration />
       <InitialRouteRedirect />
       <AuthErrorHandler />

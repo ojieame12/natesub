@@ -108,8 +108,8 @@ describe('UserPage', () => {
         routePath: '/:username',
       })
 
-      // Loading state is just a gradient background div
-      const container = document.querySelector('[style*="linear-gradient"]')
+      // Loading state is just a gradient background div with min-height
+      const container = document.querySelector('[style*="100dvh"]')
       expect(container).toBeTruthy()
     })
   })
