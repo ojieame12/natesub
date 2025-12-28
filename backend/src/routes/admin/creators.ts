@@ -258,6 +258,10 @@ creators.get('/:id', auditSensitiveRead('creator_details'), async (c) => {
           city: true,
           state: true,
           zip: true,
+          // Salary mode fields (for debugging billing anchor issues)
+          salaryModeEnabled: true,
+          preferredPayday: true,
+          paydayAlignmentUnlocked: true,
         },
       },
     },
@@ -576,6 +580,97 @@ creators.get('/stats/overview', async (c) => {
       totalGross: revenueStats._sum?.amountCents || 0,
       totalFees: revenueStats._sum?.feeCents || 0,
       paymentCount: revenueStats._count || 0,
+    },
+  })
+})
+
+/**
+ * GET /admin/creators/by-username/:username
+ * Quick lookup by username (for debugging)
+ */
+creators.get('/by-username/:username', async (c) => {
+  const { username } = c.req.param()
+
+  const profile = await db.profile.findUnique({
+    where: { username: username.toLowerCase() },
+    select: {
+      userId: true,
+      username: true,
+      displayName: true,
+      countryCode: true,
+      currency: true,
+      paymentProvider: true,
+      stripeAccountId: true,
+      paystackSubaccountCode: true,
+      salaryModeEnabled: true,
+      preferredPayday: true,
+      paydayAlignmentUnlocked: true,
+      singleAmount: true,
+      pricingModel: true,
+    },
+  })
+
+  if (!profile) {
+    throw new HTTPException(404, { message: 'Creator not found' })
+  }
+
+  return c.json({
+    profile,
+    debug: {
+      willUseBillingAnchor: profile.salaryModeEnabled && profile.preferredPayday,
+    },
+  })
+})
+
+/**
+ * POST /admin/creators/:id/disable-salary-mode
+ * Force disable salary mode for a creator
+ */
+creators.post('/:id/disable-salary-mode', adminSensitiveRateLimit, async (c) => {
+  const { id } = c.req.param()
+
+  const profile = await db.profile.findUnique({
+    where: { userId: id },
+    select: {
+      id: true,
+      username: true,
+      salaryModeEnabled: true,
+      preferredPayday: true,
+    },
+  })
+
+  if (!profile) {
+    throw new HTTPException(404, { message: 'Creator profile not found' })
+  }
+
+  // Disable salary mode
+  await db.profile.update({
+    where: { id: profile.id },
+    data: {
+      salaryModeEnabled: false,
+      // Keep preferredPayday in case they want to re-enable later
+    },
+  })
+
+  await logAdminAction(c, 'Disabled salary mode for creator', {
+    creatorId: id,
+    username: profile.username,
+    previousState: {
+      salaryModeEnabled: profile.salaryModeEnabled,
+      preferredPayday: profile.preferredPayday,
+    },
+  })
+
+  return c.json({
+    success: true,
+    message: `Salary mode disabled for ${profile.username}`,
+    previous: {
+      salaryModeEnabled: profile.salaryModeEnabled,
+      preferredPayday: profile.preferredPayday,
+    },
+    current: {
+      salaryModeEnabled: false,
+      preferredPayday: profile.preferredPayday,
     },
   })
 })
