@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react'
 import { ChevronLeft, ChevronDown, Check, Loader2, AlertCircle, Camera, RefreshCw, Heart, Gift, Briefcase, Star, Sparkles, Wallet, MoreHorizontal, Edit3, Wand2, Plus, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { useOnboardingStore } from './store'
+import { useOnboardingStore, useShallow } from './store'
 import { Button, Pressable } from './components'
 import { BottomDrawer } from '../components'
 import { getShareableLink } from '../utils/constants'
@@ -46,6 +46,7 @@ export default function PersonalReviewStep() {
     const isAIAvailable = aiConfig?.available ?? false
     const { data: userData } = useCurrentUser()
 
+    // Use useShallow to prevent re-renders when unrelated store values change
     const {
         firstName,
         lastName,
@@ -76,7 +77,36 @@ export default function PersonalReviewStep() {
         servicePerks,
         setServicePerks,
         bannerUrl,
-    } = useOnboardingStore()
+    } = useOnboardingStore(useShallow((s) => ({
+        firstName: s.firstName,
+        lastName: s.lastName,
+        setFirstName: s.setFirstName,
+        setLastName: s.setLastName,
+        username: s.username,
+        purpose: s.purpose,
+        singleAmount: s.singleAmount,
+        country: s.country,
+        countryCode: s.countryCode,
+        currency: s.currency,
+        setCurrency: s.setCurrency,
+        avatarUrl: s.avatarUrl,
+        paymentProvider: s.paymentProvider,
+        address: s.address,
+        city: s.city,
+        state: s.state,
+        zip: s.zip,
+        currentStep: s.currentStep,
+        setAvatarUrl: s.setAvatarUrl,
+        setPurpose: s.setPurpose,
+        setPricing: s.setPricing,
+        prevStep: s.prevStep,
+        reset: s.reset,
+        serviceDescription: s.serviceDescription,
+        setServiceDescription: s.setServiceDescription,
+        servicePerks: s.servicePerks,
+        setServicePerks: s.setServicePerks,
+        bannerUrl: s.bannerUrl,
+    })))
 
     // Check if we're in service mode
     const isServiceMode = purpose === 'service'

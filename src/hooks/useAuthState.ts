@@ -159,29 +159,43 @@ export function useAuthState(): AuthState {
   const needsPaymentSetup = hasProfile && !hasActivePayment
   const needsOnboarding = !hasProfile
 
-  return {
+  // Memoize user object to prevent unnecessary re-renders in consumers
+  const memoizedUser = useMemo(() => user ? {
+    id: user.id,
+    email: user.email,
+    profile: user.profile,
+    createdAt: user.createdAt ?? null,
+  } : null, [user?.id, user?.email, user?.profile, user?.createdAt])
+
+  // Memoize onboarding object to prevent unnecessary re-renders in consumers
+  const memoizedOnboarding = useMemo(() => user?.onboarding ? {
+    hasProfile: user.onboarding.hasProfile,
+    hasActivePayment: user.onboarding.hasActivePayment,
+    step: user.onboarding.step ?? null,
+    branch: user.onboarding.branch ?? null,
+    data: user.onboarding.data ?? null,
+    redirectTo: user.onboarding.redirectTo ?? '/onboarding',
+  } : null, [
+    user?.onboarding?.hasProfile,
+    user?.onboarding?.hasActivePayment,
+    user?.onboarding?.step,
+    user?.onboarding?.branch,
+    user?.onboarding?.data,
+    user?.onboarding?.redirectTo,
+  ])
+
+  // Memoize final return value to provide stable reference
+  return useMemo(() => ({
     status,
-    user: user ? {
-      id: user.id,
-      email: user.email,
-      profile: user.profile,
-      createdAt: user.createdAt ?? null,
-    } : null,
-    onboarding: user?.onboarding ? {
-      hasProfile: user.onboarding.hasProfile,
-      hasActivePayment: user.onboarding.hasActivePayment,
-      step: user.onboarding.step ?? null,
-      branch: user.onboarding.branch ?? null,
-      data: user.onboarding.data ?? null,
-      redirectTo: user.onboarding.redirectTo ?? '/onboarding',
-    } : null,
+    user: memoizedUser,
+    onboarding: memoizedOnboarding,
     isReady,
     isFullySetUp,
     needsPaymentSetup,
     needsOnboarding,
     error: error as Error | null,
     refetch,
-  }
+  }), [status, memoizedUser, memoizedOnboarding, isReady, isFullySetUp, needsPaymentSetup, needsOnboarding, error, refetch])
 }
 
 export default useAuthState

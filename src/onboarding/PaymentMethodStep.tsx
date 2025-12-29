@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronLeft, CreditCard, Check, Loader2, AlertCircle } from 'lucide-react'
-import { useOnboardingStore, type PaymentProvider } from './store'
+import { useOnboardingStore, useShallow, type PaymentProvider } from './store'
 import { Button, Pressable } from './components'
 import { SwiftCodeLookup } from '../components'
 import { api } from '../api'
@@ -61,7 +61,34 @@ function PaymentMethodCard({ name, description, logo, recommended, disabled, sel
 
 export default function PaymentMethodStep() {
     const navigate = useNavigate()
-    const store = useOnboardingStore()
+    // Use useShallow to prevent re-renders when unrelated store values change
+    const store = useOnboardingStore(useShallow((s) => ({
+        countryCode: s.countryCode,
+        country: s.country,
+        currency: s.currency,
+        setCurrency: s.setCurrency,
+        paymentProvider: s.paymentProvider,
+        setPaymentProvider: s.setPaymentProvider,
+        prevStep: s.prevStep,
+        reset: s.reset,
+        nextStep: s.nextStep,
+        currentStep: s.currentStep,
+        // Values used in handleContinue
+        username: s.username,
+        firstName: s.firstName,
+        lastName: s.lastName,
+        bio: s.bio,
+        avatarUrl: s.avatarUrl,
+        purpose: s.purpose,
+        pricingModel: s.pricingModel,
+        singleAmount: s.singleAmount,
+        tiers: s.tiers,
+        setPricing: s.setPricing,
+        address: s.address,
+        city: s.city,
+        state: s.state,
+        zip: s.zip,
+    })))
     const { countryCode, country, setCurrency, paymentProvider, setPaymentProvider, prevStep, reset, nextStep, currentStep } = store
     const [selectedMethod, setSelectedMethod] = useState<string | null>(paymentProvider)
     const [saving, setSaving] = useState(false)

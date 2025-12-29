@@ -1,5 +1,9 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware'
+import { useShallow } from 'zustand/react/shallow'
+
+// Re-export useShallow for components that need multiple values without causing re-renders
+export { useShallow }
 
 // === Safe Storage ===
 // Wrap localStorage to prevent crashes in Safari Private Mode, in-app browsers, etc.

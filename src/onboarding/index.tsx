@@ -2,6 +2,7 @@ import { useRef, useEffect, useState, useMemo } from 'react'
 import { useLocation } from 'react-router-dom'
 import {
     useOnboardingStore,
+    useShallow,
     type OnboardingStepKey,
     getVisibleStepKeys,
     stepKeyToIndex,
@@ -48,7 +49,17 @@ export default function OnboardingFlow() {
     const onboardingData = onboarding?.data ?? null
     const onboardingStepKey = onboardingData?.stepKey as OnboardingStepKey | undefined
 
-    const { currentStep, currentStepKey, countryCode, purpose, hydrateFromServer, goToStepKey } = useOnboardingStore()
+    // Use useShallow to prevent re-renders when unrelated store values change
+    const { currentStep, currentStepKey, countryCode, purpose, hydrateFromServer, goToStepKey } = useOnboardingStore(
+        useShallow((s) => ({
+            currentStep: s.currentStep,
+            currentStepKey: s.currentStepKey,
+            countryCode: s.countryCode,
+            purpose: s.purpose,
+            hydrateFromServer: s.hydrateFromServer,
+            goToStepKey: s.goToStepKey,
+        }))
+    )
     const [animState, setAnimState] = useState<{ direction: 'forward' | 'back'; isAnimating: boolean }>({
         direction: 'forward',
         isAnimating: false,
