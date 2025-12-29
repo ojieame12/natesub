@@ -174,6 +174,12 @@ export interface ServicePerk {
     enabled: boolean  // All generated perks are enabled by default
 }
 
+// Banner option with variant label
+export interface BannerOption {
+    url: string
+    variant: 'standard' | 'artistic'
+}
+
 
 
 // === Store Interface ===
@@ -219,7 +225,8 @@ interface OnboardingStore {
     // Service Mode (purpose: 'service')
     serviceDescription: string  // Description for perk generation
     servicePerks: ServicePerk[] // AI-generated perks (always 3)
-    bannerUrl: string | null    // AI-generated banner from avatar
+    bannerUrl: string | null    // Selected/final banner
+    bannerOptions: BannerOption[] // AI-generated banner options (max 2, with variant info)
 
     // Payment provider
     paymentProvider: PaymentProvider
@@ -247,6 +254,8 @@ interface OnboardingStore {
     setServiceDescription: (description: string) => void
     setServicePerks: (perks: ServicePerk[]) => void
     setBannerUrl: (url: string | null) => void
+    addBannerOption: (option: BannerOption) => void  // Add to bannerOptions (max 2)
+    clearBannerOptions: () => void          // Reset banner options
     setPaymentProvider: (provider: PaymentProvider) => void
     setFeeMode: (mode: FeeMode) => void
     nextStep: () => void
@@ -299,6 +308,7 @@ const initialState = {
     serviceDescription: '',
     servicePerks: [] as ServicePerk[],
     bannerUrl: null as string | null,
+    bannerOptions: [] as BannerOption[],
     paymentProvider: null as PaymentProvider,
     feeMode: 'split' as FeeMode, // Default: 4.5%/4.5% split between subscriber and creator
 }
@@ -342,6 +352,12 @@ export const useOnboardingStore = create<OnboardingStore>()(
             setServiceDescription: (serviceDescription) => set({ serviceDescription }),
             setServicePerks: (servicePerks) => set({ servicePerks }),
             setBannerUrl: (bannerUrl) => set({ bannerUrl }),
+            addBannerOption: (option) => set((state) => ({
+                bannerOptions: state.bannerOptions.length < 2
+                    ? [...state.bannerOptions, option]
+                    : state.bannerOptions, // Don't add more than 2
+            })),
+            clearBannerOptions: () => set({ bannerOptions: [], bannerUrl: null }),
 
             // Payment provider
             setPaymentProvider: (provider) => set({ paymentProvider: provider }),
@@ -420,6 +436,7 @@ export const useOnboardingStore = create<OnboardingStore>()(
                 serviceDescription: '',
                 servicePerks: [],
                 bannerUrl: null,
+                bannerOptions: [],
             }),
 
             // Hydrate from server data (for resume flows)
@@ -468,6 +485,14 @@ export const useOnboardingStore = create<OnboardingStore>()(
                     if (d.serviceDescription) updates.serviceDescription = d.serviceDescription
                     if (d.servicePerks) updates.servicePerks = d.servicePerks
                     if (d.bannerUrl) updates.bannerUrl = d.bannerUrl
+                    // Handle backward compatibility: convert string[] to BannerOption[]
+                    if (d.bannerOptions && Array.isArray(d.bannerOptions)) {
+                        updates.bannerOptions = d.bannerOptions.map((opt: string | BannerOption, i: number) =>
+                            typeof opt === 'string'
+                                ? { url: opt, variant: i === 0 ? 'standard' : 'artistic' as const }
+                                : opt
+                        )
+                    }
                     // Payment
                     if (d.paymentProvider) updates.paymentProvider = d.paymentProvider
                     if (d.feeMode) updates.feeMode = d.feeMode
@@ -478,7 +503,7 @@ export const useOnboardingStore = create<OnboardingStore>()(
         }),
         {
             name: 'natepay-onboarding',
-            version: 3, // Bumped to add stepKey support
+            version: 4, // Bumped to add BannerOption type with variant
             // Use localStorage with TTL to persist onboarding progress across tab closes
             // while still preventing stale state via the 24-hour TTL check below
             storage: createJSONStorage(() => safeStorage),
@@ -508,6 +533,7 @@ export const useOnboardingStore = create<OnboardingStore>()(
                 serviceDescription: state.serviceDescription,
                 servicePerks: state.servicePerks,
                 bannerUrl: state.bannerUrl,
+                bannerOptions: state.bannerOptions,
                 paymentProvider: state.paymentProvider,
                 feeMode: state.feeMode,
                 // Track when state was last updated for TTL

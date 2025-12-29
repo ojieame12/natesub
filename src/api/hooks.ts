@@ -239,7 +239,8 @@ export function useGenerateBanner() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: api.profile.generateBanner,
+    mutationFn: (data?: { serviceDescription?: string; variant?: 'standard' | 'artistic' }) =>
+      api.profile.generateBanner(data),
     onSuccess: (data) => {
       // Update profile cache with new banner URL
       queryClient.setQueryData(queryKeys.profile, (oldData: any) => {
@@ -853,7 +854,7 @@ export function useSendUpdate() {
 
 export function useUploadUrl() {
   return useMutation({
-    mutationFn: ({ type, mimeType, fileSize }: { type: 'avatar' | 'photo' | 'voice'; mimeType: string; fileSize: number }) =>
+    mutationFn: ({ type, mimeType, fileSize }: { type: 'avatar' | 'photo' | 'voice' | 'banner'; mimeType: string; fileSize: number }) =>
       api.media.getUploadUrl(type, mimeType, fileSize),
   })
 }
@@ -914,13 +915,13 @@ const UPLOAD_TIMEOUT_MS = 120_000
 // Helper to upload file to S3
 export async function uploadFile(
   file: File,
-  type: 'avatar' | 'photo' | 'voice'
+  type: 'avatar' | 'photo' | 'voice' | 'banner'
 ): Promise<string> {
   let uploadBlob: Blob = file
   let mimeType = file.type
 
   // For images, compress and convert to JPEG (handles HEIC, large files, etc.)
-  if (type === 'avatar' || type === 'photo') {
+  if (type === 'avatar' || type === 'photo' || type === 'banner') {
     // Check if it's an image type that needs conversion/compression
     const isImage = file.type.startsWith('image/') ||
       file.type === 'image/heic' ||
@@ -930,7 +931,7 @@ export async function uploadFile(
 
     if (isImage) {
       try {
-        // Compress to max 1200px width for avatars/photos, JPEG quality 85%
+        // Compress to appropriate width: avatar=800, photo/banner=1600
         const maxWidth = type === 'avatar' ? 800 : 1600
         uploadBlob = await compressImage(file, maxWidth, 0.85)
         mimeType = 'image/jpeg'
@@ -996,16 +997,17 @@ export async function uploadFile(
 }
 
 // Max file sizes in bytes (must match backend/src/services/storage.ts)
-const MAX_UPLOAD_SIZES = {
+const MAX_UPLOAD_SIZES: Record<'avatar' | 'photo' | 'voice' | 'banner', number> = {
   avatar: 10 * 1024 * 1024,  // 10MB
   photo: 15 * 1024 * 1024,   // 15MB
   voice: 10 * 1024 * 1024,   // 10MB
+  banner: 10 * 1024 * 1024,  // 10MB
 }
 
 // Helper to upload blob (e.g., audio recording) to S3
 export async function uploadBlob(
   blob: Blob,
-  type: 'avatar' | 'photo' | 'voice',
+  type: 'avatar' | 'photo' | 'voice' | 'banner',
   mimeType?: string
 ): Promise<string> {
   // Client-side size validation (fail fast before requesting signed URL)

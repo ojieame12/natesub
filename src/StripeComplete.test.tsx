@@ -19,10 +19,14 @@ vi.mock('./api', () => ({
   },
 }))
 
-// Mock hooks
+// Mock hooks - useCurrentUser includes profile (no separate useProfile call)
 vi.mock('./api/hooks', () => ({
-  useProfile: () => ({ data: { profile: { username: 'test', isPublic: false } } }),
-  useCurrentUser: () => ({ data: { onboarding: { step: 0, data: {} } } }),
+  useCurrentUser: () => ({
+    data: {
+      profile: { username: 'test', isPublic: false },
+      onboarding: { step: 0, data: {} },
+    },
+  }),
 }))
 
 // Mock navigation

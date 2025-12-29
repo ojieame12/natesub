@@ -827,54 +827,94 @@ profile.patch(
 // SERVICE MODE ASSETS (Banner + Perks)
 // ============================================
 
+// Max AI banner generations per user (cost control)
+const MAX_BANNER_GENERATIONS = 2
+
+// Generate banner schema (all fields optional)
+const generateBannerSchema = z.object({
+  serviceDescription: z.string().max(2000).optional(),
+  variant: z.enum(['standard', 'artistic']).optional(),
+}).optional()
+
 // Generate banner from avatar (for service users)
-profile.post('/generate-banner', requireAuth, async (c) => {
-  const userId = c.get('userId')
+// Accepts optional variant: 'standard' (default) or 'artistic'
+profile.post(
+  '/generate-banner',
+  requireAuth,
+  zValidator('json', generateBannerSchema),
+  async (c) => {
+    const userId = c.get('userId')
 
-  const userProfile = await db.profile.findUnique({
-    where: { userId },
-    select: { avatarUrl: true, purpose: true, displayName: true },
-  })
+    // Get validated params (or defaults)
+    const body = c.req.valid('json') || {}
+    const serviceDescription = body.serviceDescription
+    const variant = body.variant || 'standard'
 
-  if (!userProfile) {
-    return c.json({ error: 'Profile not found' }, 404)
-  }
-
-  if (!userProfile.avatarUrl) {
-    return c.json({ error: 'Avatar required to generate banner' }, 400)
-  }
-
-  try {
-    const result = await generateBanner({
-      avatarUrl: userProfile.avatarUrl,
-      userId,
-      displayName: userProfile.displayName || undefined,
+    // Check generation limit (stored in User.onboardingData)
+    const user = await db.user.findUnique({
+      where: { id: userId },
+      select: { onboardingData: true },
     })
 
-    // Save to profile
-    await db.profile.update({
-      where: { userId },
-      data: { bannerUrl: result.bannerUrl },
-    })
+    const onboardingData = (user?.onboardingData as Record<string, unknown>) || {}
+    const bannerGenerationCount = (onboardingData.bannerGenerationCount as number) || 0
 
-    // Invalidate cache
-    const updatedProfile = await db.profile.findUnique({
-      where: { userId },
-      select: { username: true },
-    })
-    if (updatedProfile?.username) {
-      await invalidatePublicProfileCache(updatedProfile.username)
+    if (bannerGenerationCount >= MAX_BANNER_GENERATIONS) {
+      return c.json({
+        error: `You've reached the limit of ${MAX_BANNER_GENERATIONS} AI-generated banners. Please upload a custom banner instead.`,
+        limitReached: true,
+      }, 400)
     }
 
-    return c.json({
-      bannerUrl: result.bannerUrl,
-      wasGenerated: result.wasGenerated,
+    const userProfile = await db.profile.findUnique({
+      where: { userId },
+      select: { avatarUrl: true, purpose: true, displayName: true, bio: true },
     })
-  } catch (error) {
-    console.error('[banner] Generation failed:', error)
-    return c.json({ error: 'Failed to generate banner' }, 500)
+
+    if (!userProfile) {
+      return c.json({ error: 'Profile not found' }, 404)
+    }
+
+    if (!userProfile.avatarUrl) {
+      return c.json({ error: 'Avatar required to generate banner' }, 400)
+    }
+
+    try {
+      const result = await generateBanner({
+        avatarUrl: userProfile.avatarUrl,
+        userId,
+        displayName: userProfile.displayName || undefined,
+        serviceDescription: serviceDescription || userProfile.bio || undefined,
+        variant,
+      })
+
+      // Increment generation count in User.onboardingData
+      await db.user.update({
+        where: { id: userId },
+        data: {
+          onboardingData: {
+            ...onboardingData,
+            bannerGenerationCount: bannerGenerationCount + 1,
+          },
+        },
+      })
+
+      // Note: Don't auto-save to profile.bannerUrl during generation
+      // Let frontend handle selection from multiple options
+      // Only the final selected banner should be saved to profile
+
+      return c.json({
+        bannerUrl: result.bannerUrl,
+        wasGenerated: result.wasGenerated,
+        variant: result.variant,
+        generationsRemaining: MAX_BANNER_GENERATIONS - bannerGenerationCount - 1,
+      })
+    } catch (error) {
+      console.error('[banner] Generation failed:', error)
+      return c.json({ error: 'Failed to generate banner' }, 500)
+    }
   }
-})
+)
 
 // Generate perks schema
 const generatePerksSchema = z.object({

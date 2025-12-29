@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useMemo } from 'react'
+import { useRef, useEffect, useLayoutEffect, useState, useMemo } from 'react'
 import { useLocation } from 'react-router-dom'
 import {
     useOnboardingStore,
@@ -23,6 +23,18 @@ import ServiceDescriptionStep from './ServiceDescriptionStep'
 import AIGeneratingStep from './AIGeneratingStep'
 import PersonalReviewStep from './PersonalReviewStep'
 import './onboarding.css'
+
+// Lightweight shell shown while waiting for auth/hydration
+// Prevents flash of step 0 on reload for returning users
+function ResumingShell() {
+    return (
+        <div className="onboarding-wrapper">
+            <div className="onboarding-resuming">
+                <img src="/logo.svg" alt="NatePay" className="resuming-logo" />
+            </div>
+        </div>
+    )
+}
 
 // Map step keys to components
 const STEP_COMPONENTS: Record<OnboardingStepKey, React.ReactElement> = {
@@ -64,16 +76,23 @@ export default function OnboardingFlow() {
         direction: 'forward',
         isAnimating: false,
     })
+    // Track if we're ready to render (prevents flash of step 0 on reload)
+    const [isReadyToRender, setIsReadyToRender] = useState(false)
     const prevStepRef = useRef(currentStep)
     const hasHydratedFromServer = useRef(false)
     const lastAppliedUrlStep = useRef<string | null>(null)
     const shouldSkipNextAnimation = useRef(false)
 
     // Determine if we should show the address step based on country
-    const showAddressStep = countryCode && !shouldSkipAddressStep(countryCode)
+    // Use server data as fallback before store is hydrated
+    const effectiveCountryCode = countryCode || onboardingData?.countryCode
+    const showAddressStep = effectiveCountryCode && !shouldSkipAddressStep(effectiveCountryCode)
 
     // Check if this is service mode (requires AI generation steps)
-    const isServiceMode = purpose === 'service'
+    // Use server data as fallback to avoid chicken-and-egg problem
+    // where store has 'support' but server has 'service'
+    const effectivePurpose = purpose || onboardingData?.purpose
+    const isServiceMode = effectivePurpose === 'service'
 
     // Step configuration for utility functions
     const stepConfig = useMemo(() => ({
@@ -118,10 +137,20 @@ export default function OnboardingFlow() {
     }, [currentStepKey, currentStep, visibleStepKeys, stepConfig, steps.length])
 
     // Hydrate onboarding state from URL ?step= param or server state
-    // Uses extracted primitives instead of full object to prevent unnecessary re-runs
-    useEffect(() => {
-        if (status !== 'authenticated') return
+    // Use useLayoutEffect to hydrate BEFORE first paint (prevents flash)
+    useLayoutEffect(() => {
+        // For unauthenticated users (fresh start), render immediately
+        if (status === 'unauthenticated') {
+            setIsReadyToRender(true)
+            return
+        }
 
+        // Still checking auth - don't render yet
+        if (status === 'checking' || status === 'unknown') {
+            return
+        }
+
+        // Authenticated - hydrate from URL or server state before rendering
         const params = new URLSearchParams(location.search)
         const urlStep = params.get('step')
 
@@ -155,13 +184,12 @@ export default function OnboardingFlow() {
                     })
                 }
             }
+            setIsReadyToRender(true)
             return
         }
 
-        if (hasHydratedFromServer.current) return
-
         // Hydrate from server state (resume flow)
-        if (onboardingStep && onboardingStep > 0 && effectiveStep === 0) {
+        if (!hasHydratedFromServer.current && onboardingStep && onboardingStep > 0) {
             hasHydratedFromServer.current = true
             shouldSkipNextAnimation.current = true
 
@@ -188,7 +216,10 @@ export default function OnboardingFlow() {
                 })
             }
         }
-    }, [location.search, status, onboardingStep, onboardingStepKey, onboardingData, effectiveStep, hydrateFromServer, visibleStepKeys, stepConfig, steps.length])
+
+        // Ready to render after hydration
+        setIsReadyToRender(true)
+    }, [location.search, status, onboardingStep, onboardingStepKey, onboardingData, hydrateFromServer, visibleStepKeys, stepConfig, steps.length])
 
     // Sync step key when effectiveStep changes (e.g., after nextStep/prevStep)
     // This keeps the step key in sync with navigation that uses indices
@@ -229,6 +260,12 @@ export default function OnboardingFlow() {
     // Progress bar logic
     const progress = Math.min(((effectiveStep + 1) / steps.length) * 100, 100)
     const showProgress = effectiveStep > 0 && effectiveStep < steps.length - 1
+
+    // Show resuming shell while waiting for auth/hydration
+    // This prevents the flash of step 0 on reload for returning users
+    if (!isReadyToRender) {
+        return <ResumingShell />
+    }
 
     return (
         <div className="onboarding-wrapper">

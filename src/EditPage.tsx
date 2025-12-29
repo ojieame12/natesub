@@ -139,7 +139,7 @@ export default function EditPage() {
       return
     }
     try {
-      const result = await generateBannerMutation.mutateAsync()
+      const result = await generateBannerMutation.mutateAsync({})
       setBannerUrl(result.bannerUrl)
       toast.success(result.wasGenerated ? 'Banner generated' : 'Using avatar as banner')
     } catch (err: any) {

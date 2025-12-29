@@ -19,6 +19,9 @@ import {
 import '../Dashboard.css'
 import './onboarding.css'
 
+// Prefetch StripeComplete chunk so return from Stripe doesn't trigger Suspense fallback
+const prefetchStripeComplete = () => import('../StripeComplete')
+
 interface PaymentMethodCardProps {
     name: string
     description: string
@@ -209,28 +212,33 @@ export default function PaymentMethodStep() {
                 isPublic: false,
             }
 
-            // Save profile to backend (single call - includes isPublic: false)
-            await api.profile.update(profileData)
-
             // Persist onboarding progress so the flow can resume after redirects
             // Save next step - for service flow it's service-desc, for others it's review
-            // IMPORTANT: This must succeed for proper Stripe return handling
             const nextStepKey = store.purpose === 'service' ? 'service-desc' : 'review'
-            try {
-                await api.auth.saveOnboardingProgress({
+
+            // Parallelize profile update + onboarding progress save for faster redirect
+            // These are independent calls that don't depend on each other
+            const [profileResult, progressResult] = await Promise.allSettled([
+                api.profile.update(profileData),
+                api.auth.saveOnboardingProgress({
                     step: currentStep + 1,
-                    stepKey: nextStepKey, // Canonical step key for safe resume
+                    stepKey: nextStepKey,
                     data: {
                         paymentProvider: selectedMethod,
                         countryCode: store.countryCode,
-                        purpose: store.purpose, // Redundant - ensures backend knows flow type
+                        purpose: store.purpose,
                     },
-                })
-            } catch (progressErr) {
-                // Log but continue - sessionStorage fallback should handle most cases
-                // But without this, users returning from Stripe with cleared storage
-                // will resume at an old step (likely Username) and get stuck
-                console.error('[PaymentMethodStep] Failed to save onboarding progress:', progressErr)
+                }),
+            ])
+
+            // Profile update is critical - throw if it failed
+            if (profileResult.status === 'rejected') {
+                throw profileResult.reason
+            }
+
+            // Progress save failure is non-critical - log and continue
+            if (progressResult.status === 'rejected') {
+                console.error('[PaymentMethodStep] Failed to save onboarding progress:', progressResult.reason)
             }
 
             // Handle Stripe connect flow
@@ -245,6 +253,9 @@ export default function PaymentMethodStep() {
                         // Fallback: return to next step after Payment
                         // Use step key (not numeric index) for safe resume regardless of step array changes
                         sessionStorage.setItem('stripe_return_to', `/onboarding?step=${nextStepKey}`)
+
+                        // Prefetch StripeComplete chunk so return doesn't show skeleton
+                        prefetchStripeComplete()
 
                         // For cross-border countries (NG/GH/KE), show SWIFT code helper first
                         // This helps users find their bank's SWIFT code before Stripe onboarding

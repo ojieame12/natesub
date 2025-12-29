@@ -525,9 +525,10 @@ export const profile = {
       timeout: AI_TIMEOUT_MS, // 30s - AI generation can be slow
     }),
 
-  generateBanner: () =>
-    apiFetch<{ bannerUrl: string; wasGenerated: boolean }>('/profile/generate-banner', {
+  generateBanner: (data?: { serviceDescription?: string; variant?: 'standard' | 'artistic' }) =>
+    apiFetch<{ bannerUrl: string; wasGenerated: boolean; variant: 'standard' | 'artistic' }>('/profile/generate-banner', {
       method: 'POST',
+      body: data ? JSON.stringify(data) : undefined,
       timeout: BANNER_TIMEOUT_MS, // 90s - uses "Thinking" mode which is slower
     }),
 
@@ -947,7 +948,7 @@ export const updates = {
 // ============================================
 
 export const media = {
-  getUploadUrl: (type: 'avatar' | 'photo' | 'voice', mimeType: string, fileSize: number) =>
+  getUploadUrl: (type: 'avatar' | 'photo' | 'voice' | 'banner', mimeType: string, fileSize: number) =>
     apiFetch<{
       uploadUrl: string
       publicUrl: string

@@ -9,6 +9,10 @@
  * - Supports aspect ratio: 16:9 (closest to header format)
  * - Resolution: 2K for high quality
  * - Advanced reasoning ("Thinking") for complex instructions
+ *
+ * Supports two style variants:
+ * - 'standard': Clean, professional headshot (first generation)
+ * - 'artistic': Dramatic, stylized portrait (regeneration)
  */
 
 import { GoogleGenAI } from '@google/genai'
@@ -64,16 +68,22 @@ function withTimeout<T>(promise: Promise<T>, ms: number, operation: string): Pro
   ])
 }
 
+// Style variant for banner generation
+export type BannerVariant = 'standard' | 'artistic'
+
 interface BannerGenerationInput {
   avatarUrl: string
   userId: string
   serviceType?: string  // e.g., "fitness coach", "business consultant"
   displayName?: string
+  serviceDescription?: string  // Description of the service for context
+  variant?: BannerVariant     // Style variant (default: 'standard')
 }
 
 interface BannerGenerationResult {
   bannerUrl: string
   wasGenerated: boolean  // true if AI generated, false if fallback
+  variant: BannerVariant // Which variant was used
 }
 
 // Initialize client (lazy - only when needed)
@@ -97,11 +107,14 @@ function getClient(): GoogleGenAI {
  * 2. Creating a professional, clean aesthetic
  * 3. Using a dark/neutral background
  * 4. Proper framing for a wide banner format
+ *
+ * @param input.variant - 'standard' for clean professional, 'artistic' for dramatic/stylized
  */
 export async function generateBanner(
   input: BannerGenerationInput
 ): Promise<BannerGenerationResult> {
   const client = getClient()
+  const variant = input.variant || 'standard'
 
   try {
     // Validate URL before fetching (SSRF protection)
@@ -132,8 +145,10 @@ export async function generateBanner(
     const avatarBase64 = Buffer.from(avatarBuffer).toString('base64')
     const mimeType = avatarResponse.headers.get('content-type') || 'image/jpeg'
 
-    // Craft the prompt for professional banner generation
-    const prompt = buildBannerPrompt(input)
+    // Craft the prompt based on variant
+    const prompt = variant === 'artistic'
+      ? buildArtisticBannerPrompt(input)
+      : buildStandardBannerPrompt(input)
 
     // Build contents as flat array (text + image) per API docs
     const contents = [
@@ -146,7 +161,7 @@ export async function generateBanner(
       },
     ]
 
-    console.log('[banner] Calling Nano Banana Pro with model:', IMAGE_MODEL)
+    console.log('[banner] Calling Nano Banana Pro with variant:', variant)
 
     const response = await withTimeout(
       client.models.generateContent({
@@ -178,7 +193,7 @@ export async function generateBanner(
     if (!imagePart?.inlineData?.data) {
       // AI didn't generate an image - use text editing fallback
       console.log('[banner] No image in response, using fallback')
-      return generateFallbackBanner(input)
+      return generateFallbackBanner(input, variant)
     }
 
     // Use actual MIME type from response, fallback to JPEG
@@ -187,118 +202,116 @@ export async function generateBanner(
 
     // Upload to R2 with correct MIME type
     const imageBuffer = Buffer.from(imagePart.inlineData.data, 'base64')
-    const filename = `banners/${input.userId}-${Date.now()}.${extension}`
+    const filename = `banners/${input.userId}-${variant}-${Date.now()}.${extension}`
     const bannerUrl = await uploadBuffer(imageBuffer, filename, responseMime)
 
     return {
       bannerUrl,
       wasGenerated: true,
+      variant,
     }
   } catch (error) {
     console.error('[banner] AI generation failed:', error)
-    return generateFallbackBanner(input)
+    return generateFallbackBanner(input, variant)
   }
 }
 
 /**
- * Build the prompt for banner generation.
- * Engineered for premium, professional output using Nano Banana Pro's advanced capabilities.
+ * Standard variant: Clean, professional headshot.
+ * Used for first-time generation.
  */
-function buildBannerPrompt(input: BannerGenerationInput): string {
-  // Industry-specific styling hints
-  const industryStyles: Record<string, string> = {
-    fitness: 'energetic, dynamic lighting with warm orange/gold accents, gym or outdoor sports aesthetic',
-    coaching: 'warm, inviting atmosphere with soft natural lighting, inspirational and approachable',
-    consulting: 'corporate elegance, cool blue/grey tones, minimalist office or city skyline backdrop',
-    design: 'creative studio aesthetic, artistic lighting, modern and stylish with subtle color gradients',
-    tech: 'futuristic, clean lines, subtle tech elements like code patterns or circuit motifs, blue/purple tones',
-    education: 'academic warmth, library or study environment feel, welcoming and knowledgeable',
-    creative: 'artistic flair, bold yet sophisticated, creative studio or gallery aesthetic',
-    business: 'executive presence, premium corporate feel, subtle luxury with clean lines',
-    health: 'calming, wellness-focused, soft greens or blues, clean and trustworthy',
-    finance: 'sophisticated luxury, premium materials feel, dark tones with gold accents',
-    marketing: 'bold and confident, dynamic energy, modern and trend-forward aesthetic',
-  }
+function buildStandardBannerPrompt(input: BannerGenerationInput): string {
+  const nameContext = input.displayName ? `This is ${input.displayName}.` : ''
+  const serviceContext = input.serviceDescription
+    ? `They provide: ${input.serviceDescription.slice(0, 200)}`
+    : ''
 
-  const serviceType = input.serviceType?.toLowerCase() || ''
-  const styleHint = industryStyles[serviceType] || 'professional, modern, trustworthy aesthetic'
+  return `Create a polished, professional headshot banner from this photo.
 
-  const serviceContext = input.serviceType
-    ? `INDUSTRY: ${input.serviceType}\nSTYLE DIRECTION: ${styleHint}`
-    : 'STYLE DIRECTION: Premium professional service provider aesthetic'
+REQUIREMENTS:
+- PRESERVE the person's face and identity EXACTLY as shown
+- HEAD AND SHOULDERS/BUST ONLY - crop to show head and upper chest
+- PURE BLACK BACKGROUND (#000000) - solid, no gradients
+- 16:9 wide format for a page banner
+- Professional studio lighting on the face
+- Clean, polished look like a LinkedIn premium profile photo
+- Person should be centered or slightly left of center
 
-  return `You are a professional graphic designer creating a premium banner for a high-end subscription service.
-
-TASK: Transform this headshot into a stunning wide banner that looks like it belongs on a premium SaaS landing page or executive speaker profile.
-
-REFERENCE IMAGE: The attached photo shows the person who needs to appear in the banner.
-
-CRITICAL REQUIREMENTS:
-1. PRESERVE IDENTITY: The person's face, features, and likeness must be EXACTLY preserved
-2. WIDE FORMAT: 16:9 aspect ratio banner suitable for a page header
-3. PREMIUM AESTHETIC: This should look like a $10,000 photoshoot result
-4. PROFESSIONAL COMPOSITION: Person positioned in the left third or center, with intentional negative space
-
-VISUAL STYLE:
-- ${styleHint}
-- Studio-quality lighting with depth and dimension
-- Rich, cinematic color grading (not flat or washed out)
-- Subtle depth of field for professional photography feel
-- Clean, uncluttered composition with breathing room
-
-BACKGROUND TREATMENT:
-- Dark, sophisticated backdrop (deep charcoal #1C1C1E, rich navy #0A1628, or elegant black)
-- Can include subtle gradient or atmospheric lighting effects
-- Optional: very subtle, abstract environmental elements matching the industry
-- NO distracting patterns, NO text, NO logos
-
-PHOTOGRAPHY QUALITY:
-- Looks like shot with a Sony A7R IV or Hasselblad
-- Professional retouching (subtle skin smoothing, not plastic)
-- Catch lights in eyes preserved
-- Natural, flattering shadow placement
-
+${nameContext}
 ${serviceContext}
-${input.displayName ? `PERSON: ${input.displayName}` : ''}
 
-PROHIBITED:
-❌ Text overlays or watermarks
-❌ Cartoon or illustrated styles
-❌ Artificial or uncanny valley appearance
-❌ Over-filtered or Instagram-style processing
-❌ Stock photo generic look
-❌ Altering facial features, skin tone, or identity
+STYLE:
+- Modern, minimalist, professional
+- Soft rim lighting on edges (subtle)
+- Natural skin tones, not over-edited
+- Sharp focus on face, slight depth blur on shoulders if visible
 
-OUTPUT: Generate ONE premium banner image. Think "Apple keynote speaker banner" or "Y Combinator founder profile".`
+DO NOT:
+- Add any text, logos, or watermarks
+- Change facial features or skin tone
+- Use cartoon/illustration style
+- Add busy backgrounds or props
+- Include full body - HEAD AND BUST ONLY
+
+Generate ONE high-quality professional headshot banner.`
+}
+
+/**
+ * Artistic variant: Dramatic, stylized portrait.
+ * Used for regeneration to give user variety.
+ */
+function buildArtisticBannerPrompt(input: BannerGenerationInput): string {
+  const nameContext = input.displayName ? `This is ${input.displayName}.` : ''
+  const serviceContext = input.serviceDescription
+    ? `They provide: ${input.serviceDescription.slice(0, 200)}`
+    : ''
+
+  return `Create a dramatic, artistic portrait banner from this photo.
+
+REQUIREMENTS:
+- PRESERVE the person's face and identity EXACTLY as shown
+- HEAD AND SHOULDERS/BUST ONLY - crop to show head and upper chest
+- DEEP DARK BACKGROUND with subtle gradient or texture
+- 16:9 wide format for a page banner
+- Dramatic, cinematic lighting (Rembrandt or split lighting)
+- High-end editorial/magazine quality
+- Person positioned slightly off-center for dynamic composition
+
+${nameContext}
+${serviceContext}
+
+STYLE:
+- Cinematic, editorial, dramatic
+- Strong key light with deep shadows
+- Subtle color grading (warm highlights, cool shadows)
+- Professional retouching while keeping natural appearance
+- Slight vignette effect around edges
+
+DO NOT:
+- Add any text, logos, or watermarks
+- Change facial features significantly
+- Use cartoon/illustration style
+- Add busy backgrounds or props
+- Include full body - HEAD AND BUST ONLY
+
+Generate ONE dramatic, high-quality artistic portrait banner.`
 }
 
 /**
  * Fallback banner generation when AI fails.
- * Creates a simple banner by placing the avatar on a dark background.
- *
- * Note: This is a basic fallback. For production, consider:
- * - Using Sharp or Canvas for proper image composition
- * - Generating on the frontend with Canvas API
+ * Returns the avatar URL as a fallback.
  */
 async function generateFallbackBanner(
-  input: BannerGenerationInput
+  input: BannerGenerationInput,
+  variant: BannerVariant
 ): Promise<BannerGenerationResult> {
-  // For the fallback, we'll create a simple dark banner with the avatar centered
-  // This requires an image processing library like Sharp
-  // For now, we'll return the avatar URL as a "banner" and let the frontend handle display
-
-  // TODO: Implement proper fallback with Sharp when installed:
-  // 1. Create black canvas (1200x375)
-  // 2. Resize avatar to fit height
-  // 3. Center avatar on canvas
-  // 4. Upload to R2
-
   console.log('[banner] Using avatar as fallback banner for user:', input.userId)
 
   // Return avatar URL as fallback - frontend will display appropriately
   return {
     bannerUrl: input.avatarUrl,
     wasGenerated: false,
+    variant,
   }
 }
 

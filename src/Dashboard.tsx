@@ -4,7 +4,7 @@ import { api } from './api/client'
 import { getShareableLink } from './utils/constants'
 import { Menu, Bell, Copy, Share2, Check, RefreshCw, Clock, ChevronRight, CreditCard } from 'lucide-react'
 import { Pressable, useToast, Skeleton, ErrorState } from './components'
-import { useViewTransition } from './hooks'
+import { useViewTransition, useDelayedLoading } from './hooks'
 import { useCurrentUser, useMetrics, useActivity, useProfile, useAnalyticsStats, useNotifications } from './api/hooks'
 import { centsToDisplayAmount } from './utils/currency'
 import { SlideOutMenu, NotificationsPanel, StatsCard, ActivityFeed } from './dashboard/index'
@@ -30,11 +30,15 @@ export default function Dashboard() {
 
   // Real API hooks
   const { data: currentUser } = useCurrentUser()
-  const { data: profileData, isLoading: profileLoading, refetch: refetchProfile } = useProfile()
-  const { data: metricsData, isLoading: metricsLoading, isError: metricsError, refetch: refetchMetrics } = useMetrics()
+  const { data: profileData, isLoading: profileLoadingRaw, refetch: refetchProfile } = useProfile()
+  const { data: metricsData, isLoading: metricsLoadingRaw, isError: metricsError, refetch: refetchMetrics } = useMetrics()
   const { data: activityData, isLoading: activityLoading, isError: activityError, refetch: refetchActivity } = useActivity(5)
   const { refetch: refetchAnalytics } = useAnalyticsStats()
   const { notifications, unreadCount, isError: notificationsError, markAsRead, markAllAsRead, refetch: refetchNotifications } = useNotifications(10)
+
+  // Delay showing skeletons to prevent flash on fast cache hits
+  const profileLoading = useDelayedLoading(profileLoadingRaw)
+  const metricsLoading = useDelayedLoading(metricsLoadingRaw)
 
   const profile = profileData?.profile
   const metrics = metricsData?.metrics

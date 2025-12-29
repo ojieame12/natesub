@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
+import { useIsRestoring } from '../api/provider'
 
 /**
- * useDelayedLoading - Prevent skeleton flash on fast requests
+ * useDelayedLoading - Prevent skeleton flash on fast requests and cache restoration
  *
  * Returns true only after `delay` ms of loading, preventing the jarring
- * "flash of skeleton" on fast network requests. Pairs well with React Query's
- * staleTime and keepPreviousData for a smoother UX.
+ * "flash of skeleton" on fast network requests. Also suppresses skeletons
+ * while the persisted cache is being restored (hydration).
  *
  * Usage:
  * ```tsx
@@ -23,8 +24,15 @@ import { useState, useEffect } from 'react'
  */
 export function useDelayedLoading(isLoading: boolean, delay = 200): boolean {
   const [showSkeleton, setShowSkeleton] = useState(false)
+  const isRestoring = useIsRestoring()
 
   useEffect(() => {
+    // Never show skeleton while cache is restoring (hydration in progress)
+    if (isRestoring) {
+      setShowSkeleton(false)
+      return
+    }
+
     if (!isLoading) {
       setShowSkeleton(false)
       return
@@ -36,9 +44,10 @@ export function useDelayedLoading(isLoading: boolean, delay = 200): boolean {
     }, delay)
 
     return () => clearTimeout(timer)
-  }, [isLoading, delay])
+  }, [isLoading, isRestoring, delay])
 
-  return showSkeleton
+  // Never show skeleton during restoration
+  return showSkeleton && !isRestoring
 }
 
 export default useDelayedLoading

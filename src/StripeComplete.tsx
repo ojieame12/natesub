@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { CheckCircle, AlertCircle, Loader2, Building2, Calendar, ExternalLink, ArrowLeft } from 'lucide-react'
 import { api } from './api'
-import { useProfile, useCurrentUser } from './api/hooks'
+import { useCurrentUser } from './api/hooks'
 import { useOnboardingStore } from './onboarding/store'
 import { setPaymentConfirmed } from './utils/paymentConfirmed'
 import { Pressable, LoadingButton } from './components'
@@ -54,9 +54,9 @@ type FlowSource = 'onboarding' | 'settings' | 'unknown'
 export default function StripeComplete() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const { data: profileData } = useProfile()
+  // Use currentUser only - profile is included, avoiding duplicate /profile fetch
   const { data: userData } = useCurrentUser()
-  const profile = profileData?.profile
+  const profile = userData?.profile
   const { reset: resetOnboarding, purpose } = useOnboardingStore()
 
   // Use store → profile → backend onboardingData fallback chain (most robust)

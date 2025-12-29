@@ -14,7 +14,7 @@ media.post(
   requireAuth,
   mediaUploadRateLimit,
   zValidator('json', z.object({
-    type: z.enum(['avatar', 'photo', 'voice']),
+    type: z.enum(['avatar', 'photo', 'voice', 'banner']),
     mimeType: z.string(),
     fileSize: z.number().int().positive().max(50 * 1024 * 1024), // Max 50MB absolute limit
     fileName: z.string().optional(),

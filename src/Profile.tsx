@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import { Pen, ExternalLink, ChevronRight, LogOut, Copy, Shield } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { Pressable, Skeleton, ErrorState, useToast } from './components'
+import { useDelayedLoading } from './hooks'
 import { useProfile, useMetrics, useLogout, useCurrentUser } from './api/hooks'
 import { useOnboardingStore } from './onboarding/store'
 import { getShareableLink, getShareableLinkFull, getPublicPageUrl } from './utils/constants'
@@ -49,8 +50,12 @@ export default function Profile() {
 
   // Real API hooks
   const { data: userData } = useCurrentUser()
-  const { data: profileData, isLoading: profileLoading, isError: profileError, refetch } = useProfile()
-  const { data: metricsData, isLoading: metricsLoading } = useMetrics()
+  const { data: profileData, isLoading: profileLoadingRaw, isError: profileError, refetch } = useProfile()
+  const { data: metricsData, isLoading: metricsLoadingRaw } = useMetrics()
+
+  // Delay showing skeletons to prevent flash on fast cache hits
+  const profileLoading = useDelayedLoading(profileLoadingRaw)
+  const metricsLoading = useDelayedLoading(metricsLoadingRaw)
 
   // Check if user is admin
   const { data: adminStatus } = useQuery({

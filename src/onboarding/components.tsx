@@ -15,6 +15,8 @@ interface ButtonProps {
     fullWidth?: boolean
     disabled?: boolean
     onClick?: () => void
+    className?: string
+    style?: React.CSSProperties
 }
 
 export const Button = memo(function Button({
@@ -24,7 +26,9 @@ export const Button = memo(function Button({
     icon,
     fullWidth,
     disabled,
-    onClick
+    onClick,
+    className: extraClassName,
+    style: extraStyle
 }: ButtonProps) {
     const [pressed, setPressed] = useState(false)
 
@@ -49,12 +53,14 @@ export const Button = memo(function Button({
         const classes = ['btn', `btn-${variant}`, `btn-${size}`]
         if (fullWidth) classes.push('btn-full')
         if (pressed) classes.push('pressed')
+        if (extraClassName) classes.push(extraClassName)
         return classes.join(' ')
-    }, [variant, size, fullWidth, pressed])
+    }, [variant, size, fullWidth, pressed, extraClassName])
 
     const style = useMemo(() => ({
-        opacity: disabled ? 0.5 : 1
-    }), [disabled])
+        opacity: disabled ? 0.5 : 1,
+        ...extraStyle
+    }), [disabled, extraStyle])
 
     return (
         <button

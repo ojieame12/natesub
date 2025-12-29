@@ -7,7 +7,7 @@ import { useOnboardingStore } from './onboarding/store'
 import { PageSkeleton, ScrollRestoration, useToast, SplashScreen, AmbientBackground, Pressable } from './components'
 import { useAuthState } from './hooks/useAuthState'
 import { AUTH_ERROR_EVENT } from './api/client'
-import { clearPersistedCache, queryClient } from './api/provider'
+import { clearPersistedCache, queryClient, useIsRestoring } from './api/provider'
 import { isReservedUsername } from './utils/constants'
 import { prefetchRoutes, prefetchCoreData } from './utils/prefetch'
 import './index.css'
@@ -156,9 +156,13 @@ function AuthErrorHandler() {
  */
 function RootRedirect() {
   const { status, isFullySetUp, needsPaymentSetup, refetch } = useAuthState()
+  const isRestoring = useIsRestoring()
 
-  // Still checking - show skeleton (splash may be suppressed for returning users)
+  // During cache restoration, don't show skeleton - data will be available shortly
+  // Also suppress skeleton when checking if we have persisted auth (splash handles this)
   if (status === 'unknown' || status === 'checking') {
+    // If cache is restoring, return null to avoid skeleton flash
+    if (isRestoring) return null
     return <PageSkeleton />
   }
 
@@ -301,9 +305,12 @@ function InitialRouteRedirect() {
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { status, needsOnboarding, onboarding, refetch } = useAuthState()
   const location = useLocation()
+  const isRestoring = useIsRestoring()
 
   // Still checking - show skeleton to prevent content flash
+  // But during cache restoration, suppress skeleton (data will be available shortly)
   if (status === 'unknown' || status === 'checking') {
+    if (isRestoring) return null
     return <PageSkeleton />
   }
 
@@ -361,6 +368,7 @@ function AppShell() {
   // Safe sessionStorage access - handles Safari private mode, in-app browsers
   // SKIP splash entirely for public creator pages - they have their own loading state
   const isPublicCreator = isPublicCreatorPage(location.pathname)
+  const isOnboardingRoute = location.pathname.startsWith('/onboarding')
   const hasShownSplash = (() => {
     try {
       return sessionStorage.getItem('splash_shown') === 'true'
@@ -486,6 +494,18 @@ function AppShell() {
           minHeight: '100dvh',
           background: 'url("/Vector87.svg") center center / cover no-repeat, linear-gradient(180deg, #FFE7A0 0%, #FFF5D6 100%)',
         }} />
+      ) : isOnboardingRoute ? (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minHeight: '100dvh',
+          maxWidth: 430,
+          margin: '0 auto',
+          background: 'var(--bg-primary)',
+        }}>
+          <img src="/logo.svg" alt="NatePay" style={{ width: 48, height: 48, opacity: 0.5 }} />
+        </div>
       ) : <PageSkeleton />}>
         <Routes>
           {/* Root redirect - Smart redirect based on auth state */}

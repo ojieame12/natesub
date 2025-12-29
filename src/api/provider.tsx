@@ -1,14 +1,19 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider, useIsRestoring } from '@tanstack/react-query'
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
 import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persister'
 import type { ReactNode } from 'react'
+
+// Re-export useIsRestoring for components to suppress skeletons during hydration
+export { useIsRestoring }
 
 // Cache version - increment when schema changes to invalidate old persisted data
 const CACHE_VERSION = 1
 const CACHE_KEY = `natepay-query-cache-v${CACHE_VERSION}`
 
 // Keys that are safe to persist (small, non-sensitive, user-specific)
+// currentUser is critical to avoid auth skeleton flash on reload
 const PERSIST_WHITELIST = new Set([
+  'currentUser',
   'profile',
   'metrics',
   'settings',

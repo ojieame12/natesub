@@ -1,8 +1,8 @@
-import { useEffect, useState, useRef } from 'react'
-import { AlertCircle } from 'lucide-react'
+import { useEffect, useState, useRef, useCallback } from 'react'
+import { AlertCircle, Check, RefreshCw, Sparkles, Upload } from 'lucide-react'
 import { useOnboardingStore } from './store'
-import { useGeneratePerks, useGenerateBanner } from '../api/hooks'
-import { Button } from './components'
+import { useGeneratePerks, useGenerateBanner, uploadFile } from '../api/hooks'
+import { Button, Pressable } from './components'
 import { api } from '../api'
 import './onboarding.css'
 
@@ -12,7 +12,7 @@ type GenerationPhase =
   | 'perks'
   | 'banner'
   | 'finishing'
-  | 'done'
+  | 'preview'  // Shows generated content for review
   | 'error'
 
 const PHASE_MESSAGES: Record<GenerationPhase, string> = {
@@ -21,9 +21,12 @@ const PHASE_MESSAGES: Record<GenerationPhase, string> = {
   perks: 'Crafting your perks...',
   banner: 'Creating your banner...',
   finishing: 'Almost ready...',
-  done: 'All set!',
+  preview: 'Review your page',
   error: 'Something went wrong',
 }
+
+// Max 2 AI-generated banners per user
+const MAX_BANNER_OPTIONS = 2
 
 export default function AIGeneratingStep() {
   const {
@@ -32,10 +35,13 @@ export default function AIGeneratingStep() {
     firstName,
     lastName,
     avatarUrl,
-    bannerUrl,
+    bannerOptions,
     servicePerks,
+    purpose,
     setServicePerks,
     setBannerUrl,
+    addBannerOption,
+    clearBannerOptions,
     nextStep,
     prevStep,
     currentStep,
@@ -43,49 +49,72 @@ export default function AIGeneratingStep() {
 
   const [phase, setPhase] = useState<GenerationPhase>('starting')
   const [error, setError] = useState<string | null>(null)
+  const [isRegeneratingBanner, setIsRegeneratingBanner] = useState(false)
+  const [selectedBannerIndex, setSelectedBannerIndex] = useState<number | 'custom' | null>(null)
+  const [customBannerFile, setCustomBannerFile] = useState<File | null>(null)
+  const [customBannerPreview, setCustomBannerPreview] = useState<string | null>(null)
+  const [isUploadingCustom, setIsUploadingCustom] = useState(false)
   const hasStarted = useRef(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const generatePerksMutation = useGeneratePerks()
   const generateBannerMutation = useGenerateBanner()
 
   const displayName = `${firstName} ${lastName}`.trim()
 
-  // Idempotent checks - separate for perks and banner
+  // Idempotent checks
   const hasPerks = servicePerks.length >= 3
-  const hasBanner = !!bannerUrl
-  const fullyGenerated = hasPerks && (hasBanner || !avatarUrl) // Skip if both done (or banner N/A)
+  const canRegenerate = bannerOptions.length < MAX_BANNER_OPTIONS && avatarUrl
 
-  // Run generation on mount (or skip if already generated)
+  // Initialize selected banner from existing options
+  useEffect(() => {
+    if (bannerOptions.length > 0 && selectedBannerIndex === null) {
+      // Auto-select first banner if available
+      setSelectedBannerIndex(0)
+    }
+  }, [bannerOptions, selectedBannerIndex])
+
+  // Run generation on mount
+  // If we have perks but no banner, still try to generate banner
   useEffect(() => {
     if (hasStarted.current) return
     hasStarted.current = true
 
-    // Skip if everything is already generated
-    if (fullyGenerated) {
-      nextStep()
+    // Check if we need to generate anything
+    const needsBanner = avatarUrl && bannerOptions.length === 0
+
+    // If we have perks but need banner, run generation for banner only
+    if (hasPerks && needsBanner) {
+      runGeneration()
       return
     }
 
+    // If we have perks and banner (or no avatar), go straight to preview
+    if (hasPerks) {
+      setPhase('preview')
+      return
+    }
+
+    // Otherwise, run full generation
     runGeneration()
-  }, [fullyGenerated])
+  }, [hasPerks, avatarUrl, bannerOptions.length])
 
   const runGeneration = async () => {
     try {
-      // Phase 1: Analyzing (brief for UX feedback)
+      setError(null)
       setPhase('analyzing')
 
       let generatedPerks = servicePerks
-      let generatedBanner = bannerUrl
+      let generatedBanner: string | null = null
 
-      // Run perks and banner generation in PARALLEL for faster completion
+      // Run perks and banner generation in PARALLEL
       const needsPerks = !hasPerks
-      const needsBanner = avatarUrl && !hasBanner
+      const needsBanner = avatarUrl && bannerOptions.length === 0
 
       if (needsPerks || needsBanner) {
         setPhase(needsPerks ? 'perks' : 'banner')
 
         const [perksResult, bannerResult] = await Promise.allSettled([
-          // Generate perks (skip if already exist)
           needsPerks
             ? generatePerksMutation.mutateAsync({
                 description: serviceDescription,
@@ -93,9 +122,11 @@ export default function AIGeneratingStep() {
                 displayName: displayName || undefined,
               })
             : Promise.resolve(null),
-          // Generate banner in parallel (if avatar exists)
           needsBanner
-            ? generateBannerMutation.mutateAsync()
+            ? generateBannerMutation.mutateAsync({
+                serviceDescription,
+                variant: 'standard', // First generation is standard
+              })
             : Promise.resolve(null),
         ])
 
@@ -104,37 +135,39 @@ export default function AIGeneratingStep() {
           setServicePerks(perksResult.value.perks)
           generatedPerks = perksResult.value.perks
         } else if (perksResult.status === 'rejected') {
-          // Perks are required - throw to trigger error state
           throw perksResult.reason
         }
 
         // Handle banner result (optional - failure is ok)
-        if (bannerResult.status === 'fulfilled' && bannerResult.value) {
-          setBannerUrl(bannerResult.value.bannerUrl)
+        if (bannerResult.status === 'fulfilled' && bannerResult.value?.wasGenerated) {
+          const variant = bannerResult.value.variant || 'standard'
+          addBannerOption({ url: bannerResult.value.bannerUrl, variant })
           generatedBanner = bannerResult.value.bannerUrl
+          setSelectedBannerIndex(0)
         } else if (bannerResult.status === 'rejected') {
           console.warn('Banner generation failed:', bannerResult.reason)
         }
       }
 
-      // Persist generated content to backend (fire and forget)
+      // Persist to backend (with new BannerOption format)
+      const bannerOptionsToSave = generatedBanner
+        ? [{ url: generatedBanner, variant: 'standard' as const }]
+        : []
       api.auth.saveOnboardingProgress({
         step: currentStep,
         stepKey: 'ai-gen',
         data: {
           servicePerks: generatedPerks,
-          bannerUrl: generatedBanner || null,
-          purpose: 'service',
+          bannerUrl: generatedBanner,
+          bannerOptions: bannerOptionsToSave,
+          purpose: purpose || 'service',
+          serviceDescription,
         },
       }).catch(() => {})
 
-      // Quick finishing phase for UX transition
       setPhase('finishing')
       await delay(150)
-
-      // Done - advance immediately
-      setPhase('done')
-      nextStep()
+      setPhase('preview')
 
     } catch (err: any) {
       console.error('AI generation failed:', err)
@@ -143,15 +176,132 @@ export default function AIGeneratingStep() {
     }
   }
 
+  // Regenerate banner with artistic variant
+  const handleRegenerateBanner = async () => {
+    if (!avatarUrl || isRegeneratingBanner || bannerOptions.length >= MAX_BANNER_OPTIONS) return
+
+    setIsRegeneratingBanner(true)
+    try {
+      const result = await generateBannerMutation.mutateAsync({
+        serviceDescription,
+        variant: 'artistic', // Second generation uses artistic variant
+      })
+
+      if (result?.wasGenerated && result.bannerUrl) {
+        const newOption = { url: result.bannerUrl, variant: result.variant || 'artistic' as const }
+        addBannerOption(newOption)
+        setSelectedBannerIndex(bannerOptions.length) // Select the new one
+
+        // Persist to backend
+        api.auth.saveOnboardingProgress({
+          step: currentStep,
+          stepKey: 'ai-gen',
+          data: {
+            servicePerks,
+            bannerOptions: [...bannerOptions, newOption],
+            purpose: purpose || 'service',
+            serviceDescription,
+          },
+        }).catch(() => {})
+      }
+    } catch (err) {
+      console.error('Banner regeneration failed:', err)
+    } finally {
+      setIsRegeneratingBanner(false)
+    }
+  }
+
+  // Handle custom banner file selection
+  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      setError('Please select an image file')
+      return
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      setError('Image must be less than 5MB')
+      return
+    }
+
+    setCustomBannerFile(file)
+    setSelectedBannerIndex('custom')
+    setError(null)
+
+    // Create preview
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      setCustomBannerPreview(reader.result as string)
+    }
+    reader.readAsDataURL(file)
+  }, [])
+
+  // Upload custom banner when continuing
+  const uploadCustomBanner = async (): Promise<string | null> => {
+    if (!customBannerFile) return null
+
+    setIsUploadingCustom(true)
+    try {
+      const url = await uploadFile(customBannerFile, 'banner')
+      return url
+    } catch (err) {
+      console.error('Custom banner upload failed:', err)
+      setError('Failed to upload custom banner')
+      return null
+    } finally {
+      setIsUploadingCustom(false)
+    }
+  }
+
   const handleRetry = () => {
     setError(null)
     hasStarted.current = false
-    runGeneration()
+    setPhase('starting')
+    setServicePerks([])
+    clearBannerOptions()
+    setSelectedBannerIndex(null)
+    setCustomBannerFile(null)
+    setCustomBannerPreview(null)
+    setTimeout(() => {
+      runGeneration()
+    }, 50)
   }
 
   const handleSkip = () => {
-    // Skip AI generation - go to review with empty perks
-    // User can manually add perks there
+    nextStep()
+  }
+
+  const handleContinue = async () => {
+    let finalBannerUrl: string | null = null
+
+    if (selectedBannerIndex === 'custom' && customBannerFile) {
+      // Upload custom banner
+      finalBannerUrl = await uploadCustomBanner()
+      if (!finalBannerUrl) return // Error handled in uploadCustomBanner
+    } else if (typeof selectedBannerIndex === 'number' && bannerOptions[selectedBannerIndex]) {
+      finalBannerUrl = bannerOptions[selectedBannerIndex].url
+    }
+
+    // Set the selected banner as the final one
+    setBannerUrl(finalBannerUrl)
+
+    // Persist final selection
+    api.auth.saveOnboardingProgress({
+      step: currentStep,
+      stepKey: 'ai-gen',
+      data: {
+        servicePerks,
+        bannerUrl: finalBannerUrl,
+        bannerOptions,
+        purpose: purpose || 'service',
+        serviceDescription,
+      },
+    }).catch(() => {})
+
     nextStep()
   }
 
@@ -185,7 +335,163 @@ export default function AIGeneratingStep() {
     )
   }
 
-  // Loading state with logo animation
+  // Preview state - show generated content for review
+  if (phase === 'preview') {
+    const showBannerSelection = bannerOptions.length >= MAX_BANNER_OPTIONS || !canRegenerate
+
+    return (
+      <div className="onboarding">
+        <div className="onboarding-logo-header">
+          <img src="/logo.svg" alt="NatePay" />
+        </div>
+
+        <div className="onboarding-content">
+          <div className="step-header">
+            <h1>Your page is ready</h1>
+            <p>Review what we've created for you</p>
+          </div>
+
+          <div className="step-body ai-preview">
+            {/* Banner Section */}
+            <div className="ai-preview-section">
+              <div className="ai-preview-header">
+                <h3>Banner</h3>
+                {canRegenerate && !showBannerSelection && (
+                  <Pressable
+                    className="ai-preview-regenerate"
+                    onClick={handleRegenerateBanner}
+                    disabled={isRegeneratingBanner}
+                  >
+                    <RefreshCw size={14} className={isRegeneratingBanner ? 'spin' : ''} />
+                    <span>{isRegeneratingBanner ? 'Generating...' : 'Try Another Style'}</span>
+                  </Pressable>
+                )}
+              </div>
+
+              {/* Banner Options Selection (after 2 generations OR no avatar) */}
+              {showBannerSelection ? (
+                <div className="ai-banner-selection">
+                  {bannerOptions.map((option, index) => (
+                    <Pressable
+                      key={option.url}
+                      className={`ai-banner-option ${selectedBannerIndex === index ? 'selected' : ''}`}
+                      onClick={() => setSelectedBannerIndex(index)}
+                    >
+                      <img src={option.url} alt={`Banner option ${index + 1}`} />
+                      <div className="ai-banner-option-label">
+                        {option.variant === 'artistic' ? 'Artistic' : 'Professional'}
+                      </div>
+                      {selectedBannerIndex === index && (
+                        <div className="ai-banner-option-check">
+                          <Check size={16} />
+                        </div>
+                      )}
+                    </Pressable>
+                  ))}
+
+                  {/* Custom Upload Option */}
+                  <Pressable
+                    className={`ai-banner-option ai-banner-upload ${selectedBannerIndex === 'custom' ? 'selected' : ''}`}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    {customBannerPreview ? (
+                      <>
+                        <img src={customBannerPreview} alt="Custom banner" />
+                        <div className="ai-banner-option-label">Custom</div>
+                      </>
+                    ) : (
+                      <div className="ai-banner-upload-placeholder">
+                        <Upload size={24} />
+                        <span>Upload Your Own</span>
+                      </div>
+                    )}
+                    {selectedBannerIndex === 'custom' && customBannerPreview && (
+                      <div className="ai-banner-option-check">
+                        <Check size={16} />
+                      </div>
+                    )}
+                  </Pressable>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFileSelect}
+                    style={{ display: 'none' }}
+                  />
+                </div>
+              ) : (
+                /* Single Banner Preview */
+                <div className="ai-preview-banner">
+                  {bannerOptions[0] ? (
+                    <img src={bannerOptions[0].url} alt="Generated banner" />
+                  ) : avatarUrl ? (
+                    <div className="ai-preview-banner-fallback">
+                      <img src={avatarUrl} alt="Avatar" className="ai-preview-avatar-fallback" />
+                      <span>Banner will use your avatar</span>
+                    </div>
+                  ) : (
+                    <div className="ai-preview-banner-empty">
+                      <Sparkles size={24} />
+                      <span>No banner - add an avatar first</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Generation limit notice */}
+              {bannerOptions.length >= MAX_BANNER_OPTIONS && (
+                <p className="ai-preview-hint">
+                  Select a banner above or upload your own
+                </p>
+              )}
+            </div>
+
+            {/* Perks Preview */}
+            <div className="ai-preview-section">
+              <div className="ai-preview-header">
+                <h3>Your Perks</h3>
+              </div>
+              <div className="ai-preview-perks">
+                {servicePerks.map((perk, index) => (
+                  <div key={perk.id || index} className="ai-preview-perk">
+                    <Check size={16} />
+                    <span>{perk.title}</span>
+                  </div>
+                ))}
+              </div>
+              <p className="ai-preview-hint">You can edit these on the next screen</p>
+            </div>
+
+            {error && (
+              <div className="ai-preview-error">
+                <AlertCircle size={16} />
+                <span>{error}</span>
+              </div>
+            )}
+          </div>
+
+          <div className="step-footer">
+            <Button
+              variant="primary"
+              size="lg"
+              fullWidth
+              onClick={handleContinue}
+              disabled={isUploadingCustom || (selectedBannerIndex === 'custom' && !customBannerFile)}
+            >
+              {isUploadingCustom ? 'Uploading...' : 'Continue'}
+            </Button>
+            {bannerOptions.length < MAX_BANNER_OPTIONS && (
+              <Button variant="ghost" size="md" onClick={handleRetry} style={{ marginTop: 12 }}>
+                Regenerate Everything
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Loading state
   return (
     <div className="onboarding">
       <div className="ai-generating-container">
@@ -216,7 +522,6 @@ export default function AIGeneratingStep() {
           </div>
         </div>
 
-        {/* Escape hatch - skip during loading */}
         <button className="ai-generating-skip" onClick={handleSkip}>
           Skip and add manually
         </button>
@@ -236,7 +541,7 @@ function getProgressPercent(phase: GenerationPhase): number {
     case 'perks': return 50
     case 'banner': return 75
     case 'finishing': return 90
-    case 'done': return 100
+    case 'preview': return 100
     default: return 0
   }
 }

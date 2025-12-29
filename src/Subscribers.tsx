@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, memo } from 'react'
 import { ArrowLeft, Search, X } from 'lucide-react'
 import { Virtuoso } from 'react-virtuoso'
 import { Pressable, SkeletonList, ErrorState } from './components'
-import { useAuthState, useViewTransition, useScrolled } from './hooks'
+import { useAuthState, useViewTransition, useScrolled, useDelayedLoading } from './hooks'
 import { useSubscriptions } from './api/hooks'
 import { getCurrencySymbol, formatCompactNumber } from './utils/currency'
 import './Subscribers.css'
@@ -61,13 +61,16 @@ export default function Subscribers() {
   // Real API hook - fetch all subscriptions
   const {
     data,
-    isLoading,
+    isLoading: isLoadingRaw,
     isError,
     refetch,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
   } = useSubscriptions(filter === 'all' ? 'all' : filter)
+
+  // Delay showing skeletons to prevent flash on fast cache hits
+  const isLoading = useDelayedLoading(isLoadingRaw)
 
   // Flatten paginated data
   const allSubscriptions = useMemo(() => {

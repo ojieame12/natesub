@@ -22,6 +22,7 @@ const ALLOWED_MIME_TYPES = {
   avatar: ['image/jpeg', 'image/png', 'image/webp'],
   photo: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
   voice: ['audio/mpeg', 'audio/mp4', 'audio/webm', 'audio/ogg'],
+  banner: ['image/jpeg', 'image/png', 'image/webp'], // Custom banner uploads
 }
 
 // Max file sizes in bytes
@@ -29,9 +30,10 @@ const MAX_FILE_SIZES = {
   avatar: 10 * 1024 * 1024,  // 10MB - frontend compresses, but allow headroom
   photo: 15 * 1024 * 1024,   // 15MB
   voice: 10 * 1024 * 1024,   // 10MB
+  banner: 10 * 1024 * 1024,  // 10MB - custom banner uploads
 }
 
-type UploadType = 'avatar' | 'photo' | 'voice'
+type UploadType = 'avatar' | 'photo' | 'voice' | 'banner'
 
 interface SignedUploadUrl {
   uploadUrl: string
