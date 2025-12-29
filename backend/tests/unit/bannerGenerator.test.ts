@@ -59,9 +59,12 @@ describe('Banner Generator', () => {
   })
 
   describe('generateBanner', () => {
+    // Use R2 domain for valid avatar URLs (SSRF protection)
+    const validAvatarUrl = 'https://r2.example.com/avatars/user-123.jpg'
+
     it('generates banner from avatar using Gemini', async () => {
       const result = await generateBanner({
-        avatarUrl: 'https://example.com/avatar.jpg',
+        avatarUrl: validAvatarUrl,
         userId: 'user-123',
         serviceType: 'fitness coach',
       })
@@ -74,7 +77,7 @@ describe('Banner Generator', () => {
 
     it('includes service type in prompt when provided', async () => {
       await generateBanner({
-        avatarUrl: 'https://example.com/avatar.jpg',
+        avatarUrl: validAvatarUrl,
         userId: 'user-123',
         serviceType: 'business consultant',
       })
@@ -95,24 +98,24 @@ describe('Banner Generator', () => {
       })
 
       const result = await generateBanner({
-        avatarUrl: 'https://example.com/avatar.jpg',
+        avatarUrl: validAvatarUrl,
         userId: 'user-123',
       })
 
       expect(result.wasGenerated).toBe(false)
-      expect(result.bannerUrl).toBe('https://example.com/avatar.jpg')
+      expect(result.bannerUrl).toBe(validAvatarUrl)
     })
 
     it('uses fallback when Gemini throws error', async () => {
       mockGenerateContent.mockRejectedValueOnce(new Error('API Error'))
 
       const result = await generateBanner({
-        avatarUrl: 'https://example.com/avatar.jpg',
+        avatarUrl: validAvatarUrl,
         userId: 'user-123',
       })
 
       expect(result.wasGenerated).toBe(false)
-      expect(result.bannerUrl).toBe('https://example.com/avatar.jpg')
+      expect(result.bannerUrl).toBe(validAvatarUrl)
     })
 
     it('uses fallback when avatar fetch fails', async () => {
@@ -122,7 +125,7 @@ describe('Banner Generator', () => {
       } as any)
 
       const result = await generateBanner({
-        avatarUrl: 'https://example.com/avatar.jpg',
+        avatarUrl: validAvatarUrl,
         userId: 'user-123',
       })
 
@@ -131,12 +134,58 @@ describe('Banner Generator', () => {
 
     it('uses correct model for image generation', async () => {
       await generateBanner({
-        avatarUrl: 'https://example.com/avatar.jpg',
+        avatarUrl: validAvatarUrl,
         userId: 'user-123',
       })
 
       const callArgs = mockGenerateContent.mock.calls[0][0]
       expect(callArgs.model).toBe('gemini-3-pro-image-preview')
+    })
+
+    // SSRF Protection Tests
+    describe('SSRF protection', () => {
+      it('rejects URLs from external domains', async () => {
+        const result = await generateBanner({
+          avatarUrl: 'https://evil.com/avatar.jpg',
+          userId: 'user-123',
+        })
+
+        // Should fall back, not attempt fetch to external URL
+        expect(result.wasGenerated).toBe(false)
+        expect(global.fetch).not.toHaveBeenCalled()
+      })
+
+      it('rejects URLs targeting internal services', async () => {
+        const result = await generateBanner({
+          avatarUrl: 'http://169.254.169.254/latest/meta-data/',
+          userId: 'user-123',
+        })
+
+        expect(result.wasGenerated).toBe(false)
+        expect(global.fetch).not.toHaveBeenCalled()
+      })
+
+      it('rejects URLs with credentials', async () => {
+        const result = await generateBanner({
+          avatarUrl: 'https://user:pass@r2.example.com/avatar.jpg',
+          userId: 'user-123',
+        })
+
+        expect(result.wasGenerated).toBe(false)
+        expect(global.fetch).not.toHaveBeenCalled()
+      })
+
+      it('allows URLs from R2 storage domain', async () => {
+        await generateBanner({
+          avatarUrl: validAvatarUrl,
+          userId: 'user-123',
+        })
+
+        expect(global.fetch).toHaveBeenCalledWith(
+          validAvatarUrl,
+          expect.any(Object)
+        )
+      })
     })
   })
 

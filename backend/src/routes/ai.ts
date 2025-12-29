@@ -35,11 +35,10 @@ const ALLOWED_AUDIO_MIMES = ['audio/webm', 'audio/mp4', 'audio/mp3', 'audio/mpeg
 // ============================================
 
 ai.get('/status', (c) => {
-  return c.json({
-    gemini: !!env.GOOGLE_AI_API_KEY,
-    perplexity: !!env.PERPLEXITY_API_KEY,
-    replicate: !!env.REPLICATE_API_TOKEN,
-  })
+  // Only expose aggregate availability, not individual provider status
+  // This prevents revealing which specific AI services are configured
+  const available = !!(env.GOOGLE_AI_API_KEY || env.PERPLEXITY_API_KEY)
+  return c.json({ available })
 })
 
 // ============================================

@@ -1,6 +1,12 @@
 import { useRef, useEffect, useState, useMemo } from 'react'
 import { useLocation } from 'react-router-dom'
-import { useOnboardingStore } from './store'
+import {
+    useOnboardingStore,
+    type OnboardingStepKey,
+    getVisibleStepKeys,
+    stepKeyToIndex,
+    stepIndexToKey,
+} from './store'
 import { useAuthState } from '../hooks/useAuthState'
 import { shouldSkipAddressStep } from '../utils/constants'
 import StartStep from './StartStep'
@@ -8,47 +14,79 @@ import EmailStep from './EmailStep'
 import OtpStep from './OtpStep'
 import IdentityStep from './IdentityStep'
 import AddressStep from './AddressStep'
+import PurposeStep from './PurposeStep'
+import AvatarUploadStep from './AvatarUploadStep'
 import PersonalUsernameStep from './PersonalUsernameStep'
 import PaymentMethodStep from './PaymentMethodStep'
+import ServiceDescriptionStep from './ServiceDescriptionStep'
+import AIGeneratingStep from './AIGeneratingStep'
 import PersonalReviewStep from './PersonalReviewStep'
 import './onboarding.css'
+
+// Map step keys to components
+const STEP_COMPONENTS: Record<OnboardingStepKey, React.ReactElement> = {
+    'start': <StartStep key="start" />,
+    'email': <EmailStep key="email" />,
+    'otp': <OtpStep key="otp" />,
+    'identity': <IdentityStep key="identity" />,
+    'address': <AddressStep key="address" />,
+    'purpose': <PurposeStep key="purpose" />,
+    'avatar': <AvatarUploadStep key="avatar" />,
+    'username': <PersonalUsernameStep key="username" />,
+    'payments': <PaymentMethodStep key="payments" />,
+    'service-desc': <ServiceDescriptionStep key="service-desc" />,
+    'ai-gen': <AIGeneratingStep key="ai-gen" />,
+    'review': <PersonalReviewStep key="review" />,
+}
 
 export default function OnboardingFlow() {
     const location = useLocation()
     const { onboarding, status } = useAuthState()
-    const { currentStep, countryCode, hydrateFromServer } = useOnboardingStore()
+    const { currentStep, currentStepKey, countryCode, purpose, hydrateFromServer, goToStepKey } = useOnboardingStore()
     const [direction, setDirection] = useState<'forward' | 'back'>('forward')
     const [isAnimating, setIsAnimating] = useState(false)
     const prevStepRef = useRef(currentStep)
     const hasHydratedFromServer = useRef(false)
-    const lastAppliedUrlStep = useRef<number | null>(null)
+    const lastAppliedUrlStep = useRef<string | null>(null)
     const shouldSkipNextAnimation = useRef(false)
 
     // Determine if we should show the address step based on country
     const showAddressStep = countryCode && !shouldSkipAddressStep(countryCode)
 
-    // "Naked Onboarding" Steps - dynamically include AddressStep for non-cross-border countries
-    const steps = useMemo(() => {
-        const baseSteps = [
-            <StartStep key="start" />,
-            <EmailStep key="email" />,
-            <OtpStep key="otp" />,
-            <IdentityStep key="identity" />,
-        ]
+    // Check if this is service mode (requires AI generation steps)
+    const isServiceMode = purpose === 'service'
 
-        // Add address step only for non-cross-border countries (US, UK, EU, etc.)
-        if (showAddressStep) {
-            baseSteps.push(<AddressStep key="address" />)
+    // Step configuration for utility functions
+    const stepConfig = useMemo(() => ({
+        showAddressStep: !!showAddressStep,
+        isServiceMode,
+    }), [showAddressStep, isServiceMode])
+
+    // Get visible step keys based on current configuration
+    const visibleStepKeys = useMemo(() => getVisibleStepKeys(stepConfig), [stepConfig])
+
+    // Build steps array from visible keys
+    const steps = useMemo(() =>
+        visibleStepKeys.map(key => STEP_COMPONENTS[key]),
+        [visibleStepKeys]
+    )
+
+    // Compute current step index from step key (key is the source of truth)
+    // This ensures index stays correct even when step array changes
+    const effectiveStep = useMemo(() => {
+        // If we have a non-default step key that's valid, compute index from it
+        // Default is 'start' - if key is 'start' but index is not 0, use the index
+        // This handles backwards compatibility when only currentStep was set
+        if (currentStepKey && currentStepKey !== 'start' && visibleStepKeys.includes(currentStepKey)) {
+            return stepKeyToIndex(currentStepKey, stepConfig)
         }
-
-        baseSteps.push(
-            <PersonalUsernameStep key="username" />,
-            <PaymentMethodStep key="payments" />,
-            <PersonalReviewStep key="review" />
-        )
-
-        return baseSteps
-    }, [showAddressStep])
+        // Check if the stored index is valid
+        if (currentStep >= 0 && currentStep < steps.length) {
+            return currentStep
+        }
+        // If key is 'start' and index is 0, or index is out of bounds, use 0
+        return 0
+    }, [currentStepKey, currentStep, visibleStepKeys, stepConfig, steps.length])
 
     // Hydrate onboarding state from URL ?step= param or server state
     useEffect(() => {
@@ -57,62 +95,106 @@ export default function OnboardingFlow() {
         const params = new URLSearchParams(location.search)
         const urlStep = params.get('step')
 
+        // URL can contain either a step key (preferred) or numeric index (legacy)
         if (urlStep) {
-            const parsed = parseInt(urlStep, 10)
-            if (!Number.isNaN(parsed) && lastAppliedUrlStep.current !== parsed) {
-                lastAppliedUrlStep.current = parsed
-                shouldSkipNextAnimation.current = true
-                const clampedStep = Math.min(Math.max(parsed, 0), steps.length - 1)
-                hydrateFromServer({
-                    step: clampedStep,
-                    data: onboarding?.data,
-                })
+            // Check if it's a valid step key
+            const isStepKey = visibleStepKeys.includes(urlStep as OnboardingStepKey)
+
+            if (isStepKey) {
+                if (lastAppliedUrlStep.current !== urlStep) {
+                    lastAppliedUrlStep.current = urlStep
+                    shouldSkipNextAnimation.current = true
+                    hydrateFromServer({
+                        stepKey: urlStep as OnboardingStepKey,
+                        step: stepKeyToIndex(urlStep as OnboardingStepKey, stepConfig),
+                        data: onboarding?.data,
+                    })
+                }
+            } else {
+                // Legacy numeric step support
+                const parsed = parseInt(urlStep, 10)
+                if (!Number.isNaN(parsed) && lastAppliedUrlStep.current !== urlStep) {
+                    lastAppliedUrlStep.current = urlStep
+                    shouldSkipNextAnimation.current = true
+                    const clampedStep = Math.min(Math.max(parsed, 0), steps.length - 1)
+                    const stepKey = stepIndexToKey(clampedStep, stepConfig)
+                    hydrateFromServer({
+                        stepKey,
+                        step: clampedStep,
+                        data: onboarding?.data,
+                    })
+                }
             }
             return
         }
 
         if (hasHydratedFromServer.current) return
 
-        if (onboarding?.step && onboarding.step > 0 && currentStep === 0) {
+        // Hydrate from server state (resume flow)
+        if (onboarding?.step && onboarding.step > 0 && effectiveStep === 0) {
             hasHydratedFromServer.current = true
             shouldSkipNextAnimation.current = true
-            // Map old/out-of-bounds steps to a safe step
-            // Username step is at index 4 (no address) or 5 (with address)
-            // Fallback to the username step which is 3 steps before the end
-            const usernameStepIndex = steps.length - 3
-            const safeStep = onboarding.step >= steps.length ? usernameStepIndex : onboarding.step
 
-            hydrateFromServer({
-                step: safeStep,
-                data: onboarding.data,
-            })
+            // Use server stepKey if available, otherwise map from numeric step
+            const serverStepKey = onboarding.data?.stepKey as OnboardingStepKey | undefined
+
+            if (serverStepKey && visibleStepKeys.includes(serverStepKey)) {
+                // Server has valid step key - use it
+                hydrateFromServer({
+                    stepKey: serverStepKey,
+                    step: stepKeyToIndex(serverStepKey, stepConfig),
+                    data: onboarding.data,
+                })
+            } else {
+                // Fallback: map numeric step to safe key
+                // Payment step is a safe fallback for out-of-bounds steps
+                const paymentStepKey: OnboardingStepKey = 'payments'
+                const safeStepKey = onboarding.step >= steps.length
+                    ? paymentStepKey
+                    : stepIndexToKey(onboarding.step, stepConfig)
+
+                hydrateFromServer({
+                    stepKey: safeStepKey,
+                    step: stepKeyToIndex(safeStepKey, stepConfig),
+                    data: onboarding.data,
+                })
+            }
         }
-    }, [location.search, status, onboarding, currentStep, hydrateFromServer])
+    }, [location.search, status, onboarding, effectiveStep, hydrateFromServer, visibleStepKeys, stepConfig, steps.length])
+
+    // Sync step key when effectiveStep changes (e.g., after nextStep/prevStep)
+    // This keeps the step key in sync with navigation that uses indices
+    useEffect(() => {
+        const expectedKey = stepIndexToKey(effectiveStep, stepConfig)
+        if (currentStepKey !== expectedKey) {
+            goToStepKey(expectedKey)
+        }
+    }, [effectiveStep, stepConfig, currentStepKey, goToStepKey])
 
     // Step transitions (CSS-driven) - animate only on user navigation.
     useEffect(() => {
         const prevStep = prevStepRef.current
-        if (prevStep === currentStep) return
+        if (prevStep === effectiveStep) return
 
         if (shouldSkipNextAnimation.current) {
             shouldSkipNextAnimation.current = false
-            prevStepRef.current = currentStep
+            prevStepRef.current = effectiveStep
             return
         }
 
-        setDirection(currentStep > prevStep ? 'forward' : 'back')
+        setDirection(effectiveStep > prevStep ? 'forward' : 'back')
         setIsAnimating(true)
-        prevStepRef.current = currentStep
+        prevStepRef.current = effectiveStep
 
         const timer = setTimeout(() => setIsAnimating(false), 450)
         return () => clearTimeout(timer)
-    }, [currentStep])
+    }, [effectiveStep])
 
-    const currentStepComponent = steps[currentStep] || <StartStep />
+    const currentStepComponent = steps[effectiveStep] || <StartStep />
 
     // Progress bar logic
-    const progress = Math.min(((currentStep + 1) / steps.length) * 100, 100)
-    const showProgress = currentStep > 0 && currentStep < steps.length - 1
+    const progress = Math.min(((effectiveStep + 1) / steps.length) * 100, 100)
+    const showProgress = effectiveStep > 0 && effectiveStep < steps.length - 1
 
     return (
         <div className="onboarding-wrapper">
@@ -129,7 +211,7 @@ export default function OnboardingFlow() {
             {/* Step Content with Animation */}
             <div
                 className={`onboarding-step-container ${isAnimating ? `slide-${direction}` : ''}`}
-                key={currentStep}
+                key={effectiveStep}
             >
                 {currentStepComponent}
             </div>

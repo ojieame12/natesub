@@ -17,6 +17,7 @@
 
 import { Hono } from 'hono'
 import { adminAuth } from '../../middleware/adminAuth.js'
+import { adminReadRateLimit } from '../../middleware/rateLimit.js'
 
 // Import controllers
 import users from './users.js'
@@ -51,6 +52,10 @@ admin.use('*', async (c, next) => {
   // All other routes require full admin auth
   await adminAuth(c, next)
 })
+
+// Apply rate limiting to all admin routes (100 req/min per admin)
+// Prevents bulk scraping if admin credentials are compromised
+admin.use('*', adminReadRateLimit)
 
 // Mount system routes at root level
 // These define: /me, /health, /email/*, /metrics, /dashboard, /webhooks/*,

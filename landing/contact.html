@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Contact Us — Nate</title>
+  <meta name="description" content="Get help with payments, payouts, and income verification. We're here to help.">
+
+  <!-- Canonical URL -->
+  <link rel="canonical" href="https://natepay.app/contact">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://natepay.app/contact">
+  <meta property="og:title" content="Contact Us — Nate">
+  <meta property="og:description" content="Get help with payments, payouts, and income verification. We're here to help.">
+  <meta property="og:image" content="https://natepay.app/og-image.png">
+  <meta property="og:site_name" content="Nate">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:url" content="https://natepay.app/contact">
+  <meta name="twitter:title" content="Contact Us — Nate">
+  <meta name="twitter:description" content="Get help with payments, payouts, and income verification. We're here to help.">
+  <meta name="twitter:image" content="https://natepay.app/og-image.png">
+
+  <!-- Theme & Icons -->
+  <meta name="theme-color" content="#F5D90A">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+  <link rel="manifest" href="site.webmanifest">
+
+  <link rel="stylesheet" href="styles-final.css">
+  <link rel="stylesheet" href="styles-company.css">
+</head>
+<body>
+
+  <nav class="nav">
+    <div class="nav-left">
+      <a href="coming-soon" class="nav-link">Coming Soon</a>
+    </div>
+    <a href="/" class="nav-logo">
+      <img src="logo.svg" alt="Nate" height="32">
+    </a>
+    <div class="nav-right">
+      <a href="contact" class="nav-link nav-link-active">Contact Us</a>
+      <a href="https://natepay.co" class="nav-cta">Get Started</a>
+    </div>
+
+    <button class="nav-hamburger" aria-label="Toggle menu">
+      <span></span>
+      <span></span>
+      <span></span>
+    </button>
+  </nav>
+
+  <!-- Mobile Menu -->
+  <div class="mobile-menu">
+    <div class="mobile-menu-links">
+      <a href="/" class="mobile-menu-link">Home</a>
+      <a href="coming-soon" class="mobile-menu-link">Coming Soon</a>
+      <a href="contact" class="mobile-menu-link active">Contact Us</a>
+    </div>
+    <a href="https://natepay.co" class="mobile-menu-cta">Get Started</a>
+  </div>
+
+  <div class="page">
+    <!-- Hero Section -->
+    <section class="contact-hero">
+      <div class="contact-hero-content">
+        <p class="section-label">CONTACT US</p>
+        <h1 class="contact-hero-headline">How can we help?</h1>
+        <p class="contact-hero-subhead">
+          We built Nate to be transparent. If something isn't working, or you need clarity on a payment, tell us directly.
+        </p>
+      </div>
+    </section>
+
+    <!-- Contact Section -->
+    <section class="contact-section">
+      <div class="contact-section-inner">
+        <div class="contact-grid">
+          <!-- Contact Form -->
+          <div class="contact-form-wrapper">
+            <form id="contactForm" class="contact-form" action="https://formsubmit.co/support@natepay.co" method="POST">
+              <!-- FormSubmit configuration -->
+              <input type="hidden" name="_subject" value="New Contact Form Submission - NatePay">
+              <input type="hidden" name="_captcha" value="false">
+              <input type="hidden" name="_template" value="table">
+              <input type="hidden" name="_next" value="https://natepay.app/contact?submitted=true">
+              <input type="text" name="_honey" style="display:none">
+
+              <div class="form-group">
+                <label class="form-label">Subject</label>
+                <input type="text" name="subject" class="form-input" placeholder="What's this about? (e.g. Payouts)" required>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Email</label>
+                <input type="email" name="email" class="form-input" placeholder="Your email address" required>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Message</label>
+                <textarea name="message" class="form-input form-textarea" placeholder="Tell us the details..." required></textarea>
+              </div>
+
+              <button type="submit" class="form-submit" id="submitBtn">
+                Send Message
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                  <path d="M4 10H16M16 10L11 5M16 10L11 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </button>
+            </form>
+
+            <!-- Success message (shown after redirect) -->
+            <div id="successMessage" class="form-success" style="display:none;">
+              <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+                <circle cx="24" cy="24" r="20" fill="#16a34a" fill-opacity="0.1"/>
+                <path d="M16 24L22 30L32 18" stroke="#16a34a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <h3>Message sent!</h3>
+              <p>We'll get back to you within 24 hours.</p>
+            </div>
+          </div>
+
+          <!-- Quick Links -->
+          <div class="contact-sidebar">
+            <div class="contact-sidebar-section">
+              <h3 class="contact-sidebar-title">Quick Answers</h3>
+
+              <a href="#" class="quick-answer">
+                <div class="quick-answer-icon">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <path d="M12 6v6l4 2"></path>
+                  </svg>
+                </div>
+                <div class="quick-answer-content">
+                  <span class="quick-answer-title">Payout Schedules</span>
+                  <span class="quick-answer-desc">When does money hit my account?</span>
+                </div>
+              </a>
+
+              <a href="#" class="quick-answer">
+                <div class="quick-answer-icon">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"></path>
+                  </svg>
+                </div>
+                <div class="quick-answer-content">
+                  <span class="quick-answer-title">Income Verification</span>
+                  <span class="quick-answer-desc">Download statements for landlords.</span>
+                </div>
+              </a>
+
+              <a href="#" class="quick-answer">
+                <div class="quick-answer-icon">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                  </svg>
+                </div>
+                <div class="quick-answer-content">
+                  <span class="quick-answer-title">Failed Transactions</span>
+                  <span class="quick-answer-desc">Why did my client's card decline?</span>
+                </div>
+              </a>
+
+              <a href="#" class="quick-answer">
+                <div class="quick-answer-icon">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
+                    <line x1="1" y1="10" x2="23" y2="10"></line>
+                  </svg>
+                </div>
+                <div class="quick-answer-content">
+                  <span class="quick-answer-title">Pricing</span>
+                  <span class="quick-answer-desc">Understanding the 4% flat fee.</span>
+                </div>
+              </a>
+            </div>
+
+            <div class="contact-sidebar-section">
+              <h3 class="contact-sidebar-title">Direct Contact</h3>
+              <div class="contact-direct">
+                <a href="mailto:support@natepay.co" class="contact-direct-item">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                    <polyline points="22,6 12,13 2,6"></polyline>
+                  </svg>
+                  support@natepay.co
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <div class="footer-container">
+        <div class="footer-main">
+          <div class="footer-brand">
+            <img src="logo.svg" alt="Nate" class="footer-logo">
+            <p class="footer-tagline">A Delaware Company</p>
+          </div>
+
+          <div class="footer-links">
+            <div class="footer-column">
+              <h4 class="footer-column-title">Product</h4>
+              <a href="coming-soon" class="footer-link">Coming Soon</a>
+            </div>
+
+            <div class="footer-column">
+              <h4 class="footer-column-title">Company</h4>
+              <a href="vision" class="footer-link">Our Vision</a>
+              <a href="contact" class="footer-link">Contact</a>
+            </div>
+
+            <div class="footer-column">
+              <h4 class="footer-column-title">Legal</h4>
+              <a href="privacy" class="footer-link">Privacy Policy</a>
+              <a href="terms" class="footer-link">Terms of Service</a>
+            </div>
+
+            <div class="footer-column">
+              <h4 class="footer-column-title">Support</h4>
+              <a href="mailto:support@natepay.co" class="footer-link">support@natepay.co</a>
+            </div>
+          </div>
+        </div>
+
+        <div class="footer-bottom">
+          <p class="footer-copyright">© 2025 NatePay. All rights reserved.</p>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <script>
+    const nav = document.querySelector('.nav');
+    function updateNav() {
+      if (window.scrollY > 10) {
+        nav.classList.add('nav-scrolled');
+      } else {
+        nav.classList.remove('nav-scrolled');
+      }
+    }
+    window.addEventListener('scroll', updateNav, { passive: true });
+    updateNav();
+
+    // Mobile Menu Toggle
+    const hamburger = document.querySelector('.nav-hamburger');
+    const mobileMenu = document.querySelector('.mobile-menu');
+
+    hamburger.addEventListener('click', () => {
+      hamburger.classList.toggle('active');
+      mobileMenu.classList.toggle('active');
+      document.body.style.overflow = mobileMenu.classList.contains('active') ? 'hidden' : '';
+    });
+
+    document.querySelectorAll('.mobile-menu-link, .mobile-menu-cta').forEach(link => {
+      link.addEventListener('click', () => {
+        hamburger.classList.remove('active');
+        mobileMenu.classList.remove('active');
+        document.body.style.overflow = '';
+      });
+    });
+
+    // Scroll reveal
+    const revealElements = document.querySelectorAll(
+      '.contact-hero, .contact-section'
+    );
+
+    const revealObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('revealed');
+          revealObserver.unobserve(entry.target);
+        }
+      });
+    }, {
+      threshold: 0.1,
+      rootMargin: '0px 0px -50px 0px'
+    });
+
+    revealElements.forEach(el => revealObserver.observe(el));
+
+    // Check if returning from successful form submission
+    if (window.location.search.includes('submitted=true')) {
+      document.getElementById('contactForm').style.display = 'none';
+      document.getElementById('successMessage').style.display = 'flex';
+      // Clean up URL
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+
+    // Show loading state on form submit
+    document.getElementById('contactForm').addEventListener('submit', function() {
+      const btn = document.getElementById('submitBtn');
+      btn.innerHTML = 'Sending...';
+      btn.style.opacity = '0.7';
+      btn.disabled = true;
+    });
+  </script>
+</body>
+</html>

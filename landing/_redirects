@@ -1,0 +1,10 @@
+# Cloudflare Pages Redirects
+# https://developers.cloudflare.com/pages/platform/redirects
+
+# Redirect index.html to clean URL
+/index.html  /  301
+
+# Legacy redirects - old pages redirect to coming-soon
+/africa  /coming-soon.html  301
+/about  /coming-soon.html  301
+/income-proof  /coming-soon.html  301

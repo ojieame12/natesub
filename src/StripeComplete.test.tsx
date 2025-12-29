@@ -22,6 +22,7 @@ vi.mock('./api', () => ({
 // Mock hooks
 vi.mock('./api/hooks', () => ({
   useProfile: () => ({ data: { profile: { username: 'test', isPublic: false } } }),
+  useCurrentUser: () => ({ data: { onboarding: { step: 0, data: {} } } }),
 }))
 
 // Mock navigation
@@ -93,9 +94,10 @@ describe('StripeComplete', () => {
     expect(screen.getByText(/Checking status/)).toBeInTheDocument()
   })
 
-  it('navigates to review step 7 for US users (8-step flow)', async () => {
-    // US users have 8-step flow, review is at step 7
-    useOnboardingStore.setState({ countryCode: 'US' })
+  it('navigates to review step 9 for US users (10-step non-service flow)', async () => {
+    // US users have 10-step non-service flow, review is at step 9
+    // Flow: Start(0) → Email(1) → OTP(2) → Identity(3) → Address(4) → Purpose(5) → Avatar(6) → Username(7) → Payment(8) → Review(9)
+    useOnboardingStore.setState({ countryCode: 'US', purpose: 'support' })
     vi.mocked(api.stripe.getStatus).mockResolvedValue({ connected: true, status: 'active', details: {} as any })
 
     renderWithProviders(<StripeComplete />)
@@ -107,13 +109,14 @@ describe('StripeComplete', () => {
     const continueBtn = screen.getByText('Continue to Dashboard')
     fireEvent.click(continueBtn)
 
-    // US has 8-step flow, review is at step 7
-    expect(mockNavigate).toHaveBeenCalledWith('/onboarding?step=7', { replace: true })
+    // US non-service has 10-step flow, review is at step 9
+    expect(mockNavigate).toHaveBeenCalledWith('/onboarding?step=9', { replace: true })
   })
 
-  it('navigates to review step 6 for NG users (7-step flow)', async () => {
-    // NG users skip address step, have 7-step flow, review is at step 6
-    useOnboardingStore.setState({ countryCode: 'NG' })
+  it('navigates to review step 8 for NG users (9-step non-service flow)', async () => {
+    // NG users skip address step, have 9-step non-service flow, review is at step 8
+    // Flow: Start(0) → Email(1) → OTP(2) → Identity(3) → Purpose(4) → Avatar(5) → Username(6) → Payment(7) → Review(8)
+    useOnboardingStore.setState({ countryCode: 'NG', purpose: 'support' })
     vi.mocked(api.stripe.getStatus).mockResolvedValue({ connected: true, status: 'active', details: {} as any })
 
     renderWithProviders(<StripeComplete />)
@@ -125,8 +128,27 @@ describe('StripeComplete', () => {
     const continueBtn = screen.getByText('Continue to Dashboard')
     fireEvent.click(continueBtn)
 
-    // NG has 7-step flow (no address), review is at step 6
-    expect(mockNavigate).toHaveBeenCalledWith('/onboarding?step=6', { replace: true })
+    // NG non-service has 9-step flow (no address), review is at step 8
+    expect(mockNavigate).toHaveBeenCalledWith('/onboarding?step=8', { replace: true })
+  })
+
+  it('navigates to review step 10 for NG service users (11-step flow)', async () => {
+    // NG service users have 11-step flow, review is at step 10
+    // Flow: Start(0) → Email(1) → OTP(2) → Identity(3) → Purpose(4) → Avatar(5) → Username(6) → Payment(7) → ServiceDesc(8) → AIGen(9) → Review(10)
+    useOnboardingStore.setState({ countryCode: 'NG', purpose: 'service' })
+    vi.mocked(api.stripe.getStatus).mockResolvedValue({ connected: true, status: 'active', details: {} as any })
+
+    renderWithProviders(<StripeComplete />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Continue to Dashboard')).toBeInTheDocument()
+    })
+
+    const continueBtn = screen.getByText('Continue to Dashboard')
+    fireEvent.click(continueBtn)
+
+    // NG service has 11-step flow, review is at step 10
+    expect(mockNavigate).toHaveBeenCalledWith('/onboarding?step=10', { replace: true })
   })
 
   it('retries setup when restricted', async () => {

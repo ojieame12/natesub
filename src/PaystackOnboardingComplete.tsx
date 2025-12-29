@@ -5,6 +5,7 @@ import { Loader2 } from 'lucide-react'
 import { setPaymentConfirmed } from './utils/paymentConfirmed'
 import { getReviewStepIndex } from './utils/constants'
 import { useOnboardingStore } from './onboarding/store'
+import { useProfile, useCurrentUser } from './api/hooks'
 import './StripeComplete.css'
 
 /**
@@ -16,8 +17,28 @@ import './StripeComplete.css'
 export default function PaystackOnboardingComplete() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const { countryCode } = useOnboardingStore()
+  const { countryCode, purpose, hydrateFromServer } = useOnboardingStore()
+  const { data: profileData } = useProfile()
+  const { data: userData } = useCurrentUser()
+  const profile = profileData?.profile
   const hasProcessed = useRef(false)
+  const hasHydrated = useRef(false)
+
+  // Use store → profile → backend onboardingData fallback chain (most robust)
+  // This handles cases where localStorage is cleared (Safari, storage reset)
+  const resolvedCountryCode = countryCode || profile?.countryCode || userData?.onboarding?.data?.countryCode
+  const resolvedPurpose = purpose || profile?.purpose || userData?.onboarding?.data?.purpose
+
+  // Hydrate store from server if store is empty but server has data
+  useEffect(() => {
+    if (!hasHydrated.current && !purpose && userData?.onboarding?.data?.purpose) {
+      hasHydrated.current = true
+      hydrateFromServer({
+        step: userData.onboarding.step || 0,
+        data: userData.onboarding.data,
+      })
+    }
+  }, [userData, purpose, hydrateFromServer])
 
   useEffect(() => {
     if (!hasProcessed.current) {
@@ -49,11 +70,12 @@ export default function PaystackOnboardingComplete() {
         }
       })
 
-      // Immediately redirect to review/launch step (dynamic based on country)
-      const reviewStep = getReviewStepIndex(countryCode)
+      // Immediately redirect to review/launch step (dynamic based on country and purpose)
+      // Uses store values with profile fallback for robustness
+      const reviewStep = getReviewStepIndex(resolvedCountryCode, resolvedPurpose)
       navigate(`/onboarding?step=${reviewStep}`, { replace: true })
     }
-  }, [navigate, queryClient, countryCode])
+  }, [navigate, queryClient, resolvedCountryCode, resolvedPurpose])
 
   // Show minimal loading state while redirecting
   return (

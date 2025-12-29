@@ -10,11 +10,19 @@ export interface EmailJobData {
   from?: string
 }
 
+// Mask email for logging (e.g., "te***@example.com")
+function maskEmail(email: string): string {
+  const [local, domain] = email.split('@')
+  if (!domain) return '***'
+  const masked = local.length > 2 ? `${local.slice(0, 2)}***` : '***'
+  return `${masked}@${domain}`
+}
+
 export async function emailProcessor(job: Job<EmailJobData>) {
   const { to, subject, html, text, from } = job.data
-  
-  console.log(`[worker] Processing email job ${job.id} to ${to}`)
-  
+
+  console.log(`[worker] Processing email job ${job.id} to ${maskEmail(to)}`)
+
   const result = await _sendEmail({
     from: from || env.EMAIL_FROM,
     to,
@@ -26,6 +34,6 @@ export async function emailProcessor(job: Job<EmailJobData>) {
   if (!result.success) {
     throw new Error(result.error || 'Email send failed')
   }
-  
-  console.log(`[worker] Email job ${job.id} completed: ${result.messageId}`)
+
+  console.log(`[worker] Email job ${job.id} completed`)
 }

@@ -991,9 +991,9 @@ export interface AIGenerateResult {
 }
 
 export const ai = {
-  // Check which AI services are configured
+  // Check if AI services are available (aggregate status only)
   status: () =>
-    apiFetch<{ gemini: boolean; perplexity: boolean; replicate: boolean }>('/ai/status'),
+    apiFetch<{ available: boolean }>('/ai/status'),
 
   // Main page generation (voice or text)
   generate: (data: AIGenerateInput) =>

@@ -3,895 +3,1055 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nate — Never Send an Invoice Again</title>
+  <meta name="description" content="One link. Their card on file. Paid every month. Turn any client into predictable monthly income.">
 
-  <!-- Primary SEO -->
-  <title>NatePay — The Link That Pays You Monthly. With Proof.</title>
-  <meta name="description" content="Create a payment link. Share it. Get paid every month. Download pay statements. Prove your income. Subscriptions, salaries, retainers, allowances — direct to your bank.">
-  <meta name="keywords" content="recurring payments, payment link, pay statements, income verification, proof of income, freelance payments, Africa payments, Nigeria payments">
-  <meta name="author" content="NatePay">
-  <meta name="robots" content="index, follow">
-  <link rel="canonical" href="https://natepay.co">
+  <!-- Canonical URL -->
+  <link rel="canonical" href="https://natepay.app/">
 
   <!-- Open Graph -->
   <meta property="og:type" content="website">
-  <meta property="og:url" content="https://natepay.co">
-  <meta property="og:title" content="NatePay — The Link That Pays You Monthly. With Proof.">
-  <meta property="og:description" content="Recurring payments + verifiable pay statements. Direct to your bank.">
-  <meta property="og:image" content="https://natepay.co/og-image.png">
+  <meta property="og:url" content="https://natepay.app/">
+  <meta property="og:title" content="Nate — Never Send an Invoice Again">
+  <meta property="og:description" content="One link. Their card on file. Paid every month. Turn any client into predictable monthly income.">
+  <meta property="og:image" content="https://natepay.app/og-image.png">
+  <meta property="og:site_name" content="Nate">
 
-  <!-- Twitter -->
+  <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="NatePay — The Link That Pays You Monthly. With Proof.">
-  <meta name="twitter:description" content="Recurring payments + verifiable pay statements. Direct to your bank.">
+  <meta name="twitter:url" content="https://natepay.app/">
+  <meta name="twitter:title" content="Nate — Never Send an Invoice Again">
+  <meta name="twitter:description" content="One link. Their card on file. Paid every month. Turn any client into predictable monthly income.">
+  <meta name="twitter:image" content="https://natepay.app/og-image.png">
 
-  <!-- Favicon -->
-  <link rel="icon" type="image/svg+xml" href="logo.svg">
-
-  <!-- Styles -->
-  <link rel="stylesheet" href="styles.css">
+  <!-- Theme & Icons -->
+  <meta name="theme-color" content="#F5D90A">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+  <link rel="manifest" href="site.webmanifest">
 
   <!-- Structured Data -->
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
-    "@type": "SoftwareApplication",
-    "name": "NatePay",
-    "applicationCategory": "FinanceApplication",
-    "operatingSystem": "Web",
-    "description": "Recurring payments with verifiable pay statements. Direct to your bank.",
-    "offers": {
-      "@type": "Offer",
-      "price": "0",
-      "priceCurrency": "USD"
-    }
+    "@graph": [
+      {
+        "@type": "Organization",
+        "@id": "https://natepay.app/#organization",
+        "name": "NatePay",
+        "url": "https://natepay.app",
+        "logo": {
+          "@type": "ImageObject",
+          "url": "https://natepay.app/logo.svg"
+        },
+        "sameAs": [],
+        "contactPoint": {
+          "@type": "ContactPoint",
+          "email": "support@natepay.co",
+          "contactType": "customer support"
+        }
+      },
+      {
+        "@type": "WebSite",
+        "@id": "https://natepay.app/#website",
+        "url": "https://natepay.app",
+        "name": "NatePay",
+        "publisher": {
+          "@id": "https://natepay.app/#organization"
+        }
+      },
+      {
+        "@type": "WebPage",
+        "@id": "https://natepay.app/#webpage",
+        "url": "https://natepay.app/",
+        "name": "Nate - Never Send an Invoice Again",
+        "description": "One link. Their card on file. Paid every month. Turn any client into predictable monthly income.",
+        "isPartOf": {
+          "@id": "https://natepay.app/#website"
+        }
+      },
+      {
+        "@type": "SoftwareApplication",
+        "name": "NatePay",
+        "applicationCategory": "FinanceApplication",
+        "operatingSystem": "Web",
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD"
+        }
+      }
+    ]
   }
   </script>
+
+  <link rel="stylesheet" href="styles-final.css">
+
+  <!-- Preloader Styles (inline for instant display) -->
+  <style>
+    .preloader {
+      position: fixed;
+      inset: 0;
+      background: #FFFDF5;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 99999;
+      transition: opacity 0.4s ease, visibility 0.4s ease;
+    }
+    .preloader.loaded {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+    .preloader-logo {
+      width: 80px;
+      height: 80px;
+      margin-bottom: 32px;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.05); opacity: 0.8; }
+    }
+    .preloader-bar-container {
+      width: 200px;
+      height: 4px;
+      background: rgba(0, 0, 0, 0.1);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .preloader-bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #F5D90A, #E5C908);
+      border-radius: 2px;
+      transition: width 0.3s ease;
+    }
+    .preloader-text {
+      margin-top: 16px;
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Rounded', sans-serif;
+      font-size: 13px;
+      color: rgba(0, 0, 0, 0.4);
+      letter-spacing: 0.5px;
+    }
+  </style>
 </head>
 <body>
-
-  <!-- Navigation -->
-  <nav class="nav" id="nav">
-    <div class="nav-container">
-      <a href="/" class="nav-logo">
-        <img src="logo.svg" alt="NatePay" width="85" height="29">
-      </a>
-      <div class="nav-links">
-        <a href="#pricing" class="nav-link">Pricing</a>
-        <a href="#faq" class="nav-link">FAQ</a>
-        <a href="https://app.natepay.co/login" class="nav-link">Login</a>
-        <a href="https://app.natepay.co/signup" class="btn btn-primary btn-sm">Create Your Link</a>
-      </div>
-      <button class="nav-toggle" id="nav-toggle" aria-label="Menu">
-        <span></span>
-        <span></span>
-      </button>
+  <!-- Preloader -->
+  <div class="preloader" id="preloader">
+    <img src="logo.svg" alt="Nate" class="preloader-logo">
+    <div class="preloader-bar-container">
+      <div class="preloader-bar" id="preloader-bar"></div>
     </div>
+    <div class="preloader-text">Loading...</div>
+  </div>
+
+  <!-- Fixed Navigation -->
+  <nav class="nav">
+    <div class="nav-left">
+      <a href="coming-soon" class="nav-link">Coming Soon</a>
+    </div>
+
+    <a href="/" class="nav-logo">
+      <img src="logo.svg" alt="Nate" height="32">
+    </a>
+
+    <div class="nav-right">
+      <a href="contact" class="nav-link">Contact Us</a>
+      <a href="https://natepay.co" class="nav-cta">Get Started</a>
+    </div>
+
+    <button class="nav-hamburger" aria-label="Toggle menu">
+      <span></span>
+      <span></span>
+      <span></span>
+    </button>
   </nav>
 
   <!-- Mobile Menu -->
-  <div class="mobile-menu" id="mobile-menu">
-    <a href="#pricing">Pricing</a>
-    <a href="#faq">FAQ</a>
-    <a href="https://app.natepay.co/login">Login</a>
-    <a href="https://app.natepay.co/signup" class="btn btn-primary">Create Your Link</a>
+  <div class="mobile-menu">
+    <div class="mobile-menu-links">
+      <a href="/" class="mobile-menu-link active">Home</a>
+      <a href="coming-soon" class="mobile-menu-link">Coming Soon</a>
+      <a href="contact" class="mobile-menu-link">Contact Us</a>
+    </div>
+    <a href="https://natepay.co" class="mobile-menu-cta">Get Started</a>
   </div>
 
-  <!-- Hero -->
-  <header class="hero">
-    <div class="container">
+  <div class="page">
+    <!-- Hero Section -->
+    <section class="hero">
+      <!-- Hero Content -->
       <div class="hero-content">
-        <h1>The link that pays you monthly.<br><span class="hero-accent">With proof.</span></h1>
-        <p class="hero-sub">
-          Create a payment link. Share it. Get paid every month.<br>
-          Download pay statements. Prove your income.
+        <h1 class="hero-headline">
+          Never chase a<br>payment again
+        </h1>
+
+        <p class="hero-subhead">
+          One link. Their card on file. Paid every month. Turn any<br>
+          client into predictable monthly income.
         </p>
-        <div class="hero-cta">
-          <a href="https://app.natepay.co/signup" class="btn btn-primary btn-lg">Create Your Link — Free</a>
-          <a href="#how-it-works" class="btn btn-ghost">See How It Works</a>
-        </div>
+
+        <a href="https://natepay.co" class="hero-cta">
+          Create Your Link — Free
+        </a>
       </div>
 
-      <div class="hero-visual">
-        <div class="hero-demo">
-          <div class="demo-request">
-            <div class="demo-header">Nathan requested <strong>$2,000/month</strong></div>
-            <div class="demo-note">Monthly salary — Acme Corp</div>
-            <button class="demo-apple-pay">Pay with Apple Pay</button>
-            <div class="demo-fine">Charged monthly. Cancel anytime.</div>
-          </div>
-          <div class="demo-arrow">↓</div>
-          <div class="demo-result">
-            <div class="demo-check">✓ December payment: $1,920 to First Bank</div>
-            <div class="demo-check">✓ Pay statement ready — Download PDF</div>
-            <div class="demo-check">✓ QR verification for landlords/banks</div>
-          </div>
-        </div>
+      <!-- Hero Illustration (breaks out of section) -->
+      <div class="hero-illustration">
+        <img src="bg-image.png" alt="Nate subscription cards with fox mascot">
+      </div>
+    </section>
+
+    <!-- Problem Section -->
+    <section class="problem-section">
+      <p class="section-label">THE GETTING PAID PROBLEM</p>
+
+      <div class="tabs">
+        <button class="tab active" data-tab="freelancer">Freelancer</button>
+        <button class="tab" data-tab="creator">Coaches</button>
+        <button class="tab" data-tab="remote">Remote Worker</button>
+        <button class="tab" data-tab="family">Family</button>
+        <button class="tab" data-tab="requests">Requests</button>
+        <button class="tab" data-tab="payroll">Income Proof</button>
       </div>
 
-      <div class="hero-footer">
-        <p>Works for subscriptions, salaries, retainers, allowances, rent.</p>
-        <div class="hero-flags">
-          <span>Direct payout to</span>
-          <span class="flag">🇺🇸</span>
-          <span class="flag">🇬🇧</span>
-          <span class="flag">🇳🇬</span>
-          <span class="flag">🇰🇪</span>
-          <span class="flag">🇿🇦</span>
-        </div>
-      </div>
-    </div>
-  </header>
-
-  <!-- Divider -->
-  <section class="divider-section">
-    <div class="container">
-      <h2 class="reveal-scale">Two problems.<br>One solution.</h2>
-    </div>
-  </section>
-
-  <!-- Problem 1 -->
-  <section class="problem" id="problem-1">
-    <div class="container container-narrow">
-      <div class="problem-header reveal">
-        <span class="problem-label">Problem One</span>
-        <h2>Getting Paid</h2>
-      </div>
-
-      <div class="problem-story">
-        <div class="story-block">
-          <h3>You're a freelancer.</h3>
-          <p>Every month:</p>
-          <ul class="story-list">
-            <li>→ Send invoice</li>
-            <li>→ Wait</li>
-            <li>→ Send reminder</li>
-            <li>→ Wait more</li>
-            <li>→ Money arrives (eventually)</li>
-            <li>→ Repeat next month</li>
-          </ul>
-          <p class="story-note">It's not hard. It's just... endless.</p>
-        </div>
-
-        <div class="story-block">
-          <h3>You're a creator.</h3>
-          <p>Patreon takes 10%. Plus payment fees. Plus payout fees.<br>
-          By the time you see your money, 15-18% is gone.</p>
-          <p>And if you're outside the US?<br>
-          Route through Payoneer. More fees. More waiting.</p>
-        </div>
-
-        <div class="story-block">
-          <h3>You're a remote worker.</h3>
-          <p>Your company uses Wise or PayPal.<br>
-          Someone has to manually send your pay each month.</p>
-          <p>Sometimes it's late.<br>
-          Sometimes they forget.<br>
-          Sometimes the "international transfer" takes a week.</p>
-        </div>
-
-        <div class="story-block">
-          <h3>You support family.</h3>
-          <p>$300 to your mom. Every month.</p>
-          <p class="story-repeat">
-            Open Wise. Enter details. Send.<br>
-            Open Wise. Enter details. Send.<br>
-            Open Wise. Enter details. Send.
+      <div class="tab-content">
+        <!-- Freelancer -->
+        <div class="tab-pane active" data-tab="freelancer">
+          <p class="problem-text">
+            <span class="bold">What if you never chased a payment again?</span>
+            <span class="muted">Every month it's the same. Send invoice. Wait. "Just following up." Wait more. Money arrives eventually.</span>
           </p>
-          <p>For years.</p>
-        </div>
-      </div>
-
-      <div class="problem-solution">
-        <p><strong>What if recurring payments just... happened?</strong></p>
-        <p>Set it up once. Money moves every month. Automatically.</p>
-      </div>
-    </div>
-  </section>
-
-  <!-- Problem 2 -->
-  <section class="problem problem-alt" id="problem-2">
-    <div class="container container-narrow">
-      <div class="problem-header reveal">
-        <span class="problem-label">Problem Two</span>
-        <h2>Proving It</h2>
-      </div>
-
-      <div class="problem-story">
-        <div class="story-block story-block-full">
-          <p class="story-lead">You make $4,000/month freelancing for a US startup.</p>
-          <p>Real work. Real clients. Real money.</p>
-          <p class="story-lead">Then you try to rent an apartment.</p>
-        </div>
-
-        <div class="story-dialog">
-          <p class="dialog-line"><span class="dialog-them">"We need proof of income."</span></p>
-          <p class="dialog-line"><span class="dialog-you">"Here's my bank statement."</span></p>
-          <p class="dialog-line"><span class="dialog-them">"This shows random deposits from 'WISE' and 'PAYPAL.' That's not income. That's... transactions. Do you have pay stubs? An employment letter?"</span></p>
-          <p class="dialog-line"><span class="dialog-you">"I'm self-employed. I don't have those."</span></p>
-          <p class="dialog-line"><span class="dialog-them">"Sorry. We need verifiable income."</span></p>
-        </div>
-
-        <div class="story-block story-block-full">
-          <p class="story-punchline">You make $48,000 a year.<br>You can't get a $1,500/month apartment.</p>
-        </div>
-
-        <div class="story-block">
-          <p><strong>Same story for:</strong></p>
-          <ul class="story-list">
-            <li>→ Car loans ("Your income isn't regular enough")</li>
-            <li>→ Mortgages ("We can't verify international transfers")</li>
-            <li>→ Visas ("We need proof of ongoing employment")</li>
-            <li>→ Credit cards ("Insufficient income documentation")</li>
-          </ul>
-        </div>
-
-        <div class="story-block story-block-full">
-          <p class="story-insight"><strong>Your income is real.</strong><br>But it doesn't look real.<br>And that's the problem.</p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Solution Intro -->
-  <section class="solution-intro">
-    <div class="container">
-      <img src="logo.svg" alt="NatePay" class="solution-logo">
-      <h2>Recurring payments. With proof.</h2>
-    </div>
-  </section>
-
-  <!-- How It Works -->
-  <section class="how-it-works" id="how-it-works">
-    <div class="container container-narrow">
-      <h2 class="reveal">What NatePay Does</h2>
-
-      <div class="steps reveal-stagger">
-        <div class="step">
-          <div class="step-num">1</div>
-          <div class="step-content">
-            <h3>You create a payment link</h3>
-            <p>Set the amount. Monthly or one-time.<br>
-            Public (anyone can pay) or private (specific person).</p>
-            <p class="step-note">Takes 30 seconds.</p>
-          </div>
-        </div>
-
-        <div class="step">
-          <div class="step-num">2</div>
-          <div class="step-content">
-            <h3>You share it</h3>
-            <p>Send to your client. Your employer. Your mom.<br>
-            Or put it in your bio for subscribers.</p>
-          </div>
-        </div>
-
-        <div class="step">
-          <div class="step-num">3</div>
-          <div class="step-content">
-            <h3>They click and subscribe</h3>
-            <p>Apple Pay. Google Pay. Card. Bank transfer.<br>
-            One tap. They're subscribed.</p>
-          </div>
-        </div>
-
-        <div class="step">
-          <div class="step-num">4</div>
-          <div class="step-content">
-            <h3>Money arrives every month</h3>
-            <p>Automatically. Same day each month.<br>
-            Direct to your bank account.</p>
-            <p class="step-note">No invoicing. No reminders. No chasing.</p>
-          </div>
-        </div>
-
-        <div class="step">
-          <div class="step-num">5</div>
-          <div class="step-content">
-            <h3>You download pay statements</h3>
-            <p>Real PDF documents.<br>
-            Gross amount. Fees. Net payment. YTD totals.<br>
-            QR code that verifies authenticity.</p>
-            <p class="step-note">Hand it to a landlord. They scan it. It's verified.<br>
-            Your freelance income, looking like a salary.</p>
-          </div>
-        </div>
-      </div>
-
-      <div class="section-cta">
-        <a href="https://app.natepay.co/signup" class="btn btn-primary btn-lg">Create Your Link</a>
-      </div>
-    </div>
-  </section>
-
-  <!-- Pay Statement -->
-  <section class="pay-statement-section" id="proof">
-    <div class="container">
-      <h2 class="reveal">Income Proof That Actually Works</h2>
-      <p class="section-intro reveal">Every payment through NatePay generates documentation.<br>
-      Not a transaction history. Not a screenshot of your dashboard.<br>
-      <strong>Actual pay statements.</strong></p>
-
-      <div class="statement-demo reveal-scale">
-        <div class="statement-card">
-          <div class="statement-header">NATEPAY PAY STATEMENT</div>
-          <div class="statement-row">
-            <span>Recipient</span>
-            <span>Nathan Johnson</span>
-          </div>
-          <div class="statement-row">
-            <span>Payer</span>
-            <span>Acme Corp</span>
-          </div>
-          <div class="statement-row">
-            <span>Period</span>
-            <span>December 1-31, 2025</span>
-          </div>
-          <div class="statement-divider"></div>
-          <div class="statement-row">
-            <span>Base Amount</span>
-            <span>$2,000.00</span>
-          </div>
-          <div class="statement-row statement-row-fee">
-            <span>Service Fee (4%)</span>
-            <span>-$80.00</span>
-          </div>
-          <div class="statement-divider"></div>
-          <div class="statement-row statement-row-total">
-            <span>Net Payment</span>
-            <span>$1,920.00</span>
-          </div>
-          <div class="statement-status">✓ Paid to First Bank ****4521 on Dec 3, 2025</div>
-          <div class="statement-divider"></div>
-          <div class="statement-ytd">
-            <div class="ytd-label">YEAR TO DATE</div>
-            <div class="statement-row">
-              <span>Gross</span>
-              <span>$24,000.00</span>
+          <div class="stats-row">
+            <div class="stat">
+              <div class="stat-number">71%</div>
+              <div class="stat-label">Paid late</div>
             </div>
-            <div class="statement-row">
-              <span>Net</span>
-              <span>$23,040.00</span>
+            <div class="stat">
+              <div class="stat-number">29%</div>
+              <div class="stat-label">Invoices overdue</div>
             </div>
-            <div class="statement-row">
-              <span>Payments</span>
-              <span>12 of 12 months</span>
+            <div class="stat">
+              <div class="stat-number">20 <span class="stat-unit">hrs</span></div>
+              <div class="stat-label">Chasing monthly</div>
             </div>
-          </div>
-          <div class="statement-divider"></div>
-          <div class="statement-verify">
-            <div class="qr-placeholder">QR</div>
-            <div class="verify-text">
-              <span>Verify this document:</span>
-              <span class="verify-url">natepay.co/verify/xK9mP2nQ</span>
+            <div class="stat">
+              <div class="stat-number">90+ <span class="stat-unit">days</span></div>
+              <div class="stat-label">Some wait</div>
             </div>
           </div>
         </div>
 
-        <div class="verification-card">
-          <div class="verify-header">✓ VERIFIED PAYMENT RECORD</div>
-          <p class="verify-intro">This payment statement is authentic and unaltered.</p>
-          <div class="statement-row">
-            <span>Recipient</span>
-            <span>Nathan Johnson</span>
+        <!-- Service Providers -->
+        <div class="tab-pane" data-tab="creator">
+          <p class="problem-text">
+            <span class="bold">What if your clients actually stayed?</span>
+            <span class="muted">They love your sessions. But they pay per class. No commitment. No card on file. One busy week and they ghost. You're not losing clients—you're leaking them.</span>
+          </p>
+          <div class="stats-row">
+            <div class="stat">
+              <div class="stat-number">30%</div>
+              <div class="stat-label">Churn yearly</div>
+            </div>
+            <div class="stat">
+              <div class="stat-number">23%</div>
+              <div class="stat-label">No-show rate</div>
+            </div>
+            <div class="stat">
+              <div class="stat-number">6</div>
+              <div class="stat-label">New clients/mo</div>
+            </div>
+            <div class="stat">
+              <div class="stat-number">$0</div>
+              <div class="stat-label">From ghosts</div>
+            </div>
           </div>
-          <div class="statement-row">
-            <span>Period</span>
-            <span>December 2025</span>
+        </div>
+
+        <!-- Remote Worker -->
+        <div class="tab-pane" data-tab="remote">
+          <p class="problem-text">
+            <span class="bold">What if payday just worked?</span>
+            <span class="muted">Your company pays you through Wise or PayPal. Someone does it manually. Sometimes late. Sometimes they forget. You have a real job but no real paycheck to prove it.</span>
+          </p>
+          <div class="stats-row">
+            <div class="stat">
+              <div class="stat-number">66%</div>
+              <div class="stat-label">Stressed by delays</div>
+            </div>
+            <div class="stat">
+              <div class="stat-number">24%</div>
+              <div class="stat-label">Paid late</div>
+            </div>
+            <div class="stat">
+              <div class="stat-number">2+ <span class="stat-unit">weeks</span></div>
+              <div class="stat-label">To resolve</div>
+            </div>
+            <div class="stat">
+              <div class="stat-number">0</div>
+              <div class="stat-label">Pay stubs</div>
+            </div>
           </div>
-          <div class="statement-row">
-            <span>Net Amount</span>
-            <span>$1,920.00</span>
+        </div>
+
+        <!-- Family -->
+        <div class="tab-pane" data-tab="family">
+          <p class="problem-text">
+            <span class="bold">What if the money just sent itself?</span>
+            <span class="muted">$300 to mom. Every month. Open Wise. Enter details. Send. Open Wise. Enter details. Send. For years. The same thing. Over and over. It never ends.</span>
+          </p>
+          <div class="stats-row">
+            <div class="stat">
+              <div class="stat-number">12x</div>
+              <div class="stat-label">Transfers yearly</div>
+            </div>
+            <div class="stat">
+              <div class="stat-number">$5-15</div>
+              <div class="stat-label">Fees each time</div>
+            </div>
+            <div class="stat">
+              <div class="stat-number">10 <span class="stat-unit">min</span></div>
+              <div class="stat-label">Per transfer</div>
+            </div>
+            <div class="stat">
+              <div class="stat-number">∞</div>
+              <div class="stat-label">Forever</div>
+            </div>
           </div>
-          <div class="statement-row">
-            <span>Status</span>
-            <span class="status-paid">✓ Paid</span>
+        </div>
+
+        <!-- Requests -->
+        <div class="tab-pane" data-tab="requests">
+          <p class="problem-text">
+            <span class="bold">What if asking for money wasn't awkward?</span>
+            <span class="muted">You need to charge someone. Not a client. Not a subscriber. Just... someone who owes you. No invoice. No Venmo back-and-forth. Just send a link. They pay. Done.</span>
+          </p>
+          <div class="stats-row">
+            <div class="stat">
+              <div class="stat-number">1 <span class="stat-unit">link</span></div>
+              <div class="stat-label">To get paid</div>
+            </div>
+            <div class="stat">
+              <div class="stat-number">0</div>
+              <div class="stat-label">Apps needed</div>
+            </div>
+            <div class="stat">
+              <div class="stat-number">30 <span class="stat-unit">sec</span></div>
+              <div class="stat-label">To request</div>
+            </div>
+            <div class="stat">
+              <div class="stat-number">0</div>
+              <div class="stat-label">Awkward asks</div>
+            </div>
           </div>
-          <div class="statement-divider"></div>
-          <div class="ytd-label">PAYMENT HISTORY</div>
-          <div class="statement-row">
-            <span>Consecutive payments</span>
-            <span>12 months</span>
-          </div>
-          <div class="statement-row">
-            <span>Average monthly</span>
-            <span>$1,920.00</span>
-          </div>
-          <div class="statement-row">
-            <span>Total received (YTD)</span>
-            <span>$23,040.00</span>
+        </div>
+
+        <!-- Income Proof -->
+        <div class="tab-pane" data-tab="payroll">
+          <p class="problem-text">
+            <span class="bold">What if you had real pay stubs?</span>
+            <span class="muted">You earn real money. But banks want pay stubs. Landlords want pay stubs. All you have is Wise transfers. That's not proof. That's a screenshot.</span>
+          </p>
+          <div class="stats-row">
+            <div class="stat">
+              <div class="stat-number">70%</div>
+              <div class="stat-label">Can't get loans</div>
+            </div>
+            <div class="stat">
+              <div class="stat-number">66%</div>
+              <div class="stat-label">Denied as freelancer</div>
+            </div>
+            <div class="stat">
+              <div class="stat-number">36%</div>
+              <div class="stat-label">Can't verify income</div>
+            </div>
+            <div class="stat">
+              <div class="stat-number">0</div>
+              <div class="stat-label">Stubs from Wise</div>
+            </div>
           </div>
         </div>
       </div>
 
-      <div class="statement-benefits">
-        <p><strong>The landlord sees:</strong></p>
-        <ul>
-          <li>✓ Real income (not random deposits)</li>
-          <li>✓ Consistent payments (12 consecutive months)</li>
-          <li>✓ Verifiable source (QR links to our verification page)</li>
-          <li>✓ Professional format (looks like a real pay stub)</li>
-        </ul>
-        <p class="benefit-result"><strong>You get the apartment.</strong></p>
+      <!-- CTA Card -->
+      <div class="solution-card">
+        <img src="Vector87.svg" alt="" class="solution-bg" aria-hidden="true">
+        <div class="solution-content">
+          <h2 class="solution-headline">Sleep easy.<br>Get paid anyway.</h2>
+          <p class="solution-subtext">Your payment link works while you rest. Automatic billing, automatic deposits.</p>
+          <a href="https://natepay.co" class="solution-cta">Get Started Today</a>
+        </div>
+        <div class="solution-image">
+          <img src="sleeping fox.png" alt="Sleeping fox">
+        </div>
       </div>
+    </section>
+
+    <!-- Use Case Sections Wrapper -->
+    <div class="use-case-wrapper">
+      <!-- Section Header -->
+      <div class="use-case-header">
+        <p class="section-label">HOW IT WORKS</p>
+        <h2 class="use-case-header-headline">One link. Automatic payments. Zero hassle.</h2>
+      </div>
+
+      <!-- Section 1: For Your Service -->
+      <section class="use-case-section" id="service">
+        <div class="use-case-card">
+          <div class="use-case-content">
+            <div class="use-case-top">
+              <span class="use-case-badge">
+                <img src="suit.svg" alt="" class="badge-icon">
+                For your Service
+              </span>
+
+              <h2 class="use-case-headline">No more chasing. No more waiting. Just paid.</h2>
+
+              <p class="use-case-subtext">
+                One link replaces invoices, reminders, and awkward follow-ups. Your client's card stays on file. You get paid every month — with proof.
+              </p>
+            </div>
+
+            <div class="feature-accordion">
+              <div class="feature-item active" data-feature="recurring">
+                <div class="feature-header">
+                  <span class="feature-title">Recurring payment links</span>
+                  <span class="feature-icon">
+                    <img src="arr.svg" alt="" class="accordion-arrow">
+                  </span>
+                </div>
+                <div class="feature-body">
+                  <p>Share once. Get paid forever. Your client enters their card, picks a date, and you're set. No more invoicing. No more chasing. Monthly, automatic, done.</p>
+                </div>
+              </div>
+
+              <div class="feature-item" data-feature="verification">
+                <div class="feature-header">
+                  <span class="feature-title">Income verification</span>
+                  <span class="feature-icon">
+                    <img src="arr.svg" alt="" class="accordion-arrow">
+                  </span>
+                </div>
+                <div class="feature-body">
+                  <p>Get real pay stubs and income statements that banks and landlords actually accept. Prove your income like any salaried employee.</p>
+                </div>
+              </div>
+
+              <div class="feature-item" data-feature="payday">
+                <div class="feature-header">
+                  <span class="feature-title">Set your payday</span>
+                  <span class="feature-icon">
+                    <img src="arr.svg" alt="" class="accordion-arrow">
+                  </span>
+                </div>
+                <div class="feature-body">
+                  <p>Pick the day you want to get paid. We align all your subscriber billing so money hits your account on the same day every month.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="use-case-visual use-case-visual-stacked">
+            <img src="service-mockup.png" alt="Subscription card, income statement, and QR code mockups" class="use-case-mockup">
+          </div>
+        </div>
+      </section>
+
+      <!-- Section 2: Global Payments -->
+      <section class="use-case-section use-case-section-full" id="global">
+        <div class="use-case-full-inner">
+          <div class="use-case-full-inner-content">
+            <div class="use-case-content">
+              <h2 class="use-case-headline use-case-headline-large">Global cards in.<br>Local banks out</h2>
+
+              <p class="use-case-subtext">
+                Apple Pay. Google Pay. Cards from anywhere. Your payers use what's familiar. We accept payments from 150+ countries in USD, GBP, EUR, and 20+ currencies.
+              </p>
+
+              <a href="https://natepay.co" class="use-case-cta">
+                Get Started Today
+              </a>
+            </div>
+
+            <div class="use-case-visual use-case-visual-checkout">
+              <img src="checkout-mockup.png" alt="NatePay checkout with Stripe payment form" class="use-case-mockup">
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section 3: Just Because -->
+      <section class="use-case-section" id="support">
+        <div class="use-case-card use-case-card-split">
+          <div class="use-case-content">
+            <div class="use-case-top">
+              <span class="use-case-badge">
+                <img src="gift-icon.svg" alt="" class="badge-icon">
+                Just Because
+              </span>
+
+              <h2 class="use-case-headline">Let people pay you. Automatically.</h2>
+
+              <p class="use-case-subtext">
+                Support from fans. Money to family. Recurring payments for anything personal without the awkwardness of asking every time.
+              </p>
+            </div>
+
+            <div class="feature-accordion">
+              <div class="feature-item active" data-feature="support-pages">
+                <div class="feature-header">
+                  <span class="feature-title">Recurring Support pages</span>
+                  <span class="feature-icon">
+                    <img src="arr.svg" alt="" class="accordion-arrow">
+                  </span>
+                </div>
+                <div class="feature-body">
+                  <p>No content requirements. No tier management. Just people who believe in you paying monthly. Put the link in your bio, your newsletter, anywhere.</p>
+                </div>
+              </div>
+
+              <div class="feature-item" data-feature="family">
+                <div class="feature-header">
+                  <span class="feature-title">Automated family support</span>
+                  <span class="feature-icon">
+                    <img src="arr.svg" alt="" class="accordion-arrow">
+                  </span>
+                </div>
+                <div class="feature-body">
+                  <p>Set it once and never think about it again. Monthly allowances, parent support, or any recurring family transfer — automated.</p>
+                </div>
+              </div>
+
+              <div class="feature-item" data-feature="requests">
+                <div class="feature-header">
+                  <span class="feature-title">One-time requests</span>
+                  <span class="feature-icon">
+                    <img src="arr.svg" alt="" class="accordion-arrow">
+                  </span>
+                </div>
+                <div class="feature-body">
+                  <p>Need to charge someone once? Send a link. They pay. Done. No awkward conversations, no app downloads required.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="use-case-visual use-case-visual-single">
+            <img src="summary.png" alt="Support subscription card with Clara James" class="use-case-mockup-card">
+          </div>
+        </div>
+      </section>
     </div>
-  </section>
 
-  <!-- Deel Comparison -->
-  <section class="deel-section">
-    <div class="container container-narrow">
-      <h2>This Is What Deel Charges $49/month For</h2>
-      <p>Deel, Remote, Oyster — they charge $29-$599/month per person.</p>
-      <p>A big part of what you're paying for?<br>
-      <strong>"Compliant payment documentation."</strong></p>
+    <!-- FAQ Section -->
+    <section class="faq-section" id="faq">
+      <div class="faq-container">
+        <p class="section-label">QUESTIONS & ANSWERS</p>
+        <h2 class="faq-headline">Frequently asked questions</h2>
 
-      <div class="deel-list">
-        <p><strong>With NatePay:</strong></p>
-        <ul>
-          <li>→ Pay statements included with every payment</li>
-          <li>→ QR verification for third parties</li>
-          <li>→ Public verification URL</li>
-          <li>→ YTD tracking</li>
-          <li>→ Download anytime</li>
-        </ul>
-        <p class="deel-note">Not $49/month extra.<br><strong>Built in.</strong></p>
-      </div>
-    </div>
-  </section>
-
-  <!-- Use Cases -->
-  <section class="use-cases" id="use-cases">
-    <div class="container">
-      <h2 class="reveal">Works for everything.</h2>
-
-      <div class="use-case-grid reveal-stagger">
-        <div class="use-case">
-          <h3>Subscriptions</h3>
-          <p class="use-case-quote">"Join my $10/month membership."</p>
-          <p>You're a creator, educator, writer. Fans subscribe. They're charged monthly. You get paid. You get pay statements.</p>
-          <p class="use-case-compare">Like Patreon, but 9% instead of 16%.<br>And without the Payoneer runaround.</p>
-        </div>
-
-        <div class="use-case">
-          <h3>Retainers</h3>
-          <p class="use-case-quote">"Here's the link for my $500/month retainer."</p>
-          <p>You're a consultant, coach, trainer. Client clicks once. Pays monthly forever. No invoices. No chasing. No awkward reminders.</p>
-          <p class="use-case-compare">Just money, every month, automatically.</p>
-        </div>
-
-        <div class="use-case">
-          <h3>Salaries</h3>
-          <p class="use-case-quote">"Boss, use this link for my monthly pay."</p>
-          <p>You're a remote worker or contractor. Give your employer the link. They subscribe. You get paid the same day every month.</p>
-          <p class="use-case-compare">Plus: pay statements for your lease application.</p>
-        </div>
-
-        <div class="use-case">
-          <h3>Allowances</h3>
-          <p class="use-case-quote">"Mom, click this link. I get $300/month."</p>
-          <p>You're supporting family. Set it up once. Money flows automatically. No more monthly Wise transfers.</p>
-          <p class="use-case-compare">Direct to their local bank account.</p>
-        </div>
-
-        <div class="use-case">
-          <h3>Rent</h3>
-          <p class="use-case-quote">"Roommate, here's the link for your share."</p>
-          <p>Split rent. Split bills. Automated. They subscribe once. Pay every month.</p>
-          <p class="use-case-compare">No Venmo requests. No "did you send it yet?"</p>
-        </div>
-
-        <div class="use-case">
-          <h3>Support</h3>
-          <p class="use-case-quote">"Support my work — $5/month."</p>
-          <p>Tips. Donations. Patronage. Put the link in your bio. Anywhere. Supporters subscribe. You get paid.</p>
-          <p class="use-case-compare">No platform page required. Just a link.</p>
-        </div>
-      </div>
-
-      <div class="use-case-footer">
-        <p><strong>Same link. Same flow.</strong><br>You decide what it's for.</p>
-      </div>
-    </div>
-  </section>
-
-  <!-- Public vs Private -->
-  <section class="link-types">
-    <div class="container container-narrow">
-      <h2>Public or Private. Your choice.</h2>
-
-      <div class="link-type-grid">
-        <div class="link-type">
-          <h3>Public Link</h3>
-          <div class="link-example">natepay.co/yourname</div>
-          <ul>
-            <li>→ Put it in your bio</li>
-            <li>→ Anyone can subscribe</li>
-            <li>→ Great for creators, supporters, memberships</li>
-          </ul>
-        </div>
-
-        <div class="link-type">
-          <h3>Private Request</h3>
-          <div class="link-example">natepay.co/r/xK9mP2nQ</div>
-          <ul>
-            <li>→ Send to a specific person</li>
-            <li>→ Only they see it</li>
-            <li>→ Great for retainers, salaries, allowances, rent</li>
-          </ul>
-        </div>
-      </div>
-
-      <p class="link-type-note">Both generate:<br>
-      ✓ Automatic monthly charges<br>
-      ✓ Pay statements with QR verification<br>
-      ✓ Direct payout to your bank</p>
-    </div>
-  </section>
-
-  <!-- Payouts -->
-  <section class="payouts" id="payouts">
-    <div class="container container-narrow">
-      <h2 class="reveal">Direct to your bank. Everywhere.</h2>
-
-      <p class="payout-intro">Most platforms make you jump through hoops to get your money.</p>
-      <ul class="payout-problems">
-        <li>Patreon → Payoneer → Your bank (fees at each step)</li>
-        <li>Stripe → Only works for registered businesses</li>
-        <li>PayPal → Random holds, frozen accounts, limited countries</li>
-      </ul>
-
-      <p class="payout-solution"><strong>NatePay pays you directly:</strong></p>
-
-      <div class="payout-countries">
-        <div class="payout-country">
-          <span class="flag-lg">🇺🇸</span>
-          <div>
-            <strong>United States</strong>
-            <span>Any US bank account · USD</span>
+        <div class="faq-accordion">
+          <div class="faq-item">
+            <div class="faq-header">
+              <span class="faq-question">How does NatePay work?</span>
+              <span class="faq-icon">
+                <img src="arr.svg" alt="" class="faq-arrow">
+              </span>
+            </div>
+            <div class="faq-body">
+              <p>Create a payment link, share it with your client or supporter. They enter their card details and choose a billing date. That's it — you get paid automatically every month. No invoicing, no reminders, no chasing.</p>
+            </div>
           </div>
-        </div>
-        <div class="payout-country">
-          <span class="flag-lg">🇬🇧</span>
-          <div>
-            <strong>United Kingdom</strong>
-            <span>Any UK bank account · GBP</span>
+
+          <div class="faq-item">
+            <div class="faq-header">
+              <span class="faq-question">What are the fees?</span>
+              <span class="faq-icon">
+                <img src="arr.svg" alt="" class="faq-arrow">
+              </span>
+            </div>
+            <div class="faq-body">
+              <p>We charge 4% per successful transaction. No monthly fees, no setup fees, no hidden costs. You only pay when you get paid. Stripe processing fees are included.</p>
+            </div>
           </div>
-        </div>
-        <div class="payout-country">
-          <span class="flag-lg">🇪🇺</span>
-          <div>
-            <strong>Europe</strong>
-            <span>SEPA bank accounts · EUR</span>
+
+          <div class="faq-item">
+            <div class="faq-header">
+              <span class="faq-question">Which countries do you support?</span>
+              <span class="faq-icon">
+                <img src="arr.svg" alt="" class="faq-arrow">
+              </span>
+            </div>
+            <div class="faq-body">
+              <p>We accept payments from 150+ countries. For payouts, we currently support Nigeria, Ghana, Kenya, and all Stripe-supported countries. Your subscribers can pay with any major credit card, Apple Pay, or Google Pay.</p>
+            </div>
           </div>
-        </div>
-        <div class="payout-country payout-country-highlight">
-          <span class="flag-lg">🇳🇬</span>
-          <div>
-            <strong>Nigeria</strong>
-            <span>Any Nigerian bank · NGN<br>GTBank, First Bank, Access, Zenith, UBA — all of them</span>
+
+          <div class="faq-item">
+            <div class="faq-header">
+              <span class="faq-question">How do I get my money?</span>
+              <span class="faq-icon">
+                <img src="arr.svg" alt="" class="faq-arrow">
+              </span>
+            </div>
+            <div class="faq-body">
+              <p>Money is automatically deposited to your local bank account. For Nigeria, Ghana, and Kenya, we convert and send directly to your bank. For other countries, payouts go through Stripe to your connected bank account.</p>
+            </div>
           </div>
-        </div>
-        <div class="payout-country payout-country-highlight">
-          <span class="flag-lg">🇰🇪</span>
-          <div>
-            <strong>Kenya</strong>
-            <span>Bank account or M-Pesa · KES</span>
+
+          <div class="faq-item">
+            <div class="faq-header">
+              <span class="faq-question">What is income verification?</span>
+              <span class="faq-icon">
+                <img src="arr.svg" alt="" class="faq-arrow">
+              </span>
+            </div>
+            <div class="faq-body">
+              <p>We generate official pay stubs and income statements from your NatePay earnings. These documents are formatted like traditional employment records — perfect for bank loans, apartment applications, or visa requirements.</p>
+            </div>
           </div>
-        </div>
-        <div class="payout-country payout-country-highlight">
-          <span class="flag-lg">🇿🇦</span>
-          <div>
-            <strong>South Africa</strong>
-            <span>Any SA bank · ZAR<br>Standard Bank, FNB, Capitec, Nedbank, Absa</span>
+
+          <div class="faq-item">
+            <div class="faq-header">
+              <span class="faq-question">Can I cancel anytime?</span>
+              <span class="faq-icon">
+                <img src="arr.svg" alt="" class="faq-arrow">
+              </span>
+            </div>
+            <div class="faq-body">
+              <p>Yes. There's no contract, no commitment. You can stop using NatePay whenever you want. Your subscribers can also cancel their subscriptions at any time — we believe in keeping things fair for everyone.</p>
+            </div>
           </div>
         </div>
       </div>
+    </section>
 
-      <div class="payout-benefits">
-        <p>No Payoneer account to set up.<br>
-        No PayPal limitations to navigate.<br>
-        No "international transfer" delays.</p>
-        <p><strong>Your money. Your bank. Direct.</strong></p>
-      </div>
+    <!-- Trust Section -->
+    <section class="trust-section">
+      <div class="trust-container">
+        <div class="trust-content">
+          <p class="section-label">SECURE & RELIABLE</p>
+          <h2 class="trust-headline">Your money is in safe hands</h2>
+          <p class="trust-subtext">Built on bank-grade infrastructure. We never touch your funds — payments go directly from your subscriber to your bank account.</p>
+        </div>
 
-      <div class="payout-africa">
-        <p><strong>Especially good for:</strong></p>
-        <ul>
-          <li>→ Nigerians tired of Payoneer/PayPal runarounds</li>
-          <li>→ Kenyans who want M-Pesa or direct bank</li>
-          <li>→ South Africans getting paid in USD</li>
-          <li>→ Remote workers paid by US/UK companies</li>
-          <li>→ Diaspora families sending money home</li>
-          <li>→ Anyone whose country is an "afterthought" for other platforms</li>
-        </ul>
-        <p class="africa-note">Other platforms treat Africa as an edge case.<br><strong>We built it in from day one.</strong></p>
-      </div>
-    </div>
-  </section>
-
-  <!-- Pricing -->
-  <section class="pricing" id="pricing">
-    <div class="container container-narrow">
-      <h2 class="reveal">Pricing</h2>
-
-      <div class="pricing-section">
-        <h3>Simple Split: 4% + 4%</h3>
-        <div class="pricing-split">
-          <div class="split-item">
-            <span class="split-rate">4%</span>
-            <span class="split-label">paid by subscriber</span>
-            <span class="split-detail">Added to the price at checkout</span>
+        <div class="trust-grid">
+          <div class="trust-item">
+            <div class="trust-icon">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+              </svg>
+            </div>
+            <h3 class="trust-item-title">256-bit encryption</h3>
+            <p class="trust-item-text">All data encrypted in transit and at rest</p>
           </div>
-          <div class="split-plus">+</div>
-          <div class="split-item">
-            <span class="split-rate">4%</span>
-            <span class="split-label">paid by creator</span>
-            <span class="split-detail">Deducted from your payout</span>
+
+          <div class="trust-item">
+            <div class="trust-icon">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                <path d="M9 12l2 2 4-4"></path>
+              </svg>
+            </div>
+            <h3 class="trust-item-title">PCI DSS Compliant</h3>
+            <p class="trust-item-text">Industry-standard payment security</p>
+          </div>
+
+          <div class="trust-item">
+            <div class="trust-icon">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <path d="M12 6v6l4 2"></path>
+              </svg>
+            </div>
+            <h3 class="trust-item-title">99.9% Uptime</h3>
+            <p class="trust-item-text">Reliable infrastructure, always available</p>
+          </div>
+
+          <div class="trust-item">
+            <div class="trust-icon">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                <circle cx="9" cy="7" r="4"></circle>
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+              </svg>
+            </div>
+            <h3 class="trust-item-title">24/7 Support</h3>
+            <p class="trust-item-text">Real humans ready to help</p>
           </div>
         </div>
-        <p class="pricing-note">8% total — split evenly. Neither side feels the full weight.</p>
       </div>
+    </section>
 
-      <div class="pricing-thats-it">
-        <h3>That's it. All-in.</h3>
-        <p>No payout fees.<br>
-        No monthly fees.<br>
-        No processing fees on top.<br>
-        No "oh btw here's another 2.5%."<br>
-        <strong>4% + 4%. Done.</strong></p>
-      </div>
+    <!-- Final CTA Section -->
+    <section class="final-cta-section">
+      <div class="final-cta-inner">
+        <div class="final-cta-content">
+          <h2 class="final-cta-headline">Ready to get paid on autopilot?</h2>
+          <p class="final-cta-subtext">Join thousands of creators, freelancers, and remote workers who've switched to automatic payments.</p>
 
-      <div class="pricing-examples">
-        <h3>Examples</h3>
-
-        <div class="example">
-          <div class="example-header">$50/month subscription</div>
-          <div class="example-row"><span>Subscriber pays</span><span>$50 + 4% = <strong>$52</strong></span></div>
-          <div class="example-row"><span>You receive</span><span>$50 − 4% = <strong>$48</strong></span></div>
-          <div class="example-total"><span>Your take-home</span><span><strong>96%</strong></span></div>
+          <div class="final-cta-actions">
+            <a href="https://natepay.co" class="final-cta-button">Create Your Free Link</a>
+            <p class="final-cta-note">No credit card required</p>
+          </div>
         </div>
 
-        <div class="example">
-          <div class="example-header">$500/month retainer</div>
-          <div class="example-row"><span>Subscriber pays</span><span>$500 + 4% = <strong>$520</strong></span></div>
-          <div class="example-row"><span>You receive</span><span>$500 − 4% = <strong>$480</strong></span></div>
-          <div class="example-total"><span>Your take-home</span><span><strong>96%</strong></span></div>
-        </div>
-
-        <div class="example">
-          <div class="example-header">$2,000/month salary</div>
-          <div class="example-row"><span>Subscriber pays</span><span>$2,000 + 4% = <strong>$2,080</strong></span></div>
-          <div class="example-row"><span>You receive</span><span>$2,000 − 4% = <strong>$1,920</strong></span></div>
-          <div class="example-total"><span>Your take-home</span><span><strong>96%</strong></span></div>
+        <div class="final-cta-integrations">
+          <p class="integrations-label">Powered by</p>
+          <div class="integrations-logos">
+            <div class="payment-provider-card stripe">
+              <img src="Stripe_Logo,_revised_2016.svg" alt="Stripe">
+            </div>
+            <div class="payment-provider-card paystack">
+              <img src="Paystack_idSL4BuSLF_0.svg" alt="Paystack">
+            </div>
+          </div>
         </div>
       </div>
+    </section>
 
-      <div class="pricing-compare">
-        <h3>Compare</h3>
+    <!-- Footer -->
+    <footer class="footer">
+      <div class="footer-container">
+        <div class="footer-main">
+          <div class="footer-brand">
+            <img src="logo.svg" alt="Nate" class="footer-logo">
+            <p class="footer-tagline">Automatic payments for the modern world</p>
+          </div>
 
-        <table class="compare-table">
-          <thead>
-            <tr><th>Platform</th><th>Creator Pays</th><th>Payer Pays</th><th>Total</th></tr>
-          </thead>
-          <tbody>
-            <tr><td><strong>NatePay</strong></td><td>4%</td><td>4%</td><td><strong>8%</strong></td></tr>
-            <tr><td>Patreon</td><td>8-12%</td><td>0%</td><td>8-12% + processing</td></tr>
-            <tr><td>Gumroad</td><td>10%</td><td>0%</td><td>10%</td></tr>
-            <tr><td>Ko-fi</td><td>0-5%</td><td>0%</td><td>0-5% + processing</td></tr>
-          </tbody>
-        </table>
+          <div class="footer-links">
+            <div class="footer-column">
+              <h4 class="footer-column-title">Product</h4>
+              <a href="coming-soon" class="footer-link">Coming Soon</a>
+            </div>
 
-        <p class="compare-note">Same total. Split the pain. Neither side sees "8%".<br>
-        <strong>Plus: verifiable pay statements. No one else has that.</strong></p>
-      </div>
-    </div>
-  </section>
+            <div class="footer-column">
+              <h4 class="footer-column-title">Company</h4>
+              <a href="vision" class="footer-link">Our Vision</a>
+              <a href="contact" class="footer-link">Contact</a>
+            </div>
 
-  <!-- Trust -->
-  <section class="trust" id="trust">
-    <div class="container">
-      <h2 class="reveal">Built for real.</h2>
+            <div class="footer-column">
+              <h4 class="footer-column-title">Legal</h4>
+              <a href="privacy" class="footer-link">Privacy Policy</a>
+              <a href="terms" class="footer-link">Terms of Service</a>
+            </div>
 
-      <div class="trust-grid reveal-stagger">
-        <div class="trust-item">
-          <div class="trust-icon">🏛️</div>
-          <h3>US Incorporated</h3>
-          <p><strong>NatePay, LLC</strong><br>Delaware C-Corporation</p>
-          <p class="trust-note">Real company. Real accountability.<br>Not a crypto experiment. Not a startup that might disappear.</p>
+            <div class="footer-column">
+              <h4 class="footer-column-title">Support</h4>
+              <a href="mailto:support@natepay.co" class="footer-link">support@natepay.co</a>
+            </div>
+          </div>
         </div>
 
-        <div class="trust-item">
-          <div class="trust-icon">💳</div>
-          <h3>Powered by Stripe</h3>
-          <p>Same payment infrastructure as:<br>Amazon, Shopify, Lyft, Instacart, Slack</p>
-          <p class="trust-note">Bank-grade security. PCI DSS compliant.<br>We never see your card number.</p>
+        <div class="footer-bottom">
+          <p class="footer-copyright">© 2025 NatePay. All rights reserved.</p>
+          <div class="footer-social">
+            <a href="#" class="social-link" aria-label="Twitter">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+              </svg>
+            </a>
+            <a href="#" class="social-link" aria-label="Instagram">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
+              </svg>
+            </a>
+            <a href="#" class="social-link" aria-label="LinkedIn">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+              </svg>
+            </a>
+          </div>
         </div>
-
-        <div class="trust-item">
-          <div class="trust-icon">🌍</div>
-          <h3>African Payouts via Paystack</h3>
-          <p>Stripe's licensed African subsidiary.<br>Regulated in Nigeria, Kenya, South Africa.</p>
-          <p class="trust-note">Not a workaround. Proper rails.</p>
-        </div>
-
-        <div class="trust-item">
-          <div class="trust-icon">🔒</div>
-          <h3>Your Money Is Safe</h3>
-          <p>We never hold your funds.<br>Payments go directly to your connected bank account.</p>
-          <p class="trust-note">Standard settlement: 2-3 business days.</p>
-        </div>
       </div>
-    </div>
-  </section>
+    </footer>
+  </div>
 
-  <!-- Founding Members -->
-  <section class="founding" id="founding">
-    <div class="container container-narrow">
-      <h2 class="reveal">Founding Members</h2>
+  <script>
+    // Smooth scroll for anchor links
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+      anchor.addEventListener('click', function (e) {
+        e.preventDefault();
+        const target = document.querySelector(this.getAttribute('href'));
+        if (target) {
+          target.scrollIntoView({ behavior: 'smooth' });
+        }
+      });
+    });
 
-      <p class="founding-intro">We're opening NatePay to our first 100 users.</p>
-      <p>As a Founding Member, you lock in our lowest rates.<br>
-      Not for a trial. <strong>Forever.</strong></p>
+    // Nav scroll effect - transparent to white on any scroll
+    const nav = document.querySelector('.nav');
 
-      <table class="founding-table">
-        <thead>
-          <tr><th></th><th>Standard</th><th>Founding</th></tr>
-        </thead>
-        <tbody>
-          <tr><td>Your fee</td><td>4%</td><td><strong>2.5%</strong></td></tr>
-          <tr><td>Subscriber fee</td><td>4%</td><td>4%</td></tr>
-        </tbody>
-      </table>
+    function updateNav() {
+      if (window.scrollY > 10) {
+        nav.classList.add('nav-scrolled');
+      } else {
+        nav.classList.remove('nav-scrolled');
+      }
+    }
 
-      <p class="founding-savings">You keep <strong>97.5%</strong> instead of 96%. Permanently.</p>
+    window.addEventListener('scroll', updateNav, { passive: true });
+    updateNav();
 
-      <div class="founding-benefits">
-        <h3>What Founding Members Get</h3>
-        <ul>
-          <li>✓ 2.5% creator fee (vs 4%) — locked forever</li>
-          <li>✓ Full pay statement features</li>
-          <li>✓ Early access to new features</li>
-          <li>✓ Direct line to the founders</li>
-          <li>✓ Input on product roadmap</li>
-          <li>✓ Founding Member badge</li>
-        </ul>
-      </div>
+    // Mobile Menu Toggle
+    const hamburger = document.querySelector('.nav-hamburger');
+    const mobileMenu = document.querySelector('.mobile-menu');
 
-      <div class="founding-progress">
-        <div class="progress-bar">
-          <div class="progress-fill" style="width: 71%"></div>
-        </div>
-        <p class="progress-text">71/100 spots claimed</p>
-      </div>
+    hamburger.addEventListener('click', () => {
+      hamburger.classList.toggle('active');
+      mobileMenu.classList.toggle('active');
+      document.body.style.overflow = mobileMenu.classList.contains('active') ? 'hidden' : '';
+    });
 
-      <div class="section-cta">
-        <a href="https://app.natepay.co/signup" class="btn btn-primary btn-lg">Claim Your Founding Spot</a>
-      </div>
+    // Close mobile menu when clicking a link
+    document.querySelectorAll('.mobile-menu-link, .mobile-menu-cta').forEach(link => {
+      link.addEventListener('click', () => {
+        hamburger.classList.remove('active');
+        mobileMenu.classList.remove('active');
+        document.body.style.overflow = '';
+      });
+    });
 
-      <div class="founding-why">
-        <h3>Why are we doing this?</h3>
-        <p>Honestly? We need early users more than we need revenue.</p>
-        <p>We need people to try it, break it, tell us what's wrong, and help us build something that actually works.</p>
-        <p>In exchange, you get a permanent discount.</p>
-        <p><strong>Fair trade.</strong></p>
-      </div>
-    </div>
-  </section>
+    // Scroll Reveal with Intersection Observer
+    const revealElements = document.querySelectorAll('.section-label, .tabs, .solution-card');
 
-  <!-- FAQ -->
-  <section class="faq" id="faq">
-    <div class="container container-narrow">
-      <h2 class="reveal">FAQ</h2>
+    const revealObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('revealed');
+          revealObserver.unobserve(entry.target);
+        }
+      });
+    }, {
+      threshold: 0.2,
+      rootMargin: '0px 0px -50px 0px'
+    });
 
-      <div class="faq-list reveal">
-        <details class="faq-item">
-          <summary>How is this different from Venmo/CashApp/PayPal.me?</summary>
-          <p>Those are for one-time payments. Send a request, get paid once.</p>
-          <p>NatePay is for recurring payments. Share a link, get paid every month. Automatically. Plus you get pay statements.</p>
-        </details>
+    revealElements.forEach(el => revealObserver.observe(el));
 
-        <details class="faq-item">
-          <summary>How is this different from Patreon?</summary>
-          <p>Patreon requires their whole platform — a creator page, tiers, their branding. Total fees are 15-18%. Payouts outside the US go through Payoneer.</p>
-          <p>NatePay is just a link. 9-10% total fees. Direct payout to your local bank. Plus pay statements you can use for lease applications.</p>
-          <p>Use Patreon if you need their discovery and community features. Use NatePay if you already have your audience.</p>
-        </details>
+    // Use Case Sections Scroll Reveal
+    const useCaseElements = document.querySelectorAll(
+      '.use-case-header .section-label, .use-case-header-headline, .use-case-card, .use-case-full-inner'
+    );
 
-        <details class="faq-item">
-          <summary>How is this different from Stripe Payment Links?</summary>
-          <p>Stripe requires a registered business account. It's designed for companies, not individuals.</p>
-          <p>NatePay works for anyone. No business registration required.</p>
-        </details>
+    const useCaseObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('revealed');
+          useCaseObserver.unobserve(entry.target);
+        }
+      });
+    }, {
+      threshold: 0.15,
+      rootMargin: '0px 0px -80px 0px'
+    });
 
-        <details class="faq-item">
-          <summary>Do I need a business to use this?</summary>
-          <p>No. NatePay works for individuals.</p>
-          <p>Freelancers, creators, remote workers, families — all welcome.</p>
-        </details>
+    useCaseElements.forEach(el => useCaseObserver.observe(el));
 
-        <details class="faq-item">
-          <summary>How do the pay statements work?</summary>
-          <p>Every payment generates a pay statement automatically.</p>
-          <p>Download it as a PDF. It shows: Payer name, payment period, gross amount, fees, net payment, year-to-date totals, and a QR code for verification.</p>
-          <p>When someone scans the QR (or visits the verification URL), they see a page confirming the payment is real.</p>
-          <p>Landlords, banks, visa offices — they can verify instantly.</p>
-        </details>
+    // Tab switching with animation
+    const tabs = document.querySelectorAll('.tab');
+    const panes = document.querySelectorAll('.tab-pane');
 
-        <details class="faq-item">
-          <summary>Is my money safe?</summary>
-          <p>Payments are processed by Stripe and Paystack — same infrastructure as Amazon, Shopify, and thousands of other businesses.</p>
-          <p>We never hold your funds. Payments go directly to your bank on a regular settlement schedule (typically 2-3 days).</p>
-        </details>
+    tabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        const target = tab.dataset.tab;
+        const currentPane = document.querySelector('.tab-pane.active');
+        const targetPane = document.querySelector(`.tab-pane[data-tab="${target}"]`);
 
-        <details class="faq-item">
-          <summary>How long do payouts take?</summary>
-          <p>Typically 2-3 business days after payment is received.</p>
-          <p>Nigeria: Often same-day or next-day.<br>
-          Kenya: 1-2 business days.<br>
-          South Africa: 2-3 business days.<br>
-          US/UK/EU: 2-3 business days.</p>
-        </details>
+        if (currentPane === targetPane) return;
 
-        <details class="faq-item">
-          <summary>Can payers cancel their subscription?</summary>
-          <p>Yes, anytime. No lock-in for either side.</p>
-          <p>They can manage their subscription from their email receipt or through their NatePay account.</p>
-        </details>
+        // Update tabs
+        tabs.forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
 
-        <details class="faq-item">
-          <summary>What if I'm outside the supported countries?</summary>
-          <p>Payers can pay from almost anywhere (US, UK, EU, Canada, etc.).</p>
-          <p>Recipients currently need to be in: US, UK, EU, Nigeria, Kenya, or South Africa.</p>
-          <p>We're adding more payout countries soon. Join the waitlist and we'll notify you.</p>
-        </details>
+        // Animate out current pane, then animate in new pane
+        if (currentPane) {
+          currentPane.classList.remove('active');
+        }
 
-        <details class="faq-item">
-          <summary>What currencies do you support?</summary>
-          <p>Payers can pay in: USD, GBP, EUR, CAD, and more.</p>
-          <p>Recipients receive in their local currency: USD, GBP, EUR, NGN, KES, ZAR.</p>
-          <p>Conversion is automatic. No extra fees beyond what's shown.</p>
-        </details>
-      </div>
-    </div>
-  </section>
+        if (targetPane) {
+          targetPane.classList.add('active');
+        }
+      });
+    });
 
-  <!-- Final CTA -->
-  <section class="final-cta">
-    <div class="container">
-      <h2 class="reveal">The link that pays you monthly.<br><span class="hero-accent">With proof.</span></h2>
+    // Feature accordion toggle
+    document.querySelectorAll('.feature-header').forEach(header => {
+      header.addEventListener('click', () => {
+        const item = header.closest('.feature-item');
+        const accordion = item.closest('.feature-accordion');
 
-      <div class="final-box reveal-scale">
-        <p>Create a payment link.<br>
-        Share it.<br>
-        Get paid every month.<br>
-        Download pay statements.<br>
-        Prove your income.</p>
-        <p class="final-use-cases">Subscriptions, retainers, salaries, allowances, rent — anything recurring.</p>
-        <a href="https://app.natepay.co/signup" class="btn btn-primary btn-lg">Create Your Link</a>
-        <p class="final-note">Free to start. Only pay when you get paid.</p>
-      </div>
-    </div>
-  </section>
+        // Close all other items in same accordion
+        accordion.querySelectorAll('.feature-item').forEach(i => {
+          if (i !== item) i.classList.remove('active');
+        });
 
-  <!-- Footer -->
-  <footer class="footer">
-    <div class="container">
-      <div class="footer-brand">
-        <img src="logo.svg" alt="NatePay" width="85" height="29">
-        <p>The link that pays you monthly. With proof.</p>
-      </div>
-      <div class="footer-links">
-        <a href="https://twitter.com/natepayapp">Twitter</a>
-        <a href="https://linkedin.com/company/natepay">LinkedIn</a>
-        <a href="mailto:support@natepay.co">Support</a>
-        <a href="/terms">Terms</a>
-        <a href="/privacy">Privacy</a>
-      </div>
-      <div class="footer-legal">
-        <p>&copy; 2025 NatePay, LLC · Delaware, USA</p>
-      </div>
-    </div>
-  </footer>
+        // Toggle clicked item
+        item.classList.toggle('active');
+      });
+    });
 
-  <script src="script.js"></script>
+    // FAQ accordion toggle
+    document.querySelectorAll('.faq-header').forEach(header => {
+      header.addEventListener('click', () => {
+        const item = header.closest('.faq-item');
+        const accordion = item.closest('.faq-accordion');
+
+        // Close all other items in same accordion
+        accordion.querySelectorAll('.faq-item').forEach(i => {
+          if (i !== item) i.classList.remove('active');
+        });
+
+        // Toggle clicked item
+        item.classList.toggle('active');
+      });
+    });
+
+    // Scroll reveal for FAQ section
+    const faqElements = document.querySelectorAll(
+      '.faq-section .section-label, .faq-headline, .faq-item'
+    );
+
+    const faqObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('revealed');
+          faqObserver.unobserve(entry.target);
+        }
+      });
+    }, {
+      threshold: 0.15,
+      rootMargin: '0px 0px -50px 0px'
+    });
+
+    faqElements.forEach(el => faqObserver.observe(el));
+
+    // Scroll reveal for Trust section
+    const trustElements = document.querySelectorAll(
+      '.trust-content, .trust-item'
+    );
+
+    const trustObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('revealed');
+          trustObserver.unobserve(entry.target);
+        }
+      });
+    }, {
+      threshold: 0.15,
+      rootMargin: '0px 0px -50px 0px'
+    });
+
+    trustElements.forEach(el => trustObserver.observe(el));
+
+    // Scroll reveal for Final CTA section
+    const ctaElements = document.querySelectorAll(
+      '.final-cta-content, .final-cta-integrations'
+    );
+
+    const ctaObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('revealed');
+          ctaObserver.unobserve(entry.target);
+        }
+      });
+    }, {
+      threshold: 0.2,
+      rootMargin: '0px 0px -50px 0px'
+    });
+
+    ctaElements.forEach(el => ctaObserver.observe(el));
+
+    // Preloader with progress bar - properly preloads all images
+    (function() {
+      const preloader = document.getElementById('preloader');
+      const progressBar = document.getElementById('preloader-bar');
+      if (!preloader || !progressBar) return;
+
+      let loadedCount = 0;
+      let finished = false;
+
+      // All images that need to be preloaded (including CSS backgrounds)
+      const imagesToPreload = [
+        'logo.svg',
+        'bg-image.png',
+        'Vector87.svg',
+        'sleeping fox.png',
+        'service-mockup.png',
+        'checkout-mockup.png',
+        'summary.png',
+        'suit.svg',
+        'gift-icon.svg',
+        'arr.svg',
+        'Stripe_Logo,_revised_2016.svg',
+        'Paystack_idSL4BuSLF_0.svg'
+      ];
+
+      // Fonts to preload
+      const fontsToPreload = [
+        'SF-Pro-Rounded-Light.woff2',
+        'SF-Pro-Rounded-Regular.woff2',
+        'SF-Pro-Rounded-Medium.woff2',
+        'SF-Pro-Rounded-Bold.woff2',
+        'SF-Compact-Rounded-Regular.woff2',
+        'SF-Compact-Rounded-Semibold.woff2'
+      ];
+
+      const totalResources = imagesToPreload.length + fontsToPreload.length;
+
+      function updateProgress() {
+        if (finished) return;
+        loadedCount++;
+        const progress = Math.min(100, Math.round((loadedCount / totalResources) * 100));
+        progressBar.style.width = progress + '%';
+
+        if (loadedCount >= totalResources) {
+          finishLoading();
+        }
+      }
+
+      function finishLoading() {
+        if (finished) return;
+        finished = true;
+        progressBar.style.width = '100%';
+        setTimeout(() => {
+          preloader.classList.add('loaded');
+          setTimeout(() => preloader.remove(), 500);
+        }, 200);
+      }
+
+      // Preload images by creating Image objects
+      imagesToPreload.forEach(src => {
+        const img = new Image();
+        img.onload = updateProgress;
+        img.onerror = updateProgress; // Count errors as loaded to not block
+        img.src = src;
+      });
+
+      // Preload fonts
+      fontsToPreload.forEach(fontUrl => {
+        const link = document.createElement('link');
+        link.rel = 'preload';
+        link.as = 'font';
+        link.type = 'font/woff2';
+        link.crossOrigin = 'anonymous';
+        link.href = fontUrl;
+        link.onload = updateProgress;
+        link.onerror = updateProgress;
+        document.head.appendChild(link);
+      });
+
+      // Fallback: complete after 5s max (longer for slow connections)
+      setTimeout(finishLoading, 5000);
+    })();
+
+  </script>
 </body>
 </html>

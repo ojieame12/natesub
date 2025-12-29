@@ -220,7 +220,8 @@ describe('PaymentMethodStep', () => {
     })
   })
 
-  it('sets stripe_return_to to next step (currentStep + 1) for NG 7-step flow', async () => {
+  it('sets stripe_return_to to next step (currentStep + 1) for NG 9-step flow', async () => {
+    // New flow: Start(0) → Email(1) → OTP(2) → Identity(3) → Purpose(4) → Avatar(5) → Username(6) → Payment(7) → Review(8)
     useOnboardingStore.setState({
       username: 'testuser',
       firstName: 'Test',
@@ -230,7 +231,8 @@ describe('PaymentMethodStep', () => {
       currency: 'NGN',
       pricingModel: 'single',
       singleAmount: 5000,
-      currentStep: 5, // Payment step in 7-step flow (no address)
+      purpose: 'support', // Non-service mode
+      currentStep: 7, // Payment step in 9-step flow (no address)
     })
 
     const mockConnectRes = { success: true, onboardingUrl: 'https://connect.stripe.com/setup' }
@@ -250,8 +252,8 @@ describe('PaymentMethodStep', () => {
     fireEvent.click(screen.getByText('Connect with Stripe'))
 
     await waitFor(() => {
-      // Should set stripe_return_to to currentStep + 1 (6 = Review step for NG)
-      expect(setItemSpy).toHaveBeenCalledWith('stripe_return_to', '/onboarding?step=6')
+      // Should set stripe_return_to to currentStep + 1 (8 = Review step for NG non-service)
+      expect(setItemSpy).toHaveBeenCalledWith('stripe_return_to', '/onboarding?step=8')
     })
 
     // Cleanup
@@ -259,7 +261,8 @@ describe('PaymentMethodStep', () => {
     ;(window as any).location = originalLocation
   })
 
-  it('sets stripe_return_to to step 7 for US 8-step flow', async () => {
+  it('sets stripe_return_to to step 9 for US 10-step flow', async () => {
+    // New flow with address: Start(0) → Email(1) → OTP(2) → Identity(3) → Address(4) → Purpose(5) → Avatar(6) → Username(7) → Payment(8) → Review(9)
     useOnboardingStore.setState({
       username: 'testuser',
       firstName: 'Test',
@@ -269,7 +272,8 @@ describe('PaymentMethodStep', () => {
       currency: 'USD',
       pricingModel: 'single',
       singleAmount: 10,
-      currentStep: 6, // Payment step in 8-step flow (with address)
+      purpose: 'support', // Non-service mode
+      currentStep: 8, // Payment step in 10-step flow (with address)
     })
 
     const mockConnectRes = { success: true, onboardingUrl: 'https://connect.stripe.com/setup' }
@@ -289,8 +293,8 @@ describe('PaymentMethodStep', () => {
     fireEvent.click(screen.getByText('Connect with Stripe'))
 
     await waitFor(() => {
-      // Should set stripe_return_to to currentStep + 1 (7 = Review step for US)
-      expect(setItemSpy).toHaveBeenCalledWith('stripe_return_to', '/onboarding?step=7')
+      // Should set stripe_return_to to currentStep + 1 (9 = Review step for US non-service)
+      expect(setItemSpy).toHaveBeenCalledWith('stripe_return_to', '/onboarding?step=9')
     })
 
     // Cleanup

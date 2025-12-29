@@ -12,7 +12,7 @@ import {
     getCrossBorderCurrencyOptions,
 } from '../utils/regionConfig'
 import { api } from '../api'
-import { uploadFile, useGeneratePerks, useAIConfig } from '../api/hooks'
+import { uploadFile, useGeneratePerks, useAIConfig, useCurrentUser } from '../api/hooks'
 import './onboarding.css'
 
 // Purpose options with icons for visual differentiation
@@ -44,6 +44,7 @@ export default function PersonalReviewStep() {
     const generatePerksMutation = useGeneratePerks()
     const { data: aiConfig } = useAIConfig()
     const isAIAvailable = aiConfig?.available ?? false
+    const { data: userData } = useCurrentUser()
 
     const {
         firstName,
@@ -80,8 +81,11 @@ export default function PersonalReviewStep() {
     // Check if we're in service mode
     const isServiceMode = purpose === 'service'
 
+    // Use store → backend onboardingData fallback chain (handles localStorage cleared)
+    const resolvedPaymentProvider = paymentProvider || userData?.onboarding?.data?.paymentProvider
+
     // Determine if user is a cross-border creator using Stripe
-    const isCrossBorderStripe = paymentProvider === 'stripe' && isCrossBorderCountry(countryCode)
+    const isCrossBorderStripe = resolvedPaymentProvider === 'stripe' && isCrossBorderCountry(countryCode)
     const localCurrencyName = getLocalCurrencyName(countryCode)
 
     // Construct display name from first/last name
@@ -309,7 +313,7 @@ export default function PersonalReviewStep() {
                 pricingModel: 'single',
                 singleAmount: finalAmount,
                 tiers: null,
-                paymentProvider,
+                paymentProvider: resolvedPaymentProvider,
                 // Address fields for Stripe KYC prefill (trimmed for clean data)
                 address: address?.trim() || undefined,
                 city: city?.trim() || undefined,
@@ -406,16 +410,17 @@ export default function PersonalReviewStep() {
                         {/* Link preview */}
                         <span className="setup-link">{getShareableLink(username || '...')}</span>
 
-                        {/* Purpose selector */}
+                        {/* Purpose selector - disabled for service mode to prevent step mismatch */}
                         <Pressable
-                            className="setup-purpose"
-                            onClick={() => setShowPurposeDrawer(true)}
+                            className={`setup-purpose ${isServiceMode ? 'disabled' : ''}`}
+                            onClick={() => !isServiceMode && setShowPurposeDrawer(true)}
+                            disabled={isServiceMode}
                         >
                             <span className="setup-purpose-label">For</span>
                             <span className="setup-purpose-value">
                                 {PURPOSE_OPTIONS.find(p => p.value === resolvedPurpose)?.label || 'Support Me'}
                             </span>
-                            <ChevronDown size={16} className="setup-purpose-chevron" />
+                            {!isServiceMode && <ChevronDown size={16} className="setup-purpose-chevron" />}
                         </Pressable>
                     </div>
 
@@ -618,22 +623,27 @@ export default function PersonalReviewStep() {
                 title="What's this for?"
             >
                 <div className="purpose-list">
-                    {PURPOSE_OPTIONS.map((option) => (
-                        <Pressable
-                            key={option.value}
-                            className={`purpose-option ${resolvedPurpose === option.value ? 'selected' : ''}`}
-                            onClick={() => {
-                                setPurpose(option.value)
-                                setShowPurposeDrawer(false)
-                            }}
-                        >
-                            <span className="purpose-option-icon">{option.icon}</span>
-                            <span className="purpose-option-name">{option.label}</span>
-                            {resolvedPurpose === option.value && (
-                                <Check size={20} className="purpose-option-check" />
-                            )}
-                        </Pressable>
-                    ))}
+                    {/* Filter out 'service' option if not already in service mode
+                        to prevent confusing step jumps. Service mode requires
+                        additional steps that are inserted before Review. */}
+                    {PURPOSE_OPTIONS
+                        .filter(option => isServiceMode || option.value !== 'service')
+                        .map((option) => (
+                            <Pressable
+                                key={option.value}
+                                className={`purpose-option ${resolvedPurpose === option.value ? 'selected' : ''}`}
+                                onClick={() => {
+                                    setPurpose(option.value)
+                                    setShowPurposeDrawer(false)
+                                }}
+                            >
+                                <span className="purpose-option-icon">{option.icon}</span>
+                                <span className="purpose-option-name">{option.label}</span>
+                                {resolvedPurpose === option.value && (
+                                    <Check size={20} className="purpose-option-check" />
+                                )}
+                            </Pressable>
+                        ))}
                 </div>
             </BottomDrawer>
 

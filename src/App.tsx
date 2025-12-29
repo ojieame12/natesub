@@ -7,6 +7,7 @@ import { useOnboardingStore } from './onboarding/store'
 import { PageSkeleton, ScrollRestoration, useToast, SplashScreen, AmbientBackground, Pressable } from './components'
 import { useAuthState } from './hooks/useAuthState'
 import { AUTH_ERROR_EVENT } from './api/client'
+import { clearPersistedCache, queryClient } from './api/provider'
 import { isReservedUsername } from './utils/constants'
 import { prefetchRoutes, prefetchCoreData } from './utils/prefetch'
 import './index.css'
@@ -127,6 +128,10 @@ function AuthErrorHandler() {
 
       // On protected routes, show warning and redirect to login
       toast.warning('Session expired. Please sign in again.')
+
+      // Clear cached data to prevent cross-user leakage
+      clearPersistedCache()
+      queryClient.clear()
 
       // Small delay to let user see the toast before redirect
       setTimeout(() => {

@@ -4,7 +4,7 @@ import { z } from 'zod'
 import crypto from 'crypto'
 import { db } from '../db/client.js'
 import { requireAuth } from '../middleware/auth.js'
-import { publicRateLimit } from '../middleware/rateLimit.js'
+import { analyticsRateLimit } from '../middleware/rateLimit.js'
 import { cached, CACHE_TTL } from '../utils/cache.js'
 
 const analytics = new Hono()
@@ -55,7 +55,7 @@ function getDeviceType(userAgent: string): string {
 
 analytics.post(
   '/view',
-  publicRateLimit,
+  analyticsRateLimit,
   zValidator('json', pageViewSchema),
   async (c) => {
   try {
@@ -118,7 +118,7 @@ analytics.post(
 
 analytics.patch(
   '/view/:viewId',
-  publicRateLimit,
+  analyticsRateLimit,
   zValidator('param', z.object({ viewId: z.string().uuid() })),
   zValidator('json', updateViewSchema),
   async (c) => {

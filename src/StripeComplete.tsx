@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { CheckCircle, AlertCircle, Loader2, Building2, Calendar, ExternalLink, ArrowLeft } from 'lucide-react'
 import { api } from './api'
-import { useProfile } from './api/hooks'
+import { useProfile, useCurrentUser } from './api/hooks'
 import { useOnboardingStore } from './onboarding/store'
 import { setPaymentConfirmed } from './utils/paymentConfirmed'
 import { getReviewStepIndex } from './utils/constants'
@@ -56,8 +56,14 @@ export default function StripeComplete() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { data: profileData } = useProfile()
+  const { data: userData } = useCurrentUser()
   const profile = profileData?.profile
-  const { reset: resetOnboarding, countryCode } = useOnboardingStore()
+  const { reset: resetOnboarding, countryCode, purpose } = useOnboardingStore()
+
+  // Use store → profile → backend onboardingData fallback chain (most robust)
+  // This handles cases where localStorage is cleared (Safari, storage reset)
+  const resolvedCountryCode = countryCode || profile?.countryCode || userData?.onboarding?.data?.countryCode
+  const resolvedPurpose = purpose || profile?.purpose || userData?.onboarding?.data?.purpose
 
   const [status, setStatus] = useState<'loading' | 'success' | 'pending' | 'restricted' | 'network_error'>('loading')
   const [details, setDetails] = useState<StripeDetails | null>(null)
@@ -246,18 +252,19 @@ export default function StripeComplete() {
       sessionStorage.removeItem('stripe_return_to')
       navigate(returnTo, { replace: true })
     } else if (source === 'onboarding') {
-      // Return to Review step (dynamic based on country/flow length)
-      const reviewStep = getReviewStepIndex(countryCode)
+      // Return to Review step (dynamic based on country/purpose/flow length)
+      // Uses resolved values with fallback chain for robustness
+      const reviewStep = getReviewStepIndex(resolvedCountryCode, resolvedPurpose)
       navigate(`/onboarding?step=${reviewStep}`, { replace: true })
     } else if (profile && !profile.isPublic) {
       // Fallback: If source is unknown (lost session) but profile is not public (draft),
       // assume we are in onboarding flow and need to launch.
-      const reviewStep = getReviewStepIndex(countryCode || profile.countryCode)
+      const reviewStep = getReviewStepIndex(resolvedCountryCode, resolvedPurpose)
       navigate(`/onboarding?step=${reviewStep}`, { replace: true })
     } else {
       navigate('/dashboard', { replace: true })
     }
-  }, [navigate, source, profile, countryCode])
+  }, [navigate, source, profile, resolvedCountryCode, resolvedPurpose])
 
   // Auto-continue after success for a smoother flow (especially on mobile).
   // Only do this when user came from a known flow, so manual visits don't instantly redirect away.
@@ -297,7 +304,8 @@ export default function StripeComplete() {
       sessionStorage.removeItem('stripe_return_to')
       navigate(returnTo, { replace: true })
     } else if (source === 'onboarding') {
-      const reviewStep = getReviewStepIndex(countryCode)
+      // Uses resolved values with fallback chain for robustness
+      const reviewStep = getReviewStepIndex(resolvedCountryCode, resolvedPurpose)
       navigate(`/onboarding?step=${reviewStep}`, { replace: true })
     } else {
       navigate('/dashboard', { replace: true })

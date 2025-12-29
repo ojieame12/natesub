@@ -26,12 +26,25 @@ export interface OnboardingState {
   redirectTo: string
 }
 
-// Dynamic completion step based on whether address step is shown
-// - With address step: 8 steps (0-7), completion at step 8
-// - Without address step: 7 steps (0-6), completion at step 7
+// Dynamic completion step based on country AND purpose
+// Step counts (must match frontend getOnboardingStepCount):
+// - No address, non-service: 9 steps (0-8)
+// - With address, non-service: 10 steps (0-9)
+// - No address, service: 11 steps (0-10) - includes ServiceDesc + AIGen
+// - With address, service: 12 steps (0-11)
 // Note: shouldSkipAddress is imported from countryConfig.ts (single source of truth)
-function getOnboardingCompleteStep(countryCode?: string | null): number {
-  return shouldSkipAddress(countryCode) ? 7 : 8
+export function getOnboardingCompleteStep(
+  countryCode?: string | null,
+  purpose?: string | null
+): number {
+  const hasAddressStep = !shouldSkipAddress(countryCode)
+  const isServiceMode = purpose === 'service'
+
+  let totalSteps = 9 // Base step count (non-service, no address)
+  if (hasAddressStep) totalSteps += 1
+  if (isServiceMode) totalSteps += 2 // ServiceDescription + AIGenerating
+
+  return totalSteps
 }
 
 // Hash token for storage (never store raw tokens)
@@ -131,9 +144,11 @@ export function computeOnboardingState(user: {
     paymentProvider: string | null
   } | null
 }): OnboardingState {
-  // Dynamic completion step based on country (from onboarding data)
-  const countryCode = (user.onboardingData as Record<string, any>)?.countryCode
-  const ONBOARDING_COMPLETE_STEP = getOnboardingCompleteStep(countryCode)
+  // Dynamic completion step based on country AND purpose (from onboarding data)
+  const onboardingData = user.onboardingData as Record<string, any> | null
+  const countryCode = onboardingData?.countryCode
+  const purpose = onboardingData?.purpose
+  const ONBOARDING_COMPLETE_STEP = getOnboardingCompleteStep(countryCode, purpose)
 
   const hasProfile = !!user.profile
   // Payment is only "active" when Stripe/Paystack is fully connected
@@ -499,11 +514,17 @@ export async function getCurrentUserWithOnboarding(userId: string) {
   }
 }
 
+// Valid step keys for onboarding
+export type OnboardingStepKey =
+  | 'start' | 'email' | 'otp' | 'identity' | 'address' | 'purpose'
+  | 'avatar' | 'username' | 'payments' | 'service-desc' | 'ai-gen' | 'review'
+
 // Save onboarding progress
 export async function saveOnboardingProgress(
   userId: string,
   data: {
     step: number
+    stepKey?: OnboardingStepKey // Canonical step identifier
     branch?: 'personal' | 'service'
     data?: Record<string, any>
   }
@@ -515,11 +536,17 @@ export async function saveOnboardingProgress(
   })
 
   const existingData = (user?.onboardingData as Record<string, any>) || {}
-  const mergedData = data.data ? { ...existingData, ...data.data } : existingData
+  // Include stepKey in merged data for persistence
+  const incomingData = data.data || {}
+  if (data.stepKey) {
+    incomingData.stepKey = data.stepKey
+  }
+  const mergedData = { ...existingData, ...incomingData }
 
-  // Dynamic completion step based on country
+  // Dynamic completion step based on country AND purpose
   const countryCode = mergedData.countryCode || existingData.countryCode
-  const ONBOARDING_COMPLETE_STEP = getOnboardingCompleteStep(countryCode)
+  const purpose = mergedData.purpose || existingData.purpose
+  const ONBOARDING_COMPLETE_STEP = getOnboardingCompleteStep(countryCode, purpose)
 
   // When onboarding is complete, clear the state
   if (data.step >= ONBOARDING_COMPLETE_STEP) {

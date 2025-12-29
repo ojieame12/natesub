@@ -43,6 +43,7 @@ export default function RequestPreview() {
     const currency = userData?.profile?.currency || 'USD'
     const currencySymbol = getCurrencySymbol(currency)
     const isService = userData?.profile?.purpose === 'service'
+    const perks = userData?.profile?.perks || []
 
     // API hooks
     const { mutateAsync: createRequest } = useCreateRequest()
@@ -251,6 +252,21 @@ export default function RequestPreview() {
                                 </div>
                             )}
                         </div>
+
+                        {/* Service Mode: What's Included */}
+                        {isService && perks.length > 0 && (
+                            <div className="request-preview-perks">
+                                <span className="request-preview-perks-title">What's included</span>
+                                <ul className="request-preview-perks-list">
+                                    {perks.filter((p: { enabled?: boolean }) => p.enabled !== false).map((perk: { id?: string; title: string }, i: number) => (
+                                        <li key={perk.id || i} className="request-preview-perk-item">
+                                            <span className="request-preview-perk-check">✓</span>
+                                            <span>{perk.title}</span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        )}
 
                         {/* Message Input */}
                         <div className="request-preview-message editable">

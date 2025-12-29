@@ -239,10 +239,10 @@ system.post('/sms/test', async (c) => {
   }
 
   if (!isSmsEnabled()) {
+    // Don't reveal specific configuration details - just indicate SMS is unavailable
     return c.json({
-      error: 'SMS is not enabled. Set ENABLE_SMS=true and configure BIRD_ACCESS_KEY, BIRD_WORKSPACE_ID, BIRD_CHANNEL_ID',
-      enabled: env.ENABLE_SMS,
-      configured: !!(env.BIRD_ACCESS_KEY && env.BIRD_WORKSPACE_ID && env.BIRD_CHANNEL_ID),
+      error: 'SMS is not enabled. Contact system administrator.',
+      enabled: false,
     }, 400)
   }
 

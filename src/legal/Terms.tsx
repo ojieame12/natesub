@@ -172,7 +172,7 @@ export default function Terms() {
                 <div className="legal-contact">
                     <p>
                         Questions about these terms? Contact us at{' '}
-                        <a href="mailto:legal@natepay.co">legal@natepay.co</a>
+                        <a href="mailto:support@natepay.co">support@natepay.co</a>
                     </p>
                 </div>
             </div>

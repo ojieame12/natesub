@@ -55,6 +55,70 @@ const safeStorage = createSafeStorage()
 
 // === Types ===
 
+// Step keys - canonical identifiers for each onboarding step
+// These remain stable even when step indices change due to conditional steps
+export type OnboardingStepKey =
+    | 'start'
+    | 'email'
+    | 'otp'
+    | 'identity'
+    | 'address'      // Conditional: only for non-cross-border countries
+    | 'purpose'
+    | 'avatar'
+    | 'username'
+    | 'payments'
+    | 'service-desc' // Conditional: only for service mode
+    | 'ai-gen'       // Conditional: only for service mode
+    | 'review'
+
+// All possible step keys in canonical order (some may be skipped)
+export const ALL_STEP_KEYS: OnboardingStepKey[] = [
+    'start',
+    'email',
+    'otp',
+    'identity',
+    'address',
+    'purpose',
+    'avatar',
+    'username',
+    'payments',
+    'service-desc',
+    'ai-gen',
+    'review',
+]
+
+// Get visible step keys based on current configuration
+export function getVisibleStepKeys(options: {
+    showAddressStep: boolean
+    isServiceMode: boolean
+}): OnboardingStepKey[] {
+    const { showAddressStep, isServiceMode } = options
+    return ALL_STEP_KEYS.filter(key => {
+        if (key === 'address') return showAddressStep
+        if (key === 'service-desc' || key === 'ai-gen') return isServiceMode
+        return true
+    })
+}
+
+// Convert step key to index for current configuration
+export function stepKeyToIndex(
+    key: OnboardingStepKey,
+    options: { showAddressStep: boolean; isServiceMode: boolean }
+): number {
+    const visibleKeys = getVisibleStepKeys(options)
+    const index = visibleKeys.indexOf(key)
+    return index >= 0 ? index : 0
+}
+
+// Convert step index to key for current configuration
+export function stepIndexToKey(
+    index: number,
+    options: { showAddressStep: boolean; isServiceMode: boolean }
+): OnboardingStepKey {
+    const visibleKeys = getVisibleStepKeys(options)
+    return visibleKeys[index] || 'start'
+}
+
 // Subscription purpose - why someone would subscribe to you
 export type SubscriptionPurpose =
     | 'tips'              // Tips & Appreciation - fans showing gratitude
@@ -94,8 +158,10 @@ export interface ServicePerk {
 
 // === Store Interface ===
 interface OnboardingStore {
-    // Current step
+    // Current step (numeric index - computed from stepKey)
     currentStep: number
+    // Current step key (canonical identifier - primary source of truth)
+    currentStepKey: OnboardingStepKey
 
     // Auth
     email: string
@@ -166,10 +232,13 @@ interface OnboardingStore {
     nextStep: () => void
     prevStep: () => void
     goToStep: (step: number) => void
+    goToStepKey: (key: OnboardingStepKey) => void
     reset: () => void
     // Hydrate from server data (for resume flows)
+    // Supports both legacy numeric step and new stepKey
     hydrateFromServer: (data: {
         step?: number
+        stepKey?: OnboardingStepKey
         data?: Record<string, any> | null
     }) => void
 }
@@ -184,6 +253,7 @@ const defaultTiers: SubscriptionTier[] = [
 
 const initialState = {
     currentStep: 0,
+    currentStepKey: 'start' as OnboardingStepKey,
     email: '',
     otp: '',
     firstName: '',
@@ -257,6 +327,7 @@ export const useOnboardingStore = create<OnboardingStore>()(
             setFeeMode: (mode) => set({ feeMode: mode }),
 
             // Navigation - with debounce protection against rapid tapping
+            // Note: nextStep/prevStep update index but not key (key is updated by index.tsx)
             nextStep: () => set((state) => {
                 // Prevent rapid navigation (300ms cooldown)
                 const now = Date.now()
@@ -291,6 +362,17 @@ export const useOnboardingStore = create<OnboardingStore>()(
                     _lastNavTime: now,
                 }
             }),
+            goToStepKey: (key) => set((state) => {
+                const now = Date.now()
+                const lastNav = (state as any)._lastNavTime || 0
+                if (now - lastNav < 300) {
+                    return state
+                }
+                return {
+                    currentStepKey: key,
+                    _lastNavTime: now,
+                }
+            }),
             reset: () => set({
                 ...initialState,
                 // Reset specific fields to their initial values,
@@ -316,7 +398,11 @@ export const useOnboardingStore = create<OnboardingStore>()(
             hydrateFromServer: (serverData) => set(() => {
                 const updates: Partial<typeof initialState> = {}
 
-                // Set step from server
+                // Prefer stepKey over numeric step (stepKey is the canonical identifier)
+                if (serverData.stepKey) {
+                    updates.currentStepKey = serverData.stepKey
+                }
+                // Also support legacy numeric step
                 if (serverData.step !== undefined) {
                     updates.currentStep = serverData.step
                 }
@@ -364,7 +450,7 @@ export const useOnboardingStore = create<OnboardingStore>()(
         }),
         {
             name: 'natepay-onboarding',
-            version: 2, // Bumped to force migration from sessionStorage
+            version: 3, // Bumped to add stepKey support
             // Use localStorage with TTL to persist onboarding progress across tab closes
             // while still preventing stale state via the 24-hour TTL check below
             storage: createJSONStorage(() => safeStorage),
@@ -372,6 +458,7 @@ export const useOnboardingStore = create<OnboardingStore>()(
                 // Persist key state for resume
                 // Note: avatarFile excluded as it is transient/in-memory
                 currentStep: state.currentStep,
+                currentStepKey: state.currentStepKey, // Canonical step identifier
                 email: state.email,
                 firstName: state.firstName,
                 lastName: state.lastName,

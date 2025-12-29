@@ -24,43 +24,61 @@ const defaultOptions: RateLimitOptions = {
   message: 'Too many requests, please try again later',
 }
 
+/**
+ * Normalize an IP address by stripping port numbers
+ */
+function normalizeIp(ip: string): string | null {
+  const trimmed = ip.trim()
+  if (!trimmed) return null
+
+  // Strip :port for IPv4 (keep IPv6 which uses colons differently)
+  if (/^\d{1,3}(?:\.\d{1,3}){3}:\d+$/.test(trimmed)) {
+    return trimmed.replace(/:\d+$/, '')
+  }
+
+  return trimmed
+}
+
 function getClientIp(c: Context): string | null {
-  const candidates = [
-    c.req.header('cf-connecting-ip'),
+  // SECURITY: Prioritize trusted proxy headers that cannot be spoofed by clients
+  // These are set by the reverse proxy (Cloudflare, Railway) and overwrite any client-provided values
+
+  // 1. Cloudflare's real IP header (most trusted when using Cloudflare)
+  const cfIp = c.req.header('cf-connecting-ip')
+  if (cfIp) return normalizeIp(cfIp)
+
+  // 2. Railway/other proxy headers (trusted, set by infrastructure)
+  const trustedHeaders = [
     c.req.header('true-client-ip'),
     c.req.header('fly-client-ip'),
     c.req.header('x-real-ip'),
-    c.req.header('x-forwarded-for'),
   ].filter(Boolean) as string[]
 
-  for (const candidate of candidates) {
-    const raw = candidate.trim()
-    if (!raw) continue
-
-    // x-forwarded-for may contain multiple IPs.
-    const first = raw.split(',')[0]?.trim()
-    if (!first) continue
-
-    // Strip :port for IPv4 (keep IPv6 which uses colons).
-    if (/^\d{1,3}(?:\.\d{1,3}){3}:\d+$/.test(first)) {
-      return first.replace(/:\d+$/, '')
-    }
-
-    return first
+  for (const ip of trustedHeaders) {
+    const normalized = normalizeIp(ip)
+    if (normalized) return normalized
   }
 
+  // 3. x-forwarded-for: Take the RIGHTMOST IP (added by trusted proxy)
+  // Format: "client, proxy1, proxy2" - rightmost is from our trusted proxy
+  // SECURITY: DO NOT use leftmost IP as it's client-provided and spoofable
+  const xff = c.req.header('x-forwarded-for')
+  if (xff) {
+    const ips = xff.split(',').map(ip => ip.trim()).filter(Boolean)
+    // Take last IP (added by our trusted proxy)
+    const lastIp = ips[ips.length - 1]
+    if (lastIp) return normalizeIp(lastIp)
+  }
+
+  // 4. RFC 7239 Forwarded header (fallback)
   const forwarded = c.req.header('forwarded')
   if (forwarded) {
-    // RFC 7239: Forwarded: for=192.0.2.60;proto=http;by=203.0.113.43
     const match = forwarded.match(/for=(?:"?)([^;,"]+)/i)
     if (match?.[1]) {
       let value = match[1].trim()
-      value = value.replace(/^"|"$/g, '')
-      value = value.replace(/^\[|\]$/g, '')
-      if (/^\d{1,3}(?:\.\d{1,3}){3}:\d+$/.test(value)) {
-        value = value.replace(/:\d+$/, '')
-      }
-      if (value) return value
+      value = value.replace(/^"|"$/g, '')  // Remove quotes
+      value = value.replace(/^\[|\]$/g, '') // Remove IPv6 brackets
+      return normalizeIp(value)
     }
   }
 
@@ -373,4 +391,19 @@ export const supportTicketRateLimit = rateLimit({
     return `support_ticket_ratelimit:${getClientIdentifier(c)}`
   },
   message: 'Too many support tickets. Please wait before submitting another.',
+})
+
+/**
+ * Analytics write rate limiter - IP-based
+ * Prevents spam of page view and conversion tracking
+ * 60 requests per hour per IP (stricter than general public)
+ */
+export const analyticsRateLimit = rateLimit({
+  windowMs: 60 * 60 * 1000,  // 1 hour
+  maxRequests: 60,
+  keyPrefix: 'analytics_ratelimit',
+  keyGenerator: (c) => {
+    return `analytics_ratelimit:${getClientIdentifier(c)}`
+  },
+  message: 'Too many requests. Please try again later.',
 })

@@ -1554,3 +1554,54 @@
     font-size: 14px;
     text-align: center;
 }
+
+/* =============================================
+   SERVICE MODE: PERKS IN PREVIEW
+   ============================================= */
+
+.request-preview-perks {
+    margin-top: var(--space-md);
+    padding: var(--space-md);
+    background: var(--neutral-50);
+    border-radius: var(--radius-md);
+}
+
+.request-preview-perks-title {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-tertiary);
+    margin-bottom: var(--space-sm);
+}
+
+.request-preview-perks-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.request-preview-perk-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    font-size: 14px;
+    color: var(--text-primary);
+}
+
+.request-preview-perk-check {
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--neutral-900);
+    color: white;
+    border-radius: 4px;
+    font-size: 10px;
+    flex-shrink: 0;
+}

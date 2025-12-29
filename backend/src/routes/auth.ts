@@ -288,6 +288,18 @@ const onboardingDataSchema = z.object({
   // Service-specific fields
   serviceDescription: z.string().max(500).optional(),
   serviceDescriptionAudioUrl: z.string().url().optional(),
+  servicePerks: z.array(z.object({
+    id: z.string(),
+    title: z.string(),
+    enabled: z.boolean(),
+  })).optional(),
+  bannerUrl: z.string().url().nullable().optional(),
+
+  // Fee mode - who pays the platform fee
+  feeMode: z.enum(['split', 'pass_to_subscriber', 'absorb']).optional(),
+
+  // Payment provider
+  paymentProvider: z.enum(['stripe', 'paystack']).nullable().optional(),
 }).partial()
 
 // Save onboarding progress
@@ -296,6 +308,11 @@ auth.put(
   requireAuth,
   zValidator('json', z.object({
     step: z.number().min(0).max(15),
+    // Step key - canonical identifier for the current step (preferred over numeric step)
+    stepKey: z.enum([
+      'start', 'email', 'otp', 'identity', 'address', 'purpose',
+      'avatar', 'username', 'payments', 'service-desc', 'ai-gen', 'review'
+    ]).optional(),
     branch: z.enum(['personal', 'service']).optional(),
     data: onboardingDataSchema.optional(),
   })),

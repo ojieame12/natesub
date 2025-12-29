@@ -124,10 +124,12 @@ profile.put(
       }
     }
 
-    // Service users must have at least 3 perks
-    if (data.purpose === 'service') {
+    // Service users must have at least 3 perks WHEN PUBLISHING
+    // During onboarding, perks don't exist yet (created in ServiceDescription/AIGenerating steps)
+    // Only validate on publish (Launch step) to allow PaymentMethodStep to save purpose=service
+    if (data.purpose === 'service' && data.isPublic === true) {
       if (!data.perks || data.perks.length < 3) {
-        return c.json({ error: 'Service profiles require at least 3 perks' }, 400)
+        return c.json({ error: 'Service profiles require at least 3 perks to publish' }, 400)
       }
     }
 
@@ -455,6 +457,10 @@ profile.get('/onboarding-status', requireAuth, async (c) => {
     nextStep = 'subscription'
   }
 
+  // Check if service provider needs to retry platform trial
+  // (purpose is 'service' but no subscription started)
+  const needsTrialRetry = isServiceProvider && !userProfile?.platformSubscriptionId
+
   return c.json({
     steps,
     progress: {
@@ -469,6 +475,7 @@ profile.get('/onboarding-status', requireAuth, async (c) => {
     ...(isServiceProvider && {
       plan: 'service',
       subscriptionRequired: true,
+      needsTrialRetry, // True if trial setup failed and should be retried
     }),
   })
 })
@@ -957,5 +964,65 @@ profile.patch(
     return c.json({ success: true, perks })
   }
 )
+
+// Retry platform trial (for service users whose initial trial setup failed)
+profile.post('/retry-platform-trial', requireAuth, async (c) => {
+  const userId = c.get('userId')
+
+  // Get user email and profile
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    select: { email: true },
+  })
+
+  const userProfile = await db.profile.findUnique({
+    where: { userId },
+    select: {
+      purpose: true,
+      platformSubscriptionId: true,
+      platformSubscriptionStatus: true,
+    },
+  })
+
+  if (!user || !userProfile) {
+    return c.json({ error: 'Profile not found' }, 404)
+  }
+
+  // Only allow retry for service providers
+  if (userProfile.purpose !== 'service') {
+    return c.json({ error: 'Platform trial is only available for service providers' }, 400)
+  }
+
+  // Check if they already have a subscription
+  if (userProfile.platformSubscriptionId) {
+    return c.json({
+      success: true,
+      alreadySubscribed: true,
+      subscriptionId: userProfile.platformSubscriptionId,
+      status: userProfile.platformSubscriptionStatus,
+    })
+  }
+
+  // Try to start the trial
+  try {
+    const trialId = await startPlatformTrial(userId, user.email)
+    if (trialId) {
+      console.log(`[profile] Retry: Started platform trial ${trialId} for user ${userId}`)
+      return c.json({
+        success: true,
+        subscriptionId: trialId,
+        status: 'trialing',
+      })
+    } else {
+      // Already had a subscription (shouldn't hit this given the check above)
+      return c.json({ success: true, alreadySubscribed: true })
+    }
+  } catch (err) {
+    console.error(`[profile] Retry: Failed to start platform trial for ${userId}:`, err)
+    return c.json({
+      error: 'Failed to start platform trial. Please try again later.',
+    }, 500)
+  }
+})
 
 export default profile

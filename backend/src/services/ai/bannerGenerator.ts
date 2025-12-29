@@ -15,6 +15,35 @@ import { GoogleGenAI } from '@google/genai'
 import { env } from '../../config/env.js'
 import { uploadBuffer } from '../storage.js'
 
+/**
+ * Validate avatar URL to prevent SSRF attacks.
+ * Only allows URLs from our R2 storage domain.
+ */
+function validateAvatarUrl(url: string): void {
+  // Must be from our R2 public domain
+  if (!url.startsWith(env.R2_PUBLIC_URL)) {
+    throw new Error('Avatar URL must be from trusted storage domain')
+  }
+
+  // Defense-in-depth: parse and validate
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    throw new Error('Invalid avatar URL format')
+  }
+
+  // Block non-HTTPS (except in test)
+  if (parsed.protocol !== 'https:' && process.env.NODE_ENV !== 'test') {
+    throw new Error('Avatar URL must use HTTPS')
+  }
+
+  // Block any URL with credentials
+  if (parsed.username || parsed.password) {
+    throw new Error('Avatar URL cannot contain credentials')
+  }
+}
+
 // Banner configuration for Nano Banana Pro
 const BANNER_ASPECT_RATIO = '16:9' as const  // Supported: 1:1, 2:3, 3:2, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9
 const BANNER_RESOLUTION = '2K' as const      // Supported: 1K, 2K, 4K (uppercase K required)
@@ -72,6 +101,9 @@ export async function generateBanner(
   const client = getClient()
 
   try {
+    // Validate URL before fetching (SSRF protection)
+    validateAvatarUrl(input.avatarUrl)
+
     // Fetch avatar image as base64 with timeout
     const AVATAR_FETCH_TIMEOUT = 10000 // 10 seconds
     const controller = new AbortController()

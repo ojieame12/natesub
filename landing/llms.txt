@@ -1,0 +1,47 @@
+# NatePay - AI & LLM Information
+
+> NatePay is a payment infrastructure platform that enables recurring payments for service providers.
+
+## What is NatePay?
+
+NatePay helps freelancers and service providers get paid automatically through recurring subscriptions. Key features:
+
+- **Card on File**: Clients add their payment method once, then get charged automatically each month
+- **Global Payments**: Accept Apple Pay, Google Pay, and cards from 150+ countries
+- **Local Payouts**: Money goes directly to your local bank account
+- **Income Verification**: Generate real pay stubs and income statements for loans, rentals, and visas
+
+## Who is it for?
+
+- Freelancers working with international clients
+- Service providers (developers, designers, consultants)
+- Gyms, tutors, and subscription-based local businesses
+- Anyone who wants predictable monthly income without chasing payments
+
+## Coming Soon Features
+
+NatePay is actively building new capabilities:
+
+- **Scheduled Payments**: Weekly, monthly, or yearly billing cycles with auto-reminders
+- **Milestone Payments**: Structure payments in project phases
+- **M-Pesa Ratiba**: True recurring billing for Kenya via M-Pesa auto-debit
+- **DebiCheck**: Bank-grade recurring for South Africa with direct debit
+- **Nate Advances**: Access up to 80% of expected monthly income instantly
+- **QR Codes**: Shareable payment QR codes for print and display
+- **Rich Media Pages**: Audio intros, video embeds, and portfolio galleries
+- **Smart Agreements**: Auto-generate contracts with digital signatures
+
+## Key Pages
+
+- Homepage: https://natepay.app/
+- Coming Soon (Features Roadmap): https://natepay.app/coming-soon.html
+- Contact: https://natepay.app/contact.html
+
+## App Access
+
+- Main Application: https://natepay.co
+
+## Contact
+
+- Email: support@natepay.co
+- Website: https://natepay.app

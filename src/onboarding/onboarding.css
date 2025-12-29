@@ -3051,6 +3051,11 @@ button.btn .spinning {
     background: var(--neutral-200);
 }
 
+.setup-purpose.disabled {
+    cursor: default;
+    opacity: 0.7;
+}
+
 .setup-purpose-label {
     font-size: 13px;
     color: var(--text-tertiary);
@@ -3444,4 +3449,356 @@ button.btn .spinning {
 
 .service-perk-cancel:hover {
     color: var(--accent-red, #ef4444);
+}
+
+/* =============================================
+   SERVICE DESCRIPTION STEP (New)
+   ============================================= */
+
+.service-description-step-card {
+    background: var(--bg-card);
+    border-radius: var(--radius-lg);
+    padding: 20px;
+    border: 1px solid var(--border-subtle);
+}
+
+.service-description-step-input {
+    width: 100%;
+    min-height: 140px;
+    padding: 16px;
+    font-size: 16px;
+    line-height: 1.6;
+    color: var(--text-primary);
+    background: var(--bg-subtle);
+    border: 1px solid var(--border-primary);
+    border-radius: var(--radius-md);
+    resize: none;
+    font-family: var(--font-primary);
+    transition: border-color 0.2s ease;
+}
+
+.service-description-step-input:focus {
+    outline: none;
+    border-color: var(--primary);
+}
+
+.service-description-step-input::placeholder {
+    color: var(--text-tertiary);
+}
+
+.service-description-step-hint {
+    margin-top: 12px;
+    font-size: 13px;
+    text-align: right;
+}
+
+.service-description-step-hint .hint-warning {
+    color: var(--text-tertiary);
+}
+
+.service-description-step-hint .hint-success {
+    color: var(--accent-green, #10b981);
+}
+
+/* Service price input */
+.service-description-step-card + .service-description-step-card {
+    margin-top: 16px;
+}
+
+.service-price-label {
+    display: block;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: 12px;
+}
+
+.service-price-input-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--bg-subtle);
+    border: 1px solid var(--border-primary);
+    border-radius: var(--radius-md);
+    padding: 12px 16px;
+    transition: border-color 0.2s ease;
+}
+
+.service-price-input-wrapper:focus-within {
+    border-color: var(--primary);
+}
+
+.service-price-currency {
+    font-size: 24px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.service-price-input {
+    flex: 1;
+    border: none;
+    background: transparent;
+    font-size: 32px;
+    font-weight: 600;
+    color: var(--text-primary);
+    outline: none;
+    min-width: 0;
+    font-family: var(--font-primary);
+}
+
+.service-price-input::placeholder {
+    color: var(--text-tertiary);
+}
+
+.service-price-period {
+    font-size: 14px;
+    color: var(--text-tertiary);
+    white-space: nowrap;
+}
+
+/* =============================================
+   AI GENERATING STEP
+   ============================================= */
+
+.ai-generating-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    min-height: 100dvh;
+    padding: 24px;
+    text-align: center;
+}
+
+/* Logo with pulse animation */
+.ai-generating-logo {
+    position: relative;
+    width: 80px;
+    height: 80px;
+    margin-bottom: 32px;
+}
+
+.ai-generating-logo-img {
+    width: 80px;
+    height: 80px;
+    object-fit: contain;
+    position: relative;
+    z-index: 2;
+    animation: ai-logo-breathe 2s ease-in-out infinite;
+}
+
+.ai-generating-pulse {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    background: var(--primary);
+    opacity: 0.15;
+    animation: ai-pulse 2s ease-in-out infinite;
+}
+
+@keyframes ai-logo-breathe {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+}
+
+@keyframes ai-pulse {
+    0%, 100% {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 0.15;
+    }
+    50% {
+        transform: translate(-50%, -50%) scale(1.4);
+        opacity: 0.05;
+    }
+}
+
+/* Status text */
+.ai-generating-status {
+    margin-bottom: 32px;
+}
+
+.ai-generating-message {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0 0 12px 0;
+}
+
+/* Animated dots */
+.ai-generating-dots {
+    display: flex;
+    gap: 6px;
+    justify-content: center;
+}
+
+.ai-generating-dots .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--primary);
+    animation: ai-dot-bounce 1.4s ease-in-out infinite;
+}
+
+.ai-generating-dots .dot:nth-child(2) {
+    animation-delay: 0.2s;
+}
+
+.ai-generating-dots .dot:nth-child(3) {
+    animation-delay: 0.4s;
+}
+
+@keyframes ai-dot-bounce {
+    0%, 80%, 100% {
+        transform: scale(0.6);
+        opacity: 0.4;
+    }
+    40% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+/* Progress bar */
+.ai-generating-progress {
+    width: 200px;
+}
+
+.ai-generating-progress-track {
+    height: 4px;
+    background: var(--border-subtle);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.ai-generating-progress-fill {
+    height: 100%;
+    background: var(--primary);
+    border-radius: 2px;
+    transition: width 0.5s ease-out;
+}
+
+/* Error state */
+.ai-generating-error {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    color: var(--text-primary);
+}
+
+.ai-generating-error svg {
+    color: var(--accent-red, #ef4444);
+}
+
+.ai-generating-error h2 {
+    font-size: 20px;
+    font-weight: 600;
+    margin: 0;
+}
+
+.ai-generating-error p {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin: 0;
+    max-width: 280px;
+}
+
+.ai-generating-error-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+    max-width: 280px;
+    margin-top: 16px;
+}
+
+/* =============================================
+   PURPOSE STEP
+   ============================================= */
+
+.purpose-step-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.purpose-step-card {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 16px;
+    background: var(--bg-card);
+    border: 2px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    transition: all 0.15s ease;
+}
+
+.purpose-step-card.selected {
+    border-color: var(--neutral-900);
+    background: white;
+}
+
+.purpose-step-card.pressed {
+    transform: scale(0.98);
+}
+
+.purpose-step-icon {
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--neutral-100);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    flex-shrink: 0;
+}
+
+.purpose-step-card.selected .purpose-step-icon {
+    background: var(--neutral-900);
+    color: white;
+}
+
+.purpose-step-text {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.purpose-step-label {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.purpose-step-desc {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.purpose-step-check {
+    color: var(--neutral-900);
+    flex-shrink: 0;
+}
+
+/* AI Generating Skip Button */
+.ai-generating-skip {
+    margin-top: 24px;
+    font-size: 14px;
+    color: var(--text-tertiary);
+    background: none;
+    border: none;
+    cursor: pointer;
+    text-decoration: underline;
+    transition: color 0.15s ease;
+}
+
+.ai-generating-skip:hover {
+    color: var(--text-secondary);
 }
