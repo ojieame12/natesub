@@ -22,13 +22,11 @@ export default function PaystackOnboardingComplete() {
 
   // Use shallow selector to prevent unnecessary re-renders
   const {
-    countryCode,
     purpose,
     serviceDescription,
     servicePerks,
     hydrateFromServer,
   } = useOnboardingStore(useShallow((s) => ({
-    countryCode: s.countryCode,
     purpose: s.purpose,
     serviceDescription: s.serviceDescription,
     servicePerks: s.servicePerks,

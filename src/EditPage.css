@@ -1041,14 +1041,14 @@
     color: var(--text-tertiary);
 }
 
-/* Perks List */
-.perks-list {
+/* Perks List - scoped to .edit-page to avoid conflicts with onboarding styles */
+.edit-page .perks-list {
     display: flex;
     flex-direction: column;
     gap: 8px;
 }
 
-.perk-item {
+.edit-page .perk-item {
     display: flex;
     align-items: center;
     gap: 10px;
@@ -1058,85 +1058,97 @@
     border-radius: var(--radius-md);
 }
 
-.perk-check {
+.edit-page .perk-check {
     font-size: 12px;
     color: var(--accent-green, #10b981);
     flex-shrink: 0;
 }
 
-.perk-title {
+.edit-page .perk-title {
     flex: 1;
     font-size: 14px;
     color: var(--text-primary);
 }
 
-.perk-edit-btn {
-    padding: 4px;
+.edit-page .perk-edit-btn {
+    padding: 6px;
     color: var(--text-tertiary);
     opacity: 0;
     transition: opacity 0.15s ease, color 0.15s ease;
 }
 
-.perk-item:hover .perk-edit-btn {
+.edit-page .perk-item:hover .perk-edit-btn {
     opacity: 1;
 }
 
-.perk-edit-btn:hover {
+.edit-page .perk-edit-btn:hover {
     color: var(--accent-primary);
 }
 
-.perk-edit-row {
+.edit-page .perk-edit-row {
     display: flex;
     align-items: center;
     gap: 8px;
     flex: 1;
 }
 
-.perk-edit-input {
+.edit-page .perk-edit-input {
     flex: 1;
     font-size: 14px;
     color: var(--text-primary);
-    background: var(--neutral-100);
-    border: 1px solid var(--accent-primary);
+    background: var(--bg-input, var(--neutral-50));
+    border: 1px solid var(--border-default);
     border-radius: var(--radius-sm);
-    padding: 6px 10px;
+    padding: 8px 12px;
     outline: none;
     font-family: var(--font-primary);
 }
 
-.perk-save-btn {
-    padding: 4px;
+.edit-page .perk-edit-input:focus {
+    border-color: var(--accent-primary);
+}
+
+.edit-page .perk-save-btn {
+    width: auto;
+    height: auto;
+    padding: 6px;
     color: var(--accent-green, #10b981);
+    background: transparent;
+    border-radius: var(--radius-sm);
     cursor: pointer;
 }
 
-.perk-actions {
-    display: flex;
-    align-items: center;
-    gap: 4px;
+.edit-page .perk-save-btn:hover {
+    background: var(--accent-green-soft, rgba(16, 185, 129, 0.1));
 }
 
-.perk-delete-btn {
-    padding: 4px;
+.edit-page .perk-actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.edit-page .perk-delete-btn {
+    padding: 6px;
     color: var(--text-tertiary);
     opacity: 0;
     transition: opacity 0.15s ease, color 0.15s ease;
 }
 
-.perk-item:hover .perk-delete-btn {
+.edit-page .perk-item:hover .perk-delete-btn {
     opacity: 1;
 }
 
-.perk-delete-btn:hover:not([aria-disabled="true"]) {
+.edit-page .perk-delete-btn:hover:not([aria-disabled="true"]) {
     color: var(--accent-error, #ef4444);
 }
 
-.perk-delete-btn[aria-disabled="true"] {
+.edit-page .perk-delete-btn[aria-disabled="true"] {
     opacity: 0.3;
     cursor: not-allowed;
 }
 
-.perk-add-btn {
+.edit-page .perk-add-btn {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1152,24 +1164,24 @@
     transition: all 0.15s ease;
 }
 
-.perk-add-btn:hover {
+.edit-page .perk-add-btn:hover {
     border-color: var(--accent-primary);
     color: var(--accent-primary);
     background: var(--accent-primary-alpha);
 }
 
-.perk-add-form {
+.edit-page .perk-add-form {
     display: flex;
     align-items: center;
     gap: 8px;
     margin-top: 8px;
-    padding: 8px 12px;
-    background: var(--neutral-100);
+    padding: 10px 12px;
+    background: var(--bg-card);
     border-radius: var(--radius-md);
-    border: 1px solid var(--accent-primary);
+    border: 1px solid var(--border-default);
 }
 
-.perk-add-input {
+.edit-page .perk-add-input {
     flex: 1;
     font-size: 14px;
     color: var(--text-primary);
@@ -1179,28 +1191,31 @@
     font-family: var(--font-primary);
 }
 
-.perk-add-input::placeholder {
+.edit-page .perk-add-input::placeholder {
     color: var(--text-tertiary);
 }
 
-.perk-cancel-btn {
-    padding: 4px;
+.edit-page .perk-cancel-btn {
+    padding: 6px;
     color: var(--text-tertiary);
     cursor: pointer;
 }
 
-.perk-cancel-btn:hover {
+.edit-page .perk-cancel-btn:hover {
     color: var(--accent-error, #ef4444);
 }
 
-.perks-empty-hint {
-    font-size: 12px;
+.edit-page .perks-empty-hint {
+    font-size: 13px;
     color: var(--text-tertiary);
     text-align: center;
-    margin-top: 8px;
+    margin-top: 12px;
+    padding: 16px;
+    background: var(--neutral-50);
+    border-radius: var(--radius-md);
 }
 
-.perks-empty {
+.edit-page .perks-empty {
     font-size: 13px;
     color: var(--text-tertiary);
     text-align: center;
