@@ -528,7 +528,7 @@ export const profile = {
     }),
 
   generateBanner: (data?: { serviceDescription?: string; variant?: 'standard' | 'artistic' }) =>
-    apiFetch<{ bannerUrl: string; wasGenerated: boolean; variant: 'standard' | 'artistic' }>('/profile/generate-banner', {
+    apiFetch<{ bannerUrl: string; wasGenerated: boolean; variant: 'standard' | 'artistic'; generationsRemaining: number }>('/profile/generate-banner', {
       method: 'POST',
       body: data ? JSON.stringify(data) : undefined,
       timeout: BANNER_TIMEOUT_MS, // 90s - uses "Thinking" mode which is slower
