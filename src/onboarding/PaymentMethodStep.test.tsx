@@ -212,10 +212,11 @@ describe('PaymentMethodStep', () => {
     fireEvent.click(screen.getByText('Connect with Stripe'))
 
     await waitFor(() => {
-      // Should save currentStep + 1 (7) with countryCode for backend dynamic completion
+      // Should save currentStep + 1 with stepKey and purpose for safe cross-device resume
       expect(api.auth.saveOnboardingProgress).toHaveBeenCalledWith({
         step: 7, // currentStep (6) + 1
-        data: { paymentProvider: 'stripe', countryCode: 'US' },
+        stepKey: 'review', // Non-service flow, next step is review
+        data: { paymentProvider: 'stripe', countryCode: 'US', purpose: 'support' },
       })
     })
   })
@@ -252,8 +253,8 @@ describe('PaymentMethodStep', () => {
     fireEvent.click(screen.getByText('Connect with Stripe'))
 
     await waitFor(() => {
-      // Should set stripe_return_to to currentStep + 1 (8 = Review step for NG non-service)
-      expect(setItemSpy).toHaveBeenCalledWith('stripe_return_to', '/onboarding?step=8')
+      // Should set stripe_return_to to step key (review for non-service flow)
+      expect(setItemSpy).toHaveBeenCalledWith('stripe_return_to', '/onboarding?step=review')
     })
 
     // Cleanup
@@ -293,8 +294,8 @@ describe('PaymentMethodStep', () => {
     fireEvent.click(screen.getByText('Connect with Stripe'))
 
     await waitFor(() => {
-      // Should set stripe_return_to to currentStep + 1 (9 = Review step for US non-service)
-      expect(setItemSpy).toHaveBeenCalledWith('stripe_return_to', '/onboarding?step=9')
+      // Should set stripe_return_to to step key (review for non-service flow)
+      expect(setItemSpy).toHaveBeenCalledWith('stripe_return_to', '/onboarding?step=review')
     })
 
     // Cleanup

@@ -186,10 +186,16 @@ export default function PaymentMethodStep() {
             await api.profile.updateSettings({ isPublic: false })
 
             // Persist onboarding progress so the flow can resume after redirects
-            // Save next step (Review) - backend uses countryCode to determine dynamic completion
+            // Save next step - for service flow it's service-desc, for others it's review
+            const nextStepKey = store.purpose === 'service' ? 'service-desc' : 'review'
             await api.auth.saveOnboardingProgress({
                 step: currentStep + 1,
-                data: { paymentProvider: selectedMethod, countryCode: store.countryCode },
+                stepKey: nextStepKey, // Canonical step key for safe resume
+                data: {
+                    paymentProvider: selectedMethod,
+                    countryCode: store.countryCode,
+                    purpose: store.purpose, // Redundant - ensures backend knows flow type
+                },
             }).catch(() => { })
 
             // Handle Stripe connect flow
@@ -201,9 +207,9 @@ export default function PaymentMethodStep() {
                         // Store source for redirect handling when user returns from Stripe
                         sessionStorage.setItem('stripe_onboarding_source', 'onboarding')
                         sessionStorage.setItem('stripe_onboarding_started_at', Date.now().toString())
-                        // Fallback: return to Review step (next step after Payment)
-                        // Dynamic based on whether address step is shown
-                        sessionStorage.setItem('stripe_return_to', `/onboarding?step=${currentStep + 1}`)
+                        // Fallback: return to next step after Payment
+                        // Use step key (not numeric index) for safe resume regardless of step array changes
+                        sessionStorage.setItem('stripe_return_to', `/onboarding?step=${nextStepKey}`)
 
                         // For cross-border countries (NG/GH/KE), show SWIFT code helper first
                         // This helps users find their bank's SWIFT code before Stripe onboarding

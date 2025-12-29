@@ -101,13 +101,29 @@ export function getVisibleStepKeys(options: {
 }
 
 // Convert step key to index for current configuration
+// If the key isn't visible, find a safe fallback step instead of returning 0
 export function stepKeyToIndex(
     key: OnboardingStepKey,
     options: { showAddressStep: boolean; isServiceMode: boolean }
 ): number {
     const visibleKeys = getVisibleStepKeys(options)
     const index = visibleKeys.indexOf(key)
-    return index >= 0 ? index : 0
+    if (index >= 0) return index
+
+    // Key isn't visible - find a safe fallback based on key type
+    // If it's a removed conditional step, go to the step that would come after it
+    if (key === 'address') {
+        // Address was removed (switched to cross-border country) → go to purpose
+        return visibleKeys.indexOf('purpose')
+    }
+    if (key === 'service-desc' || key === 'ai-gen') {
+        // Service steps removed (switched to non-service) → go to review
+        return visibleKeys.indexOf('review')
+    }
+
+    // Unknown case - go to payments as a safe mid-flow fallback
+    const paymentIdx = visibleKeys.indexOf('payments')
+    return paymentIdx >= 0 ? paymentIdx : 0
 }
 
 // Convert step index to key for current configuration
@@ -362,17 +378,8 @@ export const useOnboardingStore = create<OnboardingStore>()(
                     _lastNavTime: now,
                 }
             }),
-            goToStepKey: (key) => set((state) => {
-                const now = Date.now()
-                const lastNav = (state as any)._lastNavTime || 0
-                if (now - lastNav < 300) {
-                    return state
-                }
-                return {
-                    currentStepKey: key,
-                    _lastNavTime: now,
-                }
-            }),
+            // goToStepKey is NOT debounced - it's used by sync effects and must update immediately
+            goToStepKey: (key) => set({ currentStepKey: key }),
             reset: () => set({
                 ...initialState,
                 // Reset specific fields to their initial values,

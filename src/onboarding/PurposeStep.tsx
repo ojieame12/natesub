@@ -25,6 +25,7 @@ export default function PurposeStep() {
         // Silent fail - local store is primary, backend is for durability
         api.auth.saveOnboardingProgress({
             step: currentStep,
+            stepKey: 'purpose', // Canonical step key for safe resume
             data: { purpose: value },
         }).catch(() => {})
 

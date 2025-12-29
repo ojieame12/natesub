@@ -53,11 +53,14 @@ export default function ServiceDescriptionStep() {
 
     // Persist service description and price to backend for cross-device resume
     // Silent fail - local store is primary, backend is for durability
+    // Include purpose redundantly to ensure backend knows this is service flow
     api.auth.saveOnboardingProgress({
       step: currentStep,
+      stepKey: 'service-desc', // Canonical step key for safe resume
       data: {
         serviceDescription: localDescription.trim(),
         singleAmount: priceNum,
+        purpose: 'service', // Redundant - ensures backend knows service flow
       },
     }).catch(() => {})
 

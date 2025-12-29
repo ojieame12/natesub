@@ -404,6 +404,7 @@ export const auth = {
   // Save onboarding progress to server
   saveOnboardingProgress: (data: {
     step: number
+    stepKey?: string // Canonical step identifier for safe resume
     branch?: 'personal' | 'service'
     data?: Record<string, any>
   }) =>

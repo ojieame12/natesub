@@ -331,10 +331,14 @@ export default function PersonalReviewStep() {
             await api.profile.updateSettings({ isPublic: true })
 
             // 3. Complete Onboarding - dynamic step based on flow length
-            // Backend uses countryCode to determine completion threshold
+            // Backend uses countryCode + purpose to determine completion threshold
             await api.auth.saveOnboardingProgress({
                 step: currentStep + 1,
-                data: { countryCode },
+                stepKey: 'review', // Current step is review - completion triggers clear
+                data: {
+                    countryCode,
+                    purpose, // Redundant - ensures backend knows flow type for completion check
+                },
             })
 
             // 4. Go to their new page (owner view with share button)
