@@ -72,7 +72,7 @@ export function getStatusMessage(status: number): string {
  * The query options are defined in useAuthState, not here.
  */
 export function useCurrentUser() {
-  const { user, status, error, refetch } = useAuthState()
+  const { user, status, error, refetch, onboarding } = useAuthState()
 
   return {
     data: status === 'authenticated' && user ? {
@@ -80,6 +80,7 @@ export function useCurrentUser() {
       email: user.email,
       profile: user.profile,
       createdAt: user.createdAt,
+      onboarding, // Include onboarding state for cross-device resume
     } : undefined,
     isLoading: status === 'unknown' || status === 'checking',
     isError: !!error,
