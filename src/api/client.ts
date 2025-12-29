@@ -283,6 +283,12 @@ function normalizeEmail(email: string): string {
 // Default timeout for API requests (8 seconds - reduced from 15s)
 const API_TIMEOUT_MS = 8000
 
+// Longer timeout for AI endpoints (30 seconds - AI generation can be slow)
+const AI_TIMEOUT_MS = 30000
+
+// Extra long timeout for banner generation (90 seconds - uses "Thinking" mode)
+const BANNER_TIMEOUT_MS = 90000
+
 // Public endpoints where 401 doesn't mean "session expired"
 // These endpoints can be accessed without auth or may return 401 for unauthenticated users
 const PUBLIC_ENDPOINTS = [
@@ -511,16 +517,18 @@ export const profile = {
       body: JSON.stringify(data),
     }),
 
-  // Service Mode - AI-generated perks and banner
+  // Service Mode - AI-generated perks and banner (use longer timeout for AI)
   generatePerks: (data: { description: string; serviceType?: string; industry?: string; pricePerMonth: number; displayName?: string }) =>
     apiFetch<{ perks: Array<{ id: string; title: string; enabled: boolean }> }>('/profile/generate-perks', {
       method: 'POST',
       body: JSON.stringify(data),
+      timeout: AI_TIMEOUT_MS, // 30s - AI generation can be slow
     }),
 
   generateBanner: () =>
     apiFetch<{ bannerUrl: string; wasGenerated: boolean }>('/profile/generate-banner', {
       method: 'POST',
+      timeout: BANNER_TIMEOUT_MS, // 90s - uses "Thinking" mode which is slower
     }),
 
   updatePerks: (perks: Array<{ id: string; title: string; enabled: boolean }>) =>
@@ -996,14 +1004,15 @@ export const ai = {
   status: () =>
     apiFetch<{ available: boolean }>('/ai/status'),
 
-  // Main page generation (voice or text)
+  // Main page generation (voice or text) - uses longer timeout
   generate: (data: AIGenerateInput) =>
     apiFetch<AIGenerateResult>('/ai/generate', {
       method: 'POST',
       body: JSON.stringify(data),
+      timeout: AI_TIMEOUT_MS, // 30s - AI generation can be slow
     }),
 
-  // Quick text-only generation
+  // Quick text-only generation - uses longer timeout
   quick: (data: {
     description: string
     price: number
@@ -1019,9 +1028,10 @@ export const ai = {
     }>('/ai/quick', {
       method: 'POST',
       body: JSON.stringify(data),
+      timeout: AI_TIMEOUT_MS, // 30s - AI generation can be slow
     }),
 
-  // Market research
+  // Market research - uses longer timeout
   research: (serviceDescription: string, industry?: string) =>
     apiFetch<{
       success: boolean
@@ -1033,9 +1043,10 @@ export const ai = {
     }>('/ai/research', {
       method: 'POST',
       body: JSON.stringify({ serviceDescription, industry }),
+      timeout: AI_TIMEOUT_MS, // 30s - AI generation can be slow
     }),
 
-  // Price suggestion
+  // Price suggestion - uses longer timeout
   suggestPrice: (serviceDescription: string) =>
     apiFetch<{
       success: boolean
@@ -1044,6 +1055,7 @@ export const ai = {
     }>('/ai/suggest-price', {
       method: 'POST',
       body: JSON.stringify({ serviceDescription }),
+      timeout: AI_TIMEOUT_MS, // 30s - AI generation can be slow
     }),
 }
 
