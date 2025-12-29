@@ -897,13 +897,14 @@
     text-align: center;
 }
 
-.edit-page .country-list {
+/* Country/Purpose drawer options - NOT scoped to .edit-page since drawer renders via portal */
+.country-list {
     flex: 1;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
 }
 
-.edit-page .country-option {
+.country-option {
     display: flex;
     align-items: center;
     gap: var(--space-md);
@@ -912,34 +913,34 @@
     transition: background 0.15s ease;
 }
 
-.edit-page .country-option.pressed {
+.country-option.pressed {
     background: var(--neutral-50);
 }
 
-.edit-page .country-option.selected {
+.country-option.selected {
     background: var(--neutral-100);
 }
 
-.edit-page .country-option-name {
+.country-option-name {
     flex: 1;
     font-size: 16px;
     color: var(--text-primary);
 }
 
-.edit-page .country-option-check {
+.country-option-check {
     color: var(--accent-primary);
 }
 
-.edit-page .purpose-option-icon {
+.purpose-option-icon {
     color: var(--text-secondary);
     flex-shrink: 0;
 }
 
-.edit-page .country-option.selected .purpose-option-icon {
+.country-option.selected .purpose-option-icon {
     color: var(--accent-primary);
 }
 
-.edit-page .purpose-drawer-list {
+.purpose-drawer-list {
     flex: 1;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
