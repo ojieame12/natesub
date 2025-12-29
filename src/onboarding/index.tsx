@@ -71,20 +71,30 @@ export default function OnboardingFlow() {
         [visibleStepKeys]
     )
 
-    // Compute current step index from step key (key is the source of truth)
-    // This ensures index stays correct even when step array changes
+    // Compute current step index from step key OR step index
+    // nextStep/prevStep only update currentStep (index), so we must detect that case
     const effectiveStep = useMemo(() => {
-        // If we have a non-default step key that's valid, compute index from it
-        // Default is 'start' - if key is 'start' but index is not 0, use the index
-        // This handles backwards compatibility when only currentStep was set
-        if (currentStepKey && currentStepKey !== 'start' && visibleStepKeys.includes(currentStepKey)) {
-            return stepKeyToIndex(currentStepKey, stepConfig)
+        // First, compute what index the current key would give us
+        const keyIndex = currentStepKey && currentStepKey !== 'start' && visibleStepKeys.includes(currentStepKey)
+            ? stepKeyToIndex(currentStepKey, stepConfig)
+            : -1
+
+        // If currentStep differs from keyIndex, trust currentStep
+        // This handles nextStep/prevStep which only update the index
+        if (keyIndex >= 0 && currentStep !== keyIndex && currentStep >= 0 && currentStep < steps.length) {
+            return currentStep
         }
-        // Check if the stored index is valid
+
+        // If key is valid and in sync (or currentStep is out of range), use key
+        if (keyIndex >= 0) {
+            return keyIndex
+        }
+
+        // Fallback: use currentStep if valid
         if (currentStep >= 0 && currentStep < steps.length) {
             return currentStep
         }
-        // If key is 'start' and index is 0, or index is out of bounds, use 0
+
         return 0
     }, [currentStepKey, currentStep, visibleStepKeys, stepConfig, steps.length])
 
