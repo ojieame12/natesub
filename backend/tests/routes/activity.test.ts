@@ -228,6 +228,45 @@ describe('Activity API', () => {
         const json = await res.json()
         expect(json.payoutInfo.status).toBe('in_transit')
       })
+
+      it('uses real lastPayoutStatus from profile when available', async () => {
+        // Create recent payment (would normally estimate as 'pending')
+        const recentPaymentId = 'payment_real_status'
+        const recentActivityId = '55555555-5555-5555-5555-555555555556' // UUID format
+        const recentPayment = {
+          ...paymentWithFxData,
+          id: recentPaymentId,
+          occurredAt: new Date(), // Just now
+          exchangeRate: null,
+          payoutCurrency: null,
+        }
+        const recentActivity = {
+          ...activityWithPaymentId,
+          id: recentActivityId,
+          payload: {
+            ...activityWithPaymentId.payload,
+            paymentId: recentPaymentId,
+          },
+        }
+
+        // Profile with real in_transit status from Stripe webhook
+        const profileWithRealStatus = {
+          ...nigerianCreatorProfile,
+          lastPayoutAt: new Date('2024-01-01T00:00:00Z'),
+          lastPayoutStatus: 'in_transit', // Real status from payout.updated webhook
+        }
+
+        dbStorage.profiles.set(nigerianCreatorProfile.userId, profileWithRealStatus)
+        dbStorage.activities.set(recentActivityId, recentActivity)
+        dbStorage.payments.set(recentPaymentId, recentPayment)
+
+        const res = await authRequest(`/activity/${recentActivityId}`)
+        expect(res.status).toBe(200)
+
+        const json = await res.json()
+        // Should use real status instead of estimating 'pending'
+        expect(json.payoutInfo.status).toBe('in_transit')
+      })
     })
 
     describe('paymentId vs subscriptionId lookup', () => {

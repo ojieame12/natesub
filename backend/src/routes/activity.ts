@@ -439,32 +439,39 @@ activity.get(
         })
 
         if (payment) {
-          // Estimate per-payment payout status
-          // If payment occurred before the last payout, it's likely been paid out
-          // Otherwise it's still processing
+          // Determine payout status for this payment
+          // Priority: Real status from webhooks > Estimation based on timing
           const paymentDate = payment.occurredAt
           const lastPayoutDate = profile?.lastPayoutAt
+          const lastPayoutStatus = profile?.lastPayoutStatus as string | null
           const provider = profile?.paymentProvider || (payload?.provider as string) || null
 
           // Status values match PayoutInfoResponse: 'pending' | 'in_transit' | 'paid' | 'failed'
-          let estimatedStatus: 'paid' | 'pending' | 'in_transit'
+          let estimatedStatus: 'paid' | 'pending' | 'in_transit' | 'failed'
           let expectedPayoutDate: Date | null = null
           let paidDate: Date | null = null
 
           if (lastPayoutDate && paymentDate && paymentDate < lastPayoutDate) {
+            // Payment was included in a completed payout
             estimatedStatus = 'paid'
-            paidDate = lastPayoutDate // Best estimate of when it was paid
+            paidDate = lastPayoutDate
+          } else if (lastPayoutStatus && ['in_transit', 'pending', 'paid', 'failed'].includes(lastPayoutStatus)) {
+            // Use real payout status from Stripe/Paystack webhooks
+            // This gives us accurate "In Transit" status instead of estimates
+            estimatedStatus = lastPayoutStatus as 'paid' | 'pending' | 'in_transit' | 'failed'
+            expectedPayoutDate = lastPayoutDate || addBusinessDays(new Date(paymentDate), provider === 'stripe' ? 2 : 1)
+            if (lastPayoutStatus === 'paid') {
+              paidDate = lastPayoutDate
+            }
           } else if (provider === 'stripe') {
-            // Stripe payouts are typically T+2 business days
+            // Fallback: Stripe payouts are typically T+2 business days
             const daysSincePayment = (Date.now() - new Date(paymentDate).getTime()) / (1000 * 60 * 60 * 24)
             estimatedStatus = daysSincePayment > 3 ? 'in_transit' : 'pending'
-            // Calculate expected payout: payment date + 2 business days
             expectedPayoutDate = addBusinessDays(new Date(paymentDate), 2)
           } else {
-            // Paystack payouts are T+1 (next business day)
+            // Fallback: Paystack payouts are T+1 (next business day)
             const daysSincePayment = (Date.now() - new Date(paymentDate).getTime()) / (1000 * 60 * 60 * 24)
             estimatedStatus = daysSincePayment > 2 ? 'in_transit' : 'pending'
-            // Calculate expected payout: payment date + 1 business day
             expectedPayoutDate = addBusinessDays(new Date(paymentDate), 1)
           }
 

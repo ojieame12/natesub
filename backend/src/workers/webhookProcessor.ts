@@ -10,7 +10,7 @@ import { handleSubscriptionUpdated, handleSubscriptionDeleted } from '../routes/
 import { handleAccountUpdated } from '../routes/webhooks/stripe/connect.js'
 import { handleChargeRefunded, handlePaymentIntentFailed } from '../routes/webhooks/stripe/payment.js'
 import { handleDisputeCreated, handleDisputeClosed } from '../routes/webhooks/stripe/dispute.js'
-import { handlePayoutCreated, handlePayoutPaid, handlePayoutFailed } from '../routes/webhooks/stripe/payout.js'
+import { handlePayoutCreated, handlePayoutUpdated, handlePayoutPaid, handlePayoutFailed } from '../routes/webhooks/stripe/payout.js'
 import { handleEarlyFraudWarning } from '../routes/webhooks/stripe/early-fraud-warning.js'
 
 // Paystack Handlers
@@ -164,6 +164,9 @@ async function processStripeEvent(event: any) {
       break
     case 'payout.created':
       await handlePayoutCreated(event)
+      break
+    case 'payout.updated':
+      await handlePayoutUpdated(event)
       break
     case 'payout.paid':
       await handlePayoutPaid(event)

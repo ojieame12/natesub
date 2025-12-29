@@ -54,6 +54,7 @@ const getActivityIcon = (type: string) => {
         case 'request_sent': return <Send size={20} />
         case 'request_declined': return <XCircle size={20} />
         case 'payout_initiated': return <Banknote size={20} />
+        case 'payout_in_transit': return <Banknote size={20} />
 
         default: return <DollarSign size={20} />
     }
@@ -88,6 +89,7 @@ const getActivityIconClass = (type: string) => {
         case 'request_sent':
         case 'request_declined':
         case 'payout_initiated': return 'activity-icon neutral'
+        case 'payout_in_transit': return 'activity-icon payment' // Blue/positive since money is on the way
 
         default: return 'activity-icon'
     }
@@ -122,6 +124,7 @@ const getActivityTitle = (type: string, isService: boolean) => {
         case 'request_sent': return isService ? 'Invoice Sent' : 'Request Sent'
         case 'request_declined': return isService ? 'Invoice Declined' : 'Request Declined'
         case 'payout_initiated': return 'Payout Started'
+        case 'payout_in_transit': return 'Payout In Transit'
 
         default: return 'Activity'
     }

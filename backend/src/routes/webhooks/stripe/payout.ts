@@ -5,6 +5,23 @@ import { alertPayoutFailed } from '../../../services/slack.js'
 import { syncCreatorBalance, PAYOUT_STATUS } from '../../../services/balanceSync.js'
 import { invalidatePublicProfileCache } from '../../../utils/cache.js'
 
+// Map Stripe payout status to our status constants
+function mapStripePayoutStatus(stripeStatus: string): string {
+  switch (stripeStatus) {
+    case 'paid':
+      return PAYOUT_STATUS.PAID
+    case 'in_transit':
+      return PAYOUT_STATUS.IN_TRANSIT
+    case 'failed':
+      return PAYOUT_STATUS.FAILED
+    case 'canceled':
+      return PAYOUT_STATUS.CANCELED
+    case 'pending':
+    default:
+      return PAYOUT_STATUS.PENDING
+  }
+}
+
 // Handle payout.created - when Stripe initiates a payout to connected account
 // This creates visibility into "money on the way" state
 export async function handlePayoutCreated(event: Stripe.Event) {
@@ -27,13 +44,16 @@ export async function handlePayoutCreated(event: Stripe.Event) {
     return
   }
 
-  // Update profile with pending payout info
+  // Use actual payout status from Stripe (might already be 'in_transit')
+  const payoutStatus = mapStripePayoutStatus(payout.status)
+
+  // Update profile with payout info
   await db.profile.update({
     where: { id: profile.id },
     data: {
       lastPayoutAmountCents: payout.amount,
       lastPayoutAt: new Date(payout.created * 1000),
-      lastPayoutStatus: PAYOUT_STATUS.PENDING,
+      lastPayoutStatus: payoutStatus,
     },
   })
 
@@ -48,6 +68,7 @@ export async function handlePayoutCreated(event: Stripe.Event) {
         currency: payout.currency.toUpperCase(),
         arrivalDate: payout.arrival_date ? new Date(payout.arrival_date * 1000) : null,
         method: payout.method, // 'standard' or 'instant'
+        status: payoutStatus,
       },
     },
   })
@@ -57,7 +78,64 @@ export async function handlePayoutCreated(event: Stripe.Event) {
     console.error(`[payout.created] Balance sync failed:`, err)
   )
 
-  console.log(`[payout.created] Payout initiated for creator ${profile.userId}: ${payout.amount} ${payout.currency}`)
+  console.log(`[payout.created] Payout initiated for creator ${profile.userId}: ${payout.amount} ${payout.currency} (status: ${payoutStatus})`)
+}
+
+// Handle payout.updated - when payout status changes (e.g. pending → in_transit)
+// This captures the real-time "In Transit" state from Stripe
+export async function handlePayoutUpdated(event: Stripe.Event) {
+  const payout = event.data.object as Stripe.Payout
+
+  // Get account ID from event (Connect webhooks include the account)
+  const accountId = event.account as string
+  if (!accountId) {
+    console.log('[payout.updated] No account ID found')
+    return
+  }
+
+  // Find the creator by their Stripe account
+  const profile = await db.profile.findFirst({
+    where: { stripeAccountId: accountId },
+  })
+
+  if (!profile) {
+    console.log(`[payout.updated] No profile found for account ${accountId}`)
+    return
+  }
+
+  // Map the Stripe status to our status
+  const payoutStatus = mapStripePayoutStatus(payout.status)
+
+  // Update profile with new payout status
+  await db.profile.update({
+    where: { id: profile.id },
+    data: {
+      lastPayoutStatus: payoutStatus,
+      // Update arrival date if it changed
+      ...(payout.arrival_date && {
+        lastPayoutAt: new Date(payout.arrival_date * 1000),
+      }),
+    },
+  })
+
+  // If transitioning to in_transit, create an activity so the user sees the update
+  if (payoutStatus === PAYOUT_STATUS.IN_TRANSIT) {
+    await db.activity.create({
+      data: {
+        userId: profile.userId,
+        type: 'payout_in_transit',
+        payload: {
+          payoutId: payout.id,
+          amount: payout.amount,
+          currency: payout.currency.toUpperCase(),
+          arrivalDate: payout.arrival_date ? new Date(payout.arrival_date * 1000) : null,
+          status: payoutStatus,
+        },
+      },
+    })
+  }
+
+  console.log(`[payout.updated] Payout status updated for creator ${profile.userId}: ${payoutStatus}`)
 }
 
 // Handle payout.paid - when automatic payout to connected account succeeds

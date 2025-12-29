@@ -1,7 +1,7 @@
 /**
  * Payout Webhook Handler Tests
  *
- * Tests for Stripe payout webhook handling (payout.created, payout.paid, payout.failed).
+ * Tests for Stripe payout webhook handling (payout.created, payout.updated, payout.paid, payout.failed).
  */
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
@@ -9,6 +9,7 @@ import { db } from '../../src/db/client'
 import { redis } from '../../src/db/redis'
 import {
   handlePayoutCreated,
+  handlePayoutUpdated,
   handlePayoutPaid,
   handlePayoutFailed,
 } from '../../src/routes/webhooks/stripe/payout'
@@ -86,12 +87,12 @@ describe('payout webhooks', () => {
   })
 
   describe('handlePayoutCreated', () => {
-    it('updates profile with pending payout status', async () => {
+    it('uses actual payout status from Stripe (pending)', async () => {
       const event = {
         id: 'evt_123',
         type: 'payout.created',
         account: mockAccountId,
-        data: { object: mockPayout },
+        data: { object: { ...mockPayout, status: 'pending' } },
       } as Stripe.Event
 
       await handlePayoutCreated(event)
@@ -101,6 +102,26 @@ describe('payout webhooks', () => {
         data: expect.objectContaining({
           lastPayoutAmountCents: 10000,
           lastPayoutStatus: PAYOUT_STATUS.PENDING,
+        }),
+      })
+    })
+
+    it('uses actual payout status from Stripe (in_transit)', async () => {
+      // Some payouts may already be in_transit when created
+      const event = {
+        id: 'evt_123',
+        type: 'payout.created',
+        account: mockAccountId,
+        data: { object: { ...mockPayout, status: 'in_transit' } },
+      } as Stripe.Event
+
+      await handlePayoutCreated(event)
+
+      expect(db.profile.update).toHaveBeenCalledWith({
+        where: { id: mockProfileId },
+        data: expect.objectContaining({
+          lastPayoutAmountCents: 10000,
+          lastPayoutStatus: PAYOUT_STATUS.IN_TRANSIT,
         }),
       })
     })
@@ -154,6 +175,118 @@ describe('payout webhooks', () => {
       await expect(handlePayoutCreated(event)).resolves.not.toThrow()
 
       expect(db.profile.update).not.toHaveBeenCalled()
+    })
+
+    it('includes status in activity payload', async () => {
+      const event = {
+        id: 'evt_123',
+        type: 'payout.created',
+        account: mockAccountId,
+        data: { object: { ...mockPayout, status: 'in_transit' } },
+      } as Stripe.Event
+
+      await handlePayoutCreated(event)
+
+      expect(db.activity.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          type: 'payout_initiated',
+          payload: expect.objectContaining({
+            status: PAYOUT_STATUS.IN_TRANSIT,
+          }),
+        }),
+      })
+    })
+  })
+
+  describe('handlePayoutUpdated', () => {
+    it('updates profile with in_transit status', async () => {
+      const inTransitPayout = { ...mockPayout, status: 'in_transit' }
+      const event = {
+        id: 'evt_123',
+        type: 'payout.updated',
+        account: mockAccountId,
+        data: { object: inTransitPayout },
+      } as Stripe.Event
+
+      await handlePayoutUpdated(event)
+
+      expect(db.profile.update).toHaveBeenCalledWith({
+        where: { id: mockProfileId },
+        data: expect.objectContaining({
+          lastPayoutStatus: PAYOUT_STATUS.IN_TRANSIT,
+        }),
+      })
+    })
+
+    it('creates payout_in_transit activity when transitioning to in_transit', async () => {
+      const inTransitPayout = { ...mockPayout, status: 'in_transit' }
+      const event = {
+        id: 'evt_123',
+        type: 'payout.updated',
+        account: mockAccountId,
+        data: { object: inTransitPayout },
+      } as Stripe.Event
+
+      await handlePayoutUpdated(event)
+
+      expect(db.activity.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          userId: mockUserId,
+          type: 'payout_in_transit',
+          payload: expect.objectContaining({
+            payoutId: 'po_123',
+            amount: 10000,
+            currency: 'USD',
+            status: PAYOUT_STATUS.IN_TRANSIT,
+          }),
+        }),
+      })
+    })
+
+    it('does not create activity for non-in_transit status updates', async () => {
+      // Status updates to 'pending' (shouldn't create activity)
+      const pendingPayout = { ...mockPayout, status: 'pending' }
+      const event = {
+        id: 'evt_123',
+        type: 'payout.updated',
+        account: mockAccountId,
+        data: { object: pendingPayout },
+      } as Stripe.Event
+
+      await handlePayoutUpdated(event)
+
+      // Profile should be updated
+      expect(db.profile.update).toHaveBeenCalled()
+      // But no activity should be created for pending
+      expect(db.activity.create).not.toHaveBeenCalled()
+    })
+
+    it('handles missing profile gracefully', async () => {
+      ;(db.profile.findFirst as any).mockResolvedValue(null)
+
+      const event = {
+        id: 'evt_123',
+        type: 'payout.updated',
+        account: mockAccountId,
+        data: { object: mockPayout },
+      } as Stripe.Event
+
+      await expect(handlePayoutUpdated(event)).resolves.not.toThrow()
+
+      expect(db.profile.update).not.toHaveBeenCalled()
+    })
+
+    it('handles missing account ID gracefully', async () => {
+      const event = {
+        id: 'evt_123',
+        type: 'payout.updated',
+        account: undefined, // No account ID
+        data: { object: mockPayout },
+      } as unknown as Stripe.Event
+
+      await expect(handlePayoutUpdated(event)).resolves.not.toThrow()
+
+      expect(db.profile.findFirst).not.toHaveBeenCalled()
     })
   })
 
