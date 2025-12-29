@@ -4,6 +4,21 @@ import { renderWithProviders } from '../test/testUtils'
 import { useOnboardingStore } from './store'
 import OnboardingFlow from './index'
 
+// Mock matchMedia for useReducedMotion hook
+Object.defineProperty(window, 'matchMedia', {
+  writable: true,
+  value: vi.fn().mockImplementation((query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  })),
+})
+
 // Mock useAuthState to simulate authenticated user
 vi.mock('../hooks/useAuthState', () => ({
   useAuthState: () => ({
