@@ -22,6 +22,8 @@ const routeImports: Record<string, () => Promise<unknown>> = {
   '/dashboard': () => import('../Dashboard'),
   '/activity': () => import('../Activity'),
   '/subscribers': () => import('../Subscribers'),
+  '/my-subscriptions': () => import('../MySubscriptions'),
+  '/analytics': () => import('../Analytics'),
   '/profile': () => import('../Profile'),
   '/settings': () => import('../Settings'),
   '/settings/payments': () => import('../PaymentSettings'),

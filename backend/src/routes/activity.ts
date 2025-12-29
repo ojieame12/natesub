@@ -404,6 +404,7 @@ activity.get(
         where: { userId },
         select: {
           lastPayoutAt: true,
+          lastPayoutStatus: true, // For real payout status from webhooks
           paymentProvider: true,
           stripeAccountId: true, // For FX backfill
           currency: true, // For cross-border detection
@@ -461,7 +462,7 @@ activity.get(
             estimatedStatus = lastPayoutStatus as 'paid' | 'pending' | 'in_transit' | 'failed'
             expectedPayoutDate = lastPayoutDate || addBusinessDays(new Date(paymentDate), provider === 'stripe' ? 2 : 1)
             if (lastPayoutStatus === 'paid') {
-              paidDate = lastPayoutDate
+              paidDate = lastPayoutDate ?? null
             }
           } else if (provider === 'stripe') {
             // Fallback: Stripe payouts are typically T+2 business days

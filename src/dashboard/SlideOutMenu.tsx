@@ -4,6 +4,7 @@
 
 import { type LucideIcon, ChevronRight, X, UserPlus, Heart, BarChart3, DollarSign, Clock, FileText, Pen, Layout, CreditCard, Settings, HelpCircle } from 'lucide-react'
 import { Pressable } from '../components'
+import { getPrefetchHandlers } from '../utils/prefetch'
 
 interface MenuItem {
   id: string
@@ -79,6 +80,7 @@ export function SlideOutMenu({
               key={item.id}
               className="menu-item"
               onClick={() => handleNavigate(item.path)}
+              {...getPrefetchHandlers(item.path)}
             >
               <item.icon size={20} className="menu-item-icon" />
               <div className="menu-item-content">
@@ -94,6 +96,7 @@ export function SlideOutMenu({
               key={item.id}
               className="menu-item"
               onClick={() => handleNavigate(item.path)}
+              {...getPrefetchHandlers(item.path)}
             >
               <item.icon size={20} className="menu-item-icon" />
               <div className="menu-item-content">
