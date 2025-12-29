@@ -94,9 +94,8 @@ describe('StripeComplete', () => {
     expect(screen.getByText(/Checking status/)).toBeInTheDocument()
   })
 
-  it('navigates to review step 9 for US users (10-step non-service flow)', async () => {
-    // US users have 10-step non-service flow, review is at step 9
-    // Flow: Start(0) → Email(1) → OTP(2) → Identity(3) → Address(4) → Purpose(5) → Avatar(6) → Username(7) → Payment(8) → Review(9)
+  it('navigates to review step for US users (non-service flow)', async () => {
+    // US users with non-service purpose go to review step after Stripe completion
     useOnboardingStore.setState({ countryCode: 'US', purpose: 'support' })
     vi.mocked(api.stripe.getStatus).mockResolvedValue({ connected: true, status: 'active', details: {} as any })
 
@@ -109,13 +108,12 @@ describe('StripeComplete', () => {
     const continueBtn = screen.getByText('Continue to Dashboard')
     fireEvent.click(continueBtn)
 
-    // US non-service has 10-step flow, review is at step 9
-    expect(mockNavigate).toHaveBeenCalledWith('/onboarding?step=9', { replace: true })
+    // Non-service flow navigates to review step using step key
+    expect(mockNavigate).toHaveBeenCalledWith('/onboarding?step=review', { replace: true })
   })
 
-  it('navigates to review step 8 for NG users (9-step non-service flow)', async () => {
-    // NG users skip address step, have 9-step non-service flow, review is at step 8
-    // Flow: Start(0) → Email(1) → OTP(2) → Identity(3) → Purpose(4) → Avatar(5) → Username(6) → Payment(7) → Review(8)
+  it('navigates to review step for NG users (non-service flow)', async () => {
+    // NG users with non-service purpose go to review step after Stripe completion
     useOnboardingStore.setState({ countryCode: 'NG', purpose: 'support' })
     vi.mocked(api.stripe.getStatus).mockResolvedValue({ connected: true, status: 'active', details: {} as any })
 
@@ -128,13 +126,12 @@ describe('StripeComplete', () => {
     const continueBtn = screen.getByText('Continue to Dashboard')
     fireEvent.click(continueBtn)
 
-    // NG non-service has 9-step flow (no address), review is at step 8
-    expect(mockNavigate).toHaveBeenCalledWith('/onboarding?step=8', { replace: true })
+    // Non-service flow navigates to review step using step key
+    expect(mockNavigate).toHaveBeenCalledWith('/onboarding?step=review', { replace: true })
   })
 
-  it('navigates to review step 10 for NG service users (11-step flow)', async () => {
-    // NG service users have 11-step flow, review is at step 10
-    // Flow: Start(0) → Email(1) → OTP(2) → Identity(3) → Purpose(4) → Avatar(5) → Username(6) → Payment(7) → ServiceDesc(8) → AIGen(9) → Review(10)
+  it('navigates to service-desc step for service users', async () => {
+    // Service users go to service-desc step after Stripe completion (not review)
     useOnboardingStore.setState({ countryCode: 'NG', purpose: 'service' })
     vi.mocked(api.stripe.getStatus).mockResolvedValue({ connected: true, status: 'active', details: {} as any })
 
@@ -147,8 +144,8 @@ describe('StripeComplete', () => {
     const continueBtn = screen.getByText('Continue to Dashboard')
     fireEvent.click(continueBtn)
 
-    // NG service has 11-step flow, review is at step 10
-    expect(mockNavigate).toHaveBeenCalledWith('/onboarding?step=10', { replace: true })
+    // Service flow navigates to service-desc step (then AI gen, then review)
+    expect(mockNavigate).toHaveBeenCalledWith('/onboarding?step=service-desc', { replace: true })
   })
 
   it('retries setup when restricted', async () => {

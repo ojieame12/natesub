@@ -6,7 +6,6 @@ import { api } from './api'
 import { useProfile, useCurrentUser } from './api/hooks'
 import { useOnboardingStore } from './onboarding/store'
 import { setPaymentConfirmed } from './utils/paymentConfirmed'
-import { getReviewStepIndex } from './utils/constants'
 import { Pressable, LoadingButton } from './components'
 import './StripeComplete.css'
 
@@ -58,11 +57,10 @@ export default function StripeComplete() {
   const { data: profileData } = useProfile()
   const { data: userData } = useCurrentUser()
   const profile = profileData?.profile
-  const { reset: resetOnboarding, countryCode, purpose } = useOnboardingStore()
+  const { reset: resetOnboarding, purpose } = useOnboardingStore()
 
   // Use store → profile → backend onboardingData fallback chain (most robust)
   // This handles cases where localStorage is cleared (Safari, storage reset)
-  const resolvedCountryCode = countryCode || profile?.countryCode || userData?.onboarding?.data?.countryCode
   const resolvedPurpose = purpose || profile?.purpose || userData?.onboarding?.data?.purpose
 
   const [status, setStatus] = useState<'loading' | 'success' | 'pending' | 'restricted' | 'network_error'>('loading')
@@ -252,19 +250,19 @@ export default function StripeComplete() {
       sessionStorage.removeItem('stripe_return_to')
       navigate(returnTo, { replace: true })
     } else if (source === 'onboarding') {
-      // Return to Review step (dynamic based on country/purpose/flow length)
-      // Uses resolved values with fallback chain for robustness
-      const reviewStep = getReviewStepIndex(resolvedCountryCode, resolvedPurpose)
-      navigate(`/onboarding?step=${reviewStep}`, { replace: true })
+      // Return to next step using step KEY (not numeric index)
+      // Service mode goes to service-desc, others go to review
+      const nextStepKey = resolvedPurpose === 'service' ? 'service-desc' : 'review'
+      navigate(`/onboarding?step=${nextStepKey}`, { replace: true })
     } else if (profile && !profile.isPublic) {
       // Fallback: If source is unknown (lost session) but profile is not public (draft),
       // assume we are in onboarding flow and need to launch.
-      const reviewStep = getReviewStepIndex(resolvedCountryCode, resolvedPurpose)
-      navigate(`/onboarding?step=${reviewStep}`, { replace: true })
+      const nextStepKey = resolvedPurpose === 'service' ? 'service-desc' : 'review'
+      navigate(`/onboarding?step=${nextStepKey}`, { replace: true })
     } else {
       navigate('/dashboard', { replace: true })
     }
-  }, [navigate, source, profile, resolvedCountryCode, resolvedPurpose])
+  }, [navigate, source, profile, resolvedPurpose])
 
   // Auto-continue after success for a smoother flow (especially on mobile).
   // Only do this when user came from a known flow, so manual visits don't instantly redirect away.
@@ -304,9 +302,9 @@ export default function StripeComplete() {
       sessionStorage.removeItem('stripe_return_to')
       navigate(returnTo, { replace: true })
     } else if (source === 'onboarding') {
-      // Uses resolved values with fallback chain for robustness
-      const reviewStep = getReviewStepIndex(resolvedCountryCode, resolvedPurpose)
-      navigate(`/onboarding?step=${reviewStep}`, { replace: true })
+      // Return to next step using step KEY (not numeric index)
+      const nextStepKey = resolvedPurpose === 'service' ? 'service-desc' : 'review'
+      navigate(`/onboarding?step=${nextStepKey}`, { replace: true })
     } else {
       navigate('/dashboard', { replace: true })
     }
