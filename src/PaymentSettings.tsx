@@ -3,14 +3,13 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Building2, Check, ChevronDown, CreditCard, ExternalLink, History, Loader2, Lock, RefreshCw, TriangleAlert, Zap, Clock, TrendingUp, Calendar } from 'lucide-react'
 import { InlineError, Pressable, Skeleton, SwiftCodeLookup, BottomDrawer } from './components'
 import { api } from './api'
-import type { PaystackConnectionStatus } from './api/client'
-import { useProfile, useSalaryMode, useUpdateSalaryMode } from './api/hooks'
+// PaystackConnectionStatus type - now handled by React Query
+import { useProfile, useSalaryMode, useUpdateSalaryMode, useStripeStatus, usePaystackStatus, useStripeBalance } from './api/hooks'
+import { useDelayedLoading } from './hooks'
 import { formatCurrencyFromCents } from './utils/currency'
 import { needsSwiftCodeHelp } from './utils/swiftCodes'
 import { formatStripeCurrencies, formatPaystackCurrencies } from './utils/regionConfig'
 import './PaymentSettings.css'
-
-type StripeStatus = Awaited<ReturnType<typeof api.stripe.getStatus>>
 
 const STRIPE_ONBOARDING_RETURN_MAX_AGE_MS = 30 * 60 * 1000
 
@@ -123,22 +122,54 @@ export default function PaymentSettings() {
 
   const returnTo = useMemo(() => getLocationReturnTo(location.state), [location.state])
 
-  const [loading, setLoading] = useState(true)
+  // Use React Query hooks for payment status (benefits from prefetch + caching)
+  const {
+    data: stripeStatusData,
+    isLoading: stripeLoading,
+    error: stripeQueryError,
+    refetch: refetchStripeStatus,
+  } = useStripeStatus()
+  const {
+    data: paystackStatusData,
+    isLoading: paystackLoading,
+    error: paystackQueryError,
+    refetch: refetchPaystackStatus,
+  } = usePaystackStatus()
+  const {
+    data: stripeBalanceData,
+    isLoading: stripeBalanceLoading,
+    refetch: refetchStripeBalance,
+  } = useStripeBalance()
+
+  // Derive loading state from React Query - delay to prevent skeleton flash
+  const isInitialLoading = stripeLoading || paystackLoading
+  const showSkeleton = useDelayedLoading(isInitialLoading, 200)
   const [isRefreshing, setIsRefreshing] = useState(false)
-  const [stripeStatus, setStripeStatus] = useState<StripeStatus | null>(null)
-  const [paystackStatus, setPaystackStatus] = useState<PaystackConnectionStatus | null>(null)
 
-  const [stripeBalance, setStripeBalance] = useState<{
-    available: number;
-    pending: number;
-    currency?: string;
-    nextPayoutDate?: string | null;
-    nextPayoutAmount?: number | null;
-  } | null>(null)
-  const [stripeBalanceLoading, setStripeBalanceLoading] = useState(false)
+  // Map React Query data to local state shape for backwards compatibility
+  const stripeStatus = stripeStatusData ?? null
+  const paystackStatus = paystackStatusData ?? null
+  const stripeBalance = stripeBalanceData?.balance ?? null
 
+  // Error states - suppress "not supported" errors for unsupported regions
   const [stripeError, setStripeError] = useState<string | null>(null)
   const [paystackError, setPaystackError] = useState<string | null>(null)
+
+  // Sync query errors to local state (for display + mutation errors)
+  useEffect(() => {
+    if (stripeQueryError) {
+      const errorMsg = getErrorMessage(stripeQueryError)
+      if (!errorMsg.toLowerCase().includes('not currently supported')) {
+        setStripeError(errorMsg)
+      }
+    }
+  }, [stripeQueryError])
+
+  useEffect(() => {
+    if (paystackQueryError) {
+      setPaystackError(getErrorMessage(paystackQueryError))
+    }
+  }, [paystackQueryError])
 
   const [stripeConnecting, setStripeConnecting] = useState(false)
   const [stripeFixing, setStripeFixing] = useState(false)
@@ -189,73 +220,23 @@ export default function PaymentSettings() {
     return false
   }, [navigate])
 
-  const fetchStripeBalance = useCallback(async () => {
-    setStripeBalanceLoading(true)
-    try {
-      const result = await api.stripe.getBalance()
-      if (!isMountedRef.current) return
-      setStripeBalance(result.balance)
-    } catch (err) {
-      if (!isMountedRef.current) return
-      setStripeError((prev) => prev || getErrorMessage(err))
-    } finally {
-      if (isMountedRef.current) setStripeBalanceLoading(false)
-    }
-  }, [])
+  // Check for Stripe return redirect on mount
+  useEffect(() => {
+    redirectIfStripeReturnedHere()
+  }, [redirectIfStripeReturnedHere])
 
-  const loadPaymentData = useCallback(async (isManualRefresh = false) => {
-    if (redirectIfStripeReturnedHere()) return
-
-    // Only show full skeleton on initial load, not manual refresh
-    if (isManualRefresh) {
-      setIsRefreshing(true)
-    } else {
-      setLoading(true)
-    }
+  // Manual refresh handler using React Query refetch
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true)
     setStripeError(null)
     setPaystackError(null)
-    // Don't clear balance on refresh - keep showing stale data
-    if (!isManualRefresh) {
-      setStripeBalance(null)
-    }
-
-    const [stripeResult, paystackResult] = await Promise.allSettled([
-      api.stripe.getStatus({ quick: true, refresh: false }),
-      api.paystack.getStatus(),
+    await Promise.all([
+      refetchStripeStatus(),
+      refetchPaystackStatus(),
+      refetchStripeBalance(),
     ])
-
-    if (!isMountedRef.current) return
-
-    if (stripeResult.status === 'fulfilled') {
-      setStripeStatus(stripeResult.value)
-      if (stripeResult.value.connected && stripeResult.value.status === 'active') {
-        // Balance is helpful, but keep the page responsive by fetching it separately.
-        void fetchStripeBalance()
-      }
-    } else {
-      setStripeStatus({ connected: false, status: 'not_started' } as StripeStatus)
-      const errorMsg = getErrorMessage(stripeResult.reason)
-      // Suppress "not supported" errors for users in unsupported regions (e.g. NG)
-      // since they likely use Paystack instead.
-      if (!errorMsg.toLowerCase().includes('not currently supported')) {
-        setStripeError(errorMsg)
-      }
-    }
-
-    if (paystackResult.status === 'fulfilled') {
-      setPaystackStatus(paystackResult.value)
-    } else {
-      setPaystackStatus({ connected: false, status: 'not_started' })
-      setPaystackError(getErrorMessage(paystackResult.reason))
-    }
-
-    setLoading(false)
     setIsRefreshing(false)
-  }, [fetchStripeBalance, redirectIfStripeReturnedHere])
-
-  useEffect(() => {
-    void loadPaymentData()
-  }, [loadPaymentData])
+  }, [refetchStripeStatus, refetchPaystackStatus, refetchStripeBalance])
 
   const handleBack = useCallback(() => {
     if (returnTo) {
@@ -302,7 +283,7 @@ export default function PaymentSettings() {
       }
 
       if (result.alreadyOnboarded) {
-        void loadPaymentData()
+        void handleRefresh()
       }
     } catch (err) {
       const errorMsg = getErrorMessage(err)
@@ -312,7 +293,7 @@ export default function PaymentSettings() {
     } finally {
       if (isMountedRef.current) setStripeConnecting(false)
     }
-  }, [loadPaymentData, returnTo, userCountryCode])
+  }, [handleRefresh, returnTo, userCountryCode])
 
   const handleSwiftLookupContinue = useCallback(() => {
     if (pendingStripeUrl) {
@@ -361,19 +342,15 @@ export default function PaymentSettings() {
     setStripeError(null)
 
     try {
-      const result = await api.stripe.getStatus({ quick: true, refresh: true })
-      if (!isMountedRef.current) return
-      setStripeStatus(result)
-      if (result.connected && result.status === 'active') {
-        void fetchStripeBalance()
-      }
+      await refetchStripeStatus()
+      await refetchStripeBalance()
     } catch (err) {
       if (!isMountedRef.current) return
       setStripeError(getErrorMessage(err))
     } finally {
       if (isMountedRef.current) setStripeRefreshing(false)
     }
-  }, [fetchStripeBalance])
+  }, [refetchStripeStatus, refetchStripeBalance])
 
   const handleOpenStripeDashboard = useCallback(async () => {
     setStripeOpeningDashboard(true)
@@ -406,7 +383,7 @@ export default function PaymentSettings() {
 
   const stripeRequirements = stripeStatus?.details?.requirements?.currentlyDue || []
 
-  if (loading) {
+  if (showSkeleton) {
     return (
       <div className="payment-settings-page">
         <header className="payment-settings-header">
@@ -437,7 +414,7 @@ export default function PaymentSettings() {
           <ArrowLeft size={20} />
         </Pressable>
         <div className="payment-settings-title">Payments</div>
-        <Pressable className="back-btn" onClick={() => loadPaymentData(true)} disabled={loading || isRefreshing}>
+        <Pressable className="back-btn" onClick={handleRefresh} disabled={isInitialLoading || isRefreshing}>
           <RefreshCw size={20} className={isRefreshing ? 'spin' : ''} />
         </Pressable>
       </header>

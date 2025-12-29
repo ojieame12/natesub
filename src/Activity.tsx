@@ -20,7 +20,7 @@ import {
     ShieldX,
 } from 'lucide-react'
 import { Pressable, Skeleton, SkeletonList, ErrorState, LoadingButton, PullToRefresh } from './components'
-import { useScrolled } from './hooks'
+import { useScrolled, useDelayedLoading } from './hooks'
 import { useActivity, useMetrics, useCurrentUser } from './api/hooks'
 import { centsToDisplayAmount, getCurrencySymbol, formatCompactNumber, formatSmartAmount } from './utils/currency'
 import './Activity.css'
@@ -178,6 +178,9 @@ export default function Activity() {
         isFetchingNextPage,
     } = useActivity(20, { seedFromLimit: 5, polling: true }) // Seed from Dashboard's cached data + poll every 30s
 
+    // Delay showing skeleton to prevent flash on fast cache hits
+    const showSkeleton = useDelayedLoading(isLoading, 200)
+
     // Track if this is the initial load to prevent re-animating on refetch
     const hasAnimatedRef = useRef(false)
     if (activityData && !hasAnimatedRef.current) {
@@ -269,7 +272,7 @@ export default function Activity() {
                         message="We had trouble loading your activity. Please try again."
                         onRetry={loadData}
                     />
-                ) : isLoading ? (
+                ) : showSkeleton ? (
                     <>
                         <div className="activity-section">
                             <div className="activity-date-header">

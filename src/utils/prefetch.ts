@@ -138,6 +138,26 @@ const routeDataPrefetch: Record<string, () => Promise<void>> = {
   '/requests': async () => {
     // Requests uses useInfiniteQuery - nothing to prefetch here
   },
+
+  '/edit-page': async () => {
+    await queryClient.prefetchQuery({
+      queryKey: queryKeys.profile,
+      queryFn: () => api.profile.get(),
+      staleTime: 5 * 60 * 1000,
+    })
+  },
+
+  '/analytics': async () => {
+    await queryClient.prefetchQuery({
+      queryKey: queryKeys.analytics.stats,
+      queryFn: () => api.analytics.getStats(),
+      staleTime: 60 * 1000,
+    })
+  },
+
+  '/my-subscriptions': async () => {
+    // Uses useInfiniteQuery for subscriptions list - nothing to prefetch
+  },
 }
 
 // Track which routes have been prefetched to avoid duplicate requests
