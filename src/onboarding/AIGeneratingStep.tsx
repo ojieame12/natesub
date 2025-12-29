@@ -71,58 +71,69 @@ export default function AIGeneratingStep() {
 
   const runGeneration = async () => {
     try {
-      // Phase 1: Analyzing
+      // Phase 1: Analyzing (brief for UX feedback)
       setPhase('analyzing')
-      await delay(800) // Brief pause for UX
 
       let generatedPerks = servicePerks
       let generatedBanner = bannerUrl
 
-      // Phase 2: Generate perks (skip if already exist)
-      if (!hasPerks) {
-        setPhase('perks')
-        const perksResult = await generatePerksMutation.mutateAsync({
-          description: serviceDescription,
-          pricePerMonth: singleAmount || 10,
-          displayName: displayName || undefined,
-        })
-        setServicePerks(perksResult.perks)
-        generatedPerks = perksResult.perks
-      }
+      // Run perks and banner generation in PARALLEL for faster completion
+      const needsPerks = !hasPerks
+      const needsBanner = avatarUrl && !hasBanner
 
-      // Phase 3: Generate banner (if avatar exists and banner doesn't)
-      if (avatarUrl && !hasBanner) {
-        setPhase('banner')
-        try {
-          const bannerResult = await generateBannerMutation.mutateAsync()
-          setBannerUrl(bannerResult.bannerUrl)
-          generatedBanner = bannerResult.bannerUrl
-        } catch (bannerErr) {
-          // Banner is optional - continue without it
-          console.warn('Banner generation failed:', bannerErr)
+      if (needsPerks || needsBanner) {
+        setPhase(needsPerks ? 'perks' : 'banner')
+
+        const [perksResult, bannerResult] = await Promise.allSettled([
+          // Generate perks (skip if already exist)
+          needsPerks
+            ? generatePerksMutation.mutateAsync({
+                description: serviceDescription,
+                pricePerMonth: singleAmount || 10,
+                displayName: displayName || undefined,
+              })
+            : Promise.resolve(null),
+          // Generate banner in parallel (if avatar exists)
+          needsBanner
+            ? generateBannerMutation.mutateAsync()
+            : Promise.resolve(null),
+        ])
+
+        // Handle perks result
+        if (perksResult.status === 'fulfilled' && perksResult.value) {
+          setServicePerks(perksResult.value.perks)
+          generatedPerks = perksResult.value.perks
+        } else if (perksResult.status === 'rejected') {
+          // Perks are required - throw to trigger error state
+          throw perksResult.reason
+        }
+
+        // Handle banner result (optional - failure is ok)
+        if (bannerResult.status === 'fulfilled' && bannerResult.value) {
+          setBannerUrl(bannerResult.value.bannerUrl)
+          generatedBanner = bannerResult.value.bannerUrl
+        } else if (bannerResult.status === 'rejected') {
+          console.warn('Banner generation failed:', bannerResult.reason)
         }
       }
 
-      // Persist generated content to backend for cross-device resume
-      // Silent fail - local store is primary, backend is for durability
-      // Include purpose redundantly to ensure backend knows this is service flow
+      // Persist generated content to backend (fire and forget)
       api.auth.saveOnboardingProgress({
         step: currentStep,
-        stepKey: 'ai-gen', // Canonical step key for safe resume
+        stepKey: 'ai-gen',
         data: {
           servicePerks: generatedPerks,
           bannerUrl: generatedBanner || null,
-          purpose: 'service', // Redundant - ensures backend knows service flow
+          purpose: 'service',
         },
       }).catch(() => {})
 
-      // Phase 4: Finishing
+      // Quick finishing phase for UX transition
       setPhase('finishing')
-      await delay(600)
+      await delay(150)
 
-      // Phase 5: Done - auto advance
+      // Done - advance immediately
       setPhase('done')
-      await delay(400)
       nextStep()
 
     } catch (err: any) {

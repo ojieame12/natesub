@@ -3,21 +3,38 @@ import { useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { Loader2 } from 'lucide-react'
 import { setPaymentConfirmed } from './utils/paymentConfirmed'
-import { getReviewStepIndex } from './utils/constants'
-import { useOnboardingStore } from './onboarding/store'
+import { useOnboardingStore, useShallow, type OnboardingStepKey } from './onboarding/store'
 import { useProfile, useCurrentUser } from './api/hooks'
 import './StripeComplete.css'
 
 /**
  * PaystackOnboardingComplete - Handles redirect after Paystack bank setup
  *
- * This page auto-redirects to the review/launch step (dynamic based on flow).
- * No intermediate UI is shown - users go straight to setting up their page.
+ * For non-service users: redirects to review step
+ * For service users: redirects to the appropriate service step based on progress:
+ *   - No service description → service-desc
+ *   - Has description, no perks → ai-gen
+ *   - Has perks → review
  */
 export default function PaystackOnboardingComplete() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const { countryCode, purpose, hydrateFromServer } = useOnboardingStore()
+
+  // Use shallow selector to prevent unnecessary re-renders
+  const {
+    countryCode,
+    purpose,
+    serviceDescription,
+    servicePerks,
+    hydrateFromServer,
+  } = useOnboardingStore(useShallow((s) => ({
+    countryCode: s.countryCode,
+    purpose: s.purpose,
+    serviceDescription: s.serviceDescription,
+    servicePerks: s.servicePerks,
+    hydrateFromServer: s.hydrateFromServer,
+  })))
+
   const { data: profileData } = useProfile()
   const { data: userData } = useCurrentUser()
   const profile = profileData?.profile
@@ -26,7 +43,6 @@ export default function PaystackOnboardingComplete() {
 
   // Use store → profile → backend onboardingData fallback chain (most robust)
   // This handles cases where localStorage is cleared (Safari, storage reset)
-  const resolvedCountryCode = countryCode || profile?.countryCode || userData?.onboarding?.data?.countryCode
   const resolvedPurpose = purpose || profile?.purpose || userData?.onboarding?.data?.purpose
 
   // Hydrate store from server if store is empty but server has data
@@ -39,6 +55,36 @@ export default function PaystackOnboardingComplete() {
       })
     }
   }, [userData, purpose, hydrateFromServer])
+
+  /**
+   * Determine the correct return step key based on purpose and existing data.
+   * For service mode, we need to ensure users complete service-desc and ai-gen steps.
+   */
+  const getReturnStepKey = (): OnboardingStepKey => {
+    // 1. Check sessionStorage first (set by PaymentMethodStep before navigation)
+    const sessionReturnTo = sessionStorage.getItem('paystack_return_to')
+    if (sessionReturnTo) {
+      // Extract step key from URL like "/onboarding?step=service-desc"
+      const match = sessionReturnTo.match(/[?&]step=([^&]+)/)
+      if (match) {
+        sessionStorage.removeItem('paystack_return_to') // Clean up
+        return match[1] as OnboardingStepKey
+      }
+    }
+
+    // 2. Non-service users go straight to review
+    if (resolvedPurpose !== 'service') {
+      return 'review'
+    }
+
+    // 3. Service users: determine based on existing data
+    const hasDescription = serviceDescription?.trim()
+    const hasPerks = servicePerks?.length >= 3
+
+    if (!hasDescription) return 'service-desc'
+    if (!hasPerks) return 'ai-gen'
+    return 'review'
+  }
 
   useEffect(() => {
     if (!hasProcessed.current) {
@@ -70,12 +116,12 @@ export default function PaystackOnboardingComplete() {
         }
       })
 
-      // Immediately redirect to review/launch step (dynamic based on country and purpose)
-      // Uses store values with profile fallback for robustness
-      const reviewStep = getReviewStepIndex(resolvedCountryCode, resolvedPurpose)
-      navigate(`/onboarding?step=${reviewStep}`, { replace: true })
+      // Navigate to the correct step using step key (not numeric index)
+      // This ensures service users go through service-desc and ai-gen steps
+      const returnStepKey = getReturnStepKey()
+      navigate(`/onboarding?step=${returnStepKey}`, { replace: true })
     }
-  }, [navigate, queryClient, resolvedCountryCode, resolvedPurpose])
+  }, [navigate, queryClient, resolvedPurpose, serviceDescription, servicePerks])
 
   // Show minimal loading state while redirecting
   return (

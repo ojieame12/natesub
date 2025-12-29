@@ -42,16 +42,13 @@ export default function PersonalUsernameStep() {
         return null
     }
 
-    const handleContinue = async () => {
-        // Save progress to server
-        try {
-            await saveProgress({
-                step: currentStep + 1,
-                data: { username },
-            })
-        } catch (err) {
-            console.warn('Failed to save onboarding progress:', err)
-        }
+    const handleContinue = () => {
+        // Fire and forget - don't block navigation on save
+        saveProgress({
+            step: currentStep + 1,
+            data: { username },
+        }).catch(err => console.warn('[PersonalUsernameStep] Failed to save progress:', err))
+
         nextStep()
     }
 

@@ -30,17 +30,13 @@ export default function IdentityStep() {
         setSearchQuery('')
     }
 
-    const handleContinue = async () => {
-        // Save progress to server at this milestone
-        try {
-            await saveProgress({
-                step: currentStep + 1, // Will be moving to next step
-                data: { firstName, lastName, country, countryCode, currency },
-            })
-        } catch (err) {
-            // Non-blocking - continue even if save fails
-            console.warn('Failed to save onboarding progress:', err)
-        }
+    const handleContinue = () => {
+        // Fire and forget - don't block navigation on save
+        saveProgress({
+            step: currentStep + 1, // Will be moving to next step
+            data: { firstName, lastName, country, countryCode, currency },
+        }).catch(err => console.warn('[IdentityStep] Failed to save progress:', err))
+
         nextStep()
     }
 

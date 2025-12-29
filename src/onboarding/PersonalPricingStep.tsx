@@ -89,19 +89,16 @@ export default function PersonalPricingStep() {
         ? (singleAmount !== null && singleAmount > 0 && singleAmount < minAmount)
         : (tiers.some(t => t.amount > 0 && t.amount < minAmount))
 
-    const handleContinue = async () => {
-        // Save pricing milestone to server
-        try {
-            await saveProgress({
-                step: currentStep + 1,
-                data: {
-                    pricingModel,
-                    singleAmount: pricingModel === 'single' ? singleAmount : undefined,
-                },
-            })
-        } catch (err) {
-            console.warn('Failed to save onboarding progress:', err)
-        }
+    const handleContinue = () => {
+        // Fire and forget - don't block navigation on save
+        saveProgress({
+            step: currentStep + 1,
+            data: {
+                pricingModel,
+                singleAmount: pricingModel === 'single' ? singleAmount : undefined,
+            },
+        }).catch(err => console.warn('[PersonalPricingStep] Failed to save progress:', err))
+
         nextStep()
     }
 

@@ -205,12 +205,12 @@ export default function PaymentMethodStep() {
                 city: store.city?.trim() || undefined,
                 state: store.state?.trim() || undefined,
                 zip: store.zip?.trim() || undefined,
+                // Keep profile private/draft until the final "Launch" step
+                isPublic: false,
             }
 
-            // Save profile to backend
+            // Save profile to backend (single call - includes isPublic: false)
             await api.profile.update(profileData)
-            // Ensure profile stays private/draft until the final "Launch" step
-            await api.profile.updateSettings({ isPublic: false })
 
             // Persist onboarding progress so the flow can resume after redirects
             // Save next step - for service flow it's service-desc, for others it's review
@@ -284,6 +284,11 @@ export default function PaymentMethodStep() {
 
             // Handle Paystack connect flow - navigate to bank account step
             if (selectedMethod === 'paystack') {
+                // Store source for redirect handling when user returns from Paystack
+                sessionStorage.setItem('paystack_onboarding_source', 'onboarding')
+                // Fallback: return to next step after Payment (using step key for safe resume)
+                const nextStepKey = store.purpose === 'service' ? 'service-desc' : 'review'
+                sessionStorage.setItem('paystack_return_to', `/onboarding?step=${nextStepKey}`)
                 navigate('/onboarding/paystack')
                 return
             }

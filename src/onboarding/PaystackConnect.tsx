@@ -23,6 +23,7 @@ export default function PaystackConnect() {
     // Refs
     const dropdownRef = useRef<HTMLDivElement>(null)
     const listRef = useRef<HTMLDivElement>(null)
+    const verifyRequestId = useRef(0) // Track latest verification request to ignore stale responses
 
     // Form state
     const [selectedBank, setSelectedBank] = useState<Bank | null>(null)
@@ -129,6 +130,10 @@ export default function PaystackConnect() {
             setIsTyping(true)
         }
 
+        // Increment request ID - any in-flight request with older ID will be ignored
+        verifyRequestId.current += 1
+        const currentRequestId = verifyRequestId.current
+
         const verifyAccount = async () => {
             setIsTyping(false)
 
@@ -144,6 +149,12 @@ export default function PaystackConnect() {
                     bankCode: selectedBank.code,
                     ...(isSouthAfrica && idNumber ? { idNumber } : {}),
                 })
+
+                // Ignore stale responses - only apply if this is still the latest request
+                if (verifyRequestId.current !== currentRequestId) {
+                    return
+                }
+
                 if (result.verified && result.accountName) {
                     setVerifiedName(result.accountName)
                     setVerifyError(null)
@@ -159,6 +170,10 @@ export default function PaystackConnect() {
                     setVerificationSkipped(false)
                 }
             } catch (err: any) {
+                // Ignore errors from stale requests
+                if (verifyRequestId.current !== currentRequestId) {
+                    return
+                }
                 setVerifiedName(null)
                 setVerifyError(err?.error || 'Could not verify account. Please check the details.')
                 setVerificationSkipped(false)

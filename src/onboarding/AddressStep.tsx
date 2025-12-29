@@ -19,16 +19,13 @@ export default function AddressStep() {
     // Validation - street and city required, state/zip optional but recommended
     const isValid = address.trim().length >= 5 && city.trim().length >= 2
 
-    const handleContinue = async () => {
-        // Save progress to server
-        try {
-            await saveProgress({
-                step: currentStep + 1,
-                data: { address, city, state, zip },
-            })
-        } catch (err) {
-            console.warn('Failed to save onboarding progress:', err)
-        }
+    const handleContinue = () => {
+        // Fire and forget - don't block navigation on save
+        saveProgress({
+            step: currentStep + 1,
+            data: { address, city, state, zip },
+        }).catch(err => console.warn('[AddressStep] Failed to save progress:', err))
+
         nextStep()
     }
 
