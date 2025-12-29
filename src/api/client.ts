@@ -331,9 +331,11 @@ async function apiFetch<T>(
     return await fetchClient<T>(path, options)
   } catch (err: any) {
     // Re-throw as ApiError format for backward compatibility
+    // Preserve additional fields like limitReached for specific error handling
     throw {
       error: err.message || err.error || 'Request failed',
       status: err.status ?? 0,
+      ...err, // Preserve any additional fields (e.g., limitReached)
     } as ApiError
   }
 }

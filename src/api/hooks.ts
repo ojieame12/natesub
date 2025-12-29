@@ -236,24 +236,11 @@ export function useGeneratePerks() {
 }
 
 export function useGenerateBanner() {
-  const queryClient = useQueryClient()
-
   return useMutation({
     mutationFn: (data?: { serviceDescription?: string; variant?: 'standard' | 'artistic' }) =>
       api.profile.generateBanner(data),
-    onSuccess: (data) => {
-      // Update profile cache with new banner URL
-      queryClient.setQueryData(queryKeys.profile, (oldData: any) => {
-        if (!oldData?.profile) return oldData
-        return {
-          ...oldData,
-          profile: {
-            ...oldData.profile,
-            bannerUrl: data.bannerUrl,
-          },
-        }
-      })
-    },
+    // Note: Don't update profile cache here - banner is only saved to profile
+    // when user explicitly selects it in AIGeneratingStep.handleContinue
   })
 }
 

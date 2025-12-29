@@ -35,6 +35,7 @@ export default function AIGeneratingStep() {
     firstName,
     lastName,
     avatarUrl,
+    bannerUrl,
     bannerOptions,
     servicePerks,
     purpose,
@@ -51,7 +52,6 @@ export default function AIGeneratingStep() {
   const [error, setError] = useState<string | null>(null)
   const [isRegeneratingBanner, setIsRegeneratingBanner] = useState(false)
   const [selectedBannerIndex, setSelectedBannerIndex] = useState<number | 'custom' | null>(null)
-  const [customBannerFile, setCustomBannerFile] = useState<File | null>(null)
   const [customBannerPreview, setCustomBannerPreview] = useState<string | null>(null)
   const [isUploadingCustom, setIsUploadingCustom] = useState(false)
   const hasStarted = useRef(false)
@@ -66,13 +66,28 @@ export default function AIGeneratingStep() {
   const hasPerks = servicePerks.length >= 3
   const canRegenerate = bannerOptions.length < MAX_BANNER_OPTIONS && avatarUrl
 
-  // Initialize selected banner from existing options
+  // Initialize/restore selected banner from existing options or bannerUrl
   useEffect(() => {
-    if (bannerOptions.length > 0 && selectedBannerIndex === null) {
-      // Auto-select first banner if available
-      setSelectedBannerIndex(0)
+    if (selectedBannerIndex !== null) return // Already selected
+    if (bannerOptions.length === 0) return // No options yet
+
+    // Try to restore previous selection from bannerUrl
+    if (bannerUrl) {
+      // Check if bannerUrl matches an AI-generated option
+      const matchIndex = bannerOptions.findIndex(opt => opt.url === bannerUrl)
+      if (matchIndex >= 0) {
+        setSelectedBannerIndex(matchIndex)
+        return
+      }
+      // If bannerUrl doesn't match options, it's a custom banner
+      setCustomBannerPreview(bannerUrl)
+      setSelectedBannerIndex('custom')
+      return
     }
-  }, [bannerOptions, selectedBannerIndex])
+
+    // Default: select first banner
+    setSelectedBannerIndex(0)
+  }, [bannerOptions, selectedBannerIndex, bannerUrl])
 
   // Run generation on mount
   // If we have perks but no banner, still try to generate banner
@@ -204,15 +219,21 @@ export default function AIGeneratingStep() {
           },
         }).catch(() => {})
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Banner regeneration failed:', err)
+      // Check if limit was reached - guide user to upload custom
+      if (err?.limitReached) {
+        setError('You\'ve used all AI generations. Upload your own banner below!')
+        // Scroll to upload option by clicking file input
+        setTimeout(() => fileInputRef.current?.click(), 500)
+      }
     } finally {
       setIsRegeneratingBanner(false)
     }
   }
 
-  // Handle custom banner file selection
-  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle custom banner file selection - upload immediately for persistence
+  const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
 
@@ -222,40 +243,48 @@ export default function AIGeneratingStep() {
       return
     }
 
-    // Validate file size (max 5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      setError('Image must be less than 5MB')
+    // Validate file size (max 10MB - matches backend)
+    if (file.size > 10 * 1024 * 1024) {
+      setError('Image must be less than 10MB')
       return
     }
 
-    setCustomBannerFile(file)
-    setSelectedBannerIndex('custom')
     setError(null)
+    setSelectedBannerIndex('custom')
 
-    // Create preview
-    const reader = new FileReader()
-    reader.onloadend = () => {
-      setCustomBannerPreview(reader.result as string)
-    }
-    reader.readAsDataURL(file)
-  }, [])
+    // Show preview immediately
+    const localPreview = URL.createObjectURL(file)
+    setCustomBannerPreview(localPreview)
 
-  // Upload custom banner when continuing
-  const uploadCustomBanner = async (): Promise<string | null> => {
-    if (!customBannerFile) return null
-
+    // Upload immediately so it persists across navigation
     setIsUploadingCustom(true)
     try {
-      const url = await uploadFile(customBannerFile, 'banner')
-      return url
+      const url = await uploadFile(file, 'banner')
+      setBannerUrl(url) // Persist to store
+      setCustomBannerPreview(url) // Update preview to uploaded URL
+
+      // Persist to backend
+      api.auth.saveOnboardingProgress({
+        step: currentStep,
+        stepKey: 'ai-gen',
+        data: {
+          servicePerks,
+          bannerUrl: url,
+          bannerOptions,
+          purpose: purpose || 'service',
+          serviceDescription,
+        },
+      }).catch(() => {})
     } catch (err) {
       console.error('Custom banner upload failed:', err)
-      setError('Failed to upload custom banner')
-      return null
+      setError('Failed to upload banner. Please try again.')
+      setCustomBannerPreview(null)
+      setSelectedBannerIndex(bannerOptions.length > 0 ? 0 : null)
     } finally {
       setIsUploadingCustom(false)
+      URL.revokeObjectURL(localPreview)
     }
-  }
+  }, [currentStep, servicePerks, bannerOptions, purpose, serviceDescription, setBannerUrl])
 
   const handleRetry = () => {
     setError(null)
@@ -264,7 +293,6 @@ export default function AIGeneratingStep() {
     setServicePerks([])
     clearBannerOptions()
     setSelectedBannerIndex(null)
-    setCustomBannerFile(null)
     setCustomBannerPreview(null)
     setTimeout(() => {
       runGeneration()
@@ -278,16 +306,14 @@ export default function AIGeneratingStep() {
   const handleContinue = async () => {
     let finalBannerUrl: string | null = null
 
-    if (selectedBannerIndex === 'custom' && customBannerFile) {
-      // Upload custom banner
-      finalBannerUrl = await uploadCustomBanner()
-      if (!finalBannerUrl) return // Error handled in uploadCustomBanner
+    if (selectedBannerIndex === 'custom') {
+      // Custom banner was already uploaded on selection, use stored URL
+      finalBannerUrl = bannerUrl
     } else if (typeof selectedBannerIndex === 'number' && bannerOptions[selectedBannerIndex]) {
       finalBannerUrl = bannerOptions[selectedBannerIndex].url
+      // Update store with selected AI banner
+      setBannerUrl(finalBannerUrl)
     }
-
-    // Set the selected banner as the final one
-    setBannerUrl(finalBannerUrl)
 
     // Persist final selection
     api.auth.saveOnboardingProgress({
@@ -476,7 +502,7 @@ export default function AIGeneratingStep() {
               size="lg"
               fullWidth
               onClick={handleContinue}
-              disabled={isUploadingCustom || (selectedBannerIndex === 'custom' && !customBannerFile)}
+              disabled={isUploadingCustom || (selectedBannerIndex === 'custom' && !bannerUrl)}
             >
               {isUploadingCustom ? 'Uploading...' : 'Continue'}
             </Button>
