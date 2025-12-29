@@ -827,8 +827,8 @@ profile.patch(
 // SERVICE MODE ASSETS (Banner + Perks)
 // ============================================
 
-// Max AI banner generations per user (cost control)
-const MAX_BANNER_GENERATIONS = 2
+// Max AI banner generations per user (cost control for free app)
+const MAX_BANNER_GENERATIONS = 5
 
 // Generate banner schema (all fields optional)
 const generateBannerSchema = z.object({
@@ -850,25 +850,16 @@ profile.post(
     const serviceDescription = body.serviceDescription
     const variant = body.variant || 'standard'
 
-    // Check generation limit (stored in User.onboardingData)
-    const user = await db.user.findUnique({
-      where: { id: userId },
-      select: { onboardingData: true },
-    })
-
-    const onboardingData = (user?.onboardingData as Record<string, unknown>) || {}
-    const bannerGenerationCount = (onboardingData.bannerGenerationCount as number) || 0
-
-    if (bannerGenerationCount >= MAX_BANNER_GENERATIONS) {
-      return c.json({
-        error: `You've reached the limit of ${MAX_BANNER_GENERATIONS} AI-generated banners. Please upload a custom banner instead.`,
-        limitReached: true,
-      }, 400)
-    }
-
+    // Get profile with generation count (global limit, survives onboarding)
     const userProfile = await db.profile.findUnique({
       where: { userId },
-      select: { avatarUrl: true, purpose: true, displayName: true, bio: true },
+      select: {
+        avatarUrl: true,
+        purpose: true,
+        displayName: true,
+        bio: true,
+        bannerGenerationCount: true,
+      },
     })
 
     if (!userProfile) {
@@ -877,6 +868,14 @@ profile.post(
 
     if (!userProfile.avatarUrl) {
       return c.json({ error: 'Avatar required to generate banner' }, 400)
+    }
+
+    // Check global generation limit
+    if (userProfile.bannerGenerationCount >= MAX_BANNER_GENERATIONS) {
+      return c.json({
+        error: `You've reached the limit of ${MAX_BANNER_GENERATIONS} AI-generated banners. Please upload a custom banner instead.`,
+        limitReached: true,
+      }, 400)
     }
 
     try {
@@ -888,14 +887,11 @@ profile.post(
         variant,
       })
 
-      // Increment generation count in User.onboardingData
-      await db.user.update({
-        where: { id: userId },
+      // Increment generation count on Profile (persists after onboarding)
+      await db.profile.update({
+        where: { userId },
         data: {
-          onboardingData: {
-            ...onboardingData,
-            bannerGenerationCount: bannerGenerationCount + 1,
-          },
+          bannerGenerationCount: { increment: 1 },
         },
       })
 
@@ -907,7 +903,7 @@ profile.post(
         bannerUrl: result.bannerUrl,
         wasGenerated: result.wasGenerated,
         variant: result.variant,
-        generationsRemaining: MAX_BANNER_GENERATIONS - bannerGenerationCount - 1,
+        generationsRemaining: MAX_BANNER_GENERATIONS - userProfile.bannerGenerationCount - 1,
       })
     } catch (error) {
       console.error('[banner] Generation failed:', error)

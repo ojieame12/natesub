@@ -75,17 +75,18 @@ describe('Banner Generator', () => {
       expect(uploadBuffer).toHaveBeenCalled()
     })
 
-    it('includes service type in prompt when provided', async () => {
+    it('includes service description in prompt when provided', async () => {
       await generateBanner({
         avatarUrl: validAvatarUrl,
         userId: 'user-123',
-        serviceType: 'business consultant',
+        serviceDescription: 'business consulting services',
       })
 
-      // Check the prompt includes service type
+      // Check the prompt includes service description
+      // The contents array is now flat: [{ text: prompt }, { inlineData: {...} }]
       const callArgs = mockGenerateContent.mock.calls[0][0]
-      const promptText = callArgs.contents[0].parts[0].text
-      expect(promptText).toContain('business consultant')
+      const promptText = callArgs.contents[0].text
+      expect(promptText).toContain('business consulting')
     })
 
     it('uses fallback when no image in response', async () => {

@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { AlertCircle, Check, RefreshCw, Sparkles, Upload } from 'lucide-react'
+import { AlertCircle, Check, RefreshCw, Sparkles, Upload, Circle, CheckCircle2, Loader2 } from 'lucide-react'
 import { useOnboardingStore } from './store'
 import { useGeneratePerks, useGenerateBanner, uploadFile } from '../api/hooks'
 import { Button, Pressable } from './components'
@@ -25,8 +25,8 @@ const PHASE_MESSAGES: Record<GenerationPhase, string> = {
   error: 'Something went wrong',
 }
 
-// Max 2 AI-generated banners per user
-const MAX_BANNER_OPTIONS = 2
+// Max 5 AI-generated banners per user (global limit, survives onboarding)
+const MAX_BANNER_OPTIONS = 5
 
 export default function AIGeneratingStep() {
   const {
@@ -54,6 +54,7 @@ export default function AIGeneratingStep() {
   const [selectedBannerIndex, setSelectedBannerIndex] = useState<number | 'custom' | null>(null)
   const [customBannerPreview, setCustomBannerPreview] = useState<string | null>(null)
   const [isUploadingCustom, setIsUploadingCustom] = useState(false)
+  const [generationsRemaining, setGenerationsRemaining] = useState<number | null>(null)
   const hasStarted = useRef(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -64,12 +65,16 @@ export default function AIGeneratingStep() {
 
   // Idempotent checks
   const hasPerks = servicePerks.length >= 3
-  const canRegenerate = bannerOptions.length < MAX_BANNER_OPTIONS && avatarUrl
+  // Use server-side remaining count if available, otherwise fall back to local count
+  const canRegenerate = avatarUrl && (
+    generationsRemaining === null
+      ? bannerOptions.length < MAX_BANNER_OPTIONS
+      : generationsRemaining > 0
+  )
 
   // Initialize/restore selected banner from existing options or bannerUrl
   useEffect(() => {
     if (selectedBannerIndex !== null) return // Already selected
-    if (bannerOptions.length === 0) return // No options yet
 
     // Try to restore previous selection from bannerUrl
     if (bannerUrl) {
@@ -85,8 +90,10 @@ export default function AIGeneratingStep() {
       return
     }
 
-    // Default: select first banner
-    setSelectedBannerIndex(0)
+    // Default: select first banner if options exist
+    if (bannerOptions.length > 0) {
+      setSelectedBannerIndex(0)
+    }
   }, [bannerOptions, selectedBannerIndex, bannerUrl])
 
   // Run generation on mount
@@ -159,6 +166,10 @@ export default function AIGeneratingStep() {
           addBannerOption({ url: bannerResult.value.bannerUrl, variant })
           generatedBanner = bannerResult.value.bannerUrl
           setSelectedBannerIndex(0)
+          // Track remaining generations from server
+          if (typeof bannerResult.value.generationsRemaining === 'number') {
+            setGenerationsRemaining(bannerResult.value.generationsRemaining)
+          }
         } else if (bannerResult.status === 'rejected') {
           console.warn('Banner generation failed:', bannerResult.reason)
         }
@@ -193,7 +204,7 @@ export default function AIGeneratingStep() {
 
   // Regenerate banner with artistic variant
   const handleRegenerateBanner = async () => {
-    if (!avatarUrl || isRegeneratingBanner || bannerOptions.length >= MAX_BANNER_OPTIONS) return
+    if (!canRegenerate || isRegeneratingBanner) return
 
     setIsRegeneratingBanner(true)
     try {
@@ -206,6 +217,11 @@ export default function AIGeneratingStep() {
         const newOption = { url: result.bannerUrl, variant: result.variant || 'artistic' as const }
         addBannerOption(newOption)
         setSelectedBannerIndex(bannerOptions.length) // Select the new one
+
+        // Track remaining generations from server
+        if (typeof result.generationsRemaining === 'number') {
+          setGenerationsRemaining(result.generationsRemaining)
+        }
 
         // Persist to backend
         api.auth.saveOnboardingProgress({
@@ -221,8 +237,9 @@ export default function AIGeneratingStep() {
       }
     } catch (err: any) {
       console.error('Banner regeneration failed:', err)
-      // Check if limit was reached - guide user to upload custom
-      if (err?.limitReached) {
+      // Check if limit was reached - error data is nested under err.data
+      if (err?.data?.limitReached) {
+        setGenerationsRemaining(0) // Update local state
         setError('You\'ve used all AI generations. Upload your own banner below!')
         // Scroll to upload option by clicking file input
         setTimeout(() => fileInputRef.current?.click(), 500)
@@ -363,7 +380,7 @@ export default function AIGeneratingStep() {
 
   // Preview state - show generated content for review
   if (phase === 'preview') {
-    const showBannerSelection = bannerOptions.length >= MAX_BANNER_OPTIONS || !canRegenerate
+    const hasBannerOptions = bannerOptions.length > 0 || customBannerPreview
 
     return (
       <div className="onboarding">
@@ -382,21 +399,12 @@ export default function AIGeneratingStep() {
             <div className="ai-preview-section">
               <div className="ai-preview-header">
                 <h3>Banner</h3>
-                {canRegenerate && !showBannerSelection && (
-                  <Pressable
-                    className="ai-preview-regenerate"
-                    onClick={handleRegenerateBanner}
-                    disabled={isRegeneratingBanner}
-                  >
-                    <RefreshCw size={14} className={isRegeneratingBanner ? 'spin' : ''} />
-                    <span>{isRegeneratingBanner ? 'Generating...' : 'Try Another Style'}</span>
-                  </Pressable>
-                )}
               </div>
 
-              {/* Banner Options Selection (after 2 generations OR no avatar) */}
-              {showBannerSelection ? (
+              {/* Banner Selection Grid - always show when we have options */}
+              {hasBannerOptions ? (
                 <div className="ai-banner-selection">
+                  {/* AI Generated Options */}
                   {bannerOptions.map((option, index) => (
                     <Pressable
                       key={option.url}
@@ -405,7 +413,7 @@ export default function AIGeneratingStep() {
                     >
                       <img src={option.url} alt={`Banner option ${index + 1}`} />
                       <div className="ai-banner-option-label">
-                        {option.variant === 'artistic' ? 'Artistic' : 'Professional'}
+                        {option.variant === 'artistic' ? 'Creative' : 'Professional'}
                       </div>
                       {selectedBannerIndex === index && (
                         <div className="ai-banner-option-check">
@@ -415,12 +423,39 @@ export default function AIGeneratingStep() {
                     </Pressable>
                   ))}
 
-                  {/* Custom Upload Option */}
+                  {/* Generate Another Style Option (if under limit) */}
+                  {canRegenerate && (
+                    <Pressable
+                      className={`ai-banner-option ai-banner-generate ${isRegeneratingBanner ? 'generating' : ''}`}
+                      onClick={handleRegenerateBanner}
+                      disabled={isRegeneratingBanner}
+                    >
+                      {isRegeneratingBanner ? (
+                        <div className="ai-banner-generating">
+                          <RefreshCw size={24} className="spin" />
+                          <span>Generating...</span>
+                        </div>
+                      ) : (
+                        <div className="ai-banner-upload-placeholder">
+                          <Sparkles size={24} />
+                          <span>Try Another Style</span>
+                        </div>
+                      )}
+                    </Pressable>
+                  )}
+
+                  {/* Custom Upload Option - always available */}
                   <Pressable
-                    className={`ai-banner-option ai-banner-upload ${selectedBannerIndex === 'custom' ? 'selected' : ''}`}
-                    onClick={() => fileInputRef.current?.click()}
+                    className={`ai-banner-option ai-banner-upload ${selectedBannerIndex === 'custom' ? 'selected' : ''} ${isUploadingCustom ? 'uploading' : ''}`}
+                    onClick={() => !isUploadingCustom && fileInputRef.current?.click()}
+                    disabled={isUploadingCustom}
                   >
-                    {customBannerPreview ? (
+                    {isUploadingCustom ? (
+                      <div className="ai-banner-generating">
+                        <RefreshCw size={24} className="spin" />
+                        <span>Uploading...</span>
+                      </div>
+                    ) : customBannerPreview ? (
                       <>
                         <img src={customBannerPreview} alt="Custom banner" />
                         <div className="ai-banner-option-label">Custom</div>
@@ -431,7 +466,7 @@ export default function AIGeneratingStep() {
                         <span>Upload Your Own</span>
                       </div>
                     )}
-                    {selectedBannerIndex === 'custom' && customBannerPreview && (
+                    {selectedBannerIndex === 'custom' && customBannerPreview && !isUploadingCustom && (
                       <div className="ai-banner-option-check">
                         <Check size={16} />
                       </div>
@@ -446,29 +481,40 @@ export default function AIGeneratingStep() {
                   />
                 </div>
               ) : (
-                /* Single Banner Preview */
-                <div className="ai-preview-banner">
-                  {bannerOptions[0] ? (
-                    <img src={bannerOptions[0].url} alt="Generated banner" />
-                  ) : avatarUrl ? (
-                    <div className="ai-preview-banner-fallback">
-                      <img src={avatarUrl} alt="Avatar" className="ai-preview-avatar-fallback" />
-                      <span>Banner will use your avatar</span>
-                    </div>
-                  ) : (
-                    <div className="ai-preview-banner-empty">
-                      <Sparkles size={24} />
-                      <span>No banner - add an avatar first</span>
-                    </div>
-                  )}
+                /* No banner yet - show empty state with upload */
+                <div className="ai-banner-selection">
+                  <Pressable
+                    className={`ai-banner-option ai-banner-upload ${isUploadingCustom ? 'uploading' : ''}`}
+                    onClick={() => !isUploadingCustom && fileInputRef.current?.click()}
+                    disabled={isUploadingCustom}
+                  >
+                    {isUploadingCustom ? (
+                      <div className="ai-banner-generating">
+                        <RefreshCw size={24} className="spin" />
+                        <span>Uploading...</span>
+                      </div>
+                    ) : (
+                      <div className="ai-banner-upload-placeholder">
+                        <Upload size={24} />
+                        <span>Upload a Banner</span>
+                      </div>
+                    )}
+                  </Pressable>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFileSelect}
+                    style={{ display: 'none' }}
+                  />
                 </div>
               )}
 
-              {/* Generation limit notice */}
-              {bannerOptions.length >= MAX_BANNER_OPTIONS && (
-                <p className="ai-preview-hint">
-                  Select a banner above or upload your own
-                </p>
+              {error && (
+                <div className="ai-preview-error">
+                  <AlertCircle size={16} />
+                  <span>{error}</span>
+                </div>
               )}
             </div>
 
@@ -517,7 +563,14 @@ export default function AIGeneratingStep() {
     )
   }
 
-  // Loading state
+  // Step completion states for checklist
+  const steps = [
+    { id: 'analyze', label: 'Analyzing your service', done: phase !== 'starting' && phase !== 'analyzing' },
+    { id: 'perks', label: 'Crafting your perks', done: ['banner', 'finishing', 'preview'].includes(phase), active: phase === 'perks' },
+    { id: 'banner', label: 'Creating your banner', done: ['finishing', 'preview'].includes(phase), active: phase === 'banner' },
+  ]
+
+  // Loading state with step checklist
   return (
     <div className="onboarding">
       <div className="ai-generating-container">
@@ -532,11 +585,28 @@ export default function AIGeneratingStep() {
 
         <div className="ai-generating-status">
           <p className="ai-generating-message">{PHASE_MESSAGES[phase]}</p>
-          <div className="ai-generating-dots">
-            <span className="dot" />
-            <span className="dot" />
-            <span className="dot" />
-          </div>
+        </div>
+
+        {/* Step checklist */}
+        <div className="ai-generating-steps">
+          {steps.map((step, index) => (
+            <div
+              key={step.id}
+              className={`ai-step ${step.done ? 'done' : ''} ${step.active ? 'active' : ''}`}
+              style={{ animationDelay: `${index * 100}ms` }}
+            >
+              <div className="ai-step-icon">
+                {step.done ? (
+                  <CheckCircle2 size={20} className="ai-step-check" />
+                ) : step.active ? (
+                  <Loader2 size={20} className="ai-step-spinner" />
+                ) : (
+                  <Circle size={20} className="ai-step-pending" />
+                )}
+              </div>
+              <span className="ai-step-label">{step.label}</span>
+            </div>
+          ))}
         </div>
 
         <div className="ai-generating-progress">

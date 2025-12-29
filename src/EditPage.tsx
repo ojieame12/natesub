@@ -286,7 +286,11 @@ export default function EditPage() {
   }
 
   const handleSave = async () => {
-    await saveProfileAndSettings({ showSuccessToast: true })
+    const success = await saveProfileAndSettings({ showSuccessToast: true })
+    if (success) {
+      // Navigate back to dashboard after saving
+      navigate('/dashboard')
+    }
   }
 
   const handleContinue = async () => {

@@ -3704,6 +3704,91 @@ button.btn .spinning {
     transition: width 0.5s ease-out;
 }
 
+/* Step checklist */
+.ai-generating-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin-bottom: 32px;
+    text-align: left;
+}
+
+.ai-step {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    opacity: 0;
+    transform: translateY(10px);
+    animation: ai-step-appear 0.4s ease-out forwards;
+}
+
+@keyframes ai-step-appear {
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.ai-step-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
+}
+
+.ai-step-pending {
+    color: var(--text-tertiary);
+}
+
+.ai-step-spinner {
+    color: var(--primary);
+    animation: ob-spin 1s linear infinite;
+}
+
+.ai-step-check {
+    color: var(--status-success, #22c55e);
+    animation: ai-check-pop 0.3s ease-out;
+}
+
+@keyframes ai-check-pop {
+    0% { transform: scale(0); }
+    50% { transform: scale(1.2); }
+    100% { transform: scale(1); }
+}
+
+.ai-step-label {
+    font-size: 15px;
+    color: var(--text-tertiary);
+    transition: color 0.3s ease;
+}
+
+.ai-step.active .ai-step-label {
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.ai-step.done .ai-step-label {
+    color: var(--text-secondary);
+}
+
+/* Skip button */
+.ai-generating-skip {
+    margin-top: 32px;
+    padding: 8px 16px;
+    background: none;
+    border: none;
+    color: var(--text-tertiary);
+    font-size: 14px;
+    cursor: pointer;
+    transition: color 0.2s ease;
+}
+
+.ai-generating-skip:hover {
+    color: var(--text-secondary);
+}
+
 /* Error state */
 .ai-generating-error {
     display: flex;
@@ -3833,6 +3918,18 @@ button.btn .spinning {
     display: flex;
     flex-direction: column;
     gap: 24px;
+    animation: ai-preview-reveal 0.5s ease-out;
+}
+
+@keyframes ai-preview-reveal {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 .ai-preview-section {
@@ -3840,6 +3937,26 @@ button.btn .spinning {
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-lg);
     padding: 16px;
+    animation: ai-section-reveal 0.4s ease-out backwards;
+}
+
+.ai-preview-section:nth-child(1) {
+    animation-delay: 0.1s;
+}
+
+.ai-preview-section:nth-child(2) {
+    animation-delay: 0.2s;
+}
+
+@keyframes ai-section-reveal {
+    from {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
 }
 
 .ai-preview-header {
@@ -3981,17 +4098,30 @@ button.btn .spinning {
     border-radius: var(--radius-md);
     overflow: hidden;
     border: 2px solid var(--border-subtle);
-    transition: all 0.15s ease;
+    transition: all 0.2s ease;
     cursor: pointer;
+    transform: scale(1);
 }
 
 .ai-banner-option:hover {
     border-color: var(--border-strong);
+    transform: scale(1.02);
+}
+
+.ai-banner-option:active {
+    transform: scale(0.98);
 }
 
 .ai-banner-option.selected {
     border-color: var(--primary);
-    box-shadow: 0 0 0 2px rgba(var(--primary-rgb), 0.2);
+    box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.2);
+    animation: ai-banner-select 0.3s ease-out;
+}
+
+@keyframes ai-banner-select {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.03); }
+    100% { transform: scale(1); }
 }
 
 .ai-banner-option img {
@@ -4049,7 +4179,54 @@ button.btn .spinning {
     color: var(--text-secondary);
 }
 
+/* Generate Another Style Button */
+.ai-banner-generate {
+    background: var(--bg-subtle);
+    cursor: pointer;
+}
+
+.ai-banner-generate:hover:not(.generating) {
+    border-color: var(--primary);
+    background: var(--bg-hover);
+}
+
+.ai-banner-generate.generating {
+    cursor: wait;
+    opacity: 0.8;
+}
+
+/* Loading state for generation/upload */
+.ai-banner-generating {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    height: 100%;
+    color: var(--text-tertiary);
+}
+
+.ai-banner-generating span {
+    font-size: 12px;
+}
+
+.ai-banner-option .spin {
+    animation: ob-spin 1s linear infinite;
+}
+
+/* Uploading state */
+.ai-banner-option.uploading {
+    cursor: wait;
+    opacity: 0.8;
+}
+
 /* Full width for 3rd option when only 2 AI options */
 .ai-banner-selection > .ai-banner-option:nth-child(3):last-child {
+    grid-column: span 2;
+}
+
+/* Full width for 4th option when grid has 3 items */
+.ai-banner-selection > .ai-banner-option:nth-child(4):last-child {
     grid-column: span 2;
 }

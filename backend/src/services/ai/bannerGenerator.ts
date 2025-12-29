@@ -217,84 +217,39 @@ export async function generateBanner(
 }
 
 /**
- * Standard variant: Clean, professional headshot.
+ * Standard variant: Clean, professional style.
  * Used for first-time generation.
  */
 function buildStandardBannerPrompt(input: BannerGenerationInput): string {
-  const nameContext = input.displayName ? `This is ${input.displayName}.` : ''
   const serviceContext = input.serviceDescription
-    ? `They provide: ${input.serviceDescription.slice(0, 200)}`
+    ? `Context: ${input.serviceDescription.slice(0, 150)}`
     : ''
 
-  return `Create a polished, professional headshot banner from this photo.
+  return `Transform this photo into a professional wide banner (16:9).
 
-REQUIREMENTS:
-- PRESERVE the person's face and identity EXACTLY as shown
-- HEAD AND SHOULDERS/BUST ONLY - crop to show head and upper chest
-- PURE BLACK BACKGROUND (#000000) - solid, no gradients
-- 16:9 wide format for a page banner
-- Professional studio lighting on the face
-- Clean, polished look like a LinkedIn premium profile photo
-- Person should be centered or slightly left of center
-
-${nameContext}
+Keep the person's face and skin tone accurate. Dark or neutral background.
+Professional, polished look suitable for a business profile header.
 ${serviceContext}
 
-STYLE:
-- Modern, minimalist, professional
-- Soft rim lighting on edges (subtle)
-- Natural skin tones, not over-edited
-- Sharp focus on face, slight depth blur on shoulders if visible
-
-DO NOT:
-- Add any text, logos, or watermarks
-- Change facial features or skin tone
-- Use cartoon/illustration style
-- Add busy backgrounds or props
-- Include full body - HEAD AND BUST ONLY
-
-Generate ONE high-quality professional headshot banner.`
+No text or watermarks.`
 }
 
 /**
- * Artistic variant: Dramatic, stylized portrait.
+ * Artistic variant: Creative, stylized portrait.
  * Used for regeneration to give user variety.
  */
 function buildArtisticBannerPrompt(input: BannerGenerationInput): string {
-  const nameContext = input.displayName ? `This is ${input.displayName}.` : ''
   const serviceContext = input.serviceDescription
-    ? `They provide: ${input.serviceDescription.slice(0, 200)}`
+    ? `Context: ${input.serviceDescription.slice(0, 150)}`
     : ''
 
-  return `Create a dramatic, artistic portrait banner from this photo.
+  return `Transform this photo into a creative, artistic wide banner (16:9).
 
-REQUIREMENTS:
-- PRESERVE the person's face and identity EXACTLY as shown
-- HEAD AND SHOULDERS/BUST ONLY - crop to show head and upper chest
-- DEEP DARK BACKGROUND with subtle gradient or texture
-- 16:9 wide format for a page banner
-- Dramatic, cinematic lighting (Rembrandt or split lighting)
-- High-end editorial/magazine quality
-- Person positioned slightly off-center for dynamic composition
-
-${nameContext}
+Keep the person's face and skin tone accurate. Be creative with lighting,
+colors, and atmosphere. Cinematic or editorial style welcome.
 ${serviceContext}
 
-STYLE:
-- Cinematic, editorial, dramatic
-- Strong key light with deep shadows
-- Subtle color grading (warm highlights, cool shadows)
-- Professional retouching while keeping natural appearance
-- Slight vignette effect around edges
-
-DO NOT:
-- Add any text, logos, or watermarks
-- Change facial features significantly
-- Use cartoon/illustration style
-- Add busy backgrounds or props
-- Include full body - HEAD AND BUST ONLY
-
-Generate ONE dramatic, high-quality artistic portrait banner.`
+No text or watermarks.`
 }
 
 /**

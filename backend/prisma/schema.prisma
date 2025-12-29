@@ -180,6 +180,7 @@ model Profile {
   bio           String?
   avatarUrl     String?
   bannerUrl     String?  // Generated banner for service mode (from avatar)
+  bannerGenerationCount Int @default(0)  // AI banner generations used (max 5)
   voiceIntroUrl String?
   phone         String?  // Phone number for SMS notifications (E.164 format)
 
