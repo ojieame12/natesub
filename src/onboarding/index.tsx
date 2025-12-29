@@ -42,9 +42,17 @@ const STEP_COMPONENTS: Record<OnboardingStepKey, React.ReactElement> = {
 export default function OnboardingFlow() {
     const location = useLocation()
     const { onboarding, status } = useAuthState()
+
+    // Extract primitives from onboarding to prevent object reference issues in useEffect deps
+    const onboardingStep = onboarding?.step ?? null
+    const onboardingData = onboarding?.data ?? null
+    const onboardingStepKey = onboardingData?.stepKey as OnboardingStepKey | undefined
+
     const { currentStep, currentStepKey, countryCode, purpose, hydrateFromServer, goToStepKey } = useOnboardingStore()
-    const [direction, setDirection] = useState<'forward' | 'back'>('forward')
-    const [isAnimating, setIsAnimating] = useState(false)
+    const [animState, setAnimState] = useState<{ direction: 'forward' | 'back'; isAnimating: boolean }>({
+        direction: 'forward',
+        isAnimating: false,
+    })
     const prevStepRef = useRef(currentStep)
     const hasHydratedFromServer = useRef(false)
     const lastAppliedUrlStep = useRef<string | null>(null)
@@ -99,6 +107,7 @@ export default function OnboardingFlow() {
     }, [currentStepKey, currentStep, visibleStepKeys, stepConfig, steps.length])
 
     // Hydrate onboarding state from URL ?step= param or server state
+    // Uses extracted primitives instead of full object to prevent unnecessary re-runs
     useEffect(() => {
         if (status !== 'authenticated') return
 
@@ -117,7 +126,7 @@ export default function OnboardingFlow() {
                     hydrateFromServer({
                         stepKey: urlStep as OnboardingStepKey,
                         step: stepKeyToIndex(urlStep as OnboardingStepKey, stepConfig),
-                        data: onboarding?.data,
+                        data: onboardingData,
                     })
                 }
             } else {
@@ -131,7 +140,7 @@ export default function OnboardingFlow() {
                     hydrateFromServer({
                         stepKey,
                         step: clampedStep,
-                        data: onboarding?.data,
+                        data: onboardingData,
                     })
                 }
             }
@@ -141,36 +150,34 @@ export default function OnboardingFlow() {
         if (hasHydratedFromServer.current) return
 
         // Hydrate from server state (resume flow)
-        if (onboarding?.step && onboarding.step > 0 && effectiveStep === 0) {
+        if (onboardingStep && onboardingStep > 0 && effectiveStep === 0) {
             hasHydratedFromServer.current = true
             shouldSkipNextAnimation.current = true
 
             // Use server stepKey if available, otherwise map from numeric step
-            const serverStepKey = onboarding.data?.stepKey as OnboardingStepKey | undefined
-
-            if (serverStepKey && visibleStepKeys.includes(serverStepKey)) {
+            if (onboardingStepKey && visibleStepKeys.includes(onboardingStepKey)) {
                 // Server has valid step key - use it
                 hydrateFromServer({
-                    stepKey: serverStepKey,
-                    step: stepKeyToIndex(serverStepKey, stepConfig),
-                    data: onboarding.data,
+                    stepKey: onboardingStepKey,
+                    step: stepKeyToIndex(onboardingStepKey, stepConfig),
+                    data: onboardingData,
                 })
             } else {
                 // Fallback: map numeric step to safe key
                 // Payment step is a safe fallback for out-of-bounds steps
                 const paymentStepKey: OnboardingStepKey = 'payments'
-                const safeStepKey = onboarding.step >= steps.length
+                const safeStepKey = onboardingStep >= steps.length
                     ? paymentStepKey
-                    : stepIndexToKey(onboarding.step, stepConfig)
+                    : stepIndexToKey(onboardingStep, stepConfig)
 
                 hydrateFromServer({
                     stepKey: safeStepKey,
                     step: stepKeyToIndex(safeStepKey, stepConfig),
-                    data: onboarding.data,
+                    data: onboardingData,
                 })
             }
         }
-    }, [location.search, status, onboarding, effectiveStep, hydrateFromServer, visibleStepKeys, stepConfig, steps.length])
+    }, [location.search, status, onboardingStep, onboardingStepKey, onboardingData, effectiveStep, hydrateFromServer, visibleStepKeys, stepConfig, steps.length])
 
     // Sync step key when effectiveStep changes (e.g., after nextStep/prevStep)
     // This keeps the step key in sync with navigation that uses indices
@@ -182,6 +189,7 @@ export default function OnboardingFlow() {
     }, [effectiveStep, stepConfig, currentStepKey, goToStepKey])
 
     // Step transitions (CSS-driven) - animate only on user navigation.
+    // Uses single state update to prevent double renders
     useEffect(() => {
         const prevStep = prevStepRef.current
         if (prevStep === effectiveStep) return
@@ -192,11 +200,16 @@ export default function OnboardingFlow() {
             return
         }
 
-        setDirection(effectiveStep > prevStep ? 'forward' : 'back')
-        setIsAnimating(true)
+        // Single state update instead of two separate setters
+        setAnimState({
+            direction: effectiveStep > prevStep ? 'forward' : 'back',
+            isAnimating: true,
+        })
         prevStepRef.current = effectiveStep
 
-        const timer = setTimeout(() => setIsAnimating(false), 450)
+        const timer = setTimeout(() => {
+            setAnimState(prev => ({ ...prev, isAnimating: false }))
+        }, 450)
         return () => clearTimeout(timer)
     }, [effectiveStep])
 
@@ -220,7 +233,7 @@ export default function OnboardingFlow() {
 
             {/* Step Content with Animation */}
             <div
-                className={`onboarding-step-container ${isAnimating ? `slide-${direction}` : ''}`}
+                className={`onboarding-step-container ${animState.isAnimating ? `slide-${animState.direction}` : ''}`}
                 key={effectiveStep}
             >
                 {currentStepComponent}
