@@ -214,16 +214,24 @@ export default function PaymentMethodStep() {
 
             // Persist onboarding progress so the flow can resume after redirects
             // Save next step - for service flow it's service-desc, for others it's review
+            // IMPORTANT: This must succeed for proper Stripe return handling
             const nextStepKey = store.purpose === 'service' ? 'service-desc' : 'review'
-            await api.auth.saveOnboardingProgress({
-                step: currentStep + 1,
-                stepKey: nextStepKey, // Canonical step key for safe resume
-                data: {
-                    paymentProvider: selectedMethod,
-                    countryCode: store.countryCode,
-                    purpose: store.purpose, // Redundant - ensures backend knows flow type
-                },
-            }).catch(() => { })
+            try {
+                await api.auth.saveOnboardingProgress({
+                    step: currentStep + 1,
+                    stepKey: nextStepKey, // Canonical step key for safe resume
+                    data: {
+                        paymentProvider: selectedMethod,
+                        countryCode: store.countryCode,
+                        purpose: store.purpose, // Redundant - ensures backend knows flow type
+                    },
+                })
+            } catch (progressErr) {
+                // Log but continue - sessionStorage fallback should handle most cases
+                // But without this, users returning from Stripe with cleared storage
+                // will resume at an old step (likely Username) and get stuck
+                console.error('[PaymentMethodStep] Failed to save onboarding progress:', progressErr)
+            }
 
             // Handle Stripe connect flow
             if (selectedMethod === 'stripe') {

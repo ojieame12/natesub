@@ -14,7 +14,7 @@ export default function EmailStep() {
     // Use selectors to prevent unnecessary re-renders
     const email = useOnboardingStore((s) => s.email)
     const setEmail = useOnboardingStore((s) => s.setEmail)
-    const nextStep = useOnboardingStore((s) => s.nextStep)
+    const navigateToStep = useOnboardingStore((s) => s.navigateToStep)
     const prevStep = useOnboardingStore((s) => s.prevStep)
 
     const [isSending, setIsSending] = useState(false)
@@ -37,14 +37,16 @@ export default function EmailStep() {
             const normalizedEmail = email.trim().toLowerCase()
             await sendMagicLink(normalizedEmail)
             setEmail(normalizedEmail)
-            nextStep()
+            // Use atomic navigation - bypasses debounce and ensures both step key
+            // and index are updated together for reliable step transitions
+            navigateToStep('otp')
         } catch (err: any) {
             setError(err?.error || 'Failed to send code. Please try again.')
         } finally {
             setIsSending(false)
             isSubmitting.current = false
         }
-    }, [isValidEmail, isSending, email, sendMagicLink, setEmail, nextStep])
+    }, [isValidEmail, isSending, email, sendMagicLink, setEmail, navigateToStep])
 
     return (
         <div className="onboarding">

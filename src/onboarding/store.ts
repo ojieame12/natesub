@@ -253,6 +253,9 @@ interface OnboardingStore {
     prevStep: () => void
     goToStep: (step: number) => void
     goToStepKey: (key: OnboardingStepKey) => void
+    // Navigate to a specific step by key - updates both key and index atomically
+    // No debouncing - for use after async operations (e.g., API calls)
+    navigateToStep: (key: OnboardingStepKey) => void
     reset: () => void
     // Hydrate from server data (for resume flows)
     // Supports both legacy numeric step and new stepKey
@@ -384,6 +387,20 @@ export const useOnboardingStore = create<OnboardingStore>()(
             }),
             // goToStepKey is NOT debounced - it's used by sync effects and must update immediately
             goToStepKey: (key) => set({ currentStepKey: key }),
+            // navigateToStep - atomic navigation by step key (no debouncing)
+            // Computes step index from current store config and updates both atomically
+            navigateToStep: (key) => set((state) => {
+                const { countryCode, purpose } = state
+                // Compute step config from current state
+                const showAddressStep = Boolean(countryCode) && !['NG', 'GH', 'KE'].includes(countryCode)
+                const isServiceMode = purpose === 'service'
+                const stepConfig = { showAddressStep, isServiceMode }
+                const stepIndex = stepKeyToIndex(key, stepConfig)
+                return {
+                    currentStepKey: key,
+                    currentStep: stepIndex,
+                }
+            }),
             reset: () => set({
                 ...initialState,
                 // Reset specific fields to their initial values,

@@ -582,6 +582,7 @@ profile.get('/settings', requireAuth, async (c) => {
 })
 
 // Check username availability
+// Allows authenticated users to check their own username (returns available: true)
 profile.get(
   '/check-username/:username',
   publicStrictRateLimit,
@@ -602,12 +603,18 @@ profile.get(
       return c.json({ available: false, reason: 'invalid_format' })
     }
 
-    // Check taken
+    // Check taken - but allow if it belongs to the current user
     const existing = await db.profile.findUnique({
       where: { username: normalizedUsername },
+      select: { userId: true },
     })
 
     if (existing) {
+      // If authenticated and this is their own username, it's "available" to them
+      const userId = c.get('userId')
+      if (userId && existing.userId === userId) {
+        return c.json({ available: true, reason: 'own_username' })
+      }
       return c.json({ available: false, reason: 'taken' })
     }
 
