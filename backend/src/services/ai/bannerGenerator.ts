@@ -48,6 +48,9 @@ function validateAvatarUrl(url: string): void {
 const BANNER_ASPECT_RATIO = '16:9' as const  // Supported: 1:1, 2:3, 3:2, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9
 const BANNER_RESOLUTION = '2K' as const      // Supported: 1K, 2K, 4K (uppercase K required)
 
+// Model: Nano Banana Pro for high-quality banner generation
+const IMAGE_MODEL = 'gemini-3-pro-image-preview' as const
+
 // AI request timeout (90 seconds - Nano Banana Pro uses "Thinking" mode)
 const AI_TIMEOUT_MS = 90000
 
@@ -132,25 +135,26 @@ export async function generateBanner(
     // Craft the prompt for professional banner generation
     const prompt = buildBannerPrompt(input)
 
+    // Build contents as flat array (text + image) per API docs
+    const contents = [
+      { text: prompt },
+      {
+        inlineData: {
+          mimeType,
+          data: avatarBase64,
+        },
+      },
+    ]
+
+    console.log('[banner] Calling Nano Banana Pro with model:', IMAGE_MODEL)
+
     const response = await withTimeout(
       client.models.generateContent({
-        model: 'gemini-3-pro-image-preview',  // Nano Banana Pro
-        contents: [
-          {
-            parts: [
-              { text: prompt },
-              {
-                inlineData: {
-                  mimeType,
-                  data: avatarBase64,
-                },
-              },
-            ],
-          },
-        ],
+        model: IMAGE_MODEL,
+        contents,
         config: {
           // Nano Banana Pro image configuration
-          responseModalities: ['IMAGE', 'TEXT'],
+          responseModalities: ['TEXT', 'IMAGE'],
           imageConfig: {
             aspectRatio: BANNER_ASPECT_RATIO,
             imageSize: BANNER_RESOLUTION,
