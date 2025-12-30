@@ -319,7 +319,7 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
 
     return (
         <div style={{
-            minHeight: '100svh', // Use svh - doesn't change when keyboard opens
+            minHeight: '100vh', // Use vh - stable on mobile, doesn't shrink with keyboard
             background: 'linear-gradient(180deg, #FFE7A0 0%, #FFF5D6 100%)',
             display: 'flex',
             flexDirection: 'column',
@@ -375,7 +375,7 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
             <div style={{
                 width: '100%',
                 maxWidth: 420,
-                maxHeight: 'calc(100svh - 28px)', // Fit within viewport with margin
+                maxHeight: 'calc(100vh - 28px)', // Fit within viewport - vh stable with keyboard
                 background: COLORS.white,
                 borderRadius: 24,
                 boxShadow: '0 8px 32px rgba(0, 0, 0, 0.08), 0 24px 64px rgba(0, 0, 0, 0.06), 0 0 0 1px rgba(0, 0, 0, 0.02)',
@@ -795,16 +795,7 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                                     type="email"
                                     value={subscriberEmail}
                                     onChange={e => setSubscriberEmail(e.target.value)}
-                                    onFocus={() => {
-                                        setEmailFocused(true)
-                                        // Scroll input into view after keyboard opens
-                                        setTimeout(() => {
-                                            emailInputRef.current?.scrollIntoView({
-                                                behavior: 'smooth',
-                                                block: 'nearest',
-                                            })
-                                        }, 400)
-                                    }}
+                                    onFocus={() => setEmailFocused(true)}
                                     onBlur={() => setEmailFocused(false)}
                                     placeholder={emailFocused || hasEmailValue ? '' : 'Customer Email'}
                                     style={{
