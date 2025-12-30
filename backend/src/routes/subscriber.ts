@@ -132,6 +132,29 @@ const ALLOWED_ORIGINS = [
   'http://localhost:3000',
 ]
 
+/**
+ * Check if origin matches exactly (no prefix attack possible)
+ */
+function isAllowedOrigin(origin: string): boolean {
+  return ALLOWED_ORIGINS.includes(origin)
+}
+
+/**
+ * Extract origin from referer URL and check if allowed
+ * Referer includes path (e.g., https://natepay.co/subscriptions)
+ * We need to extract just the origin part for comparison
+ */
+function isAllowedReferer(referer: string): boolean {
+  try {
+    const url = new URL(referer)
+    // url.origin gives us scheme + host (e.g., "https://natepay.co")
+    return ALLOWED_ORIGINS.includes(url.origin)
+  } catch {
+    // Invalid URL - reject
+    return false
+  }
+}
+
 async function requireValidOrigin(c: any, next: () => Promise<void>) {
   const origin = c.req.header('origin')
   const referer = c.req.header('referer')
@@ -140,14 +163,16 @@ async function requireValidOrigin(c: any, next: () => Promise<void>) {
   // Use process.env directly for test compatibility (env object is cached at load time)
   if (process.env.NODE_ENV === 'production') {
     // Check origin header first (preferred)
+    // Origin header is already in origin format (scheme + host), so exact match is safe
     if (origin) {
-      if (!ALLOWED_ORIGINS.some(allowed => origin.startsWith(allowed))) {
+      if (!isAllowedOrigin(origin)) {
         console.warn(`[subscriber] CSRF blocked: invalid origin ${origin}`)
         return c.json({ error: 'Invalid request origin', code: 'CSRF_BLOCKED' }, 403)
       }
     } else if (referer) {
       // Fall back to referer if no origin (some browsers)
-      if (!ALLOWED_ORIGINS.some(allowed => referer.startsWith(allowed))) {
+      // Referer includes path, so we parse and extract origin
+      if (!isAllowedReferer(referer)) {
         console.warn(`[subscriber] CSRF blocked: invalid referer ${referer}`)
         return c.json({ error: 'Invalid request origin', code: 'CSRF_BLOCKED' }, 403)
       }

@@ -169,6 +169,80 @@ describe('Subscriber Portal', () => {
         process.env.NODE_ENV = originalEnv
       }
     })
+
+    it('blocks startsWith bypass attack (natepay.co.evil.com)', async () => {
+      const originalEnv = process.env.NODE_ENV
+      process.env.NODE_ENV = 'production'
+
+      try {
+        const res = await app.fetch(
+          new Request('http://localhost/subscriber/verify', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Origin': 'https://natepay.co.evil.com',
+            },
+            body: JSON.stringify({ email: 'test@test.com', otp: '123456' }),
+          })
+        )
+
+        // This MUST be blocked - was previously bypassing startsWith check
+        expect(res.status).toBe(403)
+        const body = await res.json()
+        expect(body.code).toBe('CSRF_BLOCKED')
+      } finally {
+        process.env.NODE_ENV = originalEnv
+      }
+    })
+
+    it('blocks referer startsWith bypass attack', async () => {
+      const originalEnv = process.env.NODE_ENV
+      process.env.NODE_ENV = 'production'
+
+      try {
+        const res = await app.fetch(
+          new Request('http://localhost/subscriber/verify', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              // No Origin header, fall back to Referer
+              'Referer': 'https://natepay.co.evil.com/phishing',
+            },
+            body: JSON.stringify({ email: 'test@test.com', otp: '123456' }),
+          })
+        )
+
+        expect(res.status).toBe(403)
+        const body = await res.json()
+        expect(body.code).toBe('CSRF_BLOCKED')
+      } finally {
+        process.env.NODE_ENV = originalEnv
+      }
+    })
+
+    it('allows valid referer with path', async () => {
+      const originalEnv = process.env.NODE_ENV
+      process.env.NODE_ENV = 'production'
+
+      try {
+        const res = await app.fetch(
+          new Request('http://localhost/subscriber/verify', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              // Valid referer with path
+              'Referer': 'https://natepay.co/subscriptions',
+            },
+            body: JSON.stringify({ email: 'test@test.com', otp: '123456' }),
+          })
+        )
+
+        // Should not be blocked by CSRF (may fail for other reasons)
+        expect(res.status).not.toBe(403)
+      } finally {
+        process.env.NODE_ENV = originalEnv
+      }
+    })
   })
 
   describe('Gross Amount Calculations', () => {
