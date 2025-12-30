@@ -386,10 +386,10 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                 overflow: 'hidden',
                 display: 'flex',
                 flexDirection: 'column',
-                // Height reveal animation - slow, premium feel
-                opacity: cardRevealed ? 1 : 0.4,
-                transform: cardRevealed ? 'scale(1)' : 'scale(0.98)',
-                transition: 'opacity 0.6s ease-out, transform 0.8s cubic-bezier(0.22, 1, 0.36, 1)',
+                // Premium card reveal animation
+                opacity: cardRevealed ? 1 : 0,
+                transform: cardRevealed ? 'scale(1) translateY(0)' : 'scale(0.95) translateY(20px)',
+                transition: 'opacity 0.5s ease-out, transform 0.7s cubic-bezier(0.34, 1.56, 0.64, 1)',
             }}>
                 {/* Content wrapper for fade-in */}
                 <div style={{
@@ -561,95 +561,97 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                     )}
                 </div>
 
-                {/* Perks List (Service Mode Only) - Collapsible */}
+                {/* Perks List (Service Mode Only) - Animated Collapsible */}
                 {isServiceMode && perks.length > 0 && (
                     <div style={{ marginTop: 20 }}>
-                        {/* Collapsed header - only show when not expanded */}
-                        {!perksExpanded && (
-                            <button
-                                onClick={() => setPerksExpanded(true)}
-                                style={{
-                                    width: '100%',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'space-between',
-                                    padding: '12px 0',
-                                    background: 'transparent',
-                                    border: 'none',
-                                    cursor: 'pointer',
-                                }}
-                            >
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                                    <PerkIcon />
-                                    <span style={{
-                                        fontSize: 16,
-                                        fontWeight: 500,
-                                        color: COLORS.neutral600,
-                                    }}>
-                                        {perks.length} perk{perks.length > 1 ? 's' : ''} included
-                                    </span>
-                                </div>
-                                <ChevronDown
-                                    size={20}
-                                    color={COLORS.neutral500}
-                                />
-                            </button>
-                        )}
-
-                        {/* Expanded perks list */}
-                        {perksExpanded && (
-                            <div>
-                                {perks.map((perk, index) => (
-                                    <div key={perk.id}>
-                                        <div style={{
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: 12,
-                                            padding: '12px 0',
-                                        }}>
-                                            <PerkIcon />
-                                            <span style={{
-                                                fontSize: 16,
-                                                fontWeight: 500,
-                                                color: COLORS.neutral600,
-                                            }}>
-                                                {perk.title}
-                                            </span>
-                                        </div>
-                                        {index < perks.length - 1 && (
-                                            <div style={{
-                                                height: 1,
-                                                background: COLORS.neutral200,
-                                            }} />
-                                        )}
-                                    </div>
-                                ))}
-                                {/* Collapse button */}
-                                <button
-                                    onClick={() => setPerksExpanded(false)}
-                                    style={{
-                                        width: '100%',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        padding: '8px 0',
-                                        marginTop: 8,
-                                        background: 'transparent',
-                                        border: 'none',
-                                        cursor: 'pointer',
-                                        color: COLORS.neutral500,
-                                        fontSize: 14,
-                                        gap: 4,
-                                    }}
-                                >
-                                    Show less
-                                    <ChevronDown
-                                        size={16}
-                                        style={{ transform: 'rotate(180deg)' }}
-                                    />
-                                </button>
+                        {/* Header - always visible, toggles expansion */}
+                        <button
+                            onClick={() => setPerksExpanded(!perksExpanded)}
+                            style={{
+                                width: '100%',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                padding: '12px 0',
+                                background: 'transparent',
+                                border: 'none',
+                                cursor: 'pointer',
+                            }}
+                        >
+                            <div style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 12,
+                                opacity: perksExpanded ? 0.5 : 1,
+                                transition: 'opacity 0.3s ease',
+                            }}>
+                                <PerkIcon />
+                                <span style={{
+                                    fontSize: 16,
+                                    fontWeight: 500,
+                                    color: COLORS.neutral600,
+                                }}>
+                                    {perks.length} perk{perks.length > 1 ? 's' : ''} included
+                                </span>
                             </div>
-                        )}
+                            <ChevronDown
+                                size={20}
+                                color={COLORS.neutral500}
+                                style={{
+                                    transform: perksExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                                    transition: 'transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                                }}
+                            />
+                        </button>
+
+                        {/* Animated perks list container */}
+                        <div style={{
+                            display: 'grid',
+                            gridTemplateRows: perksExpanded ? '1fr' : '0fr',
+                            transition: 'grid-template-rows 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                        }}>
+                            <div style={{ overflow: 'hidden' }}>
+                                <div style={{
+                                    borderTop: `1px solid ${COLORS.neutral200}`,
+                                    opacity: perksExpanded ? 1 : 0,
+                                    transform: perksExpanded ? 'translateY(0)' : 'translateY(-10px)',
+                                    transition: 'opacity 0.3s ease 0.1s, transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                                }}>
+                                    {perks.map((perk, index) => (
+                                        <div
+                                            key={perk.id}
+                                            style={{
+                                                opacity: perksExpanded ? 1 : 0,
+                                                transform: perksExpanded ? 'translateX(0)' : 'translateX(-10px)',
+                                                transition: `opacity 0.3s ease ${0.1 + index * 0.05}s, transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) ${index * 0.05}s`,
+                                            }}
+                                        >
+                                            <div style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: 12,
+                                                padding: '12px 0',
+                                            }}>
+                                                <PerkIcon />
+                                                <span style={{
+                                                    fontSize: 16,
+                                                    fontWeight: 500,
+                                                    color: COLORS.neutral600,
+                                                }}>
+                                                    {perk.title}
+                                                </span>
+                                            </div>
+                                            {index < perks.length - 1 && (
+                                                <div style={{
+                                                    height: 1,
+                                                    background: COLORS.neutral200,
+                                                }} />
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 )}
 
@@ -814,12 +816,17 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                                 )}
                             </div>
 
-                            {/* Slide to Pay */}
-                            <SlideToPay
-                                key={resetKey}
-                                onComplete={handleSubscribe}
-                                disabled={!isValidEmail || isProcessing}
-                            />
+                            {/* Slide to Pay - faded until email entered */}
+                            <div style={{
+                                opacity: isValidEmail ? 1 : 0.4,
+                                transition: 'opacity 0.3s ease',
+                            }}>
+                                <SlideToPay
+                                    key={resetKey}
+                                    onComplete={handleSubscribe}
+                                    disabled={!isValidEmail || isProcessing}
+                                />
+                            </div>
                         </>
                     ) : (
                         /* Payments Unavailable */
