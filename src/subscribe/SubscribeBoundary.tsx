@@ -403,7 +403,7 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                     }}>
                         <div style={{
                             width: '100%',
-                            height: 160,
+                            height: 109,
                             borderRadius: '24px 24px 0 0', // Match card's top corners
                             overflow: 'hidden',
                             background: COLORS.neutral900,
