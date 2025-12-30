@@ -4,20 +4,22 @@ import { renderWithProviders } from '../test/testUtils'
 import { useOnboardingStore } from './store'
 import PersonalReviewStep from './PersonalReviewStep'
 
-// Mock API
-const mockProfileUpdate = vi.fn(() => Promise.resolve({ profile: { id: 'test-id' } }))
-const mockProfileUpdateSettings = vi.fn(() => Promise.resolve({ success: true }))
-const mockSaveProgress = vi.fn(() => Promise.resolve({ success: true }))
+// Mock API - vi.hoisted ensures mocks are defined before vi.mock runs
+const { mockProfileUpdate, mockProfileUpdateSettings, mockSaveProgress } = vi.hoisted(() => ({
+  mockProfileUpdate: vi.fn(),
+  mockProfileUpdateSettings: vi.fn(),
+  mockSaveProgress: vi.fn(),
+}))
 
 vi.mock('../api', () => ({
   api: {
     put: vi.fn(() => Promise.resolve({ profile: { id: 'test-id' } })),
     profile: {
-      update: (...args: any[]) => mockProfileUpdate(...args),
-      updateSettings: (...args: any[]) => mockProfileUpdateSettings(...args),
+      update: mockProfileUpdate,
+      updateSettings: mockProfileUpdateSettings,
     },
     auth: {
-      saveOnboardingProgress: (...args: any[]) => mockSaveProgress(...args),
+      saveOnboardingProgress: mockSaveProgress,
     },
   },
 }))
@@ -376,7 +378,8 @@ describe('PersonalReviewStep', () => {
       fireEvent.click(launchButton)
 
       await waitFor(() => {
-        const call = mockProfileUpdate.mock.calls[0][0]
+        expect(mockProfileUpdate).toHaveBeenCalled()
+        const call = mockProfileUpdate.mock.calls[0]![0]
         expect(call.pricingModel).toBe('tiers')
         expect(call.tiers).not.toBeNull()
         expect(call.tiers).toHaveLength(2)

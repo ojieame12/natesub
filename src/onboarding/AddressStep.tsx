@@ -23,9 +23,10 @@ export default function AddressStep() {
 
     const handleContinue = () => {
         // Fire and forget - don't block navigation on save
+        // Save NEXT step key so resume lands on the step user is going to
         saveProgress({
             step: currentStep + 1,
-            stepKey: 'address', // Canonical step key for safe resume
+            stepKey: 'purpose', // After address is always purpose
             data: { address, city, state, zip },
         }).catch(err => {
             console.warn('[AddressStep] Failed to save progress:', err)

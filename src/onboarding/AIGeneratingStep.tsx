@@ -121,9 +121,16 @@ export default function AIGeneratingStep() {
       return
     }
 
-    // If we have perks but need banner, run generation for banner only
+    // If we have perks but need banner:
+    // - If AI available, run banner-only generation
+    // - If AI unavailable, skip banner and go to preview (user can upload manually)
     if (hasPerks && needsBanner) {
-      runGeneration()
+      if (isAIAvailable) {
+        runGeneration()
+      } else {
+        // AI unavailable - skip banner, go straight to preview with manual upload option
+        setPhase('preview')
+      }
       return
     }
 
@@ -363,9 +370,10 @@ export default function AIGeneratingStep() {
     }
 
     // Persist final selection
+    // Save NEXT step key so resume lands on the step user is going to
     api.auth.saveOnboardingProgress({
-      step: currentStep,
-      stepKey: 'ai-gen',
+      step: currentStep + 1,
+      stepKey: 'review', // After ai-gen is always review
       data: {
         servicePerks,
         bannerUrl: finalBannerUrl,

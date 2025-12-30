@@ -46,9 +46,10 @@ export default function PersonalUsernameStep() {
 
     const handleContinue = () => {
         // Fire and forget - don't block navigation on save
+        // Save NEXT step key so resume lands on the step user is going to
         saveProgress({
             step: currentStep + 1,
-            stepKey: 'username', // Canonical step key for safe resume
+            stepKey: 'payments', // After username is always payments
             data: { username },
         }).catch(err => {
             console.warn('[PersonalUsernameStep] Failed to save progress:', err)

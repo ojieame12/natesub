@@ -40,8 +40,10 @@ interface SubscriptionRowProps {
 const SubscriptionRow = memo(function SubscriptionRow({
   subscription,
   onViewPage,
+  onCancel,
   onReactivate,
   onManageBilling,
+  cancellingId,
   reactivatingId,
   managingId,
 }: SubscriptionRowProps) {
@@ -53,7 +55,6 @@ const SubscriptionRow = memo(function SubscriptionRow({
   const isCancelling = subscription.cancelAtPeriodEnd
   const isPastDue = subscription.isPastDue
   const canManageBilling = subscription.updatePaymentMethod === 'portal'
-  const isPaystack = subscription.paymentProvider === 'paystack'
 
   // Status label with proper past_due handling
   const getStatusLabel = () => {

@@ -3,7 +3,7 @@ import { ChevronLeft, ChevronDown, Check, Search, AlertCircle } from 'lucide-rea
 import { useOnboardingStore } from './store'
 import { Button, Pressable } from './components'
 import { useSaveOnboardingProgress } from '../api/hooks'
-import { getCountryList } from '../utils/regionConfig'
+import { getCountryList, isCrossBorderCountry } from '../utils/regionConfig'
 import '../Dashboard.css'
 import './onboarding.css'
 
@@ -33,9 +33,11 @@ export default function IdentityStep() {
 
     const handleContinue = () => {
         // Fire and forget - don't block navigation on save
+        // Save NEXT step key so resume lands on the step user is going to
+        const nextStepKey = isCrossBorderCountry(countryCode) ? 'purpose' : 'address'
         saveProgress({
-            step: currentStep + 1, // Will be moving to next step
-            stepKey: 'identity', // Canonical step key for safe resume
+            step: currentStep + 1,
+            stepKey: nextStepKey,
             data: { firstName, lastName, country, countryCode, currency },
         }).catch(err => {
             console.warn('[IdentityStep] Failed to save progress:', err)

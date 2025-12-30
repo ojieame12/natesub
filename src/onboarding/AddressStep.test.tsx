@@ -102,7 +102,7 @@ describe('AddressStep', () => {
       await waitFor(() => {
         expect(mockSaveProgress).toHaveBeenCalledWith({
           step: 5, // currentStep (4) + 1
-          stepKey: 'address', // Canonical step key for cross-device resume
+          stepKey: 'purpose', // NEXT step key - after address is always purpose
           data: {
             address: '123 Main St',
             city: 'San Francisco',
