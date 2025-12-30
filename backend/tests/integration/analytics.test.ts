@@ -105,7 +105,7 @@ describe('analytics routes', () => {
       expect(res.status).toBe(200)
       const body = await res.json()
       expect(body.viewId).toBeDefined()
-      expect(body.existing).toBeUndefined()
+      expect(body.existing).toBe(false)
 
       // Verify page view was created
       const pageView = await db.pageView.findUnique({ where: { id: body.viewId } })
@@ -168,7 +168,7 @@ describe('analytics routes', () => {
       expect(res1.status).toBe(200)
       const body1 = await res1.json()
       expect(body1.viewId).toBeDefined()
-      expect(body1.existing).toBeUndefined()
+      expect(body1.existing).toBe(false)
 
       // Second view from same visitor (same IP + UA)
       const res2 = await publicRequest('/analytics/view', {
@@ -210,7 +210,7 @@ describe('analytics routes', () => {
       const body2 = await res2.json()
 
       expect(body1.viewId).not.toBe(body2.viewId)
-      expect(body2.existing).toBeUndefined()
+      expect(body2.existing).toBe(false)
     })
 
     it('records referrer URL', async () => {

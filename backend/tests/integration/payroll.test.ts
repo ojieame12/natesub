@@ -23,6 +23,9 @@ vi.mock('../../src/services/pdf.js', () => ({
   generateAndUploadPayStatement: vi.fn(),
   getPayStatementSignedUrl: vi.fn(),
   generateVerificationPdf: vi.fn(),
+  verificationPdfExists: vi.fn(),
+  getVerificationPdfSignedUrl: vi.fn(),
+  uploadVerificationPdf: vi.fn(),
 }))
 
 import {
@@ -40,6 +43,8 @@ import {
   generateAndUploadPayStatement,
   getPayStatementSignedUrl,
   generateVerificationPdf,
+  verificationPdfExists,
+  uploadVerificationPdf,
 } from '../../src/services/pdf.js'
 
 const mockGetPayrollPeriods = vi.mocked(getPayrollPeriods)
@@ -54,6 +59,8 @@ const mockAggregatePayments = vi.mocked(aggregatePayments)
 const mockGenerateAndUploadPayStatement = vi.mocked(generateAndUploadPayStatement)
 const mockGetPayStatementSignedUrl = vi.mocked(getPayStatementSignedUrl)
 const mockGenerateVerificationPdf = vi.mocked(generateVerificationPdf)
+const mockVerificationPdfExists = vi.mocked(verificationPdfExists)
+const mockUploadVerificationPdf = vi.mocked(uploadVerificationPdf)
 
 // Hash function matching auth service
 function hashToken(token: string): string {
@@ -624,7 +631,9 @@ describe('payroll routes', () => {
       }
 
       mockVerifyDocument.mockResolvedValue(documentInfo)
+      mockVerificationPdfExists.mockResolvedValue(null) // No cached PDF
       mockGenerateVerificationPdf.mockResolvedValue(Buffer.from('PDF content'))
+      mockUploadVerificationPdf.mockResolvedValue('verification-pdfs/VERIFY123ABC.pdf')
 
       const res = await publicRequest('/payroll/verify/VERIFY123ABC/pdf', { method: 'GET' })
       expect(res.status).toBe(200)

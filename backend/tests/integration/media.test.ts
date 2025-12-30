@@ -85,6 +85,7 @@ describe('media routes', () => {
         body: JSON.stringify({
           type: 'avatar',
           mimeType: 'image/jpeg',
+          fileSize: 1024 * 1024,
         }),
       })
 
@@ -108,6 +109,7 @@ describe('media routes', () => {
         body: JSON.stringify({
           type: 'avatar',
           mimeType: 'image/jpeg',
+          fileSize: 1024 * 1024,
         }),
       }, rawToken)
 
@@ -123,6 +125,7 @@ describe('media routes', () => {
         user.id,
         'avatar',
         'image/jpeg',
+        1024 * 1024,
         undefined
       )
     })
@@ -144,6 +147,7 @@ describe('media routes', () => {
         body: JSON.stringify({
           type: 'photo',
           mimeType: 'image/png',
+          fileSize: 2 * 1024 * 1024,
         }),
       }, rawToken)
 
@@ -155,6 +159,7 @@ describe('media routes', () => {
         user.id,
         'photo',
         'image/png',
+        2 * 1024 * 1024,
         undefined
       )
     })
@@ -176,6 +181,7 @@ describe('media routes', () => {
         body: JSON.stringify({
           type: 'voice',
           mimeType: 'audio/webm',
+          fileSize: 500 * 1024,
         }),
       }, rawToken)
 
@@ -187,6 +193,7 @@ describe('media routes', () => {
         user.id,
         'voice',
         'audio/webm',
+        500 * 1024,
         undefined
       )
     })
@@ -208,6 +215,7 @@ describe('media routes', () => {
         body: JSON.stringify({
           type: 'avatar',
           mimeType: 'image/jpeg',
+          fileSize: 1024 * 1024,
           fileName: 'my-avatar.jpg',
         }),
       }, rawToken)
@@ -218,6 +226,7 @@ describe('media routes', () => {
         user.id,
         'avatar',
         'image/jpeg',
+        1024 * 1024,
         'my-avatar.jpg'
       )
     })
@@ -230,6 +239,7 @@ describe('media routes', () => {
         body: JSON.stringify({
           type: 'invalid-type',
           mimeType: 'image/jpeg',
+          fileSize: 1024 * 1024,
         }),
       }, rawToken)
 
@@ -243,6 +253,21 @@ describe('media routes', () => {
         method: 'POST',
         body: JSON.stringify({
           type: 'avatar',
+          fileSize: 1024 * 1024,
+        }),
+      }, rawToken)
+
+      expect(res.status).toBe(400)
+    })
+
+    it('rejects missing fileSize', async () => {
+      const { rawToken } = await createTestUserWithSession()
+
+      const res = await authRequest('/media/upload-url', {
+        method: 'POST',
+        body: JSON.stringify({
+          type: 'avatar',
+          mimeType: 'image/jpeg',
         }),
       }, rawToken)
 
@@ -261,6 +286,7 @@ describe('media routes', () => {
         body: JSON.stringify({
           type: 'avatar',
           mimeType: 'application/pdf',
+          fileSize: 1024 * 1024,
         }),
       }, rawToken)
 
@@ -279,6 +305,7 @@ describe('media routes', () => {
         body: JSON.stringify({
           type: 'avatar',
           mimeType: 'image/jpeg',
+          fileSize: 1024 * 1024,
         }),
       }, rawToken)
 
@@ -297,6 +324,7 @@ describe('media routes', () => {
         body: JSON.stringify({
           type: 'avatar',
           mimeType: 'image/jpeg',
+          fileSize: 1024 * 1024,
         }),
       }, rawToken)
 

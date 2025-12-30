@@ -90,17 +90,15 @@ function SuccessOverlay({ email, onReset }: { email: string; onReset: () => void
     )
 }
 
-// Perk checkmark icon (shield style)
+// Perk checkmark icon (badge style from landing/check.svg)
 function PerkIcon() {
     return (
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+        <svg width="24" height="24" viewBox="0 0 37 37" fill="none">
             <path
-                d="M12 2L4 5.5V11.5C4 16.19 7.4 20.55 12 22C16.6 20.55 20 16.19 20 11.5V5.5L12 2Z"
-                fill={COLORS.neutral900}
-            />
-            <path
-                d="M10 14.2L7.5 11.7L8.91 10.29L10 11.38L14.59 6.79L16 8.2L10 14.2Z"
-                fill="white"
+                fillRule="evenodd"
+                clipRule="evenodd"
+                d="M24.0249 16.2756L17.7457 22.5579C17.5283 22.7753 17.2338 22.8971 16.9271 22.8971C16.6203 22.8971 16.3258 22.7753 16.11 22.5579L13.0622 19.5054C12.612 19.0522 12.612 18.3199 13.0637 17.8682C13.517 17.418 14.2477 17.4196 14.6994 17.8697L16.9286 20.1036L22.3892 14.6399C22.8409 14.1882 23.5732 14.1882 24.0249 14.6399C24.4766 15.0916 24.4766 15.8239 24.0249 16.2756ZM31.9182 15.548L30.8406 14.4703C30.3488 13.977 30.079 13.3202 30.079 12.6249V11.0833C30.079 8.78772 28.2105 6.92076 25.9165 6.92076H24.3718C23.6734 6.92076 23.0182 6.65097 22.5279 6.16072L21.4318 5.06613C19.8023 3.45047 17.1629 3.45817 15.5457 5.08309L14.4712 6.16072C13.9764 6.65251 13.3212 6.9223 12.6243 6.9223H11.0811C8.81333 6.92384 6.96334 8.74917 6.92171 11.0093C6.92015 11.0339 6.91863 11.0586 6.91863 11.0848V12.6218C6.91863 13.3187 6.64884 13.9739 6.15704 14.4657L5.06554 15.5588C5.064 15.5634 5.05938 15.5649 5.05629 15.568C3.44525 17.1991 3.45913 19.8384 5.0825 21.4464L6.16013 22.5271C6.65038 23.0189 6.92171 23.6726 6.92171 24.3694V25.9188C6.92171 28.2128 8.78713 30.0797 11.0811 30.0797H12.6213C13.3196 30.0813 13.9748 30.3511 14.4651 30.8398L15.5642 31.9359C16.3474 32.7144 17.3865 33.143 18.4918 33.143H18.5103C19.6219 33.1384 20.6641 32.7006 21.4441 31.9158L22.5248 30.8367C23.0105 30.3526 23.6826 30.0751 24.3687 30.0751H25.9196C28.209 30.0751 30.0759 28.2112 30.0805 25.9188V24.3725C30.0805 23.6772 30.3503 23.022 30.839 22.5302L31.9352 21.4341C33.5539 19.8061 33.5447 17.1652 31.9182 15.548Z"
+                fill="black"
             />
         </svg>
     )
@@ -320,13 +318,13 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
 
     return (
         <div style={{
-            minHeight: '100dvh',
+            height: '100dvh',
             background: 'linear-gradient(180deg, #FFE7A0 0%, #FFF5D6 100%)',
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
-            padding: '24px 16px',
+            padding: '14px 10px',
             fontFamily: 'var(--font-primary, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif)',
             position: 'relative',
             overflow: 'hidden',
@@ -377,18 +375,18 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
             <div style={{
                 width: '100%',
                 maxWidth: 420,
+                maxHeight: 'calc(100dvh - 28px)', // Fit within viewport with margin
                 background: COLORS.white,
                 borderRadius: 24,
                 boxShadow: '0 8px 32px rgba(0, 0, 0, 0.08), 0 24px 64px rgba(0, 0, 0, 0.06), 0 0 0 1px rgba(0, 0, 0, 0.02)',
-                padding: '24px',
+                padding: '20px',
                 position: 'relative',
                 zIndex: 1,
                 overflow: 'hidden',
                 // Height reveal animation - slow, premium feel
-                maxHeight: cardRevealed ? 1200 : 20,
                 opacity: cardRevealed ? 1 : 0.4,
                 transform: cardRevealed ? 'scale(1)' : 'scale(0.98)',
-                transition: 'max-height 0.8s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.6s ease-out, transform 0.8s cubic-bezier(0.22, 1, 0.36, 1)',
+                transition: 'opacity 0.6s ease-out, transform 0.8s cubic-bezier(0.22, 1, 0.36, 1)',
             }}>
                 {/* Content wrapper for fade-in */}
                 <div style={{
@@ -399,10 +397,10 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                 {/* Header Section - Different for Service vs Support */}
                 {isServiceMode ? (
                     /* SERVICE MODE: Banner Header */
-                    <div style={{ paddingTop: 16 }}>
+                    <div style={{ paddingTop: 8 }}>
                         <div style={{
                             width: '100%',
-                            height: 180,
+                            height: 140,
                             borderRadius: 12,
                             overflow: 'hidden',
                             background: COLORS.neutral900,
@@ -444,7 +442,7 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                         display: 'flex',
                         alignItems: 'flex-start',
                         justifyContent: 'space-between',
-                        paddingTop: 24,
+                        paddingTop: 12,
                     }}>
                         {/* Small Avatar */}
                         <div style={{
@@ -498,7 +496,7 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
 
                 {/* Name, Price, Badge Row */}
                 <div style={{
-                    marginTop: isServiceMode ? 20 : 24,
+                    marginTop: isServiceMode ? 16 : 20,
                     display: 'flex',
                     alignItems: 'flex-start',
                     justifyContent: 'space-between',
@@ -549,14 +547,14 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
 
                 {/* Perks List (Service Mode Only) */}
                 {isServiceMode && perks.length > 0 && (
-                    <div style={{ marginTop: 28 }}>
+                    <div style={{ marginTop: 20 }}>
                         {perks.map((perk, index) => (
                             <div key={perk.id}>
                                 <div style={{
                                     display: 'flex',
                                     alignItems: 'center',
                                     gap: 12,
-                                    padding: '16px 0',
+                                    padding: '12px 0',
                                 }}>
                                     <PerkIcon />
                                     <span style={{
@@ -580,15 +578,15 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
 
                 {/* Spacer for Support mode (where perks would be) */}
                 {!isServiceMode && (
-                    <div style={{ flex: 1, minHeight: 40 }} />
+                    <div style={{ flex: 1, minHeight: 24 }} />
                 )}
 
                 {/* Pricing Card */}
                 <div style={{
-                    marginTop: isServiceMode ? 28 : 0,
+                    marginTop: isServiceMode ? 20 : 0,
                     background: COLORS.neutral50,
                     borderRadius: 12,
-                    padding: '20px',
+                    padding: '16px',
                 }}>
                     {/* Subscription Row */}
                     <div style={{
@@ -607,7 +605,7 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                     {/* Dashed Separator */}
                     <div style={{
                         borderBottom: `1px dashed ${COLORS.neutral200}`,
-                        margin: '14px 0',
+                        margin: '10px 0',
                     }} />
 
                     {/* Fee Row */}
@@ -627,7 +625,7 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                     {/* Dashed Separator */}
                     <div style={{
                         borderBottom: `1px dashed ${COLORS.neutral200}`,
-                        margin: '14px 0',
+                        margin: '10px 0',
                     }} />
 
                     {/* Total Row */}
@@ -647,8 +645,8 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
 
                 {/* Action Section - staggered reveal */}
                 <div style={{
-                    marginTop: 36,
-                    paddingBottom: 24,
+                    marginTop: 24,
+                    paddingBottom: 16,
                     opacity: actionVisible ? 1 : 0,
                     transform: actionVisible ? 'translateY(0)' : 'translateY(12px)',
                     transition: 'opacity 0.4s ease-out, transform 0.4s cubic-bezier(0.22, 1, 0.36, 1)',
@@ -750,7 +748,7 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                 {/* Footer */}
                 <div style={{
                     marginTop: 'auto',
-                    paddingBottom: 24,
+                    paddingBottom: 12,
                     textAlign: 'center',
                 }}>
                     <img
