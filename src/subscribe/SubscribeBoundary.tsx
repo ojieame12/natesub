@@ -150,8 +150,15 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
     const [contentVisible, setContentVisible] = useState(false)
     const [actionVisible, setActionVisible] = useState(false)
     const [perksExpanded, setPerksExpanded] = useState(false)
+    const [initialHeight, setInitialHeight] = useState<number | null>(null)
     const viewIdRef = useRef<string | null>(null)
     const emailInputRef = useRef<HTMLInputElement>(null)
+
+    // Capture initial viewport height before keyboard opens
+    // This prevents the card from shrinking when keyboard appears on mobile
+    useEffect(() => {
+        setInitialHeight(window.innerHeight)
+    }, [])
 
     // Multi-stage entrance animation:
     // 0. Background dither fades in
@@ -375,7 +382,8 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
             <div style={{
                 width: '100%',
                 maxWidth: 420,
-                maxHeight: 'calc(100vh - 28px)', // Fit within viewport - vh stable with keyboard
+                // Use fixed initial height to prevent shrinking when keyboard opens
+                maxHeight: initialHeight ? `${initialHeight - 28}px` : 'calc(100vh - 28px)',
                 background: COLORS.white,
                 borderRadius: 24,
                 boxShadow: '0 8px 32px rgba(0, 0, 0, 0.08), 0 24px 64px rgba(0, 0, 0, 0.06), 0 0 0 1px rgba(0, 0, 0, 0.02)',
@@ -542,17 +550,16 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                         {/* Price */}
                         <div style={{
                             fontSize: 36,
-                            fontWeight: 700,
-                            color: COLORS.neutral900,
-                            letterSpacing: -1,
+                            fontWeight: 600, // Semibold
+                            color: '#3D3D3D',
+                            letterSpacing: -0.5,
                             lineHeight: 1.1,
                             marginTop: 2,
                         }}>
-                            {formatCurrency(pricing.currentAmount, pricing.currency)}
-                            <span style={{
+                            {formatCurrency(pricing.currentAmount, pricing.currency)}<span style={{
                                 fontSize: 18,
-                                fontWeight: 600,
-                                color: COLORS.neutral700,
+                                fontWeight: 600, // Semibold
+                                color: '#3D3D3D',
                             }}>/month</span>
                         </div>
                     </div>
@@ -797,27 +804,14 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                                     onChange={e => setSubscriberEmail(e.target.value)}
                                     onFocus={() => {
                                         setEmailFocused(true)
-                                        // Scroll within the card's scrollable container
+                                        // Wait for keyboard to appear, then scroll input into view
+                                        // The card height is now fixed (initialHeight), so scrollIntoView works
                                         setTimeout(() => {
-                                            const input = emailInputRef.current
-                                            if (!input) return
-
-                                            // Find the scrollable parent (the content wrapper with overflowY)
-                                            let scrollParent = input.parentElement
-                                            while (scrollParent && getComputedStyle(scrollParent).overflowY !== 'auto') {
-                                                scrollParent = scrollParent.parentElement
-                                            }
-
-                                            if (scrollParent) {
-                                                // Scroll so input is visible with some padding above it
-                                                const inputTop = input.offsetTop - scrollParent.offsetTop
-                                                const targetScroll = inputTop - 80 // 80px from top of scroll area
-                                                scrollParent.scrollTo({
-                                                    top: Math.max(0, targetScroll),
-                                                    behavior: 'smooth'
-                                                })
-                                            }
-                                        }, 300)
+                                            emailInputRef.current?.scrollIntoView({
+                                                behavior: 'smooth',
+                                                block: 'center',
+                                            })
+                                        }, 350)
                                     }}
                                     onBlur={() => setEmailFocused(false)}
                                     placeholder={emailFocused || hasEmailValue ? '' : 'Customer Email'}
