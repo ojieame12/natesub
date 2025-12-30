@@ -3,7 +3,7 @@ import { BrowserRouter, HashRouter, Routes, Route, Navigate, useNavigate, useLoc
 import { Capacitor } from '@capacitor/core'
 import { App as CapacitorApp } from '@capacitor/app'
 import type { URLOpenListenerEvent } from '@capacitor/app'
-import { useOnboardingStore } from './onboarding/store'
+import { useOnboardingStore, type OnboardingStepKey } from './onboarding/store'
 import { PageSkeleton, ScrollRestoration, useToast, SplashScreen, AmbientBackground, Pressable } from './components'
 import { useAuthState } from './hooks/useAuthState'
 import { AUTH_ERROR_EVENT } from './api/client'
@@ -257,11 +257,14 @@ function InitialRouteRedirect() {
       // This prevents the "Login Loop" (Start -> Email -> OTP -> Start).
       const serverStep = onboarding?.step || 0
       const safeStep = Math.max(serverStep, 3)
+      // Use stepKey from server data if available for reliable step mapping
+      const serverStepKey = onboarding?.data?.stepKey as OnboardingStepKey | undefined
 
       // Only force update if we are sitting at Step 0, 1, or 2 (Auth steps)
       if (currentStep < 3) {
         hydrateFromServer({
           step: safeStep,
+          stepKey: serverStepKey,
           data: onboarding?.data,
         })
       }
