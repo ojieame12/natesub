@@ -1,8 +1,45 @@
 // Email Template Infrastructure
 // Clean, minimal, Apple-inspired design system
 //
+// ============================================
+// EMAIL CLIENT COMPATIBILITY NOTES
+// ============================================
+//
+// FONTS:
+// - Google Fonts (Barlow) removed - Gmail, Outlook, Yahoo strip <link> and @import
+// - Using system font stack: SF Pro → Segoe UI → Roboto → Helvetica → Arial
+// - This ensures native, clean typography on all platforms
+//
+// LAYOUT:
+// - All layouts use tables (not divs/flexbox) for Outlook compatibility
+// - MSO conditional comments wrap container for Outlook width handling
+// - border-radius gracefully degrades (ignored in Outlook Windows)
+// - No box-shadow (stripped in Outlook)
+//
+// DARK MODE:
+// - prefers-color-scheme media query works in: Apple Mail, iOS Mail, Outlook.com
+// - Does NOT work in: Outlook Windows, Gmail app
+// - Inline styles provide fallback colors
+//
+// MOBILE:
+// - Media queries work in: iOS Mail, Apple Mail, Android Gmail
+// - May not work in: Outlook app, some webmail
+// - Base design is responsive without media queries (fluid width)
+//
+// SPECIAL CHARACTERS:
+// - Checkmarks use HTML entity &#10003; (more reliable than Unicode)
+// - Emojis avoided in templates (render inconsistently)
+//
+// TESTED CLIENT MATRIX:
+// ✓ Gmail (web, iOS, Android)
+// ✓ Apple Mail (macOS, iOS)
+// ✓ Outlook (web, Windows 2016+, Mac)
+// ✓ Yahoo Mail
+// ✓ Outlook.com
+// ============================================
+//
 // Design principles:
-// - Barlow font (Google Fonts) with system fallbacks
+// - System fonts for reliability
 // - Light, airy aesthetic with whites and soft grays
 // - Generous breathing room and whitespace
 // - Status badges for context at a glance
@@ -62,9 +99,11 @@ const COLORS = {
   infoText: '#1E40AF',
 }
 
-// Typography - Barlow with system fallbacks
-const FONT_STACK = "'Barlow', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
-const FONT_STACK_MONO = "'SF Mono', Monaco, 'Courier New', monospace"
+// Typography - System fonts first (Barlow won't load in most email clients)
+// Email clients strip Google Fonts, so we lead with reliable system fonts
+// The font stack degrades gracefully: SF Pro (Apple) → Segoe (Windows) → Roboto (Android) → Helvetica/Arial
+const FONT_STACK = "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
+const FONT_STACK_MONO = "'SF Mono', 'Consolas', 'Monaco', 'Courier New', monospace"
 
 // ============================================
 // LOGO HANDLING
@@ -308,10 +347,6 @@ export function baseTemplate(options: BaseTemplateOptions): string {
   <meta name="x-apple-disable-message-reformatting">
   <meta name="format-detection" content="telephone=no, date=no, address=no, email=no">
   <title>${escapeHtml(headline)}</title>
-
-  <!-- Google Fonts: Barlow -->
-  <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet">
-
   <!--[if mso]>
   <noscript>
     <xml>
@@ -320,18 +355,20 @@ export function baseTemplate(options: BaseTemplateOptions): string {
       </o:OfficeDocumentSettings>
     </xml>
   </noscript>
+  <style type="text/css">
+    /* Outlook-specific table fixes */
+    table { border-collapse: collapse; }
+    td { font-family: 'Segoe UI', Arial, sans-serif; }
+  </style>
   <![endif]-->
-  <style>
-    /* Reset */
+  <style type="text/css">
+    /* Reset - these work across most clients */
     body, table, td, p, a, li, blockquote { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
-    table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+    table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; border-collapse: collapse; }
     img { -ms-interpolation-mode: bicubic; border: 0; height: auto; line-height: 100%; outline: none; text-decoration: none; }
     body { margin: 0 !important; padding: 0 !important; width: 100% !important; }
 
-    /* Font import fallback */
-    @import url('https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&display=swap');
-
-    /* Dark mode */
+    /* Dark mode - Apple Mail, iOS Mail, Outlook.com (not Windows Outlook) */
     @media (prefers-color-scheme: dark) {
       .email-bg { background-color: #1D1D1F !important; }
       .email-container { background-color: #2C2C2E !important; }
@@ -341,7 +378,7 @@ export function baseTemplate(options: BaseTemplateOptions): string {
       .card-bg { background-color: #3A3A3C !important; }
     }
 
-    /* Mobile */
+    /* Mobile - works in iOS Mail, Apple Mail, some Android */
     @media screen and (max-width: 600px) {
       .mobile-padding { padding: 24px 20px !important; }
       .mobile-full-width { width: 100% !important; }
@@ -357,8 +394,13 @@ export function baseTemplate(options: BaseTemplateOptions): string {
     <tr>
       <td align="center" style="padding: 40px 20px;">
 
-        <!-- Email container -->
-        <table role="presentation" cellpadding="0" cellspacing="0" width="100%" class="email-container" style="max-width: 520px; background-color: ${COLORS.white}; border-radius: 20px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.04);">
+        <!--[if mso]>
+        <table role="presentation" cellpadding="0" cellspacing="0" width="520" align="center" style="border-collapse: collapse;">
+        <tr><td style="background-color: ${COLORS.white};">
+        <![endif]-->
+
+        <!-- Email container - border-radius gracefully ignored in Outlook -->
+        <table role="presentation" cellpadding="0" cellspacing="0" width="100%" class="email-container" style="max-width: 520px; background-color: ${COLORS.white}; border-radius: 16px;">
 
           <!-- Header - Light with thin border -->
           <tr>
@@ -425,6 +467,10 @@ export function baseTemplate(options: BaseTemplateOptions): string {
 
         </table>
         <!-- End email container -->
+
+        <!--[if mso]>
+        </td></tr></table>
+        <![endif]-->
 
       </td>
     </tr>
@@ -544,18 +590,24 @@ export function countdownChip(days: number, urgent: boolean = false): string {
 
 /**
  * Identity Block - Creator/subscriber avatar + name
+ * Uses table-based centering for Outlook compatibility (no flexbox)
  */
 export function identityBlock(name: string, label?: string, avatarUrl?: string): string {
+  // Avatar: image or initial in colored circle (table-based for Outlook)
   const avatarHtml = avatarUrl
-    ? `<img src="${escapeHtml(avatarUrl)}" alt="${escapeHtml(name)}" width="44" height="44" style="display: block; border-radius: 50%; width: 44px; height: 44px; object-fit: cover;">`
-    : `<div style="width: 44px; height: 44px; border-radius: 50%; background-color: ${COLORS.brand}; display: flex; align-items: center; justify-content: center;">
-         <span style="font-size: 18px; font-weight: 600; color: white; font-family: ${FONT_STACK};">${escapeHtml(name.charAt(0).toUpperCase())}</span>
-       </div>`
+    ? `<img src="${escapeHtml(avatarUrl)}" alt="${escapeHtml(name)}" width="44" height="44" style="display: block; border-radius: 22px; width: 44px; height: 44px;">`
+    : `<table role="presentation" cellpadding="0" cellspacing="0" width="44" height="44" style="border-radius: 22px; background-color: ${COLORS.brand};">
+         <tr>
+           <td align="center" valign="middle" style="width: 44px; height: 44px; border-radius: 22px; background-color: ${COLORS.brand};">
+             <span style="font-size: 18px; font-weight: 600; color: #ffffff; font-family: ${FONT_STACK};">${escapeHtml(name.charAt(0).toUpperCase())}</span>
+           </td>
+         </tr>
+       </table>`
 
   return `
     <table role="presentation" cellpadding="0" cellspacing="0" style="margin: 24px 0;">
       <tr>
-        <td style="vertical-align: middle; padding-right: 14px;">
+        <td style="vertical-align: middle; padding-right: 14px; width: 44px;">
           ${avatarHtml}
         </td>
         <td style="vertical-align: middle;">
@@ -588,14 +640,19 @@ export function quoteCard(message: string): string {
 
 /**
  * Checklist - Action items with checkmarks
+ * Uses HTML entity &#10003; for cross-client checkmark compatibility
  */
 export function checklist(items: string[]): string {
   const itemsHtml = items.map(item => `
     <tr>
-      <td style="padding: 8px 0; vertical-align: top; width: 28px;">
-        <span style="display: inline-block; width: 20px; height: 20px; background-color: ${COLORS.successBg}; border-radius: 50%; text-align: center; line-height: 20px; font-size: 12px; color: ${COLORS.success};">✓</span>
+      <td style="padding: 8px 0; vertical-align: top; width: 24px;">
+        <table role="presentation" cellpadding="0" cellspacing="0" width="20" height="20">
+          <tr>
+            <td align="center" valign="middle" style="width: 20px; height: 20px; background-color: ${COLORS.successBg}; border-radius: 10px; font-size: 12px; color: ${COLORS.success}; font-family: ${FONT_STACK};">&#10003;</td>
+          </tr>
+        </table>
       </td>
-      <td style="padding: 8px 0; vertical-align: top;">
+      <td style="padding: 8px 0 8px 8px; vertical-align: middle;">
         <span style="font-size: 15px; color: ${COLORS.textSecondary}; font-family: ${FONT_STACK};">${escapeHtml(item)}</span>
       </td>
     </tr>
