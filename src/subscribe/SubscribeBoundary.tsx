@@ -379,7 +379,7 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                 background: COLORS.white,
                 borderRadius: 24,
                 boxShadow: '0 8px 32px rgba(0, 0, 0, 0.08), 0 24px 64px rgba(0, 0, 0, 0.06), 0 0 0 1px rgba(0, 0, 0, 0.02)',
-                padding: '20px',
+                padding: '11px',
                 position: 'relative',
                 zIndex: 1,
                 overflow: 'hidden',
@@ -396,48 +396,43 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                 }}>
                 {/* Header Section - Different for Service vs Support */}
                 {isServiceMode ? (
-                    /* SERVICE MODE: Banner Header - Full bleed to card edges */
+                    /* SERVICE MODE: Banner Header - Inset with rounded corners */
                     <div style={{
-                        margin: '-20px -20px 0 -20px', // Negative margin to break out of card padding
-                        width: 'calc(100% + 40px)',
+                        width: '100%',
+                        height: 109,
+                        borderRadius: 24,
+                        overflow: 'hidden',
+                        background: COLORS.neutral900,
+                        position: 'relative',
                     }}>
-                        <div style={{
-                            width: '100%',
-                            height: 109,
-                            borderRadius: '24px 24px 0 0', // Match card's top corners
-                            overflow: 'hidden',
-                            background: COLORS.neutral900,
-                            position: 'relative',
-                        }}>
-                            {bannerUrl ? (
-                                <img
-                                    src={bannerUrl}
-                                    alt=""
-                                    loading="lazy"
-                                    decoding="async"
-                                    style={{
-                                        width: '100%',
-                                        height: '100%',
-                                        objectFit: 'cover',
-                                        objectPosition: 'center top',
-                                    }}
-                                />
-                            ) : (
-                                <div style={{
+                        {bannerUrl ? (
+                            <img
+                                src={bannerUrl}
+                                alt=""
+                                loading="lazy"
+                                decoding="async"
+                                style={{
                                     width: '100%',
                                     height: '100%',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    fontSize: 64,
-                                    fontWeight: 700,
-                                    color: COLORS.white,
-                                    opacity: 0.3,
-                                }}>
-                                    {(profile.displayName || profile.username || 'U').charAt(0).toUpperCase()}
-                                </div>
-                            )}
-                        </div>
+                                    objectFit: 'cover',
+                                    objectPosition: 'center top',
+                                }}
+                            />
+                        ) : (
+                            <div style={{
+                                width: '100%',
+                                height: '100%',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: 64,
+                                fontWeight: 700,
+                                color: COLORS.white,
+                                opacity: 0.3,
+                            }}>
+                                {(profile.displayName || profile.username || 'U').charAt(0).toUpperCase()}
+                            </div>
+                        )}
                     </div>
                 ) : (
                     /* SUPPORT MODE: Avatar + Badge Header */
@@ -497,6 +492,8 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                     </div>
                 )}
 
+                {/* Content wrapper with 14px padding */}
+                <div style={{ padding: '14px' }}>
                 {/* Name, Price, Badge Row */}
                 <div style={{
                     marginTop: isServiceMode ? 16 : 20,
@@ -526,7 +523,7 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                             {formatCurrency(pricing.currentAmount, pricing.currency)}
                             <span style={{
                                 fontSize: 18,
-                                fontWeight: 400,
+                                fontWeight: 600,
                                 color: COLORS.neutral700,
                             }}>/month</span>
                         </div>
@@ -782,6 +779,7 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                         </a>
                     </div>
                 </div>
+                </div>{/* End 14px padding wrapper */}
                 </div>{/* End content wrapper */}
             </div>
 
