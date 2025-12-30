@@ -379,7 +379,7 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                 background: COLORS.white,
                 borderRadius: 24,
                 boxShadow: '0 8px 32px rgba(0, 0, 0, 0.08), 0 24px 64px rgba(0, 0, 0, 0.06), 0 0 0 1px rgba(0, 0, 0, 0.02)',
-                padding: isServiceMode ? '11px' : '20px', // Smaller padding for banner, larger for support
+                padding: isServiceMode ? '11px' : '30px', // Smaller padding for banner, larger for support
                 paddingBottom: 0, // Remove bottom padding for gradient
                 position: 'relative',
                 zIndex: 1,
