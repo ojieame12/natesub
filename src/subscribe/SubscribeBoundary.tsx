@@ -443,13 +443,13 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                             </div>
                         )}
                         </div>
-                        {/* Gradient fade below banner */}
+                        {/* Gradient fade below banner - positioned outside banner */}
                         <div style={{
                             position: 'absolute',
-                            bottom: -20,
-                            left: 0,
-                            right: 0,
-                            height: 24,
+                            top: '100%', // Start right below the banner
+                            left: 11, // Match card padding
+                            right: 11,
+                            height: 20,
                             background: 'linear-gradient(to bottom, white 0%, rgba(255,255,255,0) 100%)',
                             pointerEvents: 'none',
                             zIndex: 2,
@@ -795,23 +795,15 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                                     type="email"
                                     value={subscriberEmail}
                                     onChange={e => setSubscriberEmail(e.target.value)}
-                                    onFocus={(e) => {
+                                    onFocus={() => {
                                         setEmailFocused(true)
-                                        // Smooth scroll input into view after keyboard opens
-                                        const input = e.target
+                                        // Scroll input into view after keyboard opens
                                         setTimeout(() => {
-                                            // Use parent scroll container for smoother control
-                                            const scrollContainer = input.closest('[style*="overflowY"]')
-                                            if (scrollContainer) {
-                                                const inputRect = input.getBoundingClientRect()
-                                                const containerRect = scrollContainer.getBoundingClientRect()
-                                                const scrollTop = scrollContainer.scrollTop + (inputRect.top - containerRect.top) - 100
-                                                scrollContainer.scrollTo({
-                                                    top: Math.max(0, scrollTop),
-                                                    behavior: 'smooth',
-                                                })
-                                            }
-                                        }, 350)
+                                            emailInputRef.current?.scrollIntoView({
+                                                behavior: 'smooth',
+                                                block: 'nearest',
+                                            })
+                                        }, 400)
                                     }}
                                     onBlur={() => setEmailFocused(false)}
                                     placeholder={emailFocused || hasEmailValue ? '' : 'Customer Email'}
