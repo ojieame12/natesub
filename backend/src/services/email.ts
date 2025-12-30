@@ -20,6 +20,20 @@ import {
   baseTemplate,
   amountCard,
   alertBox,
+  // New premium components
+  statusBadge,
+  receiptCard,
+  dateChip,
+  countdownChip,
+  identityBlock,
+  quoteCard,
+  checklist,
+  stepsList,
+  infoRow,
+  divider,
+  textLink,
+  mutedText,
+  otpCode,
 } from './emailTemplates.js'
 
 const resend = new Resend(env.RESEND_API_KEY)
@@ -190,17 +204,9 @@ export async function sendOtpEmail(to: string, otp: string): Promise<EmailResult
       preheader: `Your verification code is ${otp}. It expires in ${env.MAGIC_LINK_EXPIRES_MINUTES} minutes.`,
       headline: 'Your verification code',
       body: `
-        <p style="margin: 0 0 20px 0;">Enter this code in the app to sign in:</p>
-        <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin: 0 0 20px 0;">
-          <tr>
-            <td style="background-color: #f5f5f5; border-radius: 12px; padding: 24px; text-align: center;">
-              <span style="font-size: 36px; font-weight: 700; letter-spacing: 8px; color: #1a1a1a; font-family: 'SF Mono', Monaco, 'Courier New', monospace;">
-                ${escapeHtml(otp)}
-              </span>
-            </td>
-          </tr>
-        </table>
-        <p style="margin: 0; font-size: 14px; color: #888888;">This code expires in ${env.MAGIC_LINK_EXPIRES_MINUTES} minutes. If you didn't request this, you can safely ignore it.</p>
+        <p style="margin: 0 0 8px 0;">Enter this code in the app to sign in:</p>
+        ${otpCode(otp)}
+        ${mutedText(`This code expires in ${env.MAGIC_LINK_EXPIRES_MINUTES} minutes. If you didn't request this, you can safely ignore it.`)}
       `,
     }),
   })
@@ -228,12 +234,18 @@ export async function sendWelcomeEmail(to: string, displayName: string): Promise
     html: baseTemplate({
       preheader: `Welcome ${displayName}! Your page is live and ready to receive payments.`,
       headline: `Welcome, ${safeName}!`,
+      badge: { text: 'You\'re all set', type: 'success' },
       body: `
-          <p style="margin: 0 0 16px 0;">Your page is live. Share it with your clients and start receiving payments.</p>
-          <p style="margin: 0; font-size: 14px; color: #888888;">Need help getting started? Check out our quick start guide.</p>
-        `,
+        <p style="margin: 0 0 24px 0;">Your page is live and ready to receive payments. Here's what you can do next:</p>
+        ${stepsList([
+          'Share your page link with clients',
+          'Set up your subscription tiers',
+          'Track your earnings on the dashboard',
+        ])}
+      `,
       ctaText: 'Go to Dashboard',
       ctaUrl: `${env.APP_URL}/dashboard`,
+      footerText: 'Questions? Just reply to this email.',
     }),
   })
 }
@@ -310,13 +322,13 @@ export async function sendNewSubscriberEmail(
   tierName: string | null,
   amount: number,
   currency: string,
-  userId?: string
+  userId?: string,
+  dashboardUrl?: string // Direct link to payment dashboard (Stripe Express or Paystack)
 ): Promise<EmailResult> {
   const formattedAmount = formatAmountForEmail(amount, currency)
   const safeSubscriberName = escapeHtml(subscriberName)
   const safeTierName = tierName ? escapeHtml(tierName) : null
 
-  const tierText = safeTierName ? ` to ${safeTierName}` : ''
   const subject = sanitizeEmailSubject(`New subscriber: ${subscriberName}`)
 
   const result = await sendEmail({
@@ -326,14 +338,16 @@ export async function sendNewSubscriberEmail(
     html: baseTemplate({
       preheader: `${subscriberName} just subscribed for ${formattedAmount}/month.`,
       headline: 'You have a new subscriber!',
+      badge: { text: 'New subscriber', type: 'success' },
       body: `
-          <p style="margin: 0 0 16px 0;">
-            <strong>${safeSubscriberName}</strong> just subscribed${tierText} for <strong>${escapeHtml(formattedAmount)}/month</strong>.
-          </p>
-        `,
+        ${identityBlock(safeSubscriberName, safeTierName || 'Monthly subscriber')}
+        ${amountCard('Monthly earnings', `+${formattedAmount}`, '#34C759')}
+      `,
       ctaText: 'View Subscribers',
       ctaUrl: `${env.APP_URL}/subscribers`,
-      ctaColor: '#16a34a',
+      ctaColor: '#34C759',
+      ctaSecondaryText: dashboardUrl ? 'Open Payment Dashboard →' : undefined,
+      ctaSecondaryUrl: dashboardUrl,
     }),
   })
 
@@ -349,7 +363,7 @@ export async function sendNewSubscriberEmail(
 
 /**
  * Send subscription confirmation to the subscriber (person who paid)
- * Includes link to manage their subscription
+ * Includes direct link to Stripe Customer Portal for frictionless management
  */
 export async function sendSubscriptionConfirmationEmail(
   to: string,
@@ -358,13 +372,17 @@ export async function sendSubscriptionConfirmationEmail(
   providerUsername: string,
   tierName: string | null,
   amount: number,
-  currency: string
+  currency: string,
+  manageUrl?: string // Direct portal URL (no login required)
 ): Promise<EmailResult> {
   const formattedAmount = formatAmountForEmail(amount, currency)
   const safeSubscriberName = escapeHtml(subscriberName.split(' ')[0] || 'there') // First name only
   const safeProviderName = escapeHtml(providerName)
   const safeTierName = tierName ? escapeHtml(tierName) : null
-  const tierText = safeTierName ? ` (${safeTierName})` : ''
+  const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+
+  // Use direct portal URL if provided, otherwise fall back to my-subscriptions
+  const manageLink = manageUrl || `${env.APP_URL}/my-subscriptions`
 
   return sendEmail({
     from: env.EMAIL_FROM,
@@ -373,37 +391,25 @@ export async function sendSubscriptionConfirmationEmail(
     html: baseTemplate({
       preheader: `Thanks for subscribing! You'll be charged ${formattedAmount}/month.`,
       headline: `You're subscribed!`,
+      badge: { text: 'Confirmed', type: 'success' },
       body: `
-          <p style="margin: 0 0 16px 0;">
-            Hey ${safeSubscriberName}, thanks for subscribing to <strong>${safeProviderName}</strong>${tierText}.
-          </p>
-
-          ${amountCard('Monthly subscription', formattedAmount, '#16a34a')}
-
-          <p style="margin: 0 0 8px 0; font-size: 14px; color: #4a4a4a;">
-            <strong>What's next:</strong>
-          </p>
-          <ul style="margin: 0 0 20px 0; padding-left: 20px; color: #4a4a4a; font-size: 14px;">
-            <li style="margin-bottom: 6px;">You'll be charged ${escapeHtml(formattedAmount)} each month</li>
-            <li style="margin-bottom: 6px;">Cancel anytime - no questions asked</li>
-            <li style="margin-bottom: 6px;">Manage your subscription from the link below</li>
-          </ul>
-
-          <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin: 20px 0; border: 1px solid #e5e5e5; border-radius: 8px;">
-            <tr>
-              <td style="padding: 16px; background-color: #fafafa;">
-                <p style="margin: 0 0 8px 0; font-size: 13px; color: #666666;">Need to update payment method or cancel?</p>
-                <a href="${env.APP_URL}/my-subscriptions" style="color: ${BRAND_COLOR}; text-decoration: none; font-weight: 500;">
-                  Manage your subscriptions →
-                </a>
-              </td>
-            </tr>
-          </table>
-        `,
+        <p style="margin: 0 0 24px 0;">Hey ${safeSubscriberName}, thanks for subscribing to <strong>${safeProviderName}</strong>.</p>
+        ${receiptCard([
+          { label: 'Subscription', value: safeTierName || 'Monthly' },
+          { label: 'Amount', value: `${formattedAmount}/month`, highlight: true },
+          { label: 'Started', value: today },
+        ])}
+        ${checklist([
+          `Charged ${formattedAmount} each month`,
+          'Cancel anytime - no questions asked',
+          'Manage from the link below',
+        ])}
+      `,
       ctaText: `View ${safeProviderName}'s Page`,
       ctaUrl: `${env.APP_URL}/${escapeHtml(providerUsername)}`,
-      ctaColor: '#16a34a',
-      footerText: 'You can cancel your subscription anytime from your account settings.',
+      ctaColor: '#34C759',
+      ctaSecondaryText: 'Manage subscription →',
+      ctaSecondaryUrl: manageLink,
     }),
   })
 }
@@ -414,28 +420,24 @@ export async function sendRenewalReminderEmail(
   amount: number,
   currency: string,
   renewalDate: Date,
-  cancelUrl?: string // Direct cancel link for 1-click cancellation
+  cancelUrl?: string, // Direct cancel link for 1-click cancellation
+  manageUrl?: string  // Direct portal URL (no login required)
 ): Promise<EmailResult> {
   const formattedAmount = formatAmountForEmail(amount, currency)
   const safeProviderName = escapeHtml(providerName)
   const formattedDate = renewalDate.toLocaleDateString('en-US', {
+    weekday: 'long',
     month: 'long',
     day: 'numeric',
-    year: 'numeric',
   })
 
-  // Visa-compliant: clearly show amount, date, and easy cancel option
-  const cancelSection = cancelUrl
-    ? `
-          <p style="margin: 16px 0 0 0; font-size: 14px;">
-            <a href="${escapeHtml(cancelUrl)}" style="color: #888888; text-decoration: underline;">Cancel subscription</a>
-          </p>
-        `
-    : `
-          <p style="margin: 16px 0 0 0; font-size: 14px; color: #888888;">
-            To cancel, visit <a href="${env.APP_URL}/my-subscriptions" style="color: #888888; text-decoration: underline;">your subscriptions</a>.
-          </p>
-        `
+  // Calculate days until renewal
+  const now = new Date()
+  const daysUntil = Math.ceil((renewalDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+  const isUrgent = daysUntil <= 3
+
+  // Use direct portal URL if provided, otherwise fall back to my-subscriptions
+  const manageLink = manageUrl || `${env.APP_URL}/my-subscriptions`
 
   return sendEmail({
     from: env.EMAIL_FROM,
@@ -443,22 +445,23 @@ export async function sendRenewalReminderEmail(
     subject: sanitizeEmailSubject(`Upcoming charge: ${formattedAmount} on ${formattedDate}`),
     html: baseTemplate({
       preheader: `Your subscription to ${providerName} renews on ${formattedDate} for ${formattedAmount}.`,
-      headline: 'Upcoming subscription renewal',
+      headline: 'Upcoming renewal',
+      badge: { text: 'Reminder', type: 'reminder' },
       body: `
-          <p style="margin: 0 0 16px 0;">
-            Your subscription to <strong>${safeProviderName}</strong> will automatically renew on <strong>${escapeHtml(formattedDate)}</strong>.
-          </p>
-          <p style="margin: 0 0 16px 0; font-size: 18px; font-weight: bold;">
-            Amount: ${escapeHtml(formattedAmount)}
-          </p>
-          <p style="margin: 0; font-size: 14px; color: #888888;">
-            No action needed if you'd like to continue. Your payment method will be charged automatically.
-          </p>
-          ${cancelSection}
-        `,
+        <p style="margin: 0 0 20px 0;">Your subscription to <strong>${safeProviderName}</strong> renews soon.</p>
+        ${countdownChip(daysUntil, isUrgent)}
+        ${receiptCard([
+          { label: 'Renews on', value: formattedDate, highlight: true },
+          { label: 'Amount', value: formattedAmount },
+          { label: 'Subscription', value: safeProviderName },
+        ])}
+        ${mutedText('No action needed to continue. Your payment method will be charged automatically.')}
+      `,
       ctaText: 'Manage Subscription',
-      ctaUrl: `${env.APP_URL}/my-subscriptions`,
-      ctaColor: '#1a1a1a',
+      ctaUrl: manageLink,
+      ctaColor: '#1D1D1F',
+      ctaSecondaryText: cancelUrl ? 'Cancel subscription' : undefined,
+      ctaSecondaryUrl: cancelUrl,
     }),
   })
 }
@@ -468,10 +471,14 @@ export async function sendPaymentFailedEmail(
   providerName: string,
   amount: number,
   currency: string,
-  retryDate: Date | null
+  retryDate: Date | null,
+  manageUrl?: string // Direct portal URL (no login required)
 ): Promise<EmailResult> {
   const formattedAmount = formatAmountForEmail(amount, currency)
   const safeProviderName = escapeHtml(providerName)
+
+  // Use direct portal URL if provided, otherwise fall back to my-subscriptions
+  const manageLink = manageUrl || `${env.APP_URL}/my-subscriptions`
 
   const retryMessage = retryDate
     ? `We'll automatically retry on ${retryDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}.`
@@ -491,7 +498,7 @@ export async function sendPaymentFailedEmail(
           <p style="margin: 0; font-size: 14px; color: #888888;">${escapeHtml(retryMessage)}</p>
         `,
       ctaText: 'Update Payment Method',
-      ctaUrl: `${env.APP_URL}/my-subscriptions`,
+      ctaUrl: escapeHtml(manageLink),
       ctaColor: '#dc2626',
     }),
   })
@@ -882,7 +889,8 @@ export async function sendPayoutCompletedEmail(
 ): Promise<EmailResult> {
   const formattedAmount = formatAmountForEmail(amount, currency)
   const safeName = escapeHtml(displayName)
-  const bankInfo = bankLast4 ? ` ending in ****${escapeHtml(bankLast4)}` : ''
+  const bankDisplay = bankLast4 ? `****${bankLast4}` : 'Your bank account'
+  const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 
   return sendEmail({
     from: env.EMAIL_FROM,
@@ -891,16 +899,20 @@ export async function sendPayoutCompletedEmail(
     html: baseTemplate({
       preheader: `${formattedAmount} has been deposited to your bank account.`,
       headline: 'Money on the way!',
+      badge: { text: 'Payout sent', type: 'success' },
       body: `
-          <p style="margin: 0 0 16px 0;">
-            Hey ${safeName}, <strong>${escapeHtml(formattedAmount)}</strong> has been deposited to your bank account${bankInfo}.
-          </p>
-          ${amountCard('Amount deposited', formattedAmount, '#16a34a')}
-          <p style="margin: 0; font-size: 14px; color: #888888;">Funds typically arrive within 1-2 business days.</p>
-        `,
+        <p style="margin: 0 0 24px 0;">Hey ${safeName}, your earnings have been deposited.</p>
+        ${amountCard('Amount deposited', formattedAmount, '#34C759')}
+        ${receiptCard([
+          { label: 'Deposited to', value: bankDisplay },
+          { label: 'Date', value: today },
+          { label: 'Status', value: 'Processing', highlight: true },
+        ])}
+        ${mutedText('Funds typically arrive within 1-2 business days.')}
+      `,
       ctaText: 'View Dashboard',
       ctaUrl: `${env.APP_URL}/dashboard`,
-      ctaColor: '#16a34a',
+      ctaColor: '#34C759',
     }),
   })
 }
