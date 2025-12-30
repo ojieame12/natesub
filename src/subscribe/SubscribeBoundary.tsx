@@ -783,7 +783,16 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                                     type="email"
                                     value={subscriberEmail}
                                     onChange={e => setSubscriberEmail(e.target.value)}
-                                    onFocus={() => setEmailFocused(true)}
+                                    onFocus={() => {
+                                        setEmailFocused(true)
+                                        // Scroll input into view after keyboard opens
+                                        setTimeout(() => {
+                                            emailInputRef.current?.scrollIntoView({
+                                                behavior: 'smooth',
+                                                block: 'center',
+                                            })
+                                        }, 300)
+                                    }}
                                     onBlur={() => setEmailFocused(false)}
                                     placeholder={emailFocused || hasEmailValue ? '' : 'Customer Email'}
                                     style={{
