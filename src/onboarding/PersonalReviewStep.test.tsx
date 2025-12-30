@@ -5,9 +5,20 @@ import { useOnboardingStore } from './store'
 import PersonalReviewStep from './PersonalReviewStep'
 
 // Mock API
+const mockProfileUpdate = vi.fn(() => Promise.resolve({ profile: { id: 'test-id' } }))
+const mockProfileUpdateSettings = vi.fn(() => Promise.resolve({ success: true }))
+const mockSaveProgress = vi.fn(() => Promise.resolve({ success: true }))
+
 vi.mock('../api', () => ({
   api: {
     put: vi.fn(() => Promise.resolve({ profile: { id: 'test-id' } })),
+    profile: {
+      update: (...args: any[]) => mockProfileUpdate(...args),
+      updateSettings: (...args: any[]) => mockProfileUpdateSettings(...args),
+    },
+    auth: {
+      saveOnboardingProgress: (...args: any[]) => mockSaveProgress(...args),
+    },
   },
 }))
 
@@ -35,6 +46,9 @@ vi.mock('react-router-dom', async (importOriginal) => {
 describe('PersonalReviewStep', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockProfileUpdate.mockResolvedValue({ profile: { id: 'test-id' } })
+    mockProfileUpdateSettings.mockResolvedValue({ success: true })
+    mockSaveProgress.mockResolvedValue({ success: true })
     aiConfigReturn = { data: { available: true } }
     generatePerksMutationReturn = { mutateAsync: vi.fn(), isPending: false }
 
@@ -44,7 +58,9 @@ describe('PersonalReviewStep', () => {
       lastName: 'User',
       username: 'testuser',
       purpose: 'support',
+      pricingModel: 'single',
       singleAmount: 10,
+      tiers: [],
       country: 'United States',
       countryCode: 'US',
       currency: 'USD',
@@ -284,6 +300,86 @@ describe('PersonalReviewStep', () => {
 
       await waitFor(() => {
         expect(screen.getByText('Support Me')).toBeInTheDocument()
+      })
+    })
+  })
+
+  describe('Pricing model submission', () => {
+    it('submits single pricing when pricingModel is single', async () => {
+      useOnboardingStore.setState({
+        pricingModel: 'single',
+        singleAmount: 15,
+        tiers: [],
+      })
+
+      renderWithProviders(<PersonalReviewStep />)
+
+      const launchButton = screen.getByRole('button', { name: /launch/i })
+      fireEvent.click(launchButton)
+
+      await waitFor(() => {
+        expect(mockProfileUpdate).toHaveBeenCalledWith(
+          expect.objectContaining({
+            pricingModel: 'single',
+            singleAmount: 15,
+            tiers: null,
+          })
+        )
+      })
+    })
+
+    it('submits tiered pricing when pricingModel is tiers', async () => {
+      useOnboardingStore.setState({
+        pricingModel: 'tiers',
+        singleAmount: null,
+        tiers: [
+          { id: 't1', name: 'Basic', amount: 5, perks: ['Perk A'] },
+          { id: 't2', name: 'Pro', amount: 15, perks: ['Perk A', 'Perk B'], isPopular: true },
+          { id: 't3', name: 'VIP', amount: 50, perks: ['All perks'] },
+        ],
+      })
+
+      renderWithProviders(<PersonalReviewStep />)
+
+      const launchButton = screen.getByRole('button', { name: /launch/i })
+      fireEvent.click(launchButton)
+
+      await waitFor(() => {
+        expect(mockProfileUpdate).toHaveBeenCalledWith(
+          expect.objectContaining({
+            pricingModel: 'tiers',
+            singleAmount: null,
+            tiers: expect.arrayContaining([
+              expect.objectContaining({ name: 'Basic', amount: 5 }),
+              expect.objectContaining({ name: 'Pro', amount: 15, isPopular: true }),
+              expect.objectContaining({ name: 'VIP', amount: 50 }),
+            ]),
+          })
+        )
+      })
+    })
+
+    it('does not wipe tiers when pricingModel is tiers', async () => {
+      const tiers = [
+        { id: 't1', name: 'Tier 1', amount: 10, perks: ['A'] },
+        { id: 't2', name: 'Tier 2', amount: 25, perks: ['A', 'B'] },
+      ]
+      useOnboardingStore.setState({
+        pricingModel: 'tiers',
+        singleAmount: null,
+        tiers,
+      })
+
+      renderWithProviders(<PersonalReviewStep />)
+
+      const launchButton = screen.getByRole('button', { name: /launch/i })
+      fireEvent.click(launchButton)
+
+      await waitFor(() => {
+        const call = mockProfileUpdate.mock.calls[0][0]
+        expect(call.pricingModel).toBe('tiers')
+        expect(call.tiers).not.toBeNull()
+        expect(call.tiers).toHaveLength(2)
       })
     })
   })

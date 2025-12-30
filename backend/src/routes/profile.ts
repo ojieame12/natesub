@@ -968,13 +968,13 @@ profile.post(
   }
 )
 
-// Update perks schema - always exactly 3 perks
+// Update perks schema - 3 to 5 perks allowed
 const updatePerksSchema = z.object({
   perks: z.array(z.object({
     id: z.string(),
     title: z.string().min(1).max(100),
     enabled: z.boolean(),
-  })).length(3, 'Exactly 3 perks required'),
+  })).min(3, 'At least 3 perks required').max(5, 'Maximum 5 perks allowed'),
 })
 
 // Update perks manually

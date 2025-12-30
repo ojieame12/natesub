@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware'
 import { useShallow } from 'zustand/react/shallow'
+import { isCrossBorderCountry } from '../utils/regionConfig'
 
 // Re-export useShallow for components that need multiple values without causing re-renders
 export { useShallow }
@@ -408,7 +409,8 @@ export const useOnboardingStore = create<OnboardingStore>()(
             navigateToStep: (key) => set((state) => {
                 const { countryCode, purpose } = state
                 // Compute step config from current state
-                const showAddressStep = Boolean(countryCode) && !['NG', 'GH', 'KE'].includes(countryCode)
+                // Cross-border countries skip address step (use utility for single source of truth)
+                const showAddressStep = Boolean(countryCode) && !isCrossBorderCountry(countryCode)
                 const isServiceMode = purpose === 'service'
                 const stepConfig = { showAddressStep, isServiceMode }
                 const stepIndex = stepKeyToIndex(key, stepConfig)

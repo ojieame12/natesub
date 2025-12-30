@@ -1,4 +1,5 @@
-import { ChevronLeft, Heart, Gift, Briefcase, Star, Sparkles, Wallet, MoreHorizontal, Check } from 'lucide-react'
+import { useState } from 'react'
+import { ChevronLeft, Heart, Gift, Briefcase, Star, Sparkles, Wallet, MoreHorizontal, Check, AlertCircle } from 'lucide-react'
 import { useOnboardingStore, type SubscriptionPurpose } from './store'
 import { Pressable } from './components'
 import { api } from '../api'
@@ -17,6 +18,7 @@ const PURPOSE_OPTIONS: { value: SubscriptionPurpose; label: string; description:
 
 export default function PurposeStep() {
     const { purpose, setPurpose, nextStep, prevStep, firstName, currentStep } = useOnboardingStore()
+    const [saveWarning, setSaveWarning] = useState(false)
 
     const handleSelect = (value: SubscriptionPurpose) => {
         setPurpose(value)
@@ -29,6 +31,7 @@ export default function PurposeStep() {
             data: { purpose: value },
         }).catch((err) => {
             console.warn('[onboarding] Failed to save purpose:', err)
+            setSaveWarning(true)
         })
 
         nextStep()
@@ -46,6 +49,22 @@ export default function PurposeStep() {
             </div>
 
             <div className="onboarding-content">
+                {saveWarning && (
+                    <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 10,
+                        padding: '10px 14px',
+                        background: '#FEF3C7',
+                        borderRadius: 10,
+                        marginBottom: 16,
+                        fontSize: 13,
+                        color: '#92400E',
+                    }}>
+                        <AlertCircle size={18} />
+                        <span>Your progress may not sync across devices. Complete setup on this device.</span>
+                    </div>
+                )}
                 <div className="step-header">
                     <h1>What's this for?</h1>
                     <p>

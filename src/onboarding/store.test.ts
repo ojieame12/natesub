@@ -291,4 +291,74 @@ describe('onboarding/store', () => {
       expect(useOnboardingStore.getState().paymentProvider).toBe('paystack')
     })
   })
+
+  describe('navigateToStep', () => {
+    it('skips address step for cross-border country (NG)', () => {
+      const store = useOnboardingStore.getState()
+      store.setCountry('Nigeria', 'NG')
+      store.setPurpose('support')
+
+      store.navigateToStep('purpose')
+
+      const state = useOnboardingStore.getState()
+      expect(state.currentStepKey).toBe('purpose')
+    })
+
+    it('skips address step for cross-border country (GH)', () => {
+      const store = useOnboardingStore.getState()
+      store.setCountry('Ghana', 'GH')
+      store.setPurpose('support')
+
+      store.navigateToStep('purpose')
+
+      const state = useOnboardingStore.getState()
+      expect(state.currentStepKey).toBe('purpose')
+    })
+
+    it('skips address step for cross-border country (KE)', () => {
+      const store = useOnboardingStore.getState()
+      store.setCountry('Kenya', 'KE')
+      store.setPurpose('support')
+
+      store.navigateToStep('purpose')
+
+      const state = useOnboardingStore.getState()
+      expect(state.currentStepKey).toBe('purpose')
+    })
+
+    it('includes address step for non-cross-border country (US)', () => {
+      const store = useOnboardingStore.getState()
+      store.setCountry('United States', 'US')
+      store.setPurpose('support')
+
+      store.navigateToStep('address')
+
+      const state = useOnboardingStore.getState()
+      expect(state.currentStepKey).toBe('address')
+    })
+
+    it('computes correct step index based on countryCode', () => {
+      // For US (with address step), 'purpose' should have higher index than for NG
+      const store = useOnboardingStore.getState()
+
+      // Test US (with address step)
+      store.setCountry('United States', 'US')
+      store.setPurpose('support')
+      store.navigateToStep('purpose')
+      const usState = useOnboardingStore.getState()
+
+      // Reset and test NG (without address step)
+      store.reset()
+      store.setCountry('Nigeria', 'NG')
+      store.setPurpose('support')
+      store.navigateToStep('purpose')
+      const ngState = useOnboardingStore.getState()
+
+      // Both should navigate to 'purpose' step key
+      expect(usState.currentStepKey).toBe('purpose')
+      expect(ngState.currentStepKey).toBe('purpose')
+      // But US should have higher step index due to address step
+      expect(usState.currentStep).toBeGreaterThan(ngState.currentStep)
+    })
+  })
 })

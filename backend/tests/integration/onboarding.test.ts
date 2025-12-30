@@ -1505,6 +1505,87 @@ describe('onboarding endpoints', () => {
       })
     })
 
+    describe('PATCH /profile/perks endpoint validation', () => {
+      it('accepts 4 perks', async () => {
+        const { rawToken } = await createProfileForPatch('perks-4@test.com', 'service')
+
+        const res = await authRequest('/profile/perks', {
+          method: 'PATCH',
+          body: JSON.stringify({
+            perks: [
+              { id: 'perk-1', title: 'Perk 1', enabled: true },
+              { id: 'perk-2', title: 'Perk 2', enabled: true },
+              { id: 'perk-3', title: 'Perk 3', enabled: true },
+              { id: 'perk-4', title: 'Perk 4', enabled: true },
+            ],
+          }),
+        }, rawToken)
+
+        expect(res.status).toBe(200)
+        const body = await res.json()
+        expect(body.success).toBe(true)
+        expect(body.perks).toHaveLength(4)
+      })
+
+      it('accepts 5 perks', async () => {
+        const { rawToken } = await createProfileForPatch('perks-5@test.com', 'service')
+
+        const res = await authRequest('/profile/perks', {
+          method: 'PATCH',
+          body: JSON.stringify({
+            perks: [
+              { id: 'perk-1', title: 'Perk 1', enabled: true },
+              { id: 'perk-2', title: 'Perk 2', enabled: true },
+              { id: 'perk-3', title: 'Perk 3', enabled: true },
+              { id: 'perk-4', title: 'Perk 4', enabled: true },
+              { id: 'perk-5', title: 'Perk 5', enabled: true },
+            ],
+          }),
+        }, rawToken)
+
+        expect(res.status).toBe(200)
+        const body = await res.json()
+        expect(body.success).toBe(true)
+        expect(body.perks).toHaveLength(5)
+      })
+
+      it('rejects 6 perks', async () => {
+        const { rawToken } = await createProfileForPatch('perks-6@test.com', 'service')
+
+        const res = await authRequest('/profile/perks', {
+          method: 'PATCH',
+          body: JSON.stringify({
+            perks: [
+              { id: 'perk-1', title: 'Perk 1', enabled: true },
+              { id: 'perk-2', title: 'Perk 2', enabled: true },
+              { id: 'perk-3', title: 'Perk 3', enabled: true },
+              { id: 'perk-4', title: 'Perk 4', enabled: true },
+              { id: 'perk-5', title: 'Perk 5', enabled: true },
+              { id: 'perk-6', title: 'Perk 6', enabled: true },
+            ],
+          }),
+        }, rawToken)
+
+        expect(res.status).toBe(400)
+      })
+
+      it('rejects 2 perks', async () => {
+        const { rawToken } = await createProfileForPatch('perks-2@test.com', 'service')
+
+        const res = await authRequest('/profile/perks', {
+          method: 'PATCH',
+          body: JSON.stringify({
+            perks: [
+              { id: 'perk-1', title: 'Perk 1', enabled: true },
+              { id: 'perk-2', title: 'Perk 2', enabled: true },
+            ],
+          }),
+        }, rawToken)
+
+        expect(res.status).toBe(400)
+      })
+    })
+
     describe('platform trial on purpose change to service', () => {
       it('starts platform trial when purpose changes to service', async () => {
         const { user, rawToken } = await createProfileForPatch('trial-start@test.com', 'tips')

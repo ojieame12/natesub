@@ -302,4 +302,37 @@ describe('PaymentMethodStep', () => {
     setItemSpy.mockRestore()
     ;(window as any).location = originalLocation
   })
+
+  it('syncs local state when paymentProvider changes in store', async () => {
+    // Start with no payment provider selected
+    useOnboardingStore.setState({
+      username: 'testuser',
+      firstName: 'Test',
+      lastName: 'User',
+      country: 'Nigeria',
+      countryCode: 'NG',
+      currency: 'NGN',
+      pricingModel: 'single',
+      singleAmount: 5000,
+      paymentProvider: null,
+    })
+
+    const { rerender } = renderWithProviders(<PaymentMethodStep />)
+
+    // Neither option should be selected initially
+    const stripeCard = screen.getByText('Stripe').closest('.payment-method-card')
+    const paystackCard = screen.getByText('Paystack').closest('.payment-method-card')
+    expect(stripeCard).not.toHaveClass('selected')
+    expect(paystackCard).not.toHaveClass('selected')
+
+    // Simulate store rehydration with paymentProvider set
+    useOnboardingStore.setState({ paymentProvider: 'stripe' })
+    rerender(<PaymentMethodStep />)
+
+    // Stripe should now be selected
+    await waitFor(() => {
+      const updatedStripeCard = screen.getByText('Stripe').closest('.payment-method-card')
+      expect(updatedStripeCard).toHaveClass('selected')
+    })
+  })
 })

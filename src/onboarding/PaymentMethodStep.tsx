@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronLeft, CreditCard, Check, Loader2, AlertCircle } from 'lucide-react'
 import { useOnboardingStore, useShallow, type PaymentProvider } from './store'
@@ -96,6 +96,13 @@ export default function PaymentMethodStep() {
     const [selectedMethod, setSelectedMethod] = useState<string | null>(paymentProvider)
     const [saving, setSaving] = useState(false)
     const [error, setError] = useState<string | null>(null)
+
+    // Sync local state when store rehydrates (e.g., cross-device resume)
+    useEffect(() => {
+        if (paymentProvider !== null && selectedMethod !== paymentProvider) {
+            setSelectedMethod(paymentProvider)
+        }
+    }, [paymentProvider]) // eslint-disable-line react-hooks/exhaustive-deps
 
     // SWIFT code lookup modal state (for cross-border African countries)
     const [showSwiftLookup, setShowSwiftLookup] = useState(false)
