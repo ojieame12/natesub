@@ -236,7 +236,9 @@ COMPOSITION:
 STYLE:
 - Dark or black background (solid or subtle gradient)
 - Professional, polished corporate look
-- Preserve exact facial features, expression, and skin tone
+- Preserve exact facial features and skin tone
+- Expression: warm, confident smile - approachable and professional
+- Good studio lighting that flatters the face
 - Add professional attire if not visible (blazer, business wear)
 - Clean, high-end aesthetic suitable for a business profile header
 
@@ -265,7 +267,9 @@ COMPOSITION:
 STYLE:
 - Be creative with lighting, colors, and atmosphere
 - Dramatic or editorial photography style
-- Preserve exact facial features, expression, and skin tone
+- Preserve exact facial features and skin tone
+- Expression: confident, charismatic - can be bold smile or strong presence
+- Professional lighting that creates depth and dimension
 - Can use creative backgrounds (gradients, bokeh, abstract)
 - High-end fashion or editorial magazine aesthetic
 
