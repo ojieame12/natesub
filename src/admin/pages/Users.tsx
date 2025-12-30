@@ -27,6 +27,7 @@ export default function Users() {
   const [unblockModal, setUnblockModal] = useState<{ userId: string; email: string } | null>(null)
   const [deleteModal, setDeleteModal] = useState<{ userId: string; email: string } | null>(null)
   const [deleteConfirmText, setDeleteConfirmText] = useState('')
+  const [actionError, setActionError] = useState<string | null>(null)
 
   const { data, isLoading, error, refetch } = useAdminUsers({
     search: search || undefined,
@@ -104,34 +105,43 @@ export default function Users() {
 
   const handleBlock = async (reason?: string) => {
     if (!blockModal) return
+    setActionError(null)
     try {
       await blockMutation.mutateAsync({ userId: blockModal.userId, reason })
       setBlockModal(null)
       refetch()
     } catch (err) {
+      const message = err instanceof Error ? err.message : 'Block failed'
+      setActionError(message)
       console.error('Block failed:', err)
     }
   }
 
   const handleUnblock = async () => {
     if (!unblockModal) return
+    setActionError(null)
     try {
       await unblockMutation.mutateAsync(unblockModal.userId)
       setUnblockModal(null)
       refetch()
     } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unblock failed'
+      setActionError(message)
       console.error('Unblock failed:', err)
     }
   }
 
   const handleDelete = async (reason?: string) => {
     if (!deleteModal || deleteConfirmText !== 'DELETE') return
+    setActionError(null)
     try {
       await deleteMutation.mutateAsync({ userId: deleteModal.userId, reason })
       setDeleteModal(null)
       setDeleteConfirmText('')
       refetch()
     } catch (err) {
+      const message = err instanceof Error ? err.message : 'Delete failed'
+      setActionError(message)
       console.error('Delete failed:', err)
     }
   }
@@ -178,6 +188,19 @@ export default function Users() {
           </button>
         </div>
       </div>
+
+      {/* Action error banner */}
+      {actionError && (
+        <div className="admin-alert admin-alert-error" style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>{actionError}</span>
+          <button
+            onClick={() => setActionError(null)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, padding: '0 4px' }}
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       <FilterBar
         searchValue={search}
@@ -331,7 +354,7 @@ export default function Users() {
           inputPlaceholder="Enter reason for blocking..."
           loading={blockMutation.isPending}
           onConfirm={handleBlock}
-          onCancel={() => setBlockModal(null)}
+          onCancel={() => { setBlockModal(null); setActionError(null) }}
         />
       )}
 
@@ -344,13 +367,13 @@ export default function Users() {
           confirmVariant="primary"
           loading={unblockMutation.isPending}
           onConfirm={handleUnblock}
-          onCancel={() => setUnblockModal(null)}
+          onCancel={() => { setUnblockModal(null); setActionError(null) }}
         />
       )}
 
       {/* Delete Modal - Custom since it needs a confirmation phrase */}
       {deleteModal && (
-        <div className="admin-modal-overlay" onClick={() => setDeleteModal(null)}>
+        <div className="admin-modal-overlay" onClick={() => { setDeleteModal(null); setActionError(null) }}>
           <div className="admin-modal" onClick={e => e.stopPropagation()}>
             <div className="admin-modal-header">
               <h2 className="admin-modal-title">Delete User</h2>
@@ -393,7 +416,7 @@ export default function Users() {
             <div className="admin-modal-footer">
               <button
                 className="admin-btn admin-btn-secondary"
-                onClick={() => setDeleteModal(null)}
+                onClick={() => { setDeleteModal(null); setActionError(null) }}
               >
                 Cancel
               </button>

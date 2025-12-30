@@ -120,6 +120,45 @@ async function requireSubscriberSession(c: any, next: () => Promise<void>) {
   }
 }
 
+// CSRF protection for state-changing routes
+// Validates Origin header matches allowed domains (prevents cross-site POST attacks)
+// Note: ALLOWED_ORIGINS is evaluated at load time. Dev origins are always included
+// but the production check in requireValidOrigin skips validation in non-production.
+const ALLOWED_ORIGINS = [
+  'https://natepay.co',
+  'https://www.natepay.co',
+  'https://liquid-glass-app.vercel.app',
+  'http://localhost:5173',
+  'http://localhost:3000',
+]
+
+async function requireValidOrigin(c: any, next: () => Promise<void>) {
+  const origin = c.req.header('origin')
+  const referer = c.req.header('referer')
+
+  // In production, require valid origin for state-changing requests
+  // Use process.env directly for test compatibility (env object is cached at load time)
+  if (process.env.NODE_ENV === 'production') {
+    // Check origin header first (preferred)
+    if (origin) {
+      if (!ALLOWED_ORIGINS.some(allowed => origin.startsWith(allowed))) {
+        console.warn(`[subscriber] CSRF blocked: invalid origin ${origin}`)
+        return c.json({ error: 'Invalid request origin', code: 'CSRF_BLOCKED' }, 403)
+      }
+    } else if (referer) {
+      // Fall back to referer if no origin (some browsers)
+      if (!ALLOWED_ORIGINS.some(allowed => referer.startsWith(allowed))) {
+        console.warn(`[subscriber] CSRF blocked: invalid referer ${referer}`)
+        return c.json({ error: 'Invalid request origin', code: 'CSRF_BLOCKED' }, 403)
+      }
+    }
+    // Note: If neither origin nor referer is present, we allow the request
+    // This handles same-origin requests where browsers may not send origin
+  }
+
+  await next()
+}
+
 // ============================================
 // HELPERS
 // ============================================
@@ -216,6 +255,7 @@ subscriber.post(
 subscriber.post(
   '/verify',
   verifyRateLimit,
+  requireValidOrigin,
   zValidator('json', z.object({
     email: z.string().email(),
     otp: z.string().length(6),
@@ -516,6 +556,7 @@ subscriber.get(
 subscriber.post(
   '/subscriptions/:id/cancel',
   cancelRateLimit,
+  requireValidOrigin,
   requireSubscriberSession,
   zValidator('json', z.object({
     reason: z.enum([
@@ -749,7 +790,7 @@ subscriber.get(
 )
 
 // POST /subscriber/signout - Clear session
-subscriber.post('/signout', async (c) => {
+subscriber.post('/signout', requireValidOrigin, async (c) => {
   deleteCookie(c, 'subscriber_session', {
     path: '/subscriber',
     secure: env.NODE_ENV === 'production',

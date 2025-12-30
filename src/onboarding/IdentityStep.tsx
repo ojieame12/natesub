@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronLeft, ChevronDown, Check, Search } from 'lucide-react'
+import { ChevronLeft, ChevronDown, Check, Search, AlertCircle } from 'lucide-react'
 import { useOnboardingStore } from './store'
 import { Button, Pressable } from './components'
 import { useSaveOnboardingProgress } from '../api/hooks'
@@ -14,6 +14,7 @@ export default function IdentityStep() {
     const { firstName, lastName, setFirstName, setLastName, country, countryCode, currency, setCountry, setCurrency, nextStep, prevStep, currentStep } = useOnboardingStore()
     const [showCountryPicker, setShowCountryPicker] = useState(false)
     const [searchQuery, setSearchQuery] = useState('')
+    const [saveWarning, setSaveWarning] = useState(false)
     const { mutateAsync: saveProgress } = useSaveOnboardingProgress()
 
     const selectedCountry = countries.find(c => c.code === countryCode)
@@ -34,8 +35,12 @@ export default function IdentityStep() {
         // Fire and forget - don't block navigation on save
         saveProgress({
             step: currentStep + 1, // Will be moving to next step
+            stepKey: 'identity', // Canonical step key for safe resume
             data: { firstName, lastName, country, countryCode, currency },
-        }).catch(err => console.warn('[IdentityStep] Failed to save progress:', err))
+        }).catch(err => {
+            console.warn('[IdentityStep] Failed to save progress:', err)
+            setSaveWarning(true)
+        })
 
         nextStep()
     }
@@ -52,6 +57,22 @@ export default function IdentityStep() {
             </div>
 
             <div className="onboarding-content">
+                {saveWarning && (
+                    <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 10,
+                        padding: '10px 14px',
+                        background: '#FEF3C7',
+                        borderRadius: 10,
+                        marginBottom: 16,
+                        fontSize: 13,
+                        color: '#92400E',
+                    }}>
+                        <AlertCircle size={18} />
+                        <span>Your progress may not sync across devices. Complete setup on this device.</span>
+                    </div>
+                )}
                 <div className="step-header">
                     <h1>What should we call you?</h1>
                     <p>This is how you'll appear to your subscribers.</p>

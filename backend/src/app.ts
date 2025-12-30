@@ -134,9 +134,16 @@ app.use('*', cors({
 
 // Health check - deep check for production readiness
 app.get('/health', async (c) => {
-  const checks = {
+  const { getQueueDepths } = await import('./lib/queue.js')
+
+  const checks: {
+    database: boolean
+    redis: boolean
+    queues: Awaited<ReturnType<typeof getQueueDepths>> | null
+  } = {
     database: false,
     redis: false,
+    queues: null,
   }
 
   // Check database (with timeout)
@@ -150,17 +157,35 @@ app.get('/health', async (c) => {
     console.error('[health] Database check failed:', err)
   }
 
-  // Check Redis (optional)
+  // Check Redis (optional) and get queue depths
   try {
     const pong = await redis.ping()
     checks.redis = pong === 'PONG'
+
+    // Get queue depths if Redis is up
+    if (checks.redis) {
+      checks.queues = await getQueueDepths()
+    }
   } catch (err) {
     console.error('[health] Redis check failed:', err)
   }
 
+  // Check if any queue has concerning backlog (>100 waiting or >10 failed)
+  let queueWarning = false
+  if (checks.queues) {
+    for (const q of Object.values(checks.queues)) {
+      if (q && (q.waiting > 100 || q.failed > 10)) {
+        queueWarning = true
+        break
+      }
+    }
+  }
+
   // Only fail if DATABASE is down. Redis is optional/cache.
   const isHealthy = checks.database
-  const status = isHealthy ? (checks.redis ? 'ok' : 'degraded') : 'down'
+  const status = isHealthy
+    ? (checks.redis ? (queueWarning ? 'degraded' : 'ok') : 'degraded')
+    : 'down'
 
   return c.json({
     status,
@@ -253,6 +278,7 @@ app.get('/metrics', async (c) => {
   try {
     const now = new Date()
     const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+    const sixHoursAgo = new Date(now.getTime() - 6 * 60 * 60 * 1000)
     const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000)
 
     // Get key metrics in parallel
@@ -261,7 +287,12 @@ app.get('/metrics', async (c) => {
       subscriptionsToday,
       paymentsToday,
       revenueToday,
-      webhookStats,
+      webhookStats1h,
+      webhookStats6h,
+      webhookStats24h,
+      webhooksByProvider,
+      latencyStats,
+      latencyValues,
       activeCreators,
     ] = await Promise.all([
       // Active subscriptions count
@@ -283,15 +314,99 @@ app.get('/metrics', async (c) => {
         where: { createdAt: { gte: oneHourAgo } },
         _count: true,
       }),
+      // Webhook stats (last 6 hours)
+      db.webhookEvent.groupBy({
+        by: ['status'],
+        where: { createdAt: { gte: sixHoursAgo } },
+        _count: true,
+      }),
+      // Webhook stats (last 24 hours)
+      db.webhookEvent.groupBy({
+        by: ['status'],
+        where: { createdAt: { gte: oneDayAgo } },
+        _count: true,
+      }),
+      // Webhook stats by provider (last hour)
+      db.webhookEvent.groupBy({
+        by: ['provider', 'status'],
+        where: { createdAt: { gte: oneHourAgo } },
+        _count: true,
+        _avg: { processingTimeMs: true },
+      }),
+      // Average latency (last hour, processed only)
+      db.webhookEvent.aggregate({
+        where: {
+          status: 'processed',
+          createdAt: { gte: oneHourAgo },
+          processingTimeMs: { not: null },
+        },
+        _avg: { processingTimeMs: true },
+      }),
+      // Get individual latency values for percentile calculation (last hour, limit 1000)
+      db.webhookEvent.findMany({
+        where: {
+          status: 'processed',
+          createdAt: { gte: oneHourAgo },
+          processingTimeMs: { not: null },
+        },
+        select: { processingTimeMs: true },
+        orderBy: { processingTimeMs: 'asc' },
+        take: 1000,
+      }),
       // Creators with active payout status
       db.profile.count({ where: { payoutStatus: 'active' } }),
     ])
 
-    // Format webhook stats
-    const webhooks = webhookStats.reduce((acc, s) => {
-      acc[s.status] = s._count
-      return acc
-    }, {} as Record<string, number>)
+    // Helper to format webhook stats from groupBy result
+    const formatWebhookStats = (stats: Array<{ status: string; _count: number }>) => {
+      const result = stats.reduce((acc, s) => {
+        acc[s.status] = s._count
+        return acc
+      }, {} as Record<string, number>)
+      return {
+        received: result.received || 0,
+        processing: result.processing || 0,
+        processed: result.processed || 0,
+        failed: result.failed || 0,
+        skipped: result.skipped || 0,
+        dead_letter: result.dead_letter || 0,
+      }
+    }
+
+    // Calculate failure rate: failed / (processed + failed) * 100
+    const calcFailureRate = (stats: { processed: number; failed: number }) => {
+      const total = stats.processed + stats.failed
+      return total > 0 ? Math.round((stats.failed / total) * 100 * 10) / 10 : 0
+    }
+
+    // Format last hour stats
+    const lastHour = formatWebhookStats(webhookStats1h)
+    const last6h = formatWebhookStats(webhookStats6h)
+    const last24h = formatWebhookStats(webhookStats24h)
+
+    // Format provider breakdown
+    const byProvider: Record<string, { processed: number; failed: number; avgProcessingTimeMs: number }> = {
+      stripe: { processed: 0, failed: 0, avgProcessingTimeMs: 0 },
+      paystack: { processed: 0, failed: 0, avgProcessingTimeMs: 0 },
+    }
+
+    for (const stat of webhooksByProvider) {
+      const provider = stat.provider as string
+      if (byProvider[provider]) {
+        if (stat.status === 'processed') {
+          byProvider[provider].processed = stat._count
+          byProvider[provider].avgProcessingTimeMs = Math.round(stat._avg?.processingTimeMs || 0)
+        } else if (stat.status === 'failed') {
+          byProvider[provider].failed = stat._count
+        }
+      }
+    }
+
+    // Calculate latency percentiles
+    const times = latencyValues.map(v => v.processingTimeMs!).filter(t => t !== null)
+    const p50 = times.length > 0 ? times[Math.floor(times.length * 0.5)] : 0
+    const p95 = times.length > 0 ? times[Math.floor(times.length * 0.95)] : 0
+    const avgMs = Math.round(latencyStats._avg?.processingTimeMs || 0)
 
     return c.json({
       timestamp: now.toISOString(),
@@ -304,7 +419,26 @@ app.get('/metrics', async (c) => {
         revenueLast24hCents: revenueToday._sum.netCents || 0,
       },
       webhooks: {
-        lastHour: webhooks,
+        lastHour: {
+          ...lastHour,
+          failureRate: calcFailureRate(lastHour),
+          byProvider,
+        },
+        last6h: {
+          processed: last6h.processed,
+          failed: last6h.failed,
+          failureRate: calcFailureRate(last6h),
+        },
+        last24h: {
+          processed: last24h.processed,
+          failed: last24h.failed,
+          failureRate: calcFailureRate(last24h),
+        },
+        latency: {
+          avgMs,
+          p50Ms: p50,
+          p95Ms: p95,
+        },
       },
       creators: {
         payoutsActive: activeCreators,

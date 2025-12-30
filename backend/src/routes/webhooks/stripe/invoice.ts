@@ -14,6 +14,7 @@ import { normalizeEmailAddress } from '../utils.js'
 import { invalidateAdminRevenueCache } from '../../../utils/cache.js'
 import { scheduleSubscriptionRenewalReminders } from '../../../jobs/reminders.js'
 import { getReportingCurrencyData } from '../../../services/fx.js'
+import { logger } from '../../../utils/logger.js'
 
 async function resolveStripeInvoiceCustomerEmail(invoice: Stripe.Invoice, context: string): Promise<string> {
   const anyInvoice = invoice as any
@@ -71,7 +72,7 @@ export async function handleInvoiceCreated(event: Stripe.Event) {
   })
 
   if (!subscription) {
-    console.log(`[invoice.created] No subscription found for ${stripeSubscriptionId}`)
+    logger.info('No subscription found for invoice.created', { stripeSubscriptionId })
     return
   }
 
@@ -102,12 +103,12 @@ export async function handleInvoiceCreated(event: Stripe.Event) {
         await stripe.invoices.update(invoice.id, {
           statement_descriptor: statementDescriptor,
         })
-        console.log(`[invoice.created] Set statement descriptor "${statementDescriptor}" for legacy subscription ${subscription.id}`)
+        logger.info('Set statement descriptor for legacy subscription', { subscriptionId: subscription.id, statementDescriptor })
       } catch (err) {
-        console.error(`[invoice.created] Failed to set statement descriptor for legacy invoice ${invoice.id}:`, err)
+        logger.error('Failed to set statement descriptor for legacy invoice', err as Error, { invoiceId: invoice.id })
       }
     } else {
-      console.log(`[invoice.created] Skipping legacy subscription ${subscription.id} (no feeModel, no displayName)`)
+      logger.info('Skipping legacy subscription (no feeModel, no displayName)', { subscriptionId: subscription.id })
     }
     return
   }
@@ -141,10 +142,16 @@ export async function handleInvoiceCreated(event: Stripe.Event) {
       ...(statementDescriptor && { statement_descriptor: statementDescriptor }),
     })
 
-    console.log(`[invoice.created] Applied fee ${feeCalc.feeCents} (${(feeCalc.effectiveRate * 100).toFixed(2)}%) on creator amount ${creatorAmount} to invoice ${invoice.id}${statementDescriptor ? ` with descriptor "${statementDescriptor}"` : ''}`)
+    logger.info('Applied fee to invoice', {
+      invoiceId: invoice.id,
+      feeCents: feeCalc.feeCents,
+      effectiveRate: (feeCalc.effectiveRate * 100).toFixed(2) + '%',
+      creatorAmount,
+      statementDescriptor,
+    })
   } catch (err) {
     // If we can't update (e.g., invoice already finalized), log but don't fail
-    console.error(`[invoice.created] Failed to apply fee to invoice ${invoice.id}:`, err)
+    logger.error('Failed to apply fee to invoice', err as Error, { invoiceId: invoice.id })
   }
 }
 
@@ -169,7 +176,7 @@ export async function backfillStripeSubscriptionForInvoicePaid(invoice: Stripe.I
     const grossAmount = parseMetadataAmount(meta.grossAmount) || invoice.amount_paid
     basePrice = (feeMode === 'absorb' ? grossAmount : netAmount) || grossAmount
   } else {
-    console.warn(`[invoice.paid] Invalid metadata for ${stripeSubscriptionId}, attempting fallback via transfer destination...`)
+    logger.warn('Invalid metadata for subscription, attempting fallback via transfer destination', { stripeSubscriptionId })
 
     // 2. Fallback: Find creator via transfer destination (Connected Account ID)
     const destination = stripeSubscription.transfer_data?.destination ||
@@ -182,7 +189,7 @@ export async function backfillStripeSubscriptionForInvoicePaid(invoice: Stripe.I
       })
       if (creatorProfile) {
         creatorId = creatorProfile.userId
-        console.log(`[invoice.paid] Recovered creatorId ${creatorId} from destination ${destination}`)
+        logger.info('Recovered creatorId from destination', { creatorId, destination })
       }
     }
   }
@@ -272,7 +279,7 @@ export async function backfillStripeSubscriptionForInvoicePaid(invoice: Stripe.I
 
   // Send "New Subscriber" email since checkout.session.completed likely failed
   if (creatorUser) {
-    console.log(`[invoice.paid] Sending new subscriber email for backfilled subscription ${subscription.id}`)
+    logger.info('Sending new subscriber email for backfilled subscription', { subscriptionId: subscription.id })
     // We don't await this to avoid blocking the webhook
     sendNewSubscriberEmail(
       creatorUser.email,
@@ -280,7 +287,7 @@ export async function backfillStripeSubscriptionForInvoicePaid(invoice: Stripe.I
       tierName,
       invoice.amount_paid,
       invoice.currency.toUpperCase()
-    ).catch(err => console.error('[invoice.paid] Failed to send backfill email:', err))
+    ).catch(err => logger.error('Failed to send backfill email', err as Error))
   }
 
   return subscription
@@ -305,7 +312,7 @@ export async function handleInvoicePaid(event: Stripe.Event) {
       where: { stripeEventId: event.id },
     })
     if (existingPayment) {
-      console.log(`[invoice.paid] Already processed event ${event.id}, skipping`)
+      logger.info('Already processed event, skipping', { eventId: event.id })
       return true
     }
 
@@ -318,16 +325,16 @@ export async function handleInvoicePaid(event: Stripe.Event) {
       },
     })
 
-    console.log(`[invoice.paid] Subscription lookup for ${subscriptionId}: ${subscription ? 'FOUND' : 'NOT FOUND'}`)
+    logger.info('Subscription lookup result', { subscriptionId, found: !!subscription })
 
     // If checkout.session.completed was missed or failed, reconstruct from Stripe subscription metadata.
     if (!subscription) {
-      console.log(`[invoice.paid] Attempting backfill for ${subscriptionId}...`)
+      logger.info('Attempting backfill for subscription', { subscriptionId })
       try {
         await backfillStripeSubscriptionForInvoicePaid(invoice, subscriptionId)
-        console.log(`[invoice.paid] Backfill completed for ${subscriptionId}`)
+        logger.info('Backfill completed', { subscriptionId })
       } catch (backfillErr: any) {
-        console.error(`[invoice.paid] Backfill FAILED for ${subscriptionId}:`, backfillErr.message)
+        logger.error('Backfill FAILED', backfillErr, { subscriptionId })
         throw backfillErr
       }
 
@@ -339,11 +346,11 @@ export async function handleInvoicePaid(event: Stripe.Event) {
           },
         },
       })
-      console.log(`[invoice.paid] Re-query after backfill for ${subscriptionId}: ${subscription ? 'FOUND' : 'STILL NOT FOUND'}`)
+      logger.info('Re-query after backfill', { subscriptionId, found: !!subscription })
     }
 
     if (!subscription) {
-      console.error(`[invoice.paid] CRITICAL: No subscription found after backfill for ${subscriptionId}. Throwing to trigger retry.`)
+      logger.error('CRITICAL: No subscription found after backfill, triggering retry', null, { subscriptionId })
       throw new Error(`No subscription found for ${subscriptionId} after backfill attempt - checkout.session.completed may not have processed yet`)
     }
 
@@ -359,7 +366,7 @@ export async function handleInvoicePaid(event: Stripe.Event) {
       checkoutUserAgent = metadata.checkoutUserAgent
       checkoutAcceptLanguage = metadata.checkoutAcceptLanguage
     } catch (err) {
-      console.warn(`[invoice.paid] Could not retrieve Stripe subscription metadata for ${subscriptionId}:`, err)
+      logger.warn('Could not retrieve Stripe subscription metadata', { subscriptionId, error: (err as Error).message })
     }
 
     // Get actual fee from Stripe invoice (more reliable than recalculating)
@@ -396,7 +403,13 @@ export async function handleInvoicePaid(event: Stripe.Event) {
         // Alert if mismatch - this indicates invoice.created webhook may have raced/failed
         if (stripeActualFee !== feeCalc.feeCents) {
           const mismatchPct = Math.abs((stripeActualFee - feeCalc.feeCents) / feeCalc.feeCents * 100)
-          console.error(`[ALERT][invoice.paid] Fee mismatch for sub ${subscription.id}: Stripe=${stripeActualFee}, expected=${feeCalc.feeCents} (${mismatchPct.toFixed(1)}% diff) on creator amount ${creatorAmount}`)
+          logger.error('ALERT: Fee mismatch detected', null, {
+            subscriptionId: subscription.id,
+            stripeActualFee,
+            expectedFee: feeCalc.feeCents,
+            mismatchPercent: mismatchPct.toFixed(1),
+            creatorAmount,
+          })
           // Create activity for monitoring/alerting systems
           await db.activity.create({
             data: {

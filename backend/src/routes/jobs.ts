@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { env } from '../config/env.js'
 import { db } from '../db/client.js'
 import { billingQueue } from '../lib/queue.js'
+import { recordJobRun } from '../lib/jobHealth.js'
 import { generatePayrollPeriods } from '../jobs/payroll.js'
 import { sendDunningEmails, sendCancellationEmails } from '../jobs/notifications.js'
 import { monitorStuckTransfers } from '../jobs/transfers.js'
@@ -16,6 +17,24 @@ import {
   monitorFraudRate,
   monitorCreatorDisputeRates,
 } from '../jobs/dispute-monitoring.js'
+
+// Helper to track job execution time and record health
+async function runTrackedJob<T>(
+  jobName: string,
+  fn: () => Promise<T>
+): Promise<{ result: T; durationMs: number }> {
+  const startTime = Date.now()
+  try {
+    const result = await fn()
+    const durationMs = Date.now() - startTime
+    await recordJobRun(jobName, durationMs, true)
+    return { result, durationMs }
+  } catch (err: any) {
+    const durationMs = Date.now() - startTime
+    await recordJobRun(jobName, durationMs, false, err.message)
+    throw err
+  }
+}
 
 const jobs = new Hono()
 
@@ -45,8 +64,11 @@ jobs.post('/billing', async (c) => {
   console.log('[jobs] Queuing recurring billing job')
 
   try {
-    await billingQueue.add('recurring-billing', { type: 'recurring' })
-    return c.json({ success: true, message: 'Billing job queued' })
+    const { durationMs } = await runTrackedJob('billing', async () => {
+      await billingQueue.add('recurring-billing', { type: 'recurring' })
+      return { queued: true }
+    })
+    return c.json({ success: true, message: 'Billing job queued', durationMs })
   } catch (error: any) {
     console.error('[jobs] Failed to queue billing job:', error.message)
     return c.json({ error: 'Failed to queue billing job', message: error.message }, 500)
@@ -58,8 +80,11 @@ jobs.post('/retries', async (c) => {
   console.log('[jobs] Queuing retry job')
 
   try {
-    await billingQueue.add('retry-billing', { type: 'retry' })
-    return c.json({ success: true, message: 'Retry job queued' })
+    const { durationMs } = await runTrackedJob('retries', async () => {
+      await billingQueue.add('retry-billing', { type: 'retry' })
+      return { queued: true }
+    })
+    return c.json({ success: true, message: 'Retry job queued', durationMs })
   } catch (error: any) {
     console.error('[jobs] Failed to queue retry job:', error.message)
     return c.json({ error: 'Failed to queue retry job', message: error.message }, 500)
@@ -71,13 +96,14 @@ jobs.post('/payroll', async (c) => {
   console.log('[jobs] Starting payroll generation job')
 
   try {
-    const result = await generatePayrollPeriods()
+    const { result, durationMs } = await runTrackedJob('payroll', generatePayrollPeriods)
 
     console.log(`[jobs] Payroll complete: ${result.generated} periods, ${result.pdfsGenerated} PDFs`)
 
     return c.json({
       success: true,
       ...result,
+      durationMs,
     })
   } catch (error: any) {
     console.error('[jobs] Payroll job failed:', error.message)
@@ -94,13 +120,14 @@ jobs.post('/dunning', async (c) => {
   console.log('[jobs] Starting dunning emails job')
 
   try {
-    const result = await sendDunningEmails()
+    const { result, durationMs } = await runTrackedJob('dunning', sendDunningEmails)
 
     console.log(`[jobs] Dunning complete: ${result.sent}/${result.processed} sent`)
 
     return c.json({
       success: true,
       ...result,
+      durationMs,
     })
   } catch (error: any) {
     console.error('[jobs] Dunning job failed:', error.message)
@@ -113,13 +140,14 @@ jobs.post('/cancellations', async (c) => {
   console.log('[jobs] Starting cancellation emails job')
 
   try {
-    const result = await sendCancellationEmails()
+    const { result, durationMs } = await runTrackedJob('cancellations', sendCancellationEmails)
 
     console.log(`[jobs] Cancellations complete: ${result.sent}/${result.processed} sent`)
 
     return c.json({
       success: true,
       ...result,
+      durationMs,
     })
   } catch (error: any) {
     console.error('[jobs] Cancellations job failed:', error.message)
@@ -154,13 +182,14 @@ jobs.post('/transfers', async (c) => {
   console.log('[jobs] Starting transfer monitoring job')
 
   try {
-    const result = await monitorStuckTransfers()
+    const { result, durationMs } = await runTrackedJob('transfers', monitorStuckTransfers)
 
     console.log(`[jobs] Transfer monitoring complete: ${result.stuckTransfers} stuck, ${result.alertsSent} alerts sent`)
 
     return c.json({
       success: true,
       ...result,
+      durationMs,
     })
   } catch (error: any) {
     console.error('[jobs] Transfer monitoring job failed:', error.message)
@@ -173,17 +202,20 @@ jobs.post('/reconciliation', async (c) => {
   console.log('[jobs] Starting Paystack reconciliation job')
 
   try {
-    const result = await reconcilePaystackTransactions({
-      periodHours: 48,       // Look back 48 hours
-      autoFix: false,        // Don't auto-fix, just alert
-      alertOnDiscrepancy: true,
-    })
+    const { result, durationMs } = await runTrackedJob('reconciliation', () =>
+      reconcilePaystackTransactions({
+        periodHours: 48,       // Look back 48 hours
+        autoFix: false,        // Don't auto-fix, just alert
+        alertOnDiscrepancy: true,
+      })
+    )
 
     console.log(`[jobs] Reconciliation complete: ${result.missingInDb.length} missing, ${result.statusMismatches.length} mismatched`)
 
     return c.json({
       success: true,
       ...result,
+      durationMs,
     })
   } catch (error: any) {
     console.error('[jobs] Reconciliation job failed:', error.message)
@@ -197,13 +229,14 @@ jobs.post('/scheduled-reminders', async (c) => {
   console.log('[jobs] Starting scheduled reminders job')
 
   try {
-    const result = await processDueReminders()
+    const { result, durationMs } = await runTrackedJob('scheduled-reminders', processDueReminders)
 
     console.log(`[jobs] Scheduled reminders complete: ${result.sent}/${result.processed} sent, ${result.failed} failed`)
 
     return c.json({
       success: true,
       ...result,
+      durationMs,
     })
   } catch (error: any) {
     console.error('[jobs] Scheduled reminders job failed:', error.message)
@@ -277,17 +310,21 @@ jobs.post('/cleanup-auth', async (c) => {
   console.log('[jobs] Starting combined auth cleanup job')
 
   try {
-    const [sessions, otps] = await Promise.all([
-      db.session.deleteMany({ where: { expiresAt: { lt: new Date() } } }),
-      db.magicLinkToken.deleteMany({ where: { expiresAt: { lt: new Date() } } }),
-    ])
+    const { result, durationMs } = await runTrackedJob('cleanup-auth', async () => {
+      const [sessions, otps] = await Promise.all([
+        db.session.deleteMany({ where: { expiresAt: { lt: new Date() } } }),
+        db.magicLinkToken.deleteMany({ where: { expiresAt: { lt: new Date() } } }),
+      ])
+      return { sessions: sessions.count, otps: otps.count }
+    })
 
-    console.log(`[jobs] Auth cleanup complete: ${sessions.count} sessions, ${otps.count} OTPs deleted`)
+    console.log(`[jobs] Auth cleanup complete: ${result.sessions} sessions, ${result.otps} OTPs deleted`)
 
     return c.json({
       success: true,
-      sessions: { deleted: sessions.count },
-      otps: { deleted: otps.count },
+      sessions: { deleted: result.sessions },
+      otps: { deleted: result.otps },
+      durationMs,
     })
   } catch (error: any) {
     console.error('[jobs] Auth cleanup job failed:', error.message)
@@ -300,13 +337,14 @@ jobs.post('/cleanup-pageviews', async (c) => {
   console.log('[jobs] Starting page views cleanup job')
 
   try {
-    const deleted = await cleanupOldPageViews()
+    const { result: deleted, durationMs } = await runTrackedJob('cleanup-pageviews', cleanupOldPageViews)
 
     console.log(`[jobs] Page views cleanup complete: ${deleted} deleted`)
 
     return c.json({
       success: true,
       deleted,
+      durationMs,
     })
   } catch (error: any) {
     console.error('[jobs] Page views cleanup job failed:', error.message)
@@ -319,19 +357,24 @@ jobs.post('/stats-aggregate', async (c) => {
   console.log('[jobs] Starting stats aggregation job')
 
   try {
-    const { aggregateToday, aggregateYesterday } = await import('../jobs/stats-aggregation.js')
+    const { result, durationMs } = await runTrackedJob('stats-aggregate', async () => {
+      const { aggregateToday, aggregateYesterday } = await import('../jobs/stats-aggregation.js')
 
-    // Aggregate both today (partial) and yesterday (final)
-    await Promise.all([
-      aggregateToday(),
-      aggregateYesterday(),
-    ])
+      // Aggregate both today (partial) and yesterday (final)
+      await Promise.all([
+        aggregateToday(),
+        aggregateYesterday(),
+      ])
+
+      return { aggregated: true }
+    })
 
     console.log('[jobs] Stats aggregation complete')
 
     return c.json({
       success: true,
       message: 'Stats aggregated for today and yesterday',
+      durationMs,
     })
   } catch (error: any) {
     console.error('[jobs] Stats aggregation job failed:', error.message)
@@ -368,23 +411,23 @@ jobs.post('/dispute-monitoring', async (c) => {
   console.log('[jobs] Starting dispute monitoring job')
 
   try {
-    const [disputeRatio, firstPayment, refundRate, fraudRate, creatorRates] = await Promise.all([
-      monitorDisputeRatio(),
-      monitorFirstPaymentDisputes(),
-      monitorRefundRate(),
-      monitorFraudRate(),
-      monitorCreatorDisputeRates(),
-    ])
+    const { result, durationMs } = await runTrackedJob('dispute-monitoring', async () => {
+      const [disputeRatio, firstPayment, refundRate, fraudRate, creatorRates] = await Promise.all([
+        monitorDisputeRatio(),
+        monitorFirstPaymentDisputes(),
+        monitorRefundRate(),
+        monitorFraudRate(),
+        monitorCreatorDisputeRates(),
+      ])
+      return { disputeRatio, firstPayment, refundRate, fraudRate, creatorRates }
+    })
 
-    console.log(`[jobs] Dispute monitoring complete: ${disputeRatio.disputeRatio.toFixed(4)}% dispute rate, ${fraudRate.fraudRate.toFixed(4)}% fraud rate`)
+    console.log(`[jobs] Dispute monitoring complete: ${result.disputeRatio.disputeRatio.toFixed(4)}% dispute rate, ${result.fraudRate.fraudRate.toFixed(4)}% fraud rate`)
 
     return c.json({
       success: true,
-      disputeRatio,
-      firstPayment,
-      refundRate,
-      fraudRate,
-      creatorRates,
+      ...result,
+      durationMs,
     })
   } catch (error: any) {
     console.error('[jobs] Dispute monitoring job failed:', error.message)
@@ -396,11 +439,9 @@ jobs.post('/dispute-monitoring', async (c) => {
 // This keeps dashboard balance data fresh even for inactive users
 jobs.post('/sync-balances', async (c) => {
   console.log('[jobs] Starting balance sync for all active creators...')
-  const startTime = Date.now()
 
   try {
-    const result = await syncAllActiveBalances()
-    const durationMs = Date.now() - startTime
+    const { result, durationMs } = await runTrackedJob('sync-balances', syncAllActiveBalances)
 
     console.log(`[jobs] Balance sync complete: synced=${result.synced}, failed=${result.failed}, skipped=${result.skipped}, duration=${durationMs}ms`)
 
@@ -415,13 +456,89 @@ jobs.post('/sync-balances', async (c) => {
   }
 })
 
-// Health check for job system
+// Health check for job system - reports last run times and staleness
 jobs.get('/health', async (c) => {
+  const { getJobsHealth } = await import('../lib/jobHealth.js')
+  const health = await getJobsHealth()
+
+  // Return 503 if critical jobs are stale
+  const statusCode = health.status === 'critical' ? 503 : 200
+
   return c.json({
-    status: 'ok',
-    jobs: ['billing', 'retries', 'payroll', 'dunning', 'cancellations', 'notifications', 'transfers', 'reconciliation', 'scheduled-reminders', 'scan-missed-reminders', 'cleanup-sessions', 'cleanup-otps', 'cleanup-auth', 'cleanup-pageviews', 'stats-aggregate', 'stats-backfill', 'dispute-monitoring', 'sync-balances'],
+    ...health,
     timestamp: new Date().toISOString(),
-  })
+  }, statusCode)
+})
+
+/**
+ * Monitor health and send alerts on degraded/critical status
+ *
+ * Called by external cron (Railway cron, etc.) every 15 minutes.
+ * Sends email alerts on degraded, Slack + email on critical.
+ * Uses deduplication to avoid spam (alerts on state transitions, 1hr cooldown).
+ */
+jobs.post('/monitor-health', async (c) => {
+  const { getJobsHealth, shouldSendAlert, recordAlertSent, clearAlertState } = await import('../lib/jobHealth.js')
+  const { sendJobHealthAlert } = await import('../services/alerts.js')
+  const { alertJobHealthCritical } = await import('../services/slack.js')
+
+  const health = await getJobsHealth()
+
+  // Clear alert state if healthy (resets cooldown for next degradation)
+  if (health.status === 'healthy') {
+    await clearAlertState()
+    return c.json({
+      status: health.status,
+      alertSent: false,
+      message: 'All jobs healthy',
+    })
+  }
+
+  // Check if we should send an alert (state transition or cooldown expired)
+  const shouldAlert = await shouldSendAlert(health.status)
+
+  if (shouldAlert) {
+    // Build job details for alert
+    const details = health.jobs
+      .filter(j => j.isStale || j.lastRunSuccess === false)
+      .map(j => ({
+        name: j.name,
+        staleSinceMinutes: j.staleSinceMinutes,
+        lastError: (j as any).lastRunError || null,
+      }))
+
+    try {
+      // Always send email alert
+      await sendJobHealthAlert(
+        health.status as 'degraded' | 'critical',
+        health.staleJobs,
+        health.failedJobs,
+        details
+      )
+
+      // Send Slack only for critical
+      if (health.status === 'critical') {
+        await alertJobHealthCritical(health.staleJobs, health.failedJobs)
+      }
+
+      await recordAlertSent(health.status)
+
+      console.log(`[jobs] Health alert sent: ${health.status}, stale=[${health.staleJobs.join(',')}], failed=[${health.failedJobs.join(',')}]`)
+    } catch (err: any) {
+      console.error('[jobs] Failed to send health alert:', err.message)
+    }
+  }
+
+  // Return 503 for critical (useful for external uptime monitoring)
+  const statusCode = health.status === 'critical' ? 503 : 200
+
+  return c.json({
+    status: health.status,
+    staleJobs: health.staleJobs,
+    failedJobs: health.failedJobs,
+    alertSent: shouldAlert,
+    timestamp: new Date().toISOString(),
+  }, statusCode)
 })
 
 export default jobs

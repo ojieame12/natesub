@@ -316,3 +316,95 @@ export async function checkAndAlertStuckTransfers(
 
   return { stuckCount: 0, alerted: false }
 }
+
+/**
+ * Send alert for stale or failed background jobs
+ */
+export async function sendJobHealthAlert(
+  status: 'degraded' | 'critical',
+  staleJobs: string[],
+  failedJobs: string[],
+  details: Array<{ name: string; staleSinceMinutes?: number | null; lastError?: string | null }>
+): Promise<void> {
+  if (staleJobs.length === 0 && failedJobs.length === 0) return
+
+  const isCritical = status === 'critical'
+  const subject = isCritical
+    ? `🚨 CRITICAL: Job Health Alert - ${failedJobs.length} failed, ${staleJobs.length} stale`
+    : `⚠️ Degraded: Job Health Alert - ${staleJobs.length} stale job(s)`
+
+  const jobRows = details.slice(0, 20).map(job => {
+    const statusBadge = failedJobs.includes(job.name)
+      ? '<span style="background: #dc2626; color: white; padding: 2px 6px; border-radius: 4px; font-size: 12px;">FAILED</span>'
+      : '<span style="background: #f59e0b; color: white; padding: 2px 6px; border-radius: 4px; font-size: 12px;">STALE</span>'
+
+    const staleInfo = job.staleSinceMinutes
+      ? `${Math.round(job.staleSinceMinutes / 60)}h ${job.staleSinceMinutes % 60}m`
+      : 'N/A'
+
+    return `
+      <tr>
+        <td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">${job.name}</td>
+        <td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">${statusBadge}</td>
+        <td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">${staleInfo}</td>
+        <td style="padding: 8px; border-bottom: 1px solid #e5e7eb; font-size: 12px; color: #6b7280;">${job.lastError || '-'}</td>
+      </tr>
+    `
+  }).join('')
+
+  await resend.emails.send({
+    from: env.EMAIL_FROM,
+    to: ALERT_EMAIL,
+    subject,
+    html: `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 700px; margin: 0 auto; padding: 20px;">
+        <h1 style="font-size: 20px; font-weight: 600; color: ${isCritical ? '#dc2626' : '#f59e0b'}; margin-bottom: 16px;">
+          ${isCritical ? '🚨 Critical Job Health Alert' : '⚠️ Job Health Degraded'}
+        </h1>
+
+        <p style="color: #4a4a4a; margin-bottom: 16px;">
+          ${isCritical
+            ? 'Critical background jobs have failed or stopped running. Billing and payment retries may be affected.'
+            : 'Some background jobs have not run recently. System functionality may be degraded.'}
+        </p>
+
+        <div style="background: ${isCritical ? '#fef2f2' : '#fef3c7'}; border: 1px solid ${isCritical ? '#fecaca' : '#fde68a'}; border-radius: 8px; padding: 16px; margin-bottom: 20px;">
+          <p style="margin: 0;"><strong>Status:</strong> ${status.toUpperCase()}</p>
+          <p style="margin: 8px 0 0 0;"><strong>Stale Jobs:</strong> ${staleJobs.length > 0 ? staleJobs.join(', ') : 'None'}</p>
+          <p style="margin: 8px 0 0 0;"><strong>Failed Jobs:</strong> ${failedJobs.length > 0 ? failedJobs.join(', ') : 'None'}</p>
+        </div>
+
+        <h2 style="font-size: 16px; margin: 20px 0 10px;">Job Details</h2>
+        <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+          <thead>
+            <tr style="background: #f3f4f6;">
+              <th style="padding: 8px; text-align: left;">Job</th>
+              <th style="padding: 8px; text-align: left;">Status</th>
+              <th style="padding: 8px; text-align: left;">Stale For</th>
+              <th style="padding: 8px; text-align: left;">Last Error</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${jobRows}
+          </tbody>
+        </table>
+        ${details.length > 20 ? `<p style="color: #666; font-size: 12px;">...and ${details.length - 20} more</p>` : ''}
+
+        <div style="background: ${isCritical ? '#fef2f2' : '#f3f4f6'}; border: 1px solid ${isCritical ? '#fecaca' : '#e5e7eb'}; border-radius: 8px; padding: 12px; margin-top: 20px;">
+          <strong style="color: ${isCritical ? '#dc2626' : '#4a4a4a'};">Action Required:</strong>
+          <p style="margin: 8px 0 0 0; color: ${isCritical ? '#991b1b' : '#4a4a4a'};">
+            ${isCritical
+              ? 'Check Railway logs immediately. Critical jobs (billing, retries) being down affects revenue.'
+              : 'Review job logs when convenient. Non-critical jobs being stale may affect reports and cleanup.'}
+          </p>
+        </div>
+
+        <p style="color: #6b7280; font-size: 12px; margin-top: 20px;">
+          Check job health: ${env.API_URL}/jobs/health
+        </p>
+      </div>
+    `,
+  })
+
+  console.log(`[alerts] Sent job health alert: ${status}, ${staleJobs.length} stale, ${failedJobs.length} failed`)
+}

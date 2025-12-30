@@ -14,6 +14,7 @@ import { scheduleRequestReminders, scheduleRequestUnpaidReminder } from '../jobs
 import { calculateServiceFee, type FeeMode } from '../services/fees.js'
 import { encrypt } from '../utils/encryption.js'
 import { centsToDisplayAmount } from '../utils/currency.js'
+import { isStripeCrossBorderSupported } from '../utils/constants.js'
 import { env } from '../config/env.js'
 
 const requests = new Hono()
@@ -193,12 +194,17 @@ requests.post(
     }
 
     try {
+      // Determine if cross-border (Stripe-only, for NG/GH/KE creators)
+      // Paystack is local payments, no cross-border buffer needed
+      const isCrossBorder = !usePaystack && isStripeCrossBorderSupported(profile?.countryCode || '')
+
       // Calculate service fee based on creator's fee mode setting
       const feeCalc = calculateServiceFee(
         request.amountCents,
         request.currency,
         profile?.purpose,
-        profile?.feeMode as FeeMode
+        profile?.feeMode as FeeMode,
+        isCrossBorder
       )
 
       // Route to appropriate payment provider

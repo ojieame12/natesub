@@ -71,7 +71,8 @@ export default function SelectRecipient() {
         }
 
         setRecipient(recipient)
-        setAmount(parseInt(amount) || 0)
+        // Use parseFloat to preserve decimals (e.g., $10.50)
+        setAmount(parseFloat(amount) || 0)
         setIsRecurring(isRecurring)
         setPurpose(purpose)
 
@@ -84,7 +85,7 @@ export default function SelectRecipient() {
         navigate(-1)
     }
 
-    const canContinue = recipientName.trim().length > 0 && parseInt(amount) > 0
+    const canContinue = recipientName.trim().length > 0 && parseFloat(amount) > 0
 
     return (
         <div className="request-page request-page-modern">

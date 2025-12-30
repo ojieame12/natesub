@@ -14,7 +14,6 @@ import {
 import { useProfile, useUpdateProfile } from '../api'
 import { useHaptics } from '../hooks'
 import { useOnboardingStore } from '../onboarding/store'
-import { displayAmountToCents } from '../utils/currency'
 import '../onboarding/onboarding.css'
 
 export default function PageSetupWizard() {
@@ -62,9 +61,11 @@ export default function PageSetupWizard() {
     setIsPublishing(true)
     try {
       await updateProfile({
-        singleAmount: displayAmountToCents(parseFloat(priceInput) || 0, profileData?.profile?.currency || 'USD'),
+        // Send display amount (dollars) - backend converts to cents
+        singleAmount: parseFloat(priceInput) || 0,
         pricingModel: 'single',
-        purpose: 'service',
+        // Preserve existing purpose instead of forcing 'service'
+        ...(profileData?.profile?.purpose ? {} : { purpose: 'service' }),
         isPublic: true // GO LIVE
       })
 

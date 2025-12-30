@@ -129,6 +129,17 @@ export default function PaymentMethodStep() {
     const handleContinue = async () => {
         if (!selectedMethod) return
 
+        // Validate that the selected payment method is available for this country
+        // This guards against stale store values or edge cases
+        if (selectedMethod === 'stripe' && !canUseStripe) {
+            setError('Stripe is not available in your country. Please select another payment method.')
+            return
+        }
+        if (selectedMethod === 'paystack' && !canUsePaystack) {
+            setError('Paystack is not available in your country. Please select another payment method.')
+            return
+        }
+
         // Determine final currency based on payment method selection FIRST
         // - Stripe for cross-border countries → USD (subscription currency)
         // - Paystack → local currency
@@ -153,6 +164,20 @@ export default function PaymentMethodStep() {
                 // Use the first suggested amount as a sensible default
                 finalSingleAmount = suggestedAmounts[0]
                 store.setPricing('single', store.tiers, finalSingleAmount)
+            }
+        }
+
+        // Auto-normalize tier amounts if invalid for the final currency
+        // This handles currency switches (e.g., NGN tiers → USD tiers)
+        if (store.pricingModel === 'tiers' && store.tiers && store.tiers.length > 0) {
+            const hasInvalidTiers = store.tiers.some(t => !t.amount || t.amount < minAmount)
+            if (hasInvalidTiers) {
+                // Reset tiers to suggested amounts for this currency
+                const normalizedTiers = store.tiers.map((tier, i) => ({
+                    ...tier,
+                    amount: suggestedAmounts[Math.min(i, suggestedAmounts.length - 1)] || minAmount,
+                }))
+                store.setPricing('tiers', normalizedTiers, store.singleAmount)
             }
         }
 

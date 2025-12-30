@@ -106,3 +106,43 @@ export async function closeQueues() {
     updateEmailQueue.close(),
   ])
 }
+
+// Get queue depths for health monitoring
+export async function getQueueDepths(): Promise<{
+  email: { waiting: number; active: number; failed: number } | null
+  billing: { waiting: number; active: number; failed: number } | null
+  webhook: { waiting: number; active: number; failed: number } | null
+  updateEmail: { waiting: number; active: number; failed: number } | null
+}> {
+  if (!useBullMQ) {
+    return { email: null, billing: null, webhook: null, updateEmail: null }
+  }
+
+  try {
+    const getDepth = async (queue: QueueLike) => {
+      // BullMQ Queue has getJobCounts method
+      const q = queue as Queue
+      if (typeof q.getJobCounts === 'function') {
+        const counts = await q.getJobCounts('waiting', 'active', 'failed')
+        return {
+          waiting: counts.waiting || 0,
+          active: counts.active || 0,
+          failed: counts.failed || 0,
+        }
+      }
+      return null
+    }
+
+    const [email, billing, webhook, updateEmail] = await Promise.all([
+      getDepth(emailQueue),
+      getDepth(billingQueue),
+      getDepth(webhookQueue),
+      getDepth(updateEmailQueue),
+    ])
+
+    return { email, billing, webhook, updateEmail }
+  } catch (err) {
+    console.warn('[queue] Failed to get queue depths:', err)
+    return { email: null, billing: null, webhook: null, updateEmail: null }
+  }
+}

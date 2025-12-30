@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { ChevronLeft, Loader2, Check, X } from 'lucide-react'
+import { ChevronLeft, Loader2, Check, X, AlertCircle } from 'lucide-react'
 import { useOnboardingStore } from './store'
 import { Button, Pressable } from './components'
 import { useCheckUsername, useSaveOnboardingProgress } from '../api/hooks'
@@ -11,6 +11,7 @@ export default function PersonalUsernameStep() {
     const { username, setUsername, nextStep, prevStep, currentStep } = useOnboardingStore()
     const { mutateAsync: saveProgress } = useSaveOnboardingProgress()
     const [debouncedUsername, setDebouncedUsername] = useState(username)
+    const [saveWarning, setSaveWarning] = useState(false)
 
     // Debounce username for API check
     useEffect(() => {
@@ -31,7 +32,8 @@ export default function PersonalUsernameStep() {
 
     // IMPORTANT: Only trust availability for the debounced (checked) username.
     // Otherwise users can type a new username and click continue before the check runs.
-    const canContinue = isAvailable
+    // Allow proceeding on error (API down/rate-limited) - backend will validate on profile save
+    const canContinue = isAvailable || (isFormatValid && isError)
 
     const renderStatusIcon = () => {
         if (!username || !isFormatValid) return null
@@ -46,8 +48,12 @@ export default function PersonalUsernameStep() {
         // Fire and forget - don't block navigation on save
         saveProgress({
             step: currentStep + 1,
+            stepKey: 'username', // Canonical step key for safe resume
             data: { username },
-        }).catch(err => console.warn('[PersonalUsernameStep] Failed to save progress:', err))
+        }).catch(err => {
+            console.warn('[PersonalUsernameStep] Failed to save progress:', err)
+            setSaveWarning(true)
+        })
 
         nextStep()
     }
@@ -64,6 +70,22 @@ export default function PersonalUsernameStep() {
             </div>
 
             <div className="onboarding-content">
+                {saveWarning && (
+                    <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 10,
+                        padding: '10px 14px',
+                        background: '#FEF3C7',
+                        borderRadius: 10,
+                        marginBottom: 16,
+                        fontSize: 13,
+                        color: '#92400E',
+                    }}>
+                        <AlertCircle size={18} />
+                        <span>Your progress may not sync across devices. Complete setup on this device.</span>
+                    </div>
+                )}
                 <div className="step-header">
                     <h1>Claim your link</h1>
                     <p>This is your unique subscription page URL.</p>
@@ -108,8 +130,8 @@ export default function PersonalUsernameStep() {
                             </span>
                         )}
                         {isFormatValid && !isWaitingForDebounce && !isChecking && isError && (
-                            <span className="username-helper-error">
-                                Couldn't check availability. <Pressable onClick={() => refetch()} style={{ display: 'inline' }}><span style={{ fontWeight: 600, textDecoration: 'underline' }}>Retry</span></Pressable>
+                            <span style={{ color: 'var(--text-secondary)' }}>
+                                Couldn't verify availability. <Pressable onClick={() => refetch()} style={{ display: 'inline' }}><span style={{ fontWeight: 600, textDecoration: 'underline' }}>Retry</span></Pressable> or continue anyway.
                             </span>
                         )}
                     </div>

@@ -258,9 +258,9 @@ export default function EditPage() {
     }
   }
 
-  const saveProfileAndSettings = async (options: { showSuccessToast?: boolean } = {}) => {
+  const saveProfileAndSettings = async (options: { showSuccessToast?: boolean; publishIfReady?: boolean } = {}) => {
     if (!profile) return
-    const { showSuccessToast = true } = options
+    const { showSuccessToast = true, publishIfReady } = options
 
     // Warn if service mode user has fewer than 3 perks (non-blocking)
     if (isServiceMode && perks.length > 0 && perks.length < 3) {
@@ -277,8 +277,8 @@ export default function EditPage() {
         purpose,
         // Only set singleAmount if using single pricing model
         ...(profile.pricingModel === 'single' || !profile.pricingModel ? { singleAmount } : {}),
-        // Preserve existing isPublic unless this is a launch flow
-        ...(isLaunchFlow ? { isPublic: true } : {}),
+        // Only publish if explicitly requested (payouts must be active first)
+        ...(publishIfReady ? { isPublic: true } : {}),
         // Service mode fields
         ...(isServiceMode && {
           bio,
@@ -310,25 +310,44 @@ export default function EditPage() {
     setIsContinuing(true)
     let didNavigate = false
     try {
-      // Save any pending edits first
+      // Validate price first
+      if (singleAmount <= 0) {
+        toast.error('Price must be greater than 0')
+        setIsContinuing(false)
+        return
+      }
+
+      // Service mode: require at least 3 perks before publishing
+      if (isServiceMode && perks.length < 3) {
+        toast.error('Add at least 3 perks before publishing')
+        setIsContinuing(false)
+        return
+      }
+
+      // Check payout status BEFORE saving with isPublic: true
+      // This prevents publishing an incomplete page
+      const payoutsActive = profile.payoutStatus === 'active'
+
       if (hasChanges) {
-        if (singleAmount <= 0) {
-          toast.error('Price must be greater than 0')
-          setIsContinuing(false)
-          return
-        }
-        const ok = await saveProfileAndSettings({ showSuccessToast: false })
+        // Save changes, but only set isPublic if payouts are active
+        const ok = await saveProfileAndSettings({
+          showSuccessToast: false,
+          publishIfReady: payoutsActive,
+        })
         if (!ok) {
           setIsContinuing(false)
           return
         }
+      } else if (payoutsActive && !profile.isPublic) {
+        // No changes to save, but need to publish
+        await updateProfile({ isPublic: true })
       }
 
       // If payments are not active yet, guide user to connect/finish payments next
-      if (profile.payoutStatus !== 'active') {
+      if (!payoutsActive) {
         toast.info('Next: connect payments to start earning.')
         didNavigate = true
-        navigate('/settings/payments', { state: { returnTo: '/dashboard' } })
+        navigate('/settings/payments', { state: { returnTo: '/edit?launch=1' } })
         return
       }
 

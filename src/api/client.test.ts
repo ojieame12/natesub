@@ -190,4 +190,31 @@ describe('api/client', () => {
 
     await api.profile.get()
   })
+
+  it('does not clear auth on subscriber portal 401s (separate auth system)', async () => {
+    // User is logged in to main app
+    setAuthToken('main-app-token')
+
+    const onAuthError = vi.fn()
+    window.addEventListener(AUTH_ERROR_EVENT, onAuthError)
+
+    const fetchMock = vi.fn(async (url: string) => {
+      // Subscriber portal returns 401 (session expired for portal, not main app)
+      if (url.toString().includes('/subscriber/subscriptions')) {
+        return jsonResponse({ error: 'Session expired', code: 'SESSION_EXPIRED' }, { status: 401 })
+      }
+      throw new Error(`Unexpected fetch: ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock as any)
+
+    // Call subscriber portal API
+    await expect(api.subscriberPortal.listSubscriptions()).rejects.toMatchObject({ status: 401 })
+
+    // Main app auth should NOT be cleared (subscriber portal has separate auth)
+    expect(getAuthToken()).toBe('main-app-token')
+    expect(hasAuthSession()).toBe(true)
+    expect(onAuthError).not.toHaveBeenCalled()
+
+    window.removeEventListener(AUTH_ERROR_EVENT, onAuthError)
+  })
 })

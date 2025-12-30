@@ -163,7 +163,12 @@ export function computeOnboardingState(user: {
 
   if (hasInProgressOnboarding) {
     // Resume from saved step (even if profile exists) to support multi-stage onboarding.
-    redirectTo = `/onboarding?step=${user.onboardingStep}`
+    // Prefer stepKey (canonical identifier) over numeric step for reliable resume
+    // when step order changes (e.g., address step shown/hidden based on country)
+    const stepKey = onboardingData?.stepKey
+    redirectTo = stepKey
+      ? `/onboarding?step=${stepKey}`
+      : `/onboarding?step=${user.onboardingStep}`
   } else if (hasProfile) {
     // Profile exists - allow dashboard access regardless of payment status
     // (the app can guide them to finish setup).

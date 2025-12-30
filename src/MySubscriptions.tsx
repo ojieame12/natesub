@@ -87,7 +87,7 @@ const SubscriptionRow = memo(function SubscriptionRow({
             marginTop: 2,
           }}>
             <AlertCircle size={12} />
-            Update payment method
+            {subscription.pastDueMessage || 'Update payment method'}
           </span>
         )}
       </div>

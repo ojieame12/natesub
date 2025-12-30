@@ -598,3 +598,73 @@ export async function alertDisputeRatioWarning(params: {
     ],
   })
 }
+
+/**
+ * Alert: Critical Job Health
+ * Triggered when critical jobs (billing, retries) are stale or failing
+ * This directly impacts revenue - needs immediate attention
+ */
+export async function alertJobHealthCritical(
+  staleJobs: string[],
+  failedJobs: string[]
+): Promise<void> {
+  const jobList = [...new Set([...staleJobs, ...failedJobs])]
+    .map(job => {
+      const status = failedJobs.includes(job) ? '❌ FAILED' : '⏰ STALE'
+      return `• \`${job}\`: ${status}`
+    })
+    .join('\n')
+
+  const hasBilling = staleJobs.includes('billing') || failedJobs.includes('billing')
+  const hasRetries = staleJobs.includes('retries') || failedJobs.includes('retries')
+
+  const impactMessage = hasBilling && hasRetries
+    ? '⚠️ *Both billing and retry jobs are affected. Subscriptions may not renew and failed payments won\'t retry.*'
+    : hasBilling
+    ? '⚠️ *Billing job is affected. Recurring subscriptions may not process.*'
+    : hasRetries
+    ? '⚠️ *Retry job is affected. Failed payments won\'t be retried.*'
+    : '⚠️ *Critical infrastructure jobs are affected.*'
+
+  await sendSlackMessage({
+    blocks: [
+      {
+        type: 'header',
+        text: {
+          type: 'plain_text',
+          text: '🚨 CRITICAL: Job Health Alert',
+        },
+      },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `*Critical background jobs have stopped running or are failing.*\n\n${jobList}`,
+        },
+      },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: impactMessage,
+        },
+      },
+      {
+        type: 'context',
+        elements: [
+          {
+            type: 'mrkdwn',
+            text: 'Check Railway logs immediately. Run `/jobs/health` for full status.',
+          },
+        ],
+      },
+    ],
+    attachments: [
+      {
+        color: '#dc2626', // Red - critical
+        footer: 'NatePay Job Health',
+        ts: Math.floor(Date.now() / 1000),
+      },
+    ],
+  })
+}

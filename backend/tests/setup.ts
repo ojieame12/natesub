@@ -29,7 +29,7 @@ import { config } from 'dotenv'
 import { randomUUID } from 'crypto'
 import fs from 'fs'
 import path from 'path'
-import { vi } from 'vitest'
+import { vi, beforeEach } from 'vitest'
 
 // Load test env before modules read config/env.ts
 const cwd = process.cwd()
@@ -39,6 +39,9 @@ config({ path: envPath })
 
 // Ensure NODE_ENV is test for Prisma/logging behaviors
 process.env.NODE_ENV = 'test'
+
+// Shared Redis mock store - must be declared before vi.mock
+const redisMockStore = new Map<string, string | number>()
 
 // Provide safe defaults so env validation passes in tests
 const defaults: Record<string, string> = {
@@ -79,25 +82,30 @@ for (const [key, value] of Object.entries(defaults)) {
   }
 }
 
+// Always start tests with a clean Redis mock store to avoid cross-file bleed.
+beforeEach(() => {
+  redisMockStore.clear()
+})
+
 // Global mock for Redis - prevents connection attempts
+// Uses redisMockStore declared above so tests can access it via redisMock export
 vi.mock('../src/db/redis.js', () => {
-  const store = new Map<string, string | number>()
-  const reset = () => store.clear()
+  const reset = () => redisMockStore.clear()
   return {
     redis: {
-      get: vi.fn(async (key: string) => store.get(key) ?? null),
-      set: vi.fn(async (key: string, value: string) => { store.set(key, value); return 'OK' }),
-      setex: vi.fn(async (key: string, _seconds: number, value: string) => { store.set(key, value); return 'OK' }),
+      get: vi.fn(async (key: string) => redisMockStore.get(key) ?? null),
+      set: vi.fn(async (key: string, value: string) => { redisMockStore.set(key, value); return 'OK' }),
+      setex: vi.fn(async (key: string, _seconds: number, value: string) => { redisMockStore.set(key, value); return 'OK' }),
       del: vi.fn(async (...keys: string[]) => {
         let deleted = 0
         for (const key of keys) {
-          if (store.delete(key)) deleted++
+          if (redisMockStore.delete(key)) deleted++
         }
         return deleted
       }),
       incr: vi.fn(async (key: string) => {
-        const current = (store.get(key) as number) || 0
-        store.set(key, current + 1)
+        const current = (redisMockStore.get(key) as number) || 0
+        redisMockStore.set(key, current + 1)
         return current + 1
       }),
       expire: vi.fn(async () => 1),
@@ -105,7 +113,7 @@ vi.mock('../src/db/redis.js', () => {
       ttl: vi.fn(async () => -1),
       ping: vi.fn(async () => 'PONG'),
       eval: vi.fn(async () => null),
-      exists: vi.fn(async (key: string) => (store.has(key) ? 1 : 0)),
+      exists: vi.fn(async (key: string) => (redisMockStore.has(key) ? 1 : 0)),
       on: vi.fn(),
       quit: vi.fn(),
       // Scan keys matching a pattern - used by cache invalidation
@@ -118,7 +126,7 @@ vi.mock('../src/db/redis.js', () => {
           .replace(/\*/g, '.*')
           .replace(/\?/g, '.')
         const regex = new RegExp(`^${regexPattern}$`)
-        const keys = Array.from(store.keys()).filter(k => regex.test(k as string)) as string[]
+        const keys = Array.from(redisMockStore.keys()).filter(k => regex.test(k as string)) as string[]
         return ['0', keys]
       }),
     },
@@ -687,6 +695,15 @@ vi.mock('../src/db/client.js', () => {
   return { db: client }
 })
 
-// Export for tests to access storage directly
+// Redis mock wrapper for tests to interact with the shared mock store
+export const redisMock = {
+  get: (key: string) => redisMockStore.get(key) ?? null,
+  set: (key: string, value: string) => { redisMockStore.set(key, value); return 'OK' },
+  delete: (key: string) => redisMockStore.delete(key),
+  clear: () => redisMockStore.clear(),
+  has: (key: string) => redisMockStore.has(key),
+  keys: () => Array.from(redisMockStore.keys()),
+}
+
 // Export for tests to access storage directly
 export { dbStorage }

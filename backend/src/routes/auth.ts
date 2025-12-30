@@ -269,8 +269,10 @@ const onboardingDataSchema = z.object({
   purpose: z.enum(['tips', 'support', 'allowance', 'fan_club', 'exclusive_content', 'service', 'other']).optional(),
 
   // Pricing fields
+  // Note: singleAmount allows decimals for USD/GBP/EUR (e.g. $9.99)
+  // Frontend stores in major currency units, backend converts to cents for Stripe
   pricingModel: z.enum(['single', 'tiers']).optional(),
-  singleAmount: z.number().int().min(1).max(1_000_000).optional(),
+  singleAmount: z.number().min(0.01).max(1_000_000).optional(),
   tiers: z.array(z.object({
     id: z.string(),
     name: z.string(),

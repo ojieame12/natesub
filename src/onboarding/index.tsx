@@ -31,6 +31,14 @@ function ResumingShell() {
         <div className="onboarding-wrapper">
             <div className="onboarding-resuming">
                 <img src="/logo.svg" alt="NatePay" className="resuming-logo" />
+                <p style={{
+                    marginTop: 16,
+                    fontSize: 14,
+                    color: 'var(--text-secondary)',
+                    opacity: 0.8,
+                }}>
+                    Resuming...
+                </p>
             </div>
         </div>
     )
