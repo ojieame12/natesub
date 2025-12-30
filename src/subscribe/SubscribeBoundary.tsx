@@ -404,16 +404,16 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                 {/* Header Section - Different for Service vs Support */}
                 {isServiceMode ? (
                     /* SERVICE MODE: Banner Header - Inset with rounded corners, fixed */
-                    <div style={{
-                        width: '100%',
-                        height: 109,
-                        minHeight: 109,
-                        flexShrink: 0,
-                        borderRadius: 24,
-                        overflow: 'hidden',
-                        background: COLORS.neutral900,
-                        position: 'relative',
-                    }}>
+                    <div style={{ position: 'relative', flexShrink: 0 }}>
+                        <div style={{
+                            width: '100%',
+                            height: 109,
+                            minHeight: 109,
+                            borderRadius: 24,
+                            overflow: 'hidden',
+                            background: COLORS.neutral900,
+                            position: 'relative',
+                        }}>
                         {bannerUrl ? (
                             <img
                                 src={bannerUrl}
@@ -442,6 +442,18 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                                 {(profile.displayName || profile.username || 'U').charAt(0).toUpperCase()}
                             </div>
                         )}
+                        </div>
+                        {/* Gradient fade below banner */}
+                        <div style={{
+                            position: 'absolute',
+                            bottom: -20,
+                            left: 0,
+                            right: 0,
+                            height: 24,
+                            background: 'linear-gradient(to bottom, white 0%, rgba(255,255,255,0) 100%)',
+                            pointerEvents: 'none',
+                            zIndex: 2,
+                        }} />
                     </div>
                 ) : (
                     /* SUPPORT MODE: Avatar + Badge Header */
@@ -783,15 +795,23 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                                     type="email"
                                     value={subscriberEmail}
                                     onChange={e => setSubscriberEmail(e.target.value)}
-                                    onFocus={() => {
+                                    onFocus={(e) => {
                                         setEmailFocused(true)
-                                        // Scroll input into view after keyboard opens
+                                        // Smooth scroll input into view after keyboard opens
+                                        const input = e.target
                                         setTimeout(() => {
-                                            emailInputRef.current?.scrollIntoView({
-                                                behavior: 'smooth',
-                                                block: 'center',
-                                            })
-                                        }, 300)
+                                            // Use parent scroll container for smoother control
+                                            const scrollContainer = input.closest('[style*="overflowY"]')
+                                            if (scrollContainer) {
+                                                const inputRect = input.getBoundingClientRect()
+                                                const containerRect = scrollContainer.getBoundingClientRect()
+                                                const scrollTop = scrollContainer.scrollTop + (inputRect.top - containerRect.top) - 100
+                                                scrollContainer.scrollTo({
+                                                    top: Math.max(0, scrollTop),
+                                                    behavior: 'smooth',
+                                                })
+                                            }
+                                        }, 350)
                                     }}
                                     onBlur={() => setEmailFocused(false)}
                                     placeholder={emailFocused || hasEmailValue ? '' : 'Customer Email'}
