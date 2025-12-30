@@ -549,49 +549,41 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                 {/* Perks List (Service Mode Only) - Collapsible */}
                 {isServiceMode && perks.length > 0 && (
                     <div style={{ marginTop: 35 }}>
-                        {/* Collapsed header - clickable */}
-                        <button
-                            onClick={() => setPerksExpanded(!perksExpanded)}
-                            style={{
-                                width: '100%',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                padding: '12px 0',
-                                background: 'transparent',
-                                border: 'none',
-                                cursor: 'pointer',
-                            }}
-                        >
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                                <PerkIcon />
-                                <span style={{
-                                    fontSize: 16,
-                                    fontWeight: 500,
-                                    color: COLORS.neutral600,
-                                }}>
-                                    {perks.length} perk{perks.length > 1 ? 's' : ''} included
-                                </span>
-                            </div>
-                            <ChevronDown
-                                size={20}
-                                color={COLORS.neutral500}
+                        {/* Collapsed header - only show when not expanded */}
+                        {!perksExpanded && (
+                            <button
+                                onClick={() => setPerksExpanded(true)}
                                 style={{
-                                    transform: perksExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
-                                    transition: 'transform 0.3s cubic-bezier(0.22, 1, 0.36, 1)',
+                                    width: '100%',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    padding: '12px 0',
+                                    background: 'transparent',
+                                    border: 'none',
+                                    cursor: 'pointer',
                                 }}
-                            />
-                        </button>
+                            >
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                                    <PerkIcon />
+                                    <span style={{
+                                        fontSize: 16,
+                                        fontWeight: 500,
+                                        color: COLORS.neutral600,
+                                    }}>
+                                        {perks.length} perk{perks.length > 1 ? 's' : ''} included
+                                    </span>
+                                </div>
+                                <ChevronDown
+                                    size={20}
+                                    color={COLORS.neutral500}
+                                />
+                            </button>
+                        )}
 
-                        {/* Expandable perks list */}
-                        <div style={{
-                            maxHeight: perksExpanded ? 500 : 0,
-                            overflow: 'hidden',
-                            transition: 'max-height 0.4s cubic-bezier(0.22, 1, 0.36, 1)',
-                        }}>
-                            <div style={{
-                                borderTop: `1px solid ${COLORS.neutral200}`,
-                            }}>
+                        {/* Expanded perks list */}
+                        {perksExpanded && (
+                            <div>
                                 {perks.map((perk, index) => (
                                     <div key={perk.id}>
                                         <div style={{
@@ -617,8 +609,32 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                                         )}
                                     </div>
                                 ))}
+                                {/* Collapse button */}
+                                <button
+                                    onClick={() => setPerksExpanded(false)}
+                                    style={{
+                                        width: '100%',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        padding: '8px 0',
+                                        marginTop: 8,
+                                        background: 'transparent',
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        color: COLORS.neutral500,
+                                        fontSize: 14,
+                                        gap: 4,
+                                    }}
+                                >
+                                    Show less
+                                    <ChevronDown
+                                        size={16}
+                                        style={{ transform: 'rotate(180deg)' }}
+                                    />
+                                </button>
                             </div>
-                        </div>
+                        )}
                     </div>
                 )}
 
