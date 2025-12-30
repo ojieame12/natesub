@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { Pencil, AlertCircle, Check } from 'lucide-react'
+import { Pencil, AlertCircle, Check, ChevronDown } from 'lucide-react'
 import { useToast } from '../components'
 import { useCreateCheckout, useRecordPageView, useUpdatePageView } from '../api/hooks'
 import { detectPayerCountry } from '../api/client'
@@ -149,6 +149,7 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
     const [cardRevealed, setCardRevealed] = useState(false)
     const [contentVisible, setContentVisible] = useState(false)
     const [actionVisible, setActionVisible] = useState(false)
+    const [perksExpanded, setPerksExpanded] = useState(false)
     const viewIdRef = useRef<string | null>(null)
     const emailInputRef = useRef<HTMLInputElement>(null)
 
@@ -545,34 +546,79 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                     )}
                 </div>
 
-                {/* Perks List (Service Mode Only) */}
+                {/* Perks List (Service Mode Only) - Collapsible */}
                 {isServiceMode && perks.length > 0 && (
                     <div style={{ marginTop: 35 }}>
-                        {perks.map((perk, index) => (
-                            <div key={perk.id}>
-                                <div style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: 12,
-                                    padding: '12px 0',
+                        {/* Collapsed header - clickable */}
+                        <button
+                            onClick={() => setPerksExpanded(!perksExpanded)}
+                            style={{
+                                width: '100%',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                padding: '12px 0',
+                                background: 'transparent',
+                                border: 'none',
+                                cursor: 'pointer',
+                            }}
+                        >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                                <PerkIcon />
+                                <span style={{
+                                    fontSize: 16,
+                                    fontWeight: 500,
+                                    color: COLORS.neutral600,
                                 }}>
-                                    <PerkIcon />
-                                    <span style={{
-                                        fontSize: 16,
-                                        fontWeight: 500,
-                                        color: COLORS.neutral600,
-                                    }}>
-                                        {perk.title}
-                                    </span>
-                                </div>
-                                {index < perks.length - 1 && (
-                                    <div style={{
-                                        height: 1,
-                                        background: COLORS.neutral200,
-                                    }} />
-                                )}
+                                    {perks.length} perk{perks.length > 1 ? 's' : ''} included
+                                </span>
                             </div>
-                        ))}
+                            <ChevronDown
+                                size={20}
+                                color={COLORS.neutral500}
+                                style={{
+                                    transform: perksExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                                    transition: 'transform 0.3s cubic-bezier(0.22, 1, 0.36, 1)',
+                                }}
+                            />
+                        </button>
+
+                        {/* Expandable perks list */}
+                        <div style={{
+                            maxHeight: perksExpanded ? 500 : 0,
+                            overflow: 'hidden',
+                            transition: 'max-height 0.4s cubic-bezier(0.22, 1, 0.36, 1)',
+                        }}>
+                            <div style={{
+                                borderTop: `1px solid ${COLORS.neutral200}`,
+                            }}>
+                                {perks.map((perk, index) => (
+                                    <div key={perk.id}>
+                                        <div style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: 12,
+                                            padding: '12px 0',
+                                        }}>
+                                            <PerkIcon />
+                                            <span style={{
+                                                fontSize: 16,
+                                                fontWeight: 500,
+                                                color: COLORS.neutral600,
+                                            }}>
+                                                {perk.title}
+                                            </span>
+                                        </div>
+                                        {index < perks.length - 1 && (
+                                            <div style={{
+                                                height: 1,
+                                                background: COLORS.neutral200,
+                                            }} />
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
                     </div>
                 )}
 
@@ -581,66 +627,85 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                     <div style={{ flex: 1, minHeight: 24 }} />
                 )}
 
-                {/* Pricing Card */}
+                {/* Pricing Card - Different for owner vs subscriber */}
                 <div style={{
                     marginTop: isServiceMode ? 20 : 0,
                     background: COLORS.neutral50,
                     borderRadius: 12,
                     padding: '16px',
                 }}>
-                    {/* Subscription Row */}
-                    <div style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                    }}>
-                        <span style={{ fontSize: 15, color: COLORS.neutral600 }}>
-                            Subscription
-                        </span>
-                        <span style={{ fontSize: 15, color: COLORS.neutral700, fontWeight: 500 }}>
-                            {formatCurrency(pricing.currentAmount, pricing.currency)}/month
-                        </span>
-                    </div>
+                    {isOwner ? (
+                        /* Owner View: Simple subscription display */
+                        <div style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                        }}>
+                            <span style={{ fontSize: 15, fontWeight: 600, color: COLORS.neutral900 }}>
+                                Subscription
+                            </span>
+                            <span style={{ fontSize: 18, fontWeight: 700, color: COLORS.neutral900 }}>
+                                {formatCurrency(pricing.currentAmount, pricing.currency)}/month
+                            </span>
+                        </div>
+                    ) : (
+                        /* Subscriber View: Full breakdown with fees */
+                        <>
+                            {/* Subscription Row */}
+                            <div style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                            }}>
+                                <span style={{ fontSize: 15, color: COLORS.neutral600 }}>
+                                    Subscription
+                                </span>
+                                <span style={{ fontSize: 15, color: COLORS.neutral700, fontWeight: 500 }}>
+                                    {formatCurrency(pricing.currentAmount, pricing.currency)}/month
+                                </span>
+                            </div>
 
-                    {/* Dashed Separator */}
-                    <div style={{
-                        borderBottom: `1px dashed ${COLORS.neutral200}`,
-                        margin: '10px 0',
-                    }} />
+                            {/* Dashed Separator */}
+                            <div style={{
+                                borderBottom: `1px dashed ${COLORS.neutral200}`,
+                                margin: '10px 0',
+                            }} />
 
-                    {/* Fee Row */}
-                    <div style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                    }}>
-                        <span style={{ fontSize: 15, color: COLORS.neutral600 }}>
-                            Secure payment Fee
-                        </span>
-                        <span style={{ fontSize: 15, color: COLORS.neutral700 }}>
-                            +{formatCurrency(pricing.feePreview.serviceFee, pricing.currency)}
-                        </span>
-                    </div>
+                            {/* Fee Row */}
+                            <div style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                            }}>
+                                <span style={{ fontSize: 15, color: COLORS.neutral600 }}>
+                                    Secure payment Fee
+                                </span>
+                                <span style={{ fontSize: 15, color: COLORS.neutral700 }}>
+                                    +{formatCurrency(pricing.feePreview.serviceFee, pricing.currency)}
+                                </span>
+                            </div>
 
-                    {/* Dashed Separator */}
-                    <div style={{
-                        borderBottom: `1px dashed ${COLORS.neutral200}`,
-                        margin: '10px 0',
-                    }} />
+                            {/* Dashed Separator */}
+                            <div style={{
+                                borderBottom: `1px dashed ${COLORS.neutral200}`,
+                                margin: '10px 0',
+                            }} />
 
-                    {/* Total Row */}
-                    <div style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                    }}>
-                        <span style={{ fontSize: 15, fontWeight: 600, color: COLORS.neutral900 }}>
-                            Total
-                        </span>
-                        <span style={{ fontSize: 18, fontWeight: 700, color: COLORS.neutral900 }}>
-                            {formatCurrency(pricing.total, pricing.currency)}/month
-                        </span>
-                    </div>
+                            {/* Total Row */}
+                            <div style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                            }}>
+                                <span style={{ fontSize: 15, fontWeight: 600, color: COLORS.neutral900 }}>
+                                    Total
+                                </span>
+                                <span style={{ fontSize: 18, fontWeight: 700, color: COLORS.neutral900 }}>
+                                    {formatCurrency(pricing.total, pricing.currency)}/month
+                                </span>
+                            </div>
+                        </>
+                    )}
                 </div>
 
                 {/* Action Section - staggered reveal */}
