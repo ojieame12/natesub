@@ -381,9 +381,12 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                 borderRadius: 24,
                 boxShadow: '0 8px 32px rgba(0, 0, 0, 0.08), 0 24px 64px rgba(0, 0, 0, 0.06), 0 0 0 1px rgba(0, 0, 0, 0.02)',
                 padding: '11px',
+                paddingBottom: 0, // Remove bottom padding for gradient
                 position: 'relative',
                 zIndex: 1,
                 overflow: 'hidden',
+                display: 'flex',
+                flexDirection: 'column',
                 // Height reveal animation - slow, premium feel
                 opacity: cardRevealed ? 1 : 0.4,
                 transform: cardRevealed ? 'scale(1)' : 'scale(0.98)',
@@ -394,13 +397,19 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                     opacity: contentVisible ? 1 : 0,
                     transform: contentVisible ? 'translateY(0)' : 'translateY(8px)',
                     transition: 'opacity 0.5s ease-out, transform 0.5s cubic-bezier(0.22, 1, 0.36, 1)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    flex: 1,
+                    minHeight: 0, // Allow shrinking for flex
                 }}>
                 {/* Header Section - Different for Service vs Support */}
                 {isServiceMode ? (
-                    /* SERVICE MODE: Banner Header - Inset with rounded corners */
+                    /* SERVICE MODE: Banner Header - Inset with rounded corners, fixed */
                     <div style={{
                         width: '100%',
                         height: 109,
+                        minHeight: 109,
+                        flexShrink: 0,
                         borderRadius: 24,
                         overflow: 'hidden',
                         background: COLORS.neutral900,
@@ -493,8 +502,15 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                     </div>
                 )}
 
-                {/* Content wrapper with 14px padding */}
-                <div style={{ padding: '14px' }}>
+                {/* Scrollable content wrapper with 14px padding */}
+                <div style={{
+                    padding: '14px',
+                    paddingBottom: 24,
+                    flex: 1,
+                    minHeight: 0,
+                    overflowY: 'auto',
+                    position: 'relative',
+                }}>
                 {/* Name, Price, Badge Row */}
                 <div style={{
                     marginTop: isServiceMode ? 16 : 20,
@@ -548,7 +564,7 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
 
                 {/* Perks List (Service Mode Only) - Collapsible */}
                 {isServiceMode && perks.length > 0 && (
-                    <div style={{ marginTop: 35 }}>
+                    <div style={{ marginTop: 20 }}>
                         {/* Collapsed header - only show when not expanded */}
                         {!perksExpanded && (
                             <button
@@ -860,7 +876,19 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                         </a>
                     </div>
                 </div>
-                </div>{/* End 14px padding wrapper */}
+                </div>{/* End scrollable content wrapper */}
+
+                {/* Bottom gradient fade */}
+                <div style={{
+                    position: 'absolute',
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    height: 40,
+                    background: 'linear-gradient(to top, white 0%, rgba(255,255,255,0) 100%)',
+                    pointerEvents: 'none',
+                    borderRadius: '0 0 24px 24px',
+                }} />
                 </div>{/* End content wrapper */}
             </div>
 
