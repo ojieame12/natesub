@@ -399,6 +399,11 @@ export default function AIGeneratingStep() {
             <div className="ai-preview-section">
               <div className="ai-preview-header">
                 <h3>Banner</h3>
+                {generationsRemaining !== null && generationsRemaining > 0 && (
+                  <span className="ai-generations-remaining">
+                    {generationsRemaining} generation{generationsRemaining !== 1 ? 's' : ''} left
+                  </span>
+                )}
               </div>
 
               {/* Banner Selection Grid - always show when we have options */}
@@ -432,8 +437,9 @@ export default function AIGeneratingStep() {
                     >
                       {isRegeneratingBanner ? (
                         <div className="ai-banner-generating">
-                          <RefreshCw size={24} className="spin" />
-                          <span>Generating...</span>
+                          <Loader2 size={24} className="spin" />
+                          <span>Creating banner...</span>
+                          <span className="ai-banner-generating-hint">This may take up to 30 seconds</span>
                         </div>
                       ) : (
                         <div className="ai-banner-upload-placeholder">

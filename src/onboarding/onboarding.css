@@ -3975,6 +3975,14 @@ button.btn .spinning {
     letter-spacing: 0.5px;
 }
 
+.ai-generations-remaining {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    background: var(--bg-subtle);
+    padding: 4px 8px;
+    border-radius: var(--radius-sm);
+}
+
 .ai-preview-regenerate {
     display: flex;
     align-items: center;
@@ -4209,6 +4217,12 @@ button.btn .spinning {
 
 .ai-banner-generating span {
     font-size: 12px;
+}
+
+.ai-banner-generating-hint {
+    font-size: 10px !important;
+    color: var(--text-quaternary, #888);
+    margin-top: 4px;
 }
 
 .ai-banner-option .spin {

@@ -222,16 +222,27 @@ export async function generateBanner(
  */
 function buildStandardBannerPrompt(input: BannerGenerationInput): string {
   const serviceContext = input.serviceDescription
-    ? `Context: ${input.serviceDescription.slice(0, 150)}`
+    ? `Service context: ${input.serviceDescription.slice(0, 150)}`
     : ''
 
-  return `Transform this photo into a professional wide banner (16:9).
+  return `Create a professional wide banner (16:9 aspect ratio) from this portrait photo.
 
-Keep the person's face and skin tone accurate. Dark or neutral background.
-Professional, polished look suitable for a business profile header.
+COMPOSITION:
+- Center the person horizontally in the frame
+- Show head and upper body (shoulders visible)
+- Face should be the clear focal point, positioned in upper-center area
+- Leave space on left and right sides of the person
+
+STYLE:
+- Dark or black background (solid or subtle gradient)
+- Professional, polished corporate look
+- Preserve exact facial features, expression, and skin tone
+- Add professional attire if not visible (blazer, business wear)
+- Clean, high-end aesthetic suitable for a business profile header
+
 ${serviceContext}
 
-No text or watermarks.`
+Do NOT add text, logos, or watermarks.`
 }
 
 /**
@@ -240,16 +251,27 @@ No text or watermarks.`
  */
 function buildArtisticBannerPrompt(input: BannerGenerationInput): string {
   const serviceContext = input.serviceDescription
-    ? `Context: ${input.serviceDescription.slice(0, 150)}`
+    ? `Service context: ${input.serviceDescription.slice(0, 150)}`
     : ''
 
-  return `Transform this photo into a creative, artistic wide banner (16:9).
+  return `Create a creative, artistic wide banner (16:9 aspect ratio) from this portrait photo.
 
-Keep the person's face and skin tone accurate. Be creative with lighting,
-colors, and atmosphere. Cinematic or editorial style welcome.
+COMPOSITION:
+- Center the person horizontally in the frame
+- Show head and upper body (shoulders visible)
+- Face should be the clear focal point
+- Cinematic framing with room to breathe on sides
+
+STYLE:
+- Be creative with lighting, colors, and atmosphere
+- Dramatic or editorial photography style
+- Preserve exact facial features, expression, and skin tone
+- Can use creative backgrounds (gradients, bokeh, abstract)
+- High-end fashion or editorial magazine aesthetic
+
 ${serviceContext}
 
-No text or watermarks.`
+Do NOT add text, logos, or watermarks.`
 }
 
 /**
