@@ -396,12 +396,15 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                 }}>
                 {/* Header Section - Different for Service vs Support */}
                 {isServiceMode ? (
-                    /* SERVICE MODE: Banner Header */
-                    <div style={{ paddingTop: 8 }}>
+                    /* SERVICE MODE: Banner Header - Full bleed to card edges */
+                    <div style={{
+                        margin: '-20px -20px 0 -20px', // Negative margin to break out of card padding
+                        width: 'calc(100% + 40px)',
+                    }}>
                         <div style={{
                             width: '100%',
-                            height: 140,
-                            borderRadius: 12,
+                            height: 160,
+                            borderRadius: '24px 24px 0 0', // Match card's top corners
                             overflow: 'hidden',
                             background: COLORS.neutral900,
                             position: 'relative',
@@ -547,7 +550,7 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
 
                 {/* Perks List (Service Mode Only) */}
                 {isServiceMode && perks.length > 0 && (
-                    <div style={{ marginTop: 20 }}>
+                    <div style={{ marginTop: 35 }}>
                         {perks.map((perk, index) => (
                             <div key={perk.id}>
                                 <div style={{

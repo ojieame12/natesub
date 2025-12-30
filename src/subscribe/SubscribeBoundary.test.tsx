@@ -400,8 +400,8 @@ describe('SubscribeBoundary', () => {
       )
 
       await waitFor(() => {
-        // Service mode shows banner (140px height container)
-        const banner = document.querySelector('div[style*="height: 140px"]')
+        // Service mode shows banner (160px height, full-bleed)
+        const banner = document.querySelector('div[style*="height: 160px"]')
         expect(banner).toBeInTheDocument()
       })
     })
