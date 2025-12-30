@@ -98,7 +98,7 @@ describe('ManageSubscription', () => {
       })
     })
 
-    it('shows "Canceled" for canceled status', async () => {
+    it('shows "Subscription Ended" for canceled status', async () => {
       mockApiGet.mockResolvedValue({
         ...mockSubscriptionData,
         subscription: { ...mockSubscriptionData.subscription, status: 'canceled' },
@@ -107,8 +107,26 @@ describe('ManageSubscription', () => {
       renderWithProviders(<ManageSubscription />)
 
       await waitFor(() => {
-        // Canceled view shows "Subscription Canceled" header
-        expect(screen.getByText('Subscription Canceled')).toBeInTheDocument()
+        // Canceled view shows "Subscription Ended" header (no longer has access)
+        expect(screen.getByText('Subscription Ended')).toBeInTheDocument()
+      })
+    })
+
+    it('shows "Cancellation Scheduled" for cancelAtPeriodEnd', async () => {
+      mockApiGet.mockResolvedValue({
+        ...mockSubscriptionData,
+        subscription: {
+          ...mockSubscriptionData.subscription,
+          status: 'active',
+          cancelAtPeriodEnd: true,
+        },
+      })
+
+      renderWithProviders(<ManageSubscription />)
+
+      await waitFor(() => {
+        // Canceling view shows "Cancellation Scheduled" header (still has access)
+        expect(screen.getByText('Cancellation Scheduled')).toBeInTheDocument()
       })
     })
   })

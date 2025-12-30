@@ -84,18 +84,6 @@ subscriptionManage.get(
             },
           },
         },
-        payments: {
-          where: { status: 'succeeded' },
-          orderBy: { createdAt: 'desc' },
-          // No limit - need full history for accurate totalSupported calculation
-          select: {
-            id: true,
-            amountCents: true,
-            currency: true,
-            createdAt: true,
-            type: true,
-          },
-        },
       },
     })
 
@@ -106,9 +94,45 @@ subscriptionManage.get(
       }, 404)
     }
 
-    // Calculate total supported (LTV)
-    const totalSupported = subscription.ltvCents ||
-      subscription.payments.reduce((sum, p) => sum + p.amountCents, 0)
+    // Get accurate total supported using aggregation (grossCents = what subscriber paid)
+    // This matches the subscriber portal calculation for consistency
+    const paymentAggregate = await db.payment.aggregate({
+      where: {
+        subscriptionId: decoded.subscriptionId,
+        status: 'succeeded',
+      },
+      _sum: {
+        grossCents: true,
+        amountCents: true,
+        subscriberFeeCents: true,
+      },
+      _count: true,
+    })
+
+    // grossCents is the full amount subscriber paid (price + subscriber fee)
+    // Fall back to amountCents + subscriberFeeCents for older records without grossCents
+    const totalSupportedCents = paymentAggregate._sum.grossCents
+      ?? ((paymentAggregate._sum.amountCents ?? 0) + (paymentAggregate._sum.subscriberFeeCents ?? 0))
+    const totalPaymentCount = paymentAggregate._count
+
+    // Fetch only last 5 payments for display (UI only shows recent history)
+    const recentPayments = await db.payment.findMany({
+      where: {
+        subscriptionId: decoded.subscriptionId,
+        status: 'succeeded',
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 5,
+      select: {
+        id: true,
+        grossCents: true,
+        amountCents: true,
+        subscriberFeeCents: true,
+        currency: true,
+        createdAt: true,
+        type: true,
+      },
+    })
 
     // Mask email for privacy (j***n@example.com)
     const email = subscription.subscriber?.email || ''
@@ -185,13 +209,19 @@ subscriptionManage.get(
         maskedEmail,
       },
       stats: {
-        totalSupported: centsToDisplayAmount(totalSupported, subscription.currency),
+        // Show gross amount (what subscriber actually paid, including fees)
+        totalSupported: centsToDisplayAmount(totalSupportedCents, subscription.currency),
         memberSince: subscription.startedAt || subscription.createdAt,
-        paymentCount: subscription.payments.length,
+        paymentCount: totalPaymentCount,
       },
-      payments: subscription.payments.map(p => ({
+      // Show last 5 payments with gross amounts (what subscriber paid)
+      payments: recentPayments.map(p => ({
         id: p.id,
-        amount: centsToDisplayAmount(p.amountCents, p.currency),
+        // Show subscriber what they actually paid (gross amount)
+        amount: centsToDisplayAmount(
+          p.grossCents ?? (p.amountCents + (p.subscriberFeeCents ?? 0)),
+          p.currency
+        ),
         currency: p.currency,
         date: p.createdAt.toISOString(),
         type: p.type,

@@ -41,7 +41,18 @@ const CANCEL_REASONS: { value: CancelReason; label: string; emoji: string }[] = 
   { value: 'other', label: 'Other reason', emoji: '💬' },
 ]
 
-type ViewState = 'loading' | 'details' | 'cancel_reason' | 'cancel_confirm' | 'canceled' | 'error'
+type ViewState = 'loading' | 'details' | 'cancel_reason' | 'cancel_confirm' | 'canceling' | 'canceled' | 'error'
+
+// Get interval label based on subscription interval
+function getIntervalLabel(interval: string): string {
+  switch (interval) {
+    case 'year': return '/year'
+    case 'week': return '/week'
+    case 'day': return '/day'
+    case 'one_time': return ''
+    default: return '/month'
+  }
+}
 
 export default function ManageSubscription() {
   const { token } = useParams<{ token: string }>()
@@ -65,9 +76,12 @@ export default function ManageSubscription() {
     api.subscriptionManage.get(token)
       .then((result) => {
         setData(result)
-        // If already canceled, show that state
-        if (result.subscription.status === 'canceled' || result.subscription.cancelAtPeriodEnd) {
+        // Distinguish between fully canceled vs canceling (still has access)
+        if (result.subscription.status === 'canceled') {
           setView('canceled')
+        } else if (result.subscription.cancelAtPeriodEnd) {
+          // Still active but scheduled to cancel - show "canceling" state
+          setView('canceling')
         } else {
           setView('details')
         }
@@ -83,16 +97,19 @@ export default function ManageSubscription() {
     if (!token) return
 
     setCanceling(true)
+    setError(null) // Clear any previous errors
     try {
       const result = await api.subscriptionManage.cancel(token, selectedReason || undefined, comment || undefined)
       if (result.success) {
         // Refresh data to get updated state
         const updated = await api.subscriptionManage.get(token)
         setData(updated)
-        setView('canceled')
+        // Show "canceling" state (still has access) not "canceled"
+        setView('canceling')
       }
     } catch (err: any) {
-      setError(err.message || 'Failed to cancel subscription')
+      // Show error in the confirm view so user can retry
+      setError(err.message || 'Failed to cancel subscription. Please try again.')
     } finally {
       setCanceling(false)
     }
@@ -289,7 +306,7 @@ export default function ManageSubscription() {
                     fontSize: 16,
                     fontWeight: 600,
                     color: '#3D3D3D',
-                  }}>/month</span>
+                  }}>{getIntervalLabel(subscription.interval)}</span>
                 </div>
 
                 {/* Status */}
@@ -642,6 +659,35 @@ export default function ManageSubscription() {
                 Confirm cancellation
               </h2>
 
+              {/* Error Alert in confirm view */}
+              {error && (
+                <div style={{
+                  background: '#FEE2E2',
+                  border: '1px solid #FECACA',
+                  borderRadius: 12,
+                  padding: '12px 16px',
+                  marginBottom: 16,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                }}>
+                  <AlertCircle size={18} color="#DC2626" />
+                  <span style={{ fontSize: 13, color: '#991B1B', flex: 1 }}>{error}</span>
+                  <button
+                    onClick={() => setError(null)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      padding: 4,
+                      cursor: 'pointer',
+                      color: '#991B1B',
+                    }}
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              )}
+
               <div style={{
                 background: COLORS.neutral50,
                 borderRadius: 12,
@@ -710,6 +756,88 @@ export default function ManageSubscription() {
             </>
           )}
 
+          {view === 'canceling' && (
+            <div style={{ textAlign: 'center', padding: '20px 0' }}>
+              <div style={{
+                width: 64,
+                height: 64,
+                background: '#FEF3C7',
+                borderRadius: '50%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 16px',
+              }}>
+                <Check size={32} color="#D97706" />
+              </div>
+
+              <h2 style={{
+                fontSize: 20,
+                fontWeight: 600,
+                color: COLORS.neutral900,
+                margin: '0 0 8px',
+              }}>
+                Cancellation Scheduled
+              </h2>
+
+              <p style={{
+                fontSize: 14,
+                color: COLORS.neutral500,
+                margin: '0 0 16px',
+              }}>
+                Your subscription is set to cancel, but you still have access until{' '}
+                <strong>{subscription.currentPeriodEnd ? formatDate(subscription.currentPeriodEnd) : 'the end of your billing period'}</strong>.
+              </p>
+
+              <div style={{
+                background: COLORS.neutral50,
+                borderRadius: 12,
+                padding: 16,
+                marginBottom: 20,
+                textAlign: 'left',
+              }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Check size={16} color={COLORS.green} />
+                    <span style={{ fontSize: 13, color: COLORS.neutral600 }}>
+                      You won't be charged again
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Check size={16} color={COLORS.green} />
+                    <span style={{ fontSize: 13, color: COLORS.neutral600 }}>
+                      Full access until period ends
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Check size={16} color={COLORS.green} />
+                    <span style={{ fontSize: 13, color: COLORS.neutral600 }}>
+                      You can resubscribe anytime
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {data.actions?.resubscribeUrl && (
+                <button
+                  onClick={() => window.location.href = data.actions.resubscribeUrl!}
+                  style={{
+                    padding: '14px 28px',
+                    background: COLORS.neutral900,
+                    color: COLORS.white,
+                    border: 'none',
+                    borderRadius: 12,
+                    fontSize: 15,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Resubscribe Now
+                </button>
+              )}
+            </div>
+          )}
+
           {view === 'canceled' && (
             <div style={{ textAlign: 'center', padding: '20px 0' }}>
               <div style={{
@@ -731,7 +859,7 @@ export default function ManageSubscription() {
                 color: COLORS.neutral900,
                 margin: '0 0 8px',
               }}>
-                Subscription Canceled
+                Subscription Ended
               </h2>
 
               <p style={{
@@ -739,9 +867,7 @@ export default function ManageSubscription() {
                 color: COLORS.neutral500,
                 margin: '0 0 24px',
               }}>
-                {subscription.currentPeriodEnd
-                  ? `You'll have access until ${formatDate(subscription.currentPeriodEnd)}`
-                  : 'Your subscription has ended'}
+                Your subscription has ended. You no longer have access.
               </p>
 
               <p style={{

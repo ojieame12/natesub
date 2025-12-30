@@ -12,6 +12,17 @@ import { getCurrencySymbol, formatCompactNumber } from './utils/currency'
 import { queryKeys } from './api/queryKeys'
 import './Subscribers.css' // Reuse Subscribers styles for consistency
 
+// Get interval label based on subscription interval
+function getIntervalLabel(interval?: string): string {
+  switch (interval) {
+    case 'year': return '/yr'
+    case 'week': return '/wk'
+    case 'day': return '/day'
+    case 'one_time': return ''
+    default: return '/mo'
+  }
+}
+
 type FilterType = 'all' | 'active' | 'canceled'
 
 // Memoized subscription row for virtualization performance
@@ -98,7 +109,7 @@ const SubscriptionRow = memo(function SubscriptionRow({
         >
           {getStatusLabel()}
         </span>
-        <span className="subscriber-amount">{currencySymbol}{formatCompactNumber(amount)}/mo</span>
+        <span className="subscriber-amount">{currencySymbol}{formatCompactNumber(amount)}{getIntervalLabel(subscription.interval)}</span>
       </div>
 
       {/* Action buttons */}
@@ -137,38 +148,46 @@ const SubscriptionRow = memo(function SubscriptionRow({
             >
               Reactivate
             </LoadingButton>
-          ) : canManageBilling ? (
-            <Pressable
-              className="action-chip"
-              onClick={() => onManageBilling(subscription.id)}
-              style={{
-                padding: '6px 12px',
-                background: isPastDue ? '#dc2626' : 'var(--neutral-100)',
-                color: isPastDue ? 'white' : undefined,
-                borderRadius: 8,
-                fontSize: 12,
-                fontWeight: 500,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 4,
-              }}
-            >
-              {managingId === subscription.id ? 'Loading...' : <><CreditCard size={12} /> {isPastDue ? 'Fix Payment' : 'Billing'}</>}
-            </Pressable>
-          ) : isPaystack ? (
-            <span
-              style={{
-                padding: '6px 12px',
-                background: 'var(--neutral-50)',
-                borderRadius: 8,
-                fontSize: 11,
-                color: 'var(--neutral-500)',
-              }}
-              title="Cancel and resubscribe to update payment method"
-            >
-              Cancel to update card
-            </span>
-          ) : null
+          ) : (
+            <>
+              {canManageBilling && (
+                <Pressable
+                  className="action-chip"
+                  onClick={() => onManageBilling(subscription.id)}
+                  style={{
+                    padding: '6px 12px',
+                    background: isPastDue ? '#dc2626' : 'var(--neutral-100)',
+                    color: isPastDue ? 'white' : undefined,
+                    borderRadius: 8,
+                    fontSize: 12,
+                    fontWeight: 500,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
+                  }}
+                >
+                  {managingId === subscription.id ? 'Loading...' : <><CreditCard size={12} /> {isPastDue ? 'Fix Payment' : 'Billing'}</>}
+                </Pressable>
+              )}
+              {/* Cancel button for active subscriptions */}
+              <LoadingButton
+                className="action-chip"
+                onClick={() => onCancel(subscription.id)}
+                loading={cancellingId === subscription.id}
+                style={{
+                  padding: '6px 12px',
+                  background: 'var(--neutral-100)',
+                  borderRadius: 8,
+                  fontSize: 12,
+                  fontWeight: 500,
+                  border: 'none',
+                  color: 'var(--neutral-600)',
+                }}
+              >
+                Cancel
+              </LoadingButton>
+            </>
+          )
         )}
       </div>
     </div>
