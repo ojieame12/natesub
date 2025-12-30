@@ -795,7 +795,30 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                                     type="email"
                                     value={subscriberEmail}
                                     onChange={e => setSubscriberEmail(e.target.value)}
-                                    onFocus={() => setEmailFocused(true)}
+                                    onFocus={() => {
+                                        setEmailFocused(true)
+                                        // Scroll within the card's scrollable container
+                                        setTimeout(() => {
+                                            const input = emailInputRef.current
+                                            if (!input) return
+
+                                            // Find the scrollable parent (the content wrapper with overflowY)
+                                            let scrollParent = input.parentElement
+                                            while (scrollParent && getComputedStyle(scrollParent).overflowY !== 'auto') {
+                                                scrollParent = scrollParent.parentElement
+                                            }
+
+                                            if (scrollParent) {
+                                                // Scroll so input is visible with some padding above it
+                                                const inputTop = input.offsetTop - scrollParent.offsetTop
+                                                const targetScroll = inputTop - 80 // 80px from top of scroll area
+                                                scrollParent.scrollTo({
+                                                    top: Math.max(0, targetScroll),
+                                                    behavior: 'smooth'
+                                                })
+                                            }
+                                        }, 300)
+                                    }}
                                     onBlur={() => setEmailFocused(false)}
                                     placeholder={emailFocused || hasEmailValue ? '' : 'Customer Email'}
                                     style={{
