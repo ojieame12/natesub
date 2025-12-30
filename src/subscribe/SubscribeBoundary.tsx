@@ -379,7 +379,7 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                 background: COLORS.white,
                 borderRadius: 24,
                 boxShadow: '0 8px 32px rgba(0, 0, 0, 0.08), 0 24px 64px rgba(0, 0, 0, 0.06), 0 0 0 1px rgba(0, 0, 0, 0.02)',
-                padding: '11px',
+                padding: isServiceMode ? '11px' : '20px', // Smaller padding for banner, larger for support
                 paddingBottom: 0, // Remove bottom padding for gradient
                 position: 'relative',
                 zIndex: 1,
@@ -501,9 +501,9 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                     </div>
                 )}
 
-                {/* Scrollable content wrapper with 14px padding */}
+                {/* Scrollable content wrapper - more padding for service mode (below banner) */}
                 <div style={{
-                    padding: '14px',
+                    padding: isServiceMode ? '14px' : '0', // Service needs padding below banner, support already has card padding
                     paddingBottom: 24,
                     flex: 1,
                     minHeight: 0,
