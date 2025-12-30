@@ -135,7 +135,7 @@ describe('SubscribeBoundary', () => {
       })
     })
 
-    it('renders perks list for service mode', async () => {
+    it('renders perks list for service mode (collapsed by default)', async () => {
       const serviceProfile = {
         ...mockProfile,
         purpose: 'service',
@@ -150,6 +150,15 @@ describe('SubscribeBoundary', () => {
         routePath: '/:username',
       })
 
+      // Perks are collapsed by default - should show summary
+      await waitFor(() => {
+        expect(screen.getByText('2 perks included')).toBeInTheDocument()
+      })
+
+      // Click to expand
+      fireEvent.click(screen.getByText('2 perks included'))
+
+      // Now perks should be visible
       await waitFor(() => {
         expect(screen.getByText('Daily Coaching sessions')).toBeInTheDocument()
         expect(screen.getByText('Custom Dieting Plans')).toBeInTheDocument()
