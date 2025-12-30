@@ -248,30 +248,22 @@ export default function PaymentMethodStep() {
             // Save next step - for service flow it's service-desc, for others it's review
             const nextStepKey = store.purpose === 'service' ? 'service-desc' : 'review'
 
-            // Parallelize profile update + onboarding progress save for faster redirect
-            // These are independent calls that don't depend on each other
-            const [profileResult, progressResult] = await Promise.allSettled([
-                api.profile.update(profileData),
-                api.auth.saveOnboardingProgress({
-                    step: currentStep + 1,
-                    stepKey: nextStepKey,
-                    data: {
-                        paymentProvider: selectedMethod,
-                        countryCode: store.countryCode,
-                        purpose: store.purpose,
-                    },
-                }),
-            ])
+            // Profile update must succeed before saving progress
+            // This prevents resume landing on a later step with incomplete profile
+            await api.profile.update(profileData)
 
-            // Profile update is critical - throw if it failed
-            if (profileResult.status === 'rejected') {
-                throw profileResult.reason
-            }
-
-            // Progress save failure is non-critical - log and continue
-            if (progressResult.status === 'rejected') {
-                console.error('[PaymentMethodStep] Failed to save onboarding progress:', progressResult.reason)
-            }
+            // Only save progress after profile succeeds (fire-and-forget, non-blocking)
+            api.auth.saveOnboardingProgress({
+                step: currentStep + 1,
+                stepKey: nextStepKey,
+                data: {
+                    paymentProvider: selectedMethod,
+                    countryCode: store.countryCode,
+                    purpose: store.purpose,
+                },
+            }).catch(err => {
+                console.error('[PaymentMethodStep] Failed to save onboarding progress:', err)
+            })
 
             // Handle Stripe connect flow
             if (selectedMethod === 'stripe') {

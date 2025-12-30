@@ -59,6 +59,8 @@ export function setAuthSession(): void {
 
 export function clearAuthSession(): void {
   safeRemoveItem(AUTH_SESSION_KEY)
+  // Also clear onboarding state to prevent data leaks between sessions
+  safeRemoveItem('natepay-onboarding')
 }
 
 // Types

@@ -43,9 +43,9 @@ export default function PaystackOnboardingComplete() {
   // We need at least one data source (store, profile, or userData) to have purpose
   const isDataReady = !isLoadingProfile && !isLoadingUser
 
-  // Use store → profile → backend onboardingData fallback chain (most robust)
-  // This handles cases where localStorage is cleared (Safari, storage reset)
-  const resolvedPurpose = purpose || profile?.purpose || userData?.onboarding?.data?.purpose
+  // Prefer server data over store to handle localStorage cleared scenarios
+  // Server onboardingData → profile → store fallback chain (most robust)
+  const resolvedPurpose = userData?.onboarding?.data?.purpose || profile?.purpose || purpose
 
   // Hydrate store from server if store is empty but server has data
   useEffect(() => {

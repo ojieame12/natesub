@@ -59,9 +59,9 @@ export default function StripeComplete() {
   const profile = userData?.profile
   const { reset: resetOnboarding, purpose } = useOnboardingStore()
 
-  // Use store → profile → backend onboardingData fallback chain (most robust)
-  // This handles cases where localStorage is cleared (Safari, storage reset)
-  const resolvedPurpose = purpose || profile?.purpose || userData?.onboarding?.data?.purpose
+  // Prefer server data over store to handle localStorage cleared scenarios
+  // Server onboardingData → profile → store fallback chain (most robust)
+  const resolvedPurpose = userData?.onboarding?.data?.purpose || profile?.purpose || purpose
 
   const [status, setStatus] = useState<'loading' | 'success' | 'pending' | 'restricted' | 'network_error'>('loading')
   const [details, setDetails] = useState<StripeDetails | null>(null)

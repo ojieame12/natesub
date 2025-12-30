@@ -4,13 +4,14 @@ import { useOnboardingStore } from './store'
 import { Pressable } from './components'
 import { InlineError, LoadingButton } from '../components'
 import { uploadFile } from '../api/hooks'
+import { api } from '../api'
 import '../Dashboard.css'
 import './onboarding.css'
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB (images are compressed before upload)
 
 export default function AvatarUploadStep() {
-    const { avatarUrl, setAvatarUrl, clearBannerOptions, nextStep, prevStep } = useOnboardingStore()
+    const { avatarUrl, setAvatarUrl, clearBannerOptions, nextStep, prevStep, currentStep } = useOnboardingStore()
     const [avatarPreview, setAvatarPreview] = useState<string | null>(avatarUrl)
     const [error, setError] = useState<string | null>(null)
     const [isUploading, setIsUploading] = useState(false)
@@ -51,6 +52,12 @@ export default function AvatarUploadStep() {
             setAvatarUrl(publicUrl)
             // Clear any AI-generated banners since they were based on the old avatar
             clearBannerOptions()
+            // Persist avatar for cross-device continuity (fire-and-forget)
+            api.auth.saveOnboardingProgress({
+                step: currentStep,
+                stepKey: 'avatar',
+                data: { avatarUrl: publicUrl },
+            }).catch(err => console.warn('[AvatarUploadStep] Failed to save progress:', err))
             // Clean up local preview URL
             URL.revokeObjectURL(localPreview)
         } catch (err: any) {
