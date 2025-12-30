@@ -579,7 +579,10 @@ function createMockModel(store: Map<string, any>) {
       if (_sum) {
         result._sum = {}
         for (const field of Object.keys(_sum)) {
-          result._sum[field] = items.reduce((sum, item) => sum + (item[field] || 0), 0)
+          // Prisma returns null if all values in the sum are null
+          // Only count non-null values
+          const values = items.map(item => item[field]).filter(v => v !== null && v !== undefined)
+          result._sum[field] = values.length > 0 ? values.reduce((sum, v) => sum + v, 0) : null
         }
       }
       // Handle _count (can be true or object)
@@ -641,7 +644,9 @@ function createMockModel(store: Map<string, any>) {
         if (_sum) {
           result._sum = {}
           for (const field of Object.keys(_sum)) {
-            result._sum[field] = groupItems.reduce((sum, item) => sum + (item[field] || 0), 0)
+            // Prisma returns null if all values in the sum are null
+            const values = groupItems.map(item => item[field]).filter(v => v !== null && v !== undefined)
+            result._sum[field] = values.length > 0 ? values.reduce((sum, v) => sum + v, 0) : null
           }
         }
 

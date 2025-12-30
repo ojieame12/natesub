@@ -364,6 +364,7 @@ subscriber.get(
     }
 
     // Get all subscriptions (active, past_due, and recently canceled)
+    // Don't include payments here - we'll aggregate them separately for efficiency
     const subscriptions = await db.subscription.findMany({
       where: {
         subscriberId: user.id,
@@ -393,18 +394,33 @@ subscriber.get(
             }
           }
         },
-        // Include payments to calculate subscriber's total paid (gross amounts)
-        payments: {
-          where: { status: 'succeeded' },
-          select: {
-            grossCents: true,
-            amountCents: true,
-            subscriberFeeCents: true,
-          }
-        },
       },
       orderBy: { updatedAt: 'desc' }
     })
+
+    // Get payment aggregates for all subscriptions in a single efficient query
+    // This avoids loading all payment records into memory
+    const subscriptionIds = subscriptions.map(s => s.id)
+    const paymentAggregates = subscriptionIds.length > 0
+      ? await db.payment.groupBy({
+          by: ['subscriptionId'],
+          where: {
+            subscriptionId: { in: subscriptionIds },
+            status: 'succeeded',
+          },
+          _sum: {
+            grossCents: true,
+            amountCents: true,
+            subscriberFeeCents: true,
+          },
+          _count: true,
+        })
+      : []
+
+    // Build a map for quick lookup
+    const aggregateMap = new Map(
+      paymentAggregates.map(agg => [agg.subscriptionId, agg])
+    )
 
     // Sort by urgency: past_due first, then active, then others
     const statusPriority: Record<string, number> = {
@@ -423,13 +439,14 @@ subscriber.get(
       const canUpdatePayment = provider === 'stripe' && !!sub.stripeCustomerId
       const displayName = sub.creator.profile?.displayName || 'Creator'
 
-      // Calculate subscriber's total paid (gross = what they actually paid)
+      // Get aggregated payment data
+      const agg = aggregateMap.get(sub.id)
       // grossCents is the full amount subscriber paid (price + subscriber fee)
-      // Fall back to amountCents + subscriberFeeCents for older records
-      const totalPaidCents = sub.payments.reduce((sum, p) => {
-        const gross = p.grossCents ?? (p.amountCents + (p.subscriberFeeCents ?? 0))
-        return sum + gross
-      }, 0)
+      // Fall back to amountCents + subscriberFeeCents for older records without grossCents
+      const totalPaidCents = agg
+        ? (agg._sum.grossCents ?? ((agg._sum.amountCents ?? 0) + (agg._sum.subscriberFeeCents ?? 0)))
+        : 0
+      const paymentCount = agg?._count ?? 0
 
       return {
         id: sub.id,
@@ -446,7 +463,7 @@ subscriber.get(
         currentPeriodEnd: sub.currentPeriodEnd?.toISOString(),
         startedAt: sub.startedAt?.toISOString(),
         totalPaid: centsToDisplayAmount(totalPaidCents, sub.currency),
-        paymentCount: sub.payments.length,
+        paymentCount,
         provider,
         canUpdatePayment,
         updatePaymentMethod: canUpdatePayment ? 'portal' : provider === 'paystack' ? 'resubscribe' : 'none',
@@ -482,6 +499,7 @@ subscriber.get(
       return c.json({ error: 'Subscription not found', code: 'NOT_FOUND' }, 404)
     }
 
+    // Fetch subscription with recent payments for display
     const subscription = await db.subscription.findFirst({
       where: {
         id,
@@ -499,6 +517,7 @@ subscriber.get(
             }
           }
         },
+        // Only fetch last 10 payments for display
         payments: {
           where: { status: 'succeeded' },
           orderBy: { createdAt: 'desc' },
@@ -520,6 +539,26 @@ subscriber.get(
       return c.json({ error: 'Subscription not found', code: 'NOT_FOUND' }, 404)
     }
 
+    // Get total from ALL payments using aggregation (not just the 10 displayed)
+    const paymentAggregate = await db.payment.aggregate({
+      where: {
+        subscriptionId: id,
+        status: 'succeeded',
+      },
+      _sum: {
+        grossCents: true,
+        amountCents: true,
+        subscriberFeeCents: true,
+      },
+      _count: true,
+    })
+
+    // grossCents is the full amount subscriber paid (price + subscriber fee)
+    // Fall back to amountCents + subscriberFeeCents for older records
+    const totalPaidCents = paymentAggregate._sum.grossCents
+      ?? ((paymentAggregate._sum.amountCents ?? 0) + (paymentAggregate._sum.subscriberFeeCents ?? 0))
+    const totalPaymentCount = paymentAggregate._count
+
     const provider = subscription.stripeSubscriptionId ? 'stripe' : 'paystack'
     const canUpdatePayment = provider === 'stripe' && !!subscription.stripeCustomerId
     const displayName = subscription.creator.profile?.displayName || 'Creator'
@@ -527,12 +566,6 @@ subscriber.get(
     const resubscribeUrl = subscription.creator.profile?.username
       ? `${env.PUBLIC_PAGE_URL}/${subscription.creator.profile.username}`
       : env.PUBLIC_PAGE_URL
-
-    // Calculate subscriber's total paid (gross = what they actually paid)
-    const totalPaidCents = subscription.payments.reduce((sum, p) => {
-      const gross = p.grossCents ?? (p.amountCents + (p.subscriberFeeCents ?? 0))
-      return sum + gross
-    }, 0)
 
     return c.json({
       subscription: {
@@ -551,7 +584,7 @@ subscriber.get(
         startedAt: subscription.startedAt?.toISOString(),
         createdAt: subscription.createdAt.toISOString(),
         totalPaid: centsToDisplayAmount(totalPaidCents, subscription.currency),
-        paymentCount: subscription.payments.length,
+        paymentCount: totalPaymentCount,
         provider,
         canUpdatePayment,
         updatePaymentMethod: canUpdatePayment ? 'portal' : provider === 'paystack' ? 'resubscribe' : 'none',

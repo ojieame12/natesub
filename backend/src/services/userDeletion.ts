@@ -24,7 +24,8 @@ interface CancellationCounts {
   stripeSubscriber: number
   paystackCreator: number
   paystackSubscriber: number
-  [key: string]: number // Index signature for JSON compatibility
+  stripeAccountDeleted: boolean
+  [key: string]: number | boolean // Index signature for JSON compatibility
 }
 
 /**
@@ -184,16 +185,55 @@ async function cancelPaystackSubscriptions(
 }
 
 /**
+ * Delete the Stripe Connected Account for a creator
+ * This is permanent and cannot be undone
+ */
+async function deleteStripeConnectedAccount(
+  userId: string,
+  errors: DeletionError[]
+): Promise<boolean> {
+  // Get the profile with stripeAccountId
+  const profile = await db.profile.findUnique({
+    where: { userId },
+    select: { stripeAccountId: true },
+  })
+
+  if (!profile?.stripeAccountId) {
+    return false // No Stripe account to delete
+  }
+
+  try {
+    await stripe.accounts.del(profile.stripeAccountId)
+    console.log(`[userDeletion] Deleted Stripe Connected Account ${profile.stripeAccountId} for user ${userId}`)
+    return true
+  } catch (err: any) {
+    // resource_missing means already deleted, which is fine
+    if (err.code === 'resource_missing') {
+      console.log(`[userDeletion] Stripe account ${profile.stripeAccountId} already deleted`)
+      return true
+    }
+    errors.push({
+      operation: 'delete_stripe_connected_account',
+      message: `Account ${profile.stripeAccountId}: ${err.message}`,
+      critical: false, // Non-critical since user is still deleted from our DB
+    })
+    console.error(`[userDeletion] Failed to delete Stripe Connected Account:`, err.message)
+    return false
+  }
+}
+
+/**
  * Delete a user with full cleanup
  *
  * This orchestrates the complete deletion process:
  * 1. Cancel platform subscription
  * 2. Cancel Stripe subscriptions (creator & subscriber)
  * 3. Cancel Paystack subscriptions (creator & subscriber)
- * 4. Log admin activity
- * 5. Anonymize user email
- * 6. Delete sessions
- * 7. Delete profile
+ * 4. Delete Stripe Connected Account
+ * 5. Log admin activity
+ * 6. Anonymize user email
+ * 7. Delete sessions
+ * 8. Delete profile
  */
 export async function deleteUser(
   userId: string,
@@ -209,6 +249,7 @@ export async function deleteUser(
     stripeSubscriber: 0,
     paystackCreator: 0,
     paystackSubscriber: 0,
+    stripeAccountDeleted: false,
   }
 
   // 1. Cancel platform subscription
@@ -226,7 +267,10 @@ export async function deleteUser(
   // 5. Cancel Paystack subscriptions (subscriber)
   canceledCounts.paystackSubscriber = await cancelPaystackSubscriptions(userId, 'subscriber', errors)
 
-  // 6. Log admin activity
+  // 6. Delete Stripe Connected Account (for creators)
+  canceledCounts.stripeAccountDeleted = await deleteStripeConnectedAccount(userId, errors)
+
+  // 7. Log admin activity
   await db.activity.create({
     data: {
       userId,
@@ -244,7 +288,7 @@ export async function deleteUser(
     },
   })
 
-  // 7. Anonymize email
+  // 8. Anonymize email
   const anonymizedEmail = `deleted_${userId}@deleted.natepay.co`
   await db.user.update({
     where: { id: userId },
@@ -254,7 +298,7 @@ export async function deleteUser(
     },
   })
 
-  // 8. Delete sessions (non-critical)
+  // 9. Delete sessions (non-critical)
   try {
     await db.session.deleteMany({ where: { userId } })
   } catch (err: any) {
@@ -265,7 +309,7 @@ export async function deleteUser(
     })
   }
 
-  // 9. Delete profile
+  // 10. Delete profile
   try {
     await db.profile.deleteMany({ where: { userId } })
   } catch (err: any) {

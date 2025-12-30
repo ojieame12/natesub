@@ -456,16 +456,22 @@ jobs.post('/sync-balances', async (c) => {
   }
 })
 
-// Health check for job system - reports last run times and staleness
+// Health check for job system - reports last run times, staleness, and queue depths
 jobs.get('/health', async (c) => {
   const { getJobsHealth } = await import('../lib/jobHealth.js')
-  const health = await getJobsHealth()
+  const { getQueueDepths } = await import('../lib/queue.js')
+
+  const [health, queueDepths] = await Promise.all([
+    getJobsHealth(),
+    getQueueDepths(),
+  ])
 
   // Return 503 if critical jobs are stale
   const statusCode = health.status === 'critical' ? 503 : 200
 
   return c.json({
     ...health,
+    queues: queueDepths,
     timestamp: new Date().toISOString(),
   }, statusCode)
 })
