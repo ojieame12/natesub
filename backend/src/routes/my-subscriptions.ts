@@ -73,25 +73,37 @@ mySubscriptions.get(
     const nextCursor = hasMore ? items[items.length - 1].id : null
 
     return c.json({
-      subscriptions: items.map(s => ({
-        id: s.id,
-        provider: {
-          id: s.creator.id,
-          displayName: s.creator.profile?.displayName || s.creator.email,
-          avatarUrl: s.creator.profile?.avatarUrl,
-          username: s.creator.profile?.username,
-        },
-        tierName: s.tierName,
-        amount: centsToDisplayAmount(s.amount, s.currency),
-        currency: s.currency,
-        interval: s.interval,
-        status: s.status,
-        startedAt: s.startedAt,
-        currentPeriodEnd: s.currentPeriodEnd,
-        cancelAtPeriodEnd: s.cancelAtPeriodEnd,
-        // Include whether this subscription has Stripe (for portal access)
-        hasStripe: !!s.stripeSubscriptionId,
-      })),
+      subscriptions: items.map(s => {
+        const isPastDue = s.status === 'past_due'
+        const provider = s.stripeSubscriptionId ? 'stripe' : 'paystack'
+        const canUpdatePayment = provider === 'stripe' && !!s.stripeCustomerId
+
+        return {
+          id: s.id,
+          provider: {
+            id: s.creator.id,
+            displayName: s.creator.profile?.displayName || s.creator.email,
+            avatarUrl: s.creator.profile?.avatarUrl,
+            username: s.creator.profile?.username,
+          },
+          tierName: s.tierName,
+          amount: centsToDisplayAmount(s.amount, s.currency),
+          currency: s.currency,
+          interval: s.interval,
+          status: s.status,
+          startedAt: s.startedAt,
+          currentPeriodEnd: s.currentPeriodEnd,
+          cancelAtPeriodEnd: s.cancelAtPeriodEnd,
+          // Rich fields for UI parity with public flow
+          hasStripe: !!s.stripeSubscriptionId,
+          isPastDue,
+          pastDueMessage: isPastDue
+            ? 'Your last payment failed. Please update your payment method to continue.'
+            : null,
+          updatePaymentMethod: canUpdatePayment ? 'portal' : provider === 'paystack' ? 'resubscribe' : 'none',
+          paymentProvider: provider,
+        }
+      }),
       nextCursor,
       hasMore,
     })

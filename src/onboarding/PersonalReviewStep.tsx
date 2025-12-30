@@ -332,44 +332,60 @@ export default function PersonalReviewStep() {
 
         try {
             // 1. Final Profile Update (includes address for Stripe KYC prefill)
-            await api.profile.update({
-                username,
-                displayName,
-                avatarUrl,
-                purpose: resolvedPurpose,
-                currency,
-                country,
-                countryCode,
-                pricingModel: 'single',
-                singleAmount: finalAmount,
-                tiers: null,
-                paymentProvider: resolvedPaymentProvider,
-                // Address fields for Stripe KYC prefill (trimmed for clean data)
-                address: address?.trim() || undefined,
-                city: city?.trim() || undefined,
-                state: state?.trim() || undefined,
-                zip: zip?.trim() || undefined,
-                // Service mode fields
-                ...(isServiceMode && {
-                    bio: serviceDescription.trim(),
-                    bannerUrl: bannerUrl || undefined,
-                    perks: servicePerks as any,
-                }),
-            })
+            try {
+                await api.profile.update({
+                    username,
+                    displayName,
+                    avatarUrl,
+                    purpose: resolvedPurpose,
+                    currency,
+                    country,
+                    countryCode,
+                    pricingModel: 'single',
+                    singleAmount: finalAmount,
+                    tiers: null,
+                    paymentProvider: resolvedPaymentProvider,
+                    // Address fields for Stripe KYC prefill (trimmed for clean data)
+                    address: address?.trim() || undefined,
+                    city: city?.trim() || undefined,
+                    state: state?.trim() || undefined,
+                    zip: zip?.trim() || undefined,
+                    // Service mode fields
+                    ...(isServiceMode && {
+                        bio: serviceDescription.trim(),
+                        bannerUrl: bannerUrl || undefined,
+                        perks: servicePerks as any,
+                    }),
+                })
+            } catch (err: any) {
+                console.error('Profile update failed:', err)
+                throw new Error(err?.error || 'Failed to save profile. Please try again.')
+            }
 
             // 2. Publish Page
-            await api.profile.updateSettings({ isPublic: true })
+            try {
+                await api.profile.updateSettings({ isPublic: true })
+            } catch (err: any) {
+                console.error('Publish failed:', err)
+                // Profile saved but publish failed - user can retry
+                throw new Error('Profile saved, but failed to publish. Please try again.')
+            }
 
             // 3. Complete Onboarding - dynamic step based on flow length
             // Backend uses countryCode + purpose to determine completion threshold
-            await api.auth.saveOnboardingProgress({
-                step: currentStep + 1,
-                stepKey: 'review', // Current step is review - completion triggers clear
-                data: {
-                    countryCode,
-                    purpose, // Redundant - ensures backend knows flow type for completion check
-                },
-            })
+            try {
+                await api.auth.saveOnboardingProgress({
+                    step: currentStep + 1,
+                    stepKey: 'review', // Current step is review - completion triggers clear
+                    data: {
+                        countryCode,
+                        purpose, // Redundant - ensures backend knows flow type for completion check
+                    },
+                })
+            } catch (err: any) {
+                // Page is live, just onboarding progress failed - non-critical, continue
+                console.warn('Onboarding progress save failed (non-critical):', err)
+            }
 
             // 4. Go to their new page (owner view with share button)
             reset()
@@ -377,7 +393,7 @@ export default function PersonalReviewStep() {
 
         } catch (err: any) {
             console.error('Launch error:', err)
-            setError(err?.error || 'Failed to launch page.')
+            setError(err?.message || err?.error || 'Failed to launch page.')
             setLaunching(false)
         }
     }

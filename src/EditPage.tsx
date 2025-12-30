@@ -108,6 +108,19 @@ export default function EditPage() {
     setSingleAmount(currentVal)
   }, [displayName, avatarUrl, priceInput, purpose, profile, bio, perks, bannerUrl])
 
+  // Warn user about unsaved changes when navigating away
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasChanges) {
+        e.preventDefault()
+        e.returnValue = '' // Required for Chrome
+      }
+    }
+
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [hasChanges])
+
   // Service mode: Generate perks
   const handleGeneratePerks = async () => {
     if (!bio.trim()) {

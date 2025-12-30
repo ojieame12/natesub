@@ -328,6 +328,15 @@ subscriber.get(
             }
           }
         },
+        // Include payments to calculate subscriber's total paid (gross amounts)
+        payments: {
+          where: { status: 'succeeded' },
+          select: {
+            grossCents: true,
+            amountCents: true,
+            subscriberFeeCents: true,
+          }
+        },
       },
       orderBy: { updatedAt: 'desc' }
     })
@@ -349,6 +358,14 @@ subscriber.get(
       const canUpdatePayment = provider === 'stripe' && !!sub.stripeCustomerId
       const displayName = sub.creator.profile?.displayName || 'Creator'
 
+      // Calculate subscriber's total paid (gross = what they actually paid)
+      // grossCents is the full amount subscriber paid (price + subscriber fee)
+      // Fall back to amountCents + subscriberFeeCents for older records
+      const totalPaidCents = sub.payments.reduce((sum, p) => {
+        const gross = p.grossCents ?? (p.amountCents + (p.subscriberFeeCents ?? 0))
+        return sum + gross
+      }, 0)
+
       return {
         id: sub.id,
         creator: {
@@ -363,7 +380,8 @@ subscriber.get(
         statusLabel: getStatusLabel(sub.status, sub.cancelAtPeriodEnd),
         currentPeriodEnd: sub.currentPeriodEnd?.toISOString(),
         startedAt: sub.startedAt?.toISOString(),
-        totalPaid: centsToDisplayAmount(sub.ltvCents, sub.currency),
+        totalPaid: centsToDisplayAmount(totalPaidCents, sub.currency),
+        paymentCount: sub.payments.length,
         provider,
         canUpdatePayment,
         updatePaymentMethod: canUpdatePayment ? 'portal' : provider === 'paystack' ? 'resubscribe' : 'none',
@@ -422,7 +440,9 @@ subscriber.get(
           take: 10,
           select: {
             id: true,
+            grossCents: true,
             amountCents: true,
+            subscriberFeeCents: true,
             currency: true,
             createdAt: true,
             status: true,
@@ -443,6 +463,12 @@ subscriber.get(
       ? `${env.PUBLIC_PAGE_URL}/${subscription.creator.profile.username}`
       : env.PUBLIC_PAGE_URL
 
+    // Calculate subscriber's total paid (gross = what they actually paid)
+    const totalPaidCents = subscription.payments.reduce((sum, p) => {
+      const gross = p.grossCents ?? (p.amountCents + (p.subscriberFeeCents ?? 0))
+      return sum + gross
+    }, 0)
+
     return c.json({
       subscription: {
         id: subscription.id,
@@ -459,7 +485,7 @@ subscriber.get(
         currentPeriodEnd: subscription.currentPeriodEnd?.toISOString(),
         startedAt: subscription.startedAt?.toISOString(),
         createdAt: subscription.createdAt.toISOString(),
-        totalPaid: centsToDisplayAmount(subscription.ltvCents, subscription.currency),
+        totalPaid: centsToDisplayAmount(totalPaidCents, subscription.currency),
         paymentCount: subscription.payments.length,
         provider,
         canUpdatePayment,
@@ -473,7 +499,8 @@ subscriber.get(
       },
       payments: subscription.payments.map(p => ({
         id: p.id,
-        amount: centsToDisplayAmount(p.amountCents, p.currency),
+        // Show subscriber what they actually paid (gross amount)
+        amount: centsToDisplayAmount(p.grossCents ?? (p.amountCents + (p.subscriberFeeCents ?? 0)), p.currency),
         currency: p.currency,
         date: p.createdAt.toISOString(),
         status: p.status,
@@ -695,7 +722,8 @@ subscriber.get(
     }
 
     try {
-      const returnUrl = `${env.APP_URL}/subscriptions`
+      // Use PUBLIC_PAGE_URL since this is a subscriber-facing portal
+      const returnUrl = `${env.PUBLIC_PAGE_URL}/subscriptions`
       const { url } = await createSubscriberPortalSession(subscription.stripeCustomerId, returnUrl)
 
       await logSubscriptionEvent({

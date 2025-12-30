@@ -97,6 +97,12 @@ export default function RequestPreview() {
     }
 
     const handleSend = async () => {
+        // Validate amount before anything else
+        if (!amount || amount <= 0) {
+            setError('Please set a valid amount.')
+            return
+        }
+
         // Intercept: Check if payouts are active
         const payoutStatus = userData?.profile?.payoutStatus
         if (payoutStatus !== 'active') {

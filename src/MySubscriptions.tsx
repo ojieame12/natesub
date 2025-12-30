@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, memo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Search, X, CreditCard } from 'lucide-react'
+import { ArrowLeft, Search, X, CreditCard, AlertCircle } from 'lucide-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Virtuoso } from 'react-virtuoso'
 import { api } from './api/client'
@@ -40,6 +40,23 @@ const SubscriptionRow = memo(function SubscriptionRow({
   const status = subscription.status
   const currencySymbol = getCurrencySymbol(subscription.currency || 'USD')
   const isCancelling = subscription.cancelAtPeriodEnd
+  const isPastDue = subscription.isPastDue
+  const canManageBilling = subscription.updatePaymentMethod === 'portal'
+  const isPaystack = subscription.paymentProvider === 'paystack'
+
+  // Status label with proper past_due handling
+  const getStatusLabel = () => {
+    if (isPastDue) return 'Payment Failed'
+    if (isCancelling) return 'Cancelling'
+    if (status === 'canceled') return 'Cancelled'
+    return 'Active'
+  }
+
+  const getStatusClass = () => {
+    if (isPastDue) return 'past-due'
+    if (status === 'canceled' || isCancelling) return 'cancelled'
+    return ''
+  }
 
   return (
     <div className="subscriber-row" style={{ cursor: 'default' }}>
@@ -59,16 +76,33 @@ const SubscriptionRow = memo(function SubscriptionRow({
         {provider.username && (
           <span className="subscriber-username">@{provider.username}</span>
         )}
+        {/* Past due alert inline */}
+        {isPastDue && (
+          <span style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4,
+            fontSize: 11,
+            color: '#dc2626',
+            marginTop: 2,
+          }}>
+            <AlertCircle size={12} />
+            Update payment method
+          </span>
+        )}
       </div>
       <div className="subscriber-meta">
-        <span className={`subscriber-tier ${status === 'canceled' || isCancelling ? 'cancelled' : ''}`}>
-          {isCancelling ? 'Cancelling' : status === 'canceled' ? 'Cancelled' : 'Active'}
+        <span
+          className={`subscriber-tier ${getStatusClass()}`}
+          style={isPastDue ? { background: '#fee2e2', color: '#dc2626' } : undefined}
+        >
+          {getStatusLabel()}
         </span>
         <span className="subscriber-amount">{currencySymbol}{formatCompactNumber(amount)}/mo</span>
       </div>
 
       {/* Action buttons */}
-      <div style={{ display: 'flex', gap: 8, marginLeft: 12 }}>
+      <div style={{ display: 'flex', gap: 8, marginLeft: 12, flexWrap: 'wrap' }}>
         {provider.username && (
           <Pressable
             className="action-chip"
@@ -103,13 +137,14 @@ const SubscriptionRow = memo(function SubscriptionRow({
             >
               Reactivate
             </LoadingButton>
-          ) : (
+          ) : canManageBilling ? (
             <Pressable
               className="action-chip"
               onClick={() => onManageBilling(subscription.id)}
               style={{
                 padding: '6px 12px',
-                background: 'var(--neutral-100)',
+                background: isPastDue ? '#dc2626' : 'var(--neutral-100)',
+                color: isPastDue ? 'white' : undefined,
                 borderRadius: 8,
                 fontSize: 12,
                 fontWeight: 500,
@@ -118,9 +153,22 @@ const SubscriptionRow = memo(function SubscriptionRow({
                 gap: 4,
               }}
             >
-              {managingId === subscription.id ? 'Loading...' : <><CreditCard size={12} /> Billing</>}
+              {managingId === subscription.id ? 'Loading...' : <><CreditCard size={12} /> {isPastDue ? 'Fix Payment' : 'Billing'}</>}
             </Pressable>
-          )
+          ) : isPaystack ? (
+            <span
+              style={{
+                padding: '6px 12px',
+                background: 'var(--neutral-50)',
+                borderRadius: 8,
+                fontSize: 11,
+                color: 'var(--neutral-500)',
+              }}
+              title="Cancel and resubscribe to update payment method"
+            >
+              Cancel to update card
+            </span>
+          ) : null
         )}
       </div>
     </div>

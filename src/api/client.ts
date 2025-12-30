@@ -301,6 +301,7 @@ const PUBLIC_ENDPOINTS = [
   '/analytics/',          // View tracking (public)
   '/config/',             // Public config endpoints
   '/geo',                 // Geo detection
+  '/subscriber/',         // Public subscriber portal (separate auth via OTP)
 ]
 
 // Create configured fetch client using shared layer
@@ -1246,6 +1247,11 @@ export interface MySubscription {
   currentPeriodEnd: string | null
   cancelAtPeriodEnd: boolean
   hasStripe: boolean
+  // Rich fields for UI parity with public flow
+  isPastDue: boolean
+  pastDueMessage: string | null
+  updatePaymentMethod: 'portal' | 'resubscribe' | 'none'
+  paymentProvider: 'stripe' | 'paystack'
 }
 
 export const mySubscriptions = {
