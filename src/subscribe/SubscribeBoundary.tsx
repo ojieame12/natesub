@@ -319,7 +319,7 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
 
     return (
         <div style={{
-            height: '100dvh',
+            minHeight: '100svh', // Use svh - doesn't change when keyboard opens
             background: 'linear-gradient(180deg, #FFE7A0 0%, #FFF5D6 100%)',
             display: 'flex',
             flexDirection: 'column',
@@ -328,7 +328,6 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
             padding: '14px 10px',
             fontFamily: 'var(--font-primary, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif)',
             position: 'relative',
-            overflow: 'hidden',
         }}>
             {/* Dither overlay - fades in */}
             <div style={{
@@ -376,7 +375,7 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
             <div style={{
                 width: '100%',
                 maxWidth: 420,
-                maxHeight: 'calc(100dvh - 28px)', // Fit within viewport with margin
+                maxHeight: 'calc(100svh - 28px)', // Fit within viewport with margin
                 background: COLORS.white,
                 borderRadius: 24,
                 boxShadow: '0 8px 32px rgba(0, 0, 0, 0.08), 0 24px 64px rgba(0, 0, 0, 0.06), 0 0 0 1px rgba(0, 0, 0, 0.02)',
