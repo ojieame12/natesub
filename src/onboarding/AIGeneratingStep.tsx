@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { AlertCircle, Check, RefreshCw, Sparkles, Upload, Circle, CheckCircle2, Loader2 } from 'lucide-react'
 import { useOnboardingStore } from './store'
-import { useGeneratePerks, useGenerateBanner, uploadFile } from '../api/hooks'
+import { useGeneratePerks, useGenerateBanner, uploadFile, useAIConfig } from '../api/hooks'
 import { Button, Pressable } from './components'
 import { api } from '../api'
 import './onboarding.css'
@@ -14,6 +14,7 @@ type GenerationPhase =
   | 'finishing'
   | 'preview'  // Shows generated content for review
   | 'error'
+  | 'ai_unavailable'  // AI is disabled/unavailable
 
 const PHASE_MESSAGES: Record<GenerationPhase, string> = {
   starting: 'Getting ready...',
@@ -23,6 +24,7 @@ const PHASE_MESSAGES: Record<GenerationPhase, string> = {
   finishing: 'Almost ready...',
   preview: 'Review your page',
   error: 'Something went wrong',
+  ai_unavailable: 'AI is currently unavailable',
 }
 
 // Max 5 AI-generated banners per user (global limit, survives onboarding)
@@ -55,11 +57,14 @@ export default function AIGeneratingStep() {
   const [customBannerPreview, setCustomBannerPreview] = useState<string | null>(null)
   const [isUploadingCustom, setIsUploadingCustom] = useState(false)
   const [generationsRemaining, setGenerationsRemaining] = useState<number | null>(null)
+  const [saveWarning, setSaveWarning] = useState(false) // Show if backend save fails
   const hasStarted = useRef(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const generatePerksMutation = useGeneratePerks()
   const generateBannerMutation = useGenerateBanner()
+  const { data: aiConfig, isLoading: isLoadingAIConfig } = useAIConfig()
+  const isAIAvailable = aiConfig?.available ?? true // Default to true while loading
 
   const displayName = `${firstName} ${lastName}`.trim()
 
@@ -100,10 +105,21 @@ export default function AIGeneratingStep() {
   // If we have perks but no banner, still try to generate banner
   useEffect(() => {
     if (hasStarted.current) return
+
+    // Wait for AI config to load
+    if (isLoadingAIConfig) return
+
     hasStarted.current = true
 
     // Check if we need to generate anything
     const needsBanner = avatarUrl && bannerOptions.length === 0
+    const needsPerks = !hasPerks
+
+    // If AI is unavailable and we need perks, show unavailable state
+    if (!isAIAvailable && needsPerks) {
+      setPhase('ai_unavailable')
+      return
+    }
 
     // If we have perks but need banner, run generation for banner only
     if (hasPerks && needsBanner) {
@@ -119,7 +135,7 @@ export default function AIGeneratingStep() {
 
     // Otherwise, run full generation
     runGeneration()
-  }, [hasPerks, avatarUrl, bannerOptions.length])
+  }, [hasPerks, avatarUrl, bannerOptions.length, isLoadingAIConfig, isAIAvailable])
 
   const runGeneration = async () => {
     try {
@@ -161,13 +177,18 @@ export default function AIGeneratingStep() {
         }
 
         // Handle banner result (optional - failure is ok)
-        if (bannerResult.status === 'fulfilled' && bannerResult.value?.wasGenerated) {
+        if (bannerResult.status === 'fulfilled' && bannerResult.value?.bannerUrl) {
           const variant = bannerResult.value.variant || 'standard'
-          addBannerOption({ url: bannerResult.value.bannerUrl, variant })
+          // Add banner option even if it's a fallback to avatar (wasGenerated: false)
+          // This ensures users always have a banner option to select
+          addBannerOption({
+            url: bannerResult.value.bannerUrl,
+            variant: bannerResult.value.wasGenerated ? variant : 'fallback',
+          })
           generatedBanner = bannerResult.value.bannerUrl
           setSelectedBannerIndex(0)
-          // Track remaining generations from server
-          if (typeof bannerResult.value.generationsRemaining === 'number') {
+          // Track remaining generations from server (only for AI-generated banners)
+          if (bannerResult.value.wasGenerated && typeof bannerResult.value.generationsRemaining === 'number') {
             setGenerationsRemaining(bannerResult.value.generationsRemaining)
           }
         } else if (bannerResult.status === 'rejected') {
@@ -189,7 +210,10 @@ export default function AIGeneratingStep() {
           purpose: purpose || 'service',
           serviceDescription,
         },
-      }).catch(() => {})
+      }).catch((err) => {
+        console.warn('[onboarding] Failed to save AI-generated content:', err)
+        setSaveWarning(true)
+      })
 
       setPhase('finishing')
       await delay(150)
@@ -233,7 +257,10 @@ export default function AIGeneratingStep() {
             purpose: purpose || 'service',
             serviceDescription,
           },
-        }).catch(() => {})
+        }).catch((err) => {
+          console.warn('[onboarding] Failed to save regenerated banner:', err)
+          setSaveWarning(true)
+        })
       }
     } catch (err: any) {
       console.error('Banner regeneration failed:', err)
@@ -291,7 +318,10 @@ export default function AIGeneratingStep() {
           purpose: purpose || 'service',
           serviceDescription,
         },
-      }).catch(() => {})
+      }).catch((err) => {
+        console.warn('[onboarding] Failed to save custom banner:', err)
+        setSaveWarning(true)
+      })
     } catch (err) {
       console.error('Custom banner upload failed:', err)
       setError('Failed to upload banner. Please try again.')
@@ -343,9 +373,39 @@ export default function AIGeneratingStep() {
         purpose: purpose || 'service',
         serviceDescription,
       },
-    }).catch(() => {})
+    }).catch((err) => {
+      console.warn('[onboarding] Failed to save final selection:', err)
+      setSaveWarning(true)
+    })
 
     nextStep()
+  }
+
+  // AI Unavailable state - guide user to manual entry
+  if (phase === 'ai_unavailable') {
+    return (
+      <div className="onboarding">
+        <div className="onboarding-logo-header">
+          <img src="/logo.svg" alt="NatePay" />
+        </div>
+
+        <div className="ai-generating-container">
+          <div className="ai-generating-error">
+            <Sparkles size={48} style={{ opacity: 0.5 }} />
+            <h2>AI Generation Unavailable</h2>
+            <p>AI-powered content generation is temporarily unavailable. You can add your perks and banner manually.</p>
+            <div className="ai-generating-error-actions">
+              <Button variant="primary" size="lg" onClick={handleSkip}>
+                Continue to Review
+              </Button>
+              <Button variant="ghost" size="md" onClick={prevStep}>
+                Go Back
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   // Error state
@@ -394,6 +454,25 @@ export default function AIGeneratingStep() {
             <p>Review what we've created for you</p>
           </div>
 
+          {/* Warning if backend save failed */}
+          {saveWarning && (
+            <div className="ai-save-warning" style={{
+              background: '#FFF3CD',
+              border: '1px solid #FFECB5',
+              borderRadius: 8,
+              padding: '12px 16px',
+              marginBottom: 16,
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: 8,
+              fontSize: 14,
+              color: '#664D03',
+            }}>
+              <AlertCircle size={18} style={{ flexShrink: 0, marginTop: 1 }} />
+              <span>Your progress may not sync across devices. Complete setup on this device.</span>
+            </div>
+          )}
+
           <div className="step-body ai-preview">
             {/* Banner Section */}
             <div className="ai-preview-section">
@@ -418,7 +497,7 @@ export default function AIGeneratingStep() {
                     >
                       <img src={option.url} alt={`Banner option ${index + 1}`} />
                       <div className="ai-banner-option-label">
-                        {option.variant === 'artistic' ? 'Creative' : 'Professional'}
+                        {option.variant === 'fallback' ? 'Your Photo' : option.variant === 'artistic' ? 'Creative' : 'Professional'}
                       </div>
                       {selectedBannerIndex === index && (
                         <div className="ai-banner-option-check">

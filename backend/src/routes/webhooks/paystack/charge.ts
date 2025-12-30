@@ -7,6 +7,10 @@ import { withLock } from '../../../services/lock.js'
 import { encryptAuthorizationCode } from '../../../utils/encryption.js'
 import { addOneMonth, normalizeEmailAddress } from '../utils.js'
 import { invalidateAdminRevenueCache } from '../../../utils/cache.js'
+import { generateManageUrl } from '../../../utils/cancelToken.js'
+
+// Paystack dashboard URL (no token needed - creators log in with their Paystack credentials)
+const PAYSTACK_DASHBOARD_URL = 'https://dashboard.paystack.com'
 
 // Handle Paystack charge.success
 export async function handlePaystackChargeSuccess(data: any, eventId: string) {
@@ -333,7 +337,7 @@ export async function handlePaystackChargeSuccess(data: any, eventId: string) {
   // - Implement creator balance tracking and withhold from future settlements
   // - Use Paystack's dedicated refund API to refund from platform account
 
-  // Send notification email to creator
+  // Send notification email to creator with Paystack dashboard link
   const creator = await db.user.findUnique({
     where: { id: creatorId },
     include: { profile: { select: { displayName: true, username: true } } },
@@ -344,12 +348,17 @@ export async function handlePaystackChargeSuccess(data: any, eventId: string) {
       customer?.email || 'Someone',
       tierName,
       netCents, // Show creator their earnings
-      currency?.toUpperCase() || 'NGN'
+      currency?.toUpperCase() || 'NGN',
+      creatorId,
+      PAYSTACK_DASHBOARD_URL // Paystack creators use Paystack dashboard
     )
 
-    // Send confirmation email to subscriber with GROSS amount (what they paid)
-    if (customer?.email) {
+    // Send confirmation email to subscriber with manage page link
+    if (customer?.email && subscription) {
       try {
+        // Generate manage URL for our branded subscription management page
+        const manageUrl = generateManageUrl(subscription.id)
+
         await sendSubscriptionConfirmationEmail(
           customer.email,
           customer.first_name || customer.email.split('@')[0] || 'there',
@@ -357,7 +366,8 @@ export async function handlePaystackChargeSuccess(data: any, eventId: string) {
           creator.profile?.username || '',
           tierName,
           grossCents || amount,  // GROSS - what subscriber actually paid
-          currency?.toUpperCase() || 'NGN'
+          currency?.toUpperCase() || 'NGN',
+          manageUrl // Our branded subscription management page
         )
       } catch (emailErr) {
         console.error(`[paystack] Failed to send subscriber confirmation email:`, emailErr)

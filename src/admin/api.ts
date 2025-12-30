@@ -31,11 +31,16 @@ async function adminFetch<T>(path: string, options: FetchOptions = {}): Promise<
 // TYPES
 // ============================================
 
-/** Per-currency revenue breakdown */
+/** Per-currency revenue breakdown with FX metadata */
 export interface CurrencyRevenue {
   feeCents: number
   volumeCents: number
   paymentCount: number
+  // FX data
+  weightedExchangeRate: number | null
+  latestRateAt: string | null
+  usdEquivCents: number | null
+  missingFxCount: number
 }
 
 export interface DashboardStats {
@@ -65,6 +70,15 @@ export interface DashboardStats {
       thisMonthVolumeUsdCents: number
       hasEstimatedRates: boolean // True if any payments used backfilled rates
       estimatedPaymentCount: number
+      latestRateAt: string | null // For "rates as of X" subtext
+    }
+    // Adjustments for admin reconciliation
+    adjustments?: {
+      refundsUsdCents: number
+      refundsCount: number
+      disputesUsdCents: number
+      disputesCount: number
+      totalAdjustmentsUsdCents: number
     }
   }
   flags: { disputedPayments: number; failedPaymentsToday: number }

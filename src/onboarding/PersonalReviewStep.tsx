@@ -311,8 +311,8 @@ export default function PersonalReviewStep() {
                 setError('Please describe your service.')
                 return
             }
-            if (servicePerks.length !== 3) {
-                setError(`Please add ${3 - servicePerks.length} more perk${3 - servicePerks.length === 1 ? '' : 's'} (${servicePerks.length}/3).`)
+            if (servicePerks.length < 3) {
+                setError(`Please add ${3 - servicePerks.length} more perk${3 - servicePerks.length === 1 ? '' : 's'} (${servicePerks.length}/3 minimum).`)
                 return
             }
         }
@@ -478,7 +478,7 @@ export default function PersonalReviewStep() {
                     {isServiceMode && (
                         <div className="setup-card service-perks-card">
                             <div className="service-perks-header">
-                                <span className="service-perks-title">What subscribers get ({servicePerks.length}/3)</span>
+                                <span className="service-perks-title">What subscribers get ({servicePerks.length}{servicePerks.length < 3 ? '/3 min' : ''})</span>
                                 {isAIAvailable && (
                                     <Pressable
                                         className="service-perks-generate"
@@ -543,8 +543,8 @@ export default function PersonalReviewStep() {
                                 </div>
                             )}
 
-                            {/* Add perk manually (when < 3 perks) */}
-                            {servicePerks.length < 3 && (
+                            {/* Add perk manually (always show, max 5) */}
+                            {servicePerks.length < 5 && (
                                 isAddingPerk ? (
                                     <div className="service-perk-add-form">
                                         <input
@@ -582,7 +582,7 @@ export default function PersonalReviewStep() {
                                 <p className="service-perks-empty">
                                     {isAIAvailable
                                         ? 'Describe your service above, then Generate or add perks manually.'
-                                        : 'Add 3 perks that describe what subscribers will receive.'}
+                                        : 'Add at least 3 perks that describe what subscribers will receive.'}
                                 </p>
                             )}
                         </div>

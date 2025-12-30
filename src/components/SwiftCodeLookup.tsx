@@ -7,10 +7,17 @@
  */
 
 import { useState } from 'react'
-import { Copy, Check, ArrowRight, X, HelpCircle } from 'lucide-react'
+import { Copy, Check, ArrowRight, X, HelpCircle, Pencil } from 'lucide-react'
 import { Pressable } from './index'
 import { getBanksForCountry, getCountryName, type BankInfo } from '../utils/swiftCodes'
 import './SwiftCodeLookup.css'
+
+// Postal code guidance by country
+const POSTAL_CODE_HINTS: Record<string, { format: string; example: string; note?: string }> = {
+  NG: { format: '6 digits', example: '100001', note: 'Lagos Island' },
+  GH: { format: '2 letters + numbers', example: 'GA-123-4567', note: 'or just use GA for Accra' },
+  KE: { format: '5 digits', example: '00100', note: 'Nairobi GPO' },
+}
 
 interface SwiftCodeLookupProps {
   countryCode: string
@@ -24,6 +31,7 @@ export function SwiftCodeLookup({ countryCode, onContinue, onClose }: SwiftCodeL
 
   const banks = getBanksForCountry(countryCode)
   const countryName = getCountryName(countryCode)
+  const postalHint = POSTAL_CODE_HINTS[countryCode]
 
   const handleCopy = async () => {
     if (!selectedBank) return
@@ -106,6 +114,26 @@ export function SwiftCodeLookup({ countryCode, onContinue, onClose }: SwiftCodeL
             </div>
           </div>
         )}
+
+        {/* Postal code guidance */}
+        {postalHint && (
+          <div className="swift-postal">
+            <div className="swift-result-label">Your postal code:</div>
+            <p className="swift-postal-hint">
+              Stripe will also ask for your postal code. In {countryName}, use {postalHint.format}.
+            </p>
+            <div className="swift-postal-example">
+              Example: <strong>{postalHint.example}</strong>
+              {postalHint.note && <span className="swift-postal-note"> ({postalHint.note})</span>}
+            </div>
+          </div>
+        )}
+
+        {/* Write it down reminder */}
+        <div className="swift-reminder">
+          <Pencil size={16} />
+          <span>Write these down before continuing — you'll need them on the next screen.</span>
+        </div>
 
         <div className="swift-actions">
           <Pressable className="swift-continue-btn" onClick={onContinue}>

@@ -128,7 +128,7 @@ describe('PersonalReviewStep', () => {
       renderWithProviders(<PersonalReviewStep />)
 
       await waitFor(() => {
-        expect(screen.getByText(/Add 3 perks that describe what subscribers will receive/i)).toBeInTheDocument()
+        expect(screen.getByText(/Add at least 3 perks that describe what subscribers will receive/i)).toBeInTheDocument()
       })
     })
   })
@@ -149,13 +149,15 @@ describe('PersonalReviewStep', () => {
       })
     })
 
-    it('hides Add perk button when 3 perks exist', async () => {
+    it('hides Add perk button when 5 perks exist', async () => {
       useOnboardingStore.setState({
         purpose: 'service',
         servicePerks: [
           { id: 'perk-1', title: 'Perk 1', enabled: true },
           { id: 'perk-2', title: 'Perk 2', enabled: true },
           { id: 'perk-3', title: 'Perk 3', enabled: true },
+          { id: 'perk-4', title: 'Perk 4', enabled: true },
+          { id: 'perk-5', title: 'Perk 5', enabled: true },
         ],
       })
 

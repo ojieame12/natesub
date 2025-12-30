@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronLeft } from 'lucide-react'
+import { ChevronLeft, AlertCircle } from 'lucide-react'
 import { useOnboardingStore } from './store'
 import { Button, Pressable } from './components'
 import { getCurrencySymbol, getMinimumAmount } from '../utils/currency'
@@ -28,6 +28,7 @@ export default function ServiceDescriptionStep() {
 
   const [localDescription, setLocalDescription] = useState(serviceDescription)
   const [localPrice, setLocalPrice] = useState(String(singleAmount || ''))
+  const [saveWarning, setSaveWarning] = useState(false)
 
   // Rotate placeholder on mount
   const [placeholderIndex] = useState(() => Math.floor(Math.random() * PLACEHOLDER_EXAMPLES.length))
@@ -52,7 +53,7 @@ export default function ServiceDescriptionStep() {
     setPricing('single', [], priceNum)
 
     // Persist service description and price to backend for cross-device resume
-    // Silent fail - local store is primary, backend is for durability
+    // Local store is primary, backend is for durability
     // Include purpose redundantly to ensure backend knows this is service flow
     api.auth.saveOnboardingProgress({
       step: currentStep,
@@ -62,7 +63,10 @@ export default function ServiceDescriptionStep() {
         singleAmount: priceNum,
         purpose: 'service', // Redundant - ensures backend knows service flow
       },
-    }).catch(() => {})
+    }).catch((err) => {
+      console.warn('[onboarding] Failed to save service description:', err)
+      setSaveWarning(true) // Show warning so user knows to complete on this device
+    })
 
     nextStep()
   }
@@ -85,6 +89,24 @@ export default function ServiceDescriptionStep() {
       </div>
 
       <div className="onboarding-content">
+        {/* Save warning - shown if backend sync failed */}
+        {saveWarning && (
+          <div className="ai-save-warning" style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            padding: '10px 14px',
+            background: '#FEF3C7',
+            borderRadius: 10,
+            marginBottom: 16,
+            fontSize: 13,
+            color: '#92400E',
+          }}>
+            <AlertCircle size={18} />
+            <span>Your progress may not sync across devices. Complete setup on this device.</span>
+          </div>
+        )}
+
         <div className="step-header">
           <h1>Describe your service</h1>
           <p>

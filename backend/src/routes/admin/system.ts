@@ -336,7 +336,11 @@ system.get('/dashboard', async (c) => {
         disputedPayments,
         failedPaymentsToday,
         lastPayment,
-        lastProcessedWebhook
+        lastProcessedWebhook,
+        fxDataByCurrency,
+        refundsTotals,
+        disputesTotals,
+        missingFxByCurrency
       ] = await Promise.all([
         db.user.count({ where: { deletedAt: null } }),
         db.user.count({ where: { createdAt: { gte: startOfDay }, deletedAt: null } }),
@@ -394,6 +398,32 @@ system.get('/dashboard', async (c) => {
           where: { status: 'processed' },
           orderBy: { processedAt: 'desc' },
           select: { processedAt: true, provider: true, eventType: true }
+        }),
+        // Weighted FX rate data per currency: sum grossCents and reportingGrossCents for weighted avg
+        db.payment.groupBy({
+          by: ['currency'],
+          where: { status: 'succeeded', type: { in: ['recurring', 'one_time'] }, reportingGrossCents: { not: null } },
+          _sum: { grossCents: true, reportingGrossCents: true },
+          _max: { reportingRateTimestamp: true },
+          _count: true,
+        }),
+        // Refunds total (for annotation)
+        db.payment.aggregate({
+          where: { status: 'refunded', type: { in: ['recurring', 'one_time'] } },
+          _sum: { reportingGrossCents: true },
+          _count: true,
+        }),
+        // Chargebacks/disputes total
+        db.payment.aggregate({
+          where: { status: 'disputed', type: { in: ['recurring', 'one_time'] } },
+          _sum: { reportingGrossCents: true },
+          _count: true,
+        }),
+        // Payments missing FX data (for "—" display)
+        db.payment.groupBy({
+          by: ['currency'],
+          where: { status: 'succeeded', type: { in: ['recurring', 'one_time'] }, reportingGrossCents: null },
+          _count: true,
         })
       ])
 
@@ -401,25 +431,64 @@ system.get('/dashboard', async (c) => {
       const legacyTotalMap = new Map(legacyTotalByCurrency.map(c => [c.currency, c._sum.amountCents || 0]))
       const legacyThisMonthMap = new Map(legacyThisMonthByCurrency.map(c => [c.currency, c._sum.amountCents || 0]))
 
-      // Build per-currency breakdown, merging grossCents + legacy amountCents
-      const byCurrency: Record<string, { feeCents: number; volumeCents: number; paymentCount: number }> = {}
-      const thisMonthByCurrency: Record<string, { feeCents: number; volumeCents: number; paymentCount: number }> = {}
+      // Build weighted FX rate map: rate = SUM(grossCents) / SUM(reportingGrossCents)
+      // This gives the effective exchange rate weighted by transaction size
+      const fxRateMap = new Map<string, { weightedRate: number | null; latestRateAt: Date | null; usdCents: number }>(
+        fxDataByCurrency.map(c => {
+          const gross = c._sum.grossCents || 0
+          const usd = c._sum.reportingGrossCents || 0
+          // Weighted rate: local cents per USD cent
+          const weightedRate = usd > 0 ? gross / usd : null
+          return [c.currency, {
+            weightedRate,
+            latestRateAt: c._max.reportingRateTimestamp || null,
+            usdCents: usd
+          }]
+        })
+      )
+
+      // Map of currencies missing FX data (show "—" instead of fake rate)
+      const missingFxMap = new Map(missingFxByCurrency.map(c => [c.currency, c._count]))
+
+      // Build per-currency breakdown with FX metadata
+      type CurrencyData = {
+        feeCents: number
+        volumeCents: number
+        paymentCount: number
+        // FX data
+        weightedExchangeRate: number | null
+        latestRateAt: string | null
+        usdEquivCents: number | null
+        missingFxCount: number
+      }
+      const byCurrency: Record<string, CurrencyData> = {}
+      const thisMonthByCurrency: Record<string, CurrencyData> = {}
 
       for (const c of totalRevenueByCurrency) {
         const legacyVolume = legacyTotalMap.get(c.currency) || 0
+        const fxData = fxRateMap.get(c.currency)
         byCurrency[c.currency] = {
           feeCents: c._sum.feeCents || 0,
           volumeCents: (c._sum.grossCents || 0) + legacyVolume,
-          paymentCount: c._count
+          paymentCount: c._count,
+          weightedExchangeRate: fxData?.weightedRate || null,
+          latestRateAt: fxData?.latestRateAt?.toISOString() || null,
+          usdEquivCents: fxData?.usdCents || null,
+          missingFxCount: missingFxMap.get(c.currency) || 0
         }
       }
 
       for (const c of thisMonthRevenueByCurrency) {
         const legacyVolume = legacyThisMonthMap.get(c.currency) || 0
+        const fxData = fxRateMap.get(c.currency)
         thisMonthByCurrency[c.currency] = {
           feeCents: c._sum.feeCents || 0,
           volumeCents: (c._sum.grossCents || 0) + legacyVolume,
-          paymentCount: c._count
+          paymentCount: c._count,
+          weightedExchangeRate: fxData?.weightedRate || null,
+          latestRateAt: fxData?.latestRateAt?.toISOString() || null,
+          usdEquivCents: fxData?.usdCents || null,
+          missingFxCount: missingFxMap.get(c.currency) || 0
         }
       }
 
@@ -443,6 +512,19 @@ system.get('/dashboard', async (c) => {
       const totalVolumeUsdCents = reportingTotals._sum.reportingGrossCents || 0
       const thisMonthFeesUsdCents = reportingThisMonth._sum.reportingFeeCents || 0
       const thisMonthVolumeUsdCents = reportingThisMonth._sum.reportingGrossCents || 0
+
+      // Find the most recent rate timestamp across all currencies (for "rates as of X")
+      const latestRateDate = Object.values(byCurrency)
+        .map(c => c.latestRateAt)
+        .filter((d): d is string => d !== null)
+        .sort()
+        .pop() || null
+
+      // Refunds and disputes (for admin reconciliation)
+      const refundsUsdCents = refundsTotals._sum.reportingGrossCents || 0
+      const refundsCount = refundsTotals._count || 0
+      const disputesUsdCents = disputesTotals._sum.reportingGrossCents || 0
+      const disputesCount = disputesTotals._count || 0
 
       return {
         users: { total: totalUsers, newToday: newUsersToday, newThisMonth: newUsersThisMonth },
@@ -472,6 +554,16 @@ system.get('/dashboard', async (c) => {
             // Flag if any payments have estimated rates (backfilled with current rate)
             hasEstimatedRates: estimatedCount > 0,
             estimatedPaymentCount: estimatedCount,
+            // Latest rate date for "rates as of X" subtext
+            latestRateAt: latestRateDate,
+          },
+          // Adjustments (for admin reconciliation annotations)
+          adjustments: {
+            refundsUsdCents,
+            refundsCount,
+            disputesUsdCents,
+            disputesCount,
+            totalAdjustmentsUsdCents: refundsUsdCents + disputesUsdCents,
           }
         },
         flags: { disputedPayments, failedPaymentsToday },

@@ -829,6 +829,8 @@ enum SystemLogType {
   admin_action
   admin_read
   admin_export
+  // Subscription events (cancel, update, manage page views)
+  subscription_event
 }
 
 enum SystemLogLevel {

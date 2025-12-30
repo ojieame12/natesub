@@ -55,6 +55,8 @@ const Terms = lazy(() => import('./legal/Terms'))
 const Privacy = lazy(() => import('./legal/Privacy'))
 const Unsubscribe = lazy(() => import('./Unsubscribe'))
 const CancelSubscription = lazy(() => import('./CancelSubscription'))
+const ManageSubscription = lazy(() => import('./subscription/ManageSubscription'))
+const SubscriberPortal = lazy(() => import('./subscriber/SubscriberPortal'))
 const MySubscriptions = lazy(() => import('./MySubscriptions'))
 const Analytics = lazy(() => import('./Analytics'))
 const NotFound = lazy(() => import('./NotFound'))
@@ -90,6 +92,8 @@ function isPublicRoute(pathname: string): boolean {
     pathname.startsWith('/onboarding/') ||
     pathname.startsWith('/r/') || // Public request pages
     pathname.startsWith('/verify/') || // Payroll verification pages
+    pathname.startsWith('/subscription/manage/') || // Public subscription management
+    pathname === '/subscriptions' || // Public subscriber portal
     isPublicCreatorPage(pathname)
   )
 }
@@ -572,6 +576,10 @@ function AppShell() {
           <Route path="/unsubscribe" element={<Unsubscribe />} />
           {/* 1-click subscription cancellation via signed token (Visa VAMP compliance) */}
           <Route path="/unsubscribe/:token" element={<CancelSubscription />} />
+          {/* Public subscription management page (token-based, no auth required) */}
+          <Route path="/subscription/manage/:token" element={<ManageSubscription />} />
+          {/* Public subscriber portal (email + OTP auth) */}
+          <Route path="/subscriptions" element={<SubscriberPortal />} />
           <Route path="/my-subscriptions" element={<RequireAuth><MySubscriptions /></RequireAuth>} />
 
           {/* Public Request Pages - for payment/subscription requests */}

@@ -212,7 +212,7 @@ export function sleep(ms: number): Promise<void> {
 // STATUS BADGES
 // ============================================
 
-export type StatusBadgeType = 'success' | 'warning' | 'error' | 'info' | 'reminder'
+export type StatusBadgeType = 'success' | 'warning' | 'error' | 'info' | 'reminder' | 'action'
 
 export function statusBadge(text: string, type: StatusBadgeType = 'info'): string {
   const styles: Record<StatusBadgeType, { bg: string; text: string; border: string }> = {
@@ -221,6 +221,7 @@ export function statusBadge(text: string, type: StatusBadgeType = 'info'): strin
     error: { bg: COLORS.errorBg, text: COLORS.errorText, border: COLORS.error },
     info: { bg: COLORS.infoBg, text: COLORS.infoText, border: COLORS.info },
     reminder: { bg: '#FFF7ED', text: '#C2410C', border: COLORS.brand },
+    action: { bg: '#FEF2F2', text: '#991B1B', border: '#EF4444' },  // Red-tinted for action required
   }
   const s = styles[type]
 

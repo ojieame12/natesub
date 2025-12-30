@@ -1,13 +1,17 @@
 /**
  * Overview - Admin dashboard home with KPIs and quick actions
  * Uses single dashboard endpoint for all metrics (3 → 2 API calls)
+ *
+ * Design: USD-primary display with collapsible currency breakdown
  */
 
-import { useAdminDashboard, useAdminActivity, type CurrencyRevenue } from '../api'
+import { useState } from 'react'
+import { useAdminDashboard, useAdminActivity } from '../api'
 import { formatCurrency, formatNumber } from '../utils/format'
 import StatCard from '../components/StatCard'
 import { Link } from 'react-router-dom'
 import { SkeletonList } from '../../components/Skeleton'
+import { ChevronDown, ChevronUp } from 'lucide-react'
 
 function timeAgo(date: string): string {
   const seconds = Math.floor((Date.now() - new Date(date).getTime()) / 1000)
@@ -17,49 +21,30 @@ function timeAgo(date: string): string {
   return `${Math.floor(seconds / 86400)}d ago`
 }
 
-/** Format revenue with currency awareness */
-function formatRevenue(
-  byCurrency: Record<string, CurrencyRevenue> | undefined,
-  field: 'feeCents' | 'volumeCents',
-  currencies: string[] | undefined
-): string {
-  if (!byCurrency || !currencies || currencies.length === 0) return '---'
-
-  // Single currency: format with correct symbol
-  if (currencies.length === 1) {
-    const currency = currencies[0]
-    return formatCurrency(byCurrency[currency]?.[field] || 0, currency)
-  }
-
-  // Multiple currencies: show each one
-  return currencies
-    .map(c => formatCurrency(byCurrency[c]?.[field] || 0, c))
-    .join(' + ')
+/** Format exchange rate for display (e.g., "1 USD = ₦1,450") */
+function formatExchangeRate(rate: number | null, currency: string): string {
+  if (!rate || currency === 'USD') return '—'
+  // Rate is stored as local currency per USD cent (so multiply by 100 for dollars)
+  const symbol = currency === 'NGN' ? '₦' : currency === 'KES' ? 'KSh' : currency === 'GHS' ? '₵' : currency === 'ZAR' ? 'R' : currency
+  return `1 USD = ${symbol}${formatNumber(Math.round(rate))}`
 }
 
-/** Get subtext for multi-currency display with optional USD equivalent */
-function getRevenueSubtext(
-  byCurrency: Record<string, CurrencyRevenue> | undefined,
-  isMultiCurrency: boolean | undefined,
-  paymentCount: number | undefined,
-  usdEquivalentCents?: number
-): string | undefined {
-  if (!byCurrency) return undefined
-  if (isMultiCurrency && usdEquivalentCents) {
-    return `≈ ${formatCurrency(usdEquivalentCents, 'USD')} · ${formatNumber(paymentCount || 0)} payments`
-  }
-  if (isMultiCurrency) {
-    return `${formatNumber(paymentCount || 0)} payments (multiple currencies)`
-  }
-  return `${formatNumber(paymentCount || 0)} payments`
+/** Format date as "Dec 18" */
+function formatShortDate(dateStr: string | null): string {
+  if (!dateStr) return 'unknown'
+  const date = new Date(dateStr)
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
 export default function Overview() {
   const { data: dashboard, isLoading: dashboardLoading, error: dashboardError, refetch: refetchDashboard } = useAdminDashboard()
   const { data: activityData, isLoading: activityLoading, refetch: refetchActivity } = useAdminActivity({ limit: 10 })
+  const [showCurrencyBreakdown, setShowCurrencyBreakdown] = useState(false)
 
   const loading = dashboardLoading
   const freshness = dashboard?.freshness
+  const revenue = dashboard?.revenue
+  const usd = revenue?.usdEquivalent
 
   const handleRefresh = () => {
     refetchDashboard()
@@ -79,6 +64,20 @@ export default function Overview() {
         </button>
       </div>
     )
+  }
+
+  // Get currency count for subtext
+  const mtdCurrencyCount = revenue?.thisMonthCurrencies?.length || 0
+  const allTimeCurrencyCount = revenue?.currencies?.length || 0
+  const latestRateAt = usd?.latestRateAt
+  const adjustments = revenue?.adjustments
+
+  // Build subtext: "X payments · Y currencies · rates as of Dec 18"
+  const buildSubtext = (count: number, currencyCount: number, showRates = false): string => {
+    const parts = [`${formatNumber(count)} payments`]
+    if (currencyCount > 1) parts.push(`${currencyCount} currencies`)
+    if (showRates && latestRateAt && currencyCount > 1) parts.push(`rates as of ${formatShortDate(latestRateAt)}`)
+    return parts.join(' · ')
   }
 
   return (
@@ -102,21 +101,19 @@ export default function Overview() {
         </p>
       )}
 
-      {/* KPI Cards */}
+      {/* KPI Cards - Always show USD equivalent as primary */}
       <div className="admin-stats-grid">
         <StatCard
           label="Platform Revenue (MTD)"
-          value={formatRevenue(dashboard?.revenue.thisMonthByCurrency, 'feeCents', dashboard?.revenue.thisMonthCurrencies)}
-          subtext={getRevenueSubtext(dashboard?.revenue.thisMonthByCurrency, dashboard?.revenue.isThisMonthMultiCurrency, dashboard?.revenue.thisMonthPaymentCount, dashboard?.revenue.usdEquivalent?.thisMonthFeesUsdCents)}
+          value={usd ? formatCurrency(usd.thisMonthFeesUsdCents, 'USD') : '---'}
+          subtext={buildSubtext(revenue?.thisMonthPaymentCount || 0, mtdCurrencyCount, true)}
           variant="success"
           loading={loading}
         />
         <StatCard
           label="Volume Processed (MTD)"
-          value={formatRevenue(dashboard?.revenue.thisMonthByCurrency, 'volumeCents', dashboard?.revenue.thisMonthCurrencies)}
-          subtext={dashboard?.revenue.isThisMonthMultiCurrency && dashboard?.revenue.usdEquivalent
-            ? `≈ ${formatCurrency(dashboard.revenue.usdEquivalent.thisMonthVolumeUsdCents, 'USD')}`
-            : 'Total subscriber payments'}
+          value={usd ? formatCurrency(usd.thisMonthVolumeUsdCents, 'USD') : '---'}
+          subtext={buildSubtext(revenue?.thisMonthPaymentCount || 0, mtdCurrencyCount)}
           loading={loading}
         />
         <StatCard
@@ -144,76 +141,125 @@ export default function Overview() {
         />
       </div>
 
-      {/* Revenue Summary */}
+      {/* All Time Revenue - Simple USD display */}
       <div className="admin-section">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <h2 className="admin-section-title" style={{ margin: 0 }}>Revenue Summary</h2>
+          <h2 className="admin-section-title" style={{ margin: 0 }}>All Time</h2>
           <Link to="/admin/revenue" style={{ fontSize: 13, color: 'var(--accent-primary)' }}>View detailed breakdown →</Link>
         </div>
-        <div className="admin-stats-grid">
+        <div className="admin-stats-grid" style={{ gridTemplateColumns: 'repeat(2, 1fr)' }}>
           <StatCard
-            label="All Time Platform Revenue"
-            value={formatRevenue(dashboard?.revenue.byCurrency, 'feeCents', dashboard?.revenue.currencies)}
-            subtext={getRevenueSubtext(dashboard?.revenue.byCurrency, dashboard?.revenue.isMultiCurrency, dashboard?.revenue.paymentCount, dashboard?.revenue.usdEquivalent?.totalFeesUsdCents)}
+            label="Total Platform Revenue"
+            value={usd ? formatCurrency(usd.totalFeesUsdCents, 'USD') : '---'}
+            subtext={buildSubtext(revenue?.paymentCount || 0, allTimeCurrencyCount, true) +
+              (adjustments?.totalAdjustmentsUsdCents ? ' · gross' : '')}
             loading={loading}
           />
           <StatCard
-            label="All Time Volume"
-            value={formatRevenue(dashboard?.revenue.byCurrency, 'volumeCents', dashboard?.revenue.currencies)}
-            subtext={dashboard?.revenue.isMultiCurrency && dashboard?.revenue.usdEquivalent
-              ? `≈ ${formatCurrency(dashboard.revenue.usdEquivalent.totalVolumeUsdCents, 'USD')}`
-              : 'Total processed'}
+            label="Total Volume Processed"
+            value={usd ? formatCurrency(usd.totalVolumeUsdCents, 'USD') : '---'}
+            subtext={allTimeCurrencyCount > 1 ? 'gross · converted at historical rates' : 'gross subscriber payments'}
             loading={loading}
           />
         </div>
 
-        {/* Per-currency breakdown when multi-currency */}
-        {dashboard?.revenue.isMultiCurrency && (
-          <div style={{ marginTop: 16 }}>
-            <h3 style={{ fontSize: 14, fontWeight: 500, marginBottom: 8, color: 'var(--text-secondary)' }}>By Currency</h3>
-            <div className="admin-table-container">
-              <table className="admin-table" style={{ fontSize: 13 }}>
-                <thead>
-                  <tr>
-                    <th>Currency</th>
-                    <th style={{ textAlign: 'right' }}>Platform Fees</th>
-                    <th style={{ textAlign: 'right' }}>Volume</th>
-                    <th style={{ textAlign: 'right' }}>Payments</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {dashboard.revenue.currencies.map(currency => {
-                    const data = dashboard.revenue.byCurrency[currency]
-                    return (
-                      <tr key={currency}>
-                        <td>{currency}</td>
-                        <td style={{ textAlign: 'right' }}>{formatCurrency(data?.feeCents || 0, currency)}</td>
-                        <td style={{ textAlign: 'right' }}>{formatCurrency(data?.volumeCents || 0, currency)}</td>
-                        <td style={{ textAlign: 'right' }}>{formatNumber(data?.paymentCount || 0)}</td>
-                      </tr>
-                    )
-                  })}
-                  {/* USD equivalent total row */}
-                  {dashboard.revenue.usdEquivalent && (
-                    <tr style={{ borderTop: '2px solid var(--border-secondary)', fontWeight: 500 }}>
-                      <td>≈ USD Total</td>
-                      <td style={{ textAlign: 'right' }}>{formatCurrency(dashboard.revenue.usdEquivalent.totalFeesUsdCents, 'USD')}</td>
-                      <td style={{ textAlign: 'right' }}>{formatCurrency(dashboard.revenue.usdEquivalent.totalVolumeUsdCents, 'USD')}</td>
-                      <td style={{ textAlign: 'right' }}>{formatNumber(dashboard.revenue.paymentCount)}</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-            {/* Estimated rates note */}
-            {dashboard.revenue.usdEquivalent?.hasEstimatedRates && (
-              <p style={{ fontSize: 11, color: 'var(--text-warning, #f59e0b)', marginTop: 8 }}>
-                {dashboard.revenue.usdEquivalent.estimatedPaymentCount} payment(s) use estimated FX rates (backfilled)
-              </p>
-            )}
+        {/* Adjustments annotation (refunds/disputes) - shown separately from gross totals */}
+        {adjustments && adjustments.totalAdjustmentsUsdCents > 0 && (
+          <div style={{ marginTop: 12, padding: '8px 12px', background: 'var(--bg-secondary, #f9fafb)', borderRadius: 6, fontSize: 13 }}>
+            <span style={{ color: 'var(--text-secondary)' }}>Adjustments (not in totals above): </span>
+            <span style={{ color: 'var(--text-primary)' }}>
+              {formatCurrency(adjustments.refundsUsdCents, 'USD')} refunded ({adjustments.refundsCount})
+              {adjustments.disputesCount > 0 && `, ${formatCurrency(adjustments.disputesUsdCents, 'USD')} disputed (${adjustments.disputesCount})`}
+            </span>
+            <span style={{ color: 'var(--text-tertiary)', marginLeft: 8 }}>
+              · Net: {formatCurrency((usd?.totalFeesUsdCents || 0) - adjustments.totalAdjustmentsUsdCents, 'USD')}
+            </span>
           </div>
         )}
       </div>
+
+      {/* Collapsible Currency Breakdown - only show if multi-currency */}
+      {revenue?.isMultiCurrency && (
+        <div className="admin-section" style={{ paddingTop: 0 }}>
+          <button
+            onClick={() => setShowCurrencyBreakdown(!showCurrencyBreakdown)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              background: 'none',
+              border: 'none',
+              padding: '8px 0',
+              cursor: 'pointer',
+              fontSize: 14,
+              fontWeight: 500,
+              color: 'var(--text-secondary)',
+            }}
+          >
+            {showCurrencyBreakdown ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            Currency Breakdown
+          </button>
+
+          {showCurrencyBreakdown && (
+            <div style={{ marginTop: 8 }}>
+              <div className="admin-table-container">
+                <table className="admin-table" style={{ fontSize: 13 }}>
+                  <thead>
+                    <tr>
+                      <th>Currency</th>
+                      <th style={{ textAlign: 'right' }}>Original Amount</th>
+                      <th style={{ textAlign: 'right' }}>USD Equiv</th>
+                      <th>Weighted Rate</th>
+                      <th style={{ textAlign: 'right' }}>Payments</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {revenue.currencies.map(currency => {
+                      const data = revenue.byCurrency[currency]
+                      const hasFxData = data?.weightedExchangeRate !== null
+                      // Use stored USD equivalent, or show "—" if missing
+                      const usdEquiv = currency === 'USD' ? data?.feeCents : data?.usdEquivCents
+                      return (
+                        <tr key={currency}>
+                          <td style={{ fontWeight: 500 }}>{currency}</td>
+                          <td style={{ textAlign: 'right' }}>{formatCurrency(data?.feeCents || 0, currency)}</td>
+                          <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>
+                            {currency === 'USD' ? '—' : (hasFxData ? formatCurrency(usdEquiv || 0, 'USD') : '—')}
+                          </td>
+                          <td style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>
+                            {hasFxData ? formatExchangeRate(data?.weightedExchangeRate || null, currency) : '—'}
+                            {data?.missingFxCount ? ` (${data.missingFxCount} missing)` : ''}
+                          </td>
+                          <td style={{ textAlign: 'right' }}>{formatNumber(data?.paymentCount || 0)}</td>
+                        </tr>
+                      )
+                    })}
+                    {/* Total row */}
+                    <tr style={{ borderTop: '2px solid var(--border-secondary)', fontWeight: 600 }}>
+                      <td>Total (USD)</td>
+                      <td style={{ textAlign: 'right' }}>—</td>
+                      <td style={{ textAlign: 'right' }}>{formatCurrency(usd?.totalFeesUsdCents || 0, 'USD')}</td>
+                      <td></td>
+                      <td style={{ textAlign: 'right' }}>{formatNumber(revenue.paymentCount)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              {/* Notes about data quality */}
+              {usd?.hasEstimatedRates && (
+                <p style={{ fontSize: 11, color: 'var(--text-warning, #f59e0b)', marginTop: 8 }}>
+                  {usd.estimatedPaymentCount} payment(s) use estimated FX rates (backfilled)
+                </p>
+              )}
+              {latestRateAt && (
+                <p style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 4 }}>
+                  Rates are weighted averages by transaction volume · Last rate: {formatShortDate(latestRateAt)}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Quick Links */}
       <div className="admin-section">

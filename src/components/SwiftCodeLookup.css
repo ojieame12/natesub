@@ -176,6 +176,54 @@
   opacity: 0.9;
 }
 
+.swift-postal {
+  background: var(--neutral-50);
+  border-radius: var(--radius-lg);
+  padding: var(--space-md);
+  margin-bottom: var(--space-md);
+}
+
+.swift-postal-hint {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin: var(--space-xs) 0;
+  line-height: 1.4;
+}
+
+.swift-postal-example {
+  font-size: 15px;
+  color: var(--text-primary);
+  margin-top: var(--space-sm);
+}
+
+.swift-postal-example strong {
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.swift-postal-note {
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+
+.swift-reminder {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  background: #FEF3C7;
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--space-lg);
+  font-size: 14px;
+  color: #92400E;
+  line-height: 1.4;
+}
+
+.swift-reminder svg {
+  flex-shrink: 0;
+}
+
 .swift-footer {
   font-size: 13px;
   color: var(--text-tertiary);

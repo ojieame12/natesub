@@ -12,7 +12,8 @@ import { createSubscriberPortalSession, cancelSubscription, reactivateSubscripti
 import { sendCancellationConfirmationEmail } from '../services/email.js'
 import { env } from '../config/env.js'
 import { centsToDisplayAmount } from '../utils/currency.js'
-import { validateCancelToken } from '../utils/cancelToken.js'
+import { validateCancelToken, validatePortalToken, validateExpressDashboardToken } from '../utils/cancelToken.js'
+import { createExpressDashboardLink } from '../services/stripe.js'
 
 const mySubscriptions = new Hono()
 
@@ -655,6 +656,89 @@ mySubscriptions.post(
         error: 'Failed to cancel subscription. Please try again or contact support.',
         code: 'CANCEL_FAILED',
       }, 500)
+    }
+  }
+)
+
+// ============================================
+// PUBLIC PORTAL ENDPOINT (No Auth Required)
+// ============================================
+// Direct access to Stripe Customer Portal via signed token
+// Used in subscription confirmation emails for frictionless management
+
+// GET /manage/:token - Redirect directly to Stripe Customer Portal
+mySubscriptions.get(
+  '/manage/:token',
+  publicRateLimit,
+  async (c) => {
+    const { token } = c.req.param()
+
+    const decoded = validatePortalToken(token)
+    if (!decoded) {
+      // Invalid token - redirect to app with error
+      return c.redirect(`${env.APP_URL}?error=invalid_manage_link`)
+    }
+
+    const { stripeCustomerId, subscriptionId } = decoded
+
+    // Look up subscription for return URL context
+    const subscription = await db.subscription.findUnique({
+      where: { id: subscriptionId },
+      include: {
+        creator: {
+          select: {
+            profile: { select: { username: true } },
+          },
+        },
+      },
+    })
+
+    // Determine return URL (creator's page or app homepage)
+    const returnUrl = subscription?.creator.profile?.username
+      ? `${env.APP_URL}/${subscription.creator.profile.username}`
+      : env.APP_URL
+
+    try {
+      // Create Stripe Customer Portal session and redirect
+      const { url } = await createSubscriberPortalSession(stripeCustomerId, returnUrl)
+      return c.redirect(url)
+    } catch (err: any) {
+      console.error(`[my-subscriptions] Failed to create portal session for token:`, err)
+      // Redirect to app with error
+      return c.redirect(`${env.APP_URL}?error=portal_unavailable`)
+    }
+  }
+)
+
+// ============================================
+// PUBLIC EXPRESS DASHBOARD ENDPOINT (No Auth Required)
+// ============================================
+// Direct access to Stripe Express Dashboard via signed token
+// Used in creator notification emails (new subscriber, payout, etc.)
+
+// GET /express-dashboard/:token - Redirect directly to Stripe Express Dashboard
+mySubscriptions.get(
+  '/express-dashboard/:token',
+  publicRateLimit,
+  async (c) => {
+    const { token } = c.req.param()
+
+    const decoded = validateExpressDashboardToken(token)
+    if (!decoded) {
+      // Invalid token - redirect to app with error
+      return c.redirect(`${env.APP_URL}?error=invalid_dashboard_link`)
+    }
+
+    const { stripeAccountId } = decoded
+
+    try {
+      // Create fresh Stripe Express login link and redirect
+      const url = await createExpressDashboardLink(stripeAccountId)
+      return c.redirect(url)
+    } catch (err: any) {
+      console.error(`[my-subscriptions] Failed to create Express dashboard link:`, err)
+      // Redirect to app with error
+      return c.redirect(`${env.APP_URL}?error=dashboard_unavailable`)
     }
   }
 )

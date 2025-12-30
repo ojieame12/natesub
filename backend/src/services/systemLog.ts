@@ -349,3 +349,41 @@ export async function logPayoutFailed(params: {
     errorMessage: params.error,
   })
 }
+
+// ============================================
+// SUBSCRIPTION EVENT LOGGING
+// ============================================
+
+/**
+ * Log subscription events for audit and analytics
+ * Events: cancel, update_payment, view_manage_page
+ */
+export async function logSubscriptionEvent(params: {
+  event: 'cancel' | 'update_payment' | 'view_manage' | 'portal_redirect'
+  subscriptionId: string
+  subscriberId?: string
+  creatorId: string
+  provider?: string
+  reason?: string
+  source?: string
+  ip?: string
+  userAgent?: string
+}): Promise<void> {
+  await logSystem({
+    type: 'subscription_event',
+    level: 'info',
+    userId: params.creatorId,
+    entityType: 'subscription',
+    entityId: params.subscriptionId,
+    message: `Subscription ${params.event}: ${params.subscriptionId}`,
+    metadata: {
+      event: params.event,
+      subscriberId: params.subscriberId,
+      provider: params.provider,
+      reason: params.reason,
+      source: params.source,
+      ip: params.ip,
+      userAgent: params.userAgent,
+    },
+  })
+}

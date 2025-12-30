@@ -177,7 +177,7 @@ export interface ServicePerk {
 // Banner option with variant label
 export interface BannerOption {
     url: string
-    variant: 'standard' | 'artistic'
+    variant: 'standard' | 'artistic' | 'fallback'  // fallback = avatar used when AI unavailable
 }
 
 
@@ -226,7 +226,7 @@ interface OnboardingStore {
     serviceDescription: string  // Description for perk generation
     servicePerks: ServicePerk[] // AI-generated perks (always 3)
     bannerUrl: string | null    // Selected/final banner
-    bannerOptions: BannerOption[] // AI-generated banner options (max 2, with variant info)
+    bannerOptions: BannerOption[] // AI-generated banner options (max 5, with variant info)
 
     // Payment provider
     paymentProvider: PaymentProvider
@@ -254,7 +254,7 @@ interface OnboardingStore {
     setServiceDescription: (description: string) => void
     setServicePerks: (perks: ServicePerk[]) => void
     setBannerUrl: (url: string | null) => void
-    addBannerOption: (option: BannerOption) => void  // Add to bannerOptions (max 2)
+    addBannerOption: (option: BannerOption) => void  // Add to bannerOptions (max 5)
     clearBannerOptions: () => void          // Reset banner options
     setPaymentProvider: (provider: PaymentProvider) => void
     setFeeMode: (mode: FeeMode) => void
@@ -353,9 +353,9 @@ export const useOnboardingStore = create<OnboardingStore>()(
             setServicePerks: (servicePerks) => set({ servicePerks }),
             setBannerUrl: (bannerUrl) => set({ bannerUrl }),
             addBannerOption: (option) => set((state) => ({
-                bannerOptions: state.bannerOptions.length < 2
+                bannerOptions: state.bannerOptions.length < 5
                     ? [...state.bannerOptions, option]
-                    : state.bannerOptions, // Don't add more than 2
+                    : state.bannerOptions, // Don't add more than 5
             })),
             clearBannerOptions: () => set({ bannerOptions: [], bannerUrl: null }),
 

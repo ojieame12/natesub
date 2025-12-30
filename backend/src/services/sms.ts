@@ -110,8 +110,8 @@ export async function sendRequestReminderSms(
   isUrgent: boolean = false
 ): Promise<void> {
   const message = isUrgent
-    ? `REMINDER: ${senderName} is waiting for your response. This request expires soon. Open NatePay to respond.`
-    : `${senderName} sent you a payment request on NatePay. Tap to view and respond.`
+    ? `REMINDER: ${senderName} is waiting for your response. This request expires soon. Tap to respond.`
+    : `${senderName} sent you a payment request. Tap to view and respond.`
 
   await sendBirdMessage(to, message)
 }
@@ -126,7 +126,7 @@ export async function sendInvoiceDueSms(
   const formattedAmount = formatAmount(amount, currency)
   const urgency = daysUntilDue === 1 ? 'tomorrow' : `in ${daysUntilDue} days`
 
-  const message = `Invoice from ${senderName} for ${formattedAmount} is due ${urgency}. Pay now on NatePay to avoid late fees.`
+  const message = `Invoice from ${senderName} for ${formattedAmount} is due ${urgency}. Tap to pay now.`
 
   await sendBirdMessage(to, message)
 }
@@ -140,7 +140,7 @@ export async function sendInvoiceOverdueSms(
 ): Promise<void> {
   const formattedAmount = formatAmount(amount, currency)
 
-  const message = `OVERDUE: Your invoice from ${senderName} for ${formattedAmount} is ${daysOverdue} day${daysOverdue > 1 ? 's' : ''} past due. Pay now on NatePay.`
+  const message = `OVERDUE: Invoice from ${senderName} for ${formattedAmount} is ${daysOverdue} day${daysOverdue > 1 ? 's' : ''} past due. Tap to pay.`
 
   await sendBirdMessage(to, message)
 }
@@ -153,7 +153,7 @@ export async function sendPayoutCompletedSms(
 ): Promise<void> {
   const formattedAmount = formatAmount(amount, currency)
 
-  const message = `${formattedAmount} has been sent to your bank account. Funds arrive within 1-2 business days. - NatePay`
+  const message = `${formattedAmount} has been sent to your bank account. Funds arrive within 1-2 business days.`
 
   await sendBirdMessage(to, message)
 }
@@ -165,7 +165,7 @@ export async function sendPayoutFailedSms(
 ): Promise<void> {
   const formattedAmount = formatAmount(amount, currency)
 
-  const message = `Payout of ${formattedAmount} failed. Please check your bank details in NatePay settings. We'll retry automatically.`
+  const message = `Payout of ${formattedAmount} failed. Please check your bank details in settings. We'll retry automatically.`
 
   await sendBirdMessage(to, message)
 }
@@ -179,7 +179,7 @@ export async function sendPaymentReceivedSms(
 ): Promise<void> {
   const formattedAmount = formatAmount(amount, currency)
 
-  const message = `You received ${formattedAmount} from ${subscriberName} on NatePay!`
+  const message = `You received ${formattedAmount} from ${subscriberName}!`
 
   await sendBirdMessage(to, message)
 }
@@ -193,7 +193,7 @@ export async function sendRenewalReminderSms(
 ): Promise<void> {
   const formattedAmount = formatAmount(amount, currency)
 
-  const message = `Your ${formattedAmount} subscription to ${creatorName} renews in 3 days. Manage it in NatePay settings.`
+  const message = `Your ${formattedAmount} subscription to ${creatorName} renews in 3 days. Tap to manage.`
 
   await sendBirdMessage(to, message)
 }
@@ -203,7 +203,7 @@ export async function sendPaymentFailedSms(
   to: string,
   creatorName: string
 ): Promise<void> {
-  const message = `Payment failed for your subscription to ${creatorName}. Update your payment method in NatePay to continue.`
+  const message = `Payment failed for your subscription to ${creatorName}. Update your payment method to continue.`
 
   await sendBirdMessage(to, message)
 }
@@ -216,7 +216,7 @@ export async function sendBankSetupReminderSms(
 ): Promise<void> {
   const formattedAmount = formatAmount(pendingAmount, currency)
 
-  const message = `You have ${formattedAmount} waiting! Add your bank details in NatePay to receive your earnings.`
+  const message = `You have ${formattedAmount} waiting! Add your bank details to receive your earnings.`
 
   await sendBirdMessage(to, message)
 }
@@ -226,7 +226,7 @@ export async function sendVerificationSms(
   to: string,
   code: string
 ): Promise<void> {
-  const message = `Your NatePay verification code is: ${code}. Valid for 15 minutes. Don't share this code.`
+  const message = `Your verification code is: ${code}. Valid for 15 minutes. Don't share this code.`
 
   await sendBirdMessage(to, message)
 }

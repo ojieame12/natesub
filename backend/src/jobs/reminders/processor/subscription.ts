@@ -19,7 +19,7 @@ import {
 import { calculateServiceFee, calculateLegacyServiceFee } from '../../../services/fees.js'
 import { isStripeCrossBorderSupported } from '../../../utils/constants.js'
 import { decryptAccountNumber } from '../../../utils/encryption.js'
-import { generateCancelUrl } from '../../../utils/cancelToken.js'
+import { generateCancelUrl, generateManageUrl } from '../../../utils/cancelToken.js'
 
 export async function processSubscriptionRenewalReminder(
   subscriptionId: string,
@@ -90,13 +90,17 @@ export async function processSubscriptionRenewalReminder(
   // Generate signed cancel URL for 1-click cancellation without login
   const cancelUrl = generateCancelUrl(subscriptionId)
 
+  // Generate manage URL for our branded subscription management page
+  const manageUrl = generateManageUrl(subscriptionId)
+
   await sendRenewalReminderEmail(
     subscription.subscriber.email,
     providerName,
     chargeAmount,
     subscription.currency,
     renewalDate,
-    cancelUrl
+    cancelUrl,
+    manageUrl
   )
 
   return true
@@ -159,12 +163,16 @@ export async function processSubscriptionPaymentFailedReminder(
     chargeAmount = baseAmount
   }
 
+  // Generate manage URL for our branded subscription management page
+  const manageUrl = generateManageUrl(subscriptionId)
+
   await sendPaymentFailedEmail(
     subscription.subscriber.email,
     providerName,
     chargeAmount,
     subscription.currency,
-    retryDate
+    retryDate,
+    manageUrl
   )
 
   return true
@@ -224,13 +232,17 @@ export async function processSubscriptionPastDueReminder(
     chargeAmount = baseAmount
   }
 
+  // Generate manage URL for our branded subscription management page
+  const manageUrl = generateManageUrl(subscriptionId)
+
   // Send payment failed with no retry date (indicating it's past due)
   await sendPaymentFailedEmail(
     subscription.subscriber.email,
     providerName,
     chargeAmount,
     subscription.currency,
-    null // No more retries
+    null, // No more retries
+    manageUrl
   )
 
   return true

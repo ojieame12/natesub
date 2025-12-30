@@ -13,6 +13,7 @@ import {
 import { normalizeEmailAddress } from '../utils.js'
 import { invalidateAdminRevenueCache } from '../../../utils/cache.js'
 import { getReportingCurrencyData } from '../../../services/fx.js'
+import { generateManageUrl, generateExpressDashboardUrl } from '../../../utils/cancelToken.js'
 
 async function resolveStripeCheckoutCustomer(session: Stripe.Checkout.Session): Promise<{ email: string; name: string | null }> {
   const directEmail = session.customer_details?.email || session.customer_email || null
@@ -407,21 +408,33 @@ export async function handleCheckoutCompleted(event: Stripe.Event) {
   // Send notification email to creator
   const creator = await db.user.findUnique({
     where: { id: creatorId },
-    include: { profile: { select: { displayName: true, username: true, platformDebitCents: true } } },
+    include: { profile: { select: { displayName: true, username: true, platformDebitCents: true, stripeAccountId: true } } },
   })
   if (creator) {
+    // Generate dashboard URL for Stripe Express users
+    const dashboardUrl = creator.profile?.stripeAccountId
+      ? generateExpressDashboardUrl(creator.profile.stripeAccountId)
+      : undefined
+
     // Send creator their NET amount (what they earn after fees)
     await sendNewSubscriberEmail(
       creator.email,
       subscriberName || subscriberEmail || 'Someone',
       tierName,
       netCents,  // NET - what creator receives after platform fees
-      session.currency?.toUpperCase() || 'USD'
+      session.currency?.toUpperCase() || 'USD',
+      creatorId,
+      dashboardUrl
     )
 
-    // Send confirmation email to subscriber with manage subscription link
+    // Send confirmation email to subscriber with manage page link (no login required)
     if (subscriberEmail) {
       try {
+        // Generate manage URL for our branded subscription management page
+        const manageUrl = subscription
+          ? generateManageUrl(subscription.id)
+          : undefined
+
         await sendSubscriptionConfirmationEmail(
           subscriberEmail,
           subscriberName || 'there',
@@ -429,7 +442,8 @@ export async function handleCheckoutCompleted(event: Stripe.Event) {
           creator.profile?.username || '',
           tierName,
           session.amount_total || 0,
-          session.currency?.toUpperCase() || 'USD'
+          session.currency?.toUpperCase() || 'USD',
+          manageUrl
         )
       } catch (emailErr) {
         console.error(`[checkout] Failed to send subscriber confirmation email:`, emailErr)
@@ -734,14 +748,24 @@ export async function handleAsyncPaymentSucceeded(event: Stripe.Event) {
   })
 
   // Send notification email to creator with NET amount (what they earn)
-  const creator = await db.user.findUnique({ where: { id: creatorId } })
+  const creator = await db.user.findUnique({
+    where: { id: creatorId },
+    include: { profile: { select: { stripeAccountId: true } } },
+  })
   if (creator) {
+    // Generate dashboard URL for Stripe Express users
+    const dashboardUrl = creator.profile?.stripeAccountId
+      ? generateExpressDashboardUrl(creator.profile.stripeAccountId)
+      : undefined
+
     await sendNewSubscriberEmail(
       creator.email,
       subscriberName || subscriberEmail || 'Someone',
       tierName,
       netCents,  // NET - what creator receives after platform fees
-      session.currency?.toUpperCase() || 'USD'
+      session.currency?.toUpperCase() || 'USD',
+      creatorId,
+      dashboardUrl
     )
   }
 

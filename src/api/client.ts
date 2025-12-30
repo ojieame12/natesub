@@ -1410,6 +1410,191 @@ const config = {
       .catch(() => ({ available: false })),
 }
 
+// ============================================
+// SUBSCRIPTION MANAGEMENT (Public, Token-based)
+// ============================================
+
+export interface ManageSubscriptionData {
+  subscription: {
+    id: string
+    status: string
+    cancelAtPeriodEnd: boolean
+    amount: number
+    currency: string
+    interval: string
+    currentPeriodEnd?: string
+    startedAt?: string
+    createdAt: string
+    provider: 'stripe' | 'paystack'
+    // Payment update capabilities
+    canUpdatePayment: boolean
+    updatePaymentMethod: 'portal' | 'resubscribe' | 'none'
+    billingDescriptor: string
+    // Alert states
+    isPastDue: boolean
+    pastDueMessage: string | null
+  }
+  creator: {
+    displayName: string
+    username?: string
+    avatarUrl?: string
+  }
+  subscriber: {
+    maskedEmail: string
+  }
+  stats: {
+    totalSupported: number
+    memberSince: string
+    paymentCount: number
+  }
+  payments: Array<{
+    id: string
+    amount: number
+    currency: string
+    date: string
+    type: string
+  }>
+  actions: {
+    resubscribeUrl: string | null
+    canOpenPortal: boolean
+  }
+}
+
+export type CancelReason =
+  | 'too_expensive'
+  | 'not_enough_value'
+  | 'taking_break'
+  | 'found_alternative'
+  | 'technical_issues'
+  | 'other'
+
+const subscriptionManage = {
+  // Get subscription data for management page
+  get: (token: string): Promise<ManageSubscriptionData> =>
+    apiFetch(`/subscription/manage/${token}`),
+
+  // Cancel subscription with reason
+  cancel: (token: string, reason?: CancelReason, comment?: string): Promise<{
+    success: boolean
+    alreadyCanceled?: boolean
+    message: string
+    accessUntil?: string
+    resubscribeUrl?: string
+  }> =>
+    apiFetch(`/subscription/manage/${token}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify({ reason, comment }),
+    }),
+
+  // Get Stripe portal URL for payment updates
+  getPortalUrl: (token: string): Promise<{ url: string }> =>
+    apiFetch(`/subscription/manage/${token}/portal`),
+}
+
+// ============================================
+// SUBSCRIBER PORTAL (Public - email + OTP auth)
+// ============================================
+
+export interface SubscriberSubscription {
+  id: string
+  creator: {
+    displayName: string
+    username?: string
+    avatarUrl?: string
+  }
+  amount: number
+  currency: string
+  interval: string
+  status: string
+  statusLabel: string
+  currentPeriodEnd?: string
+  startedAt?: string
+  totalPaid: number
+  paymentCount: number
+  provider: 'stripe' | 'paystack'
+  canUpdatePayment: boolean
+  updatePaymentMethod: 'portal' | 'resubscribe' | 'none'
+  billingDescriptor: string
+  isPastDue: boolean
+  cancelAtPeriodEnd: boolean
+}
+
+export interface SubscriberSubscriptionDetail extends SubscriberSubscription {
+  createdAt: string
+  pastDueMessage: string | null
+}
+
+const subscriberPortal = {
+  // Request OTP
+  requestOtp: (email: string): Promise<{ message: string }> =>
+    apiFetch('/subscriber/otp', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    }),
+
+  // Verify OTP
+  verifyOtp: (email: string, otp: string): Promise<{
+    success?: boolean
+    expiresAt?: string
+    error?: string
+    attemptsRemaining?: number
+  }> =>
+    apiFetch('/subscriber/verify', {
+      method: 'POST',
+      body: JSON.stringify({ email, otp }),
+    }),
+
+  // List subscriptions
+  listSubscriptions: (): Promise<{
+    email: string
+    maskedEmail: string
+    subscriptions: SubscriberSubscription[]
+  }> =>
+    apiFetch('/subscriber/subscriptions'),
+
+  // Get subscription detail
+  getSubscription: (id: string): Promise<{
+    subscription: SubscriberSubscriptionDetail
+    payments: Array<{
+      id: string
+      amount: number
+      currency: string
+      date: string
+      status: string
+    }>
+    actions: {
+      resubscribeUrl: string
+    }
+  }> =>
+    apiFetch(`/subscriber/subscriptions/${id}`),
+
+  // Cancel subscription
+  cancelSubscription: (id: string, reason?: CancelReason, comment?: string): Promise<{
+    success: boolean
+    alreadyCanceled?: boolean
+    message: string
+    accessUntil?: string
+    resubscribeUrl?: string
+  }> =>
+    apiFetch(`/subscriber/subscriptions/${id}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify({ reason, comment }),
+    }),
+
+  // Get portal URL
+  getPortalUrl: (id: string): Promise<{
+    url?: string
+    error?: string
+    instructions?: string
+    resubscribeUrl?: string
+  }> =>
+    apiFetch(`/subscriber/subscriptions/${id}/portal`),
+
+  // Sign out
+  signOut: (): Promise<{ success: boolean }> =>
+    apiFetch('/subscriber/signout', { method: 'POST' }),
+}
+
 // Export all
 export const api = {
   auth,
@@ -1420,6 +1605,8 @@ export const api = {
   checkout,
   subscriptions,
   mySubscriptions,
+  subscriptionManage,
+  subscriberPortal,
   activity,
   requests,
   updates,

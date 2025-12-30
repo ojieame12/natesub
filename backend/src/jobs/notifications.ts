@@ -12,6 +12,7 @@ import {
 } from '../services/email.js'
 import { calculateServiceFee, calculateLegacyServiceFee, type FeeMode } from '../services/fees.js'
 import { acquireLock, releaseLock } from '../services/lock.js'
+import { generateManageUrl } from '../utils/cancelToken.js'
 
 interface NotificationResult {
   processed: number
@@ -112,12 +113,16 @@ export async function sendDunningEmails(): Promise<NotificationResult> {
         : calculateLegacyServiceFee(sub.amount, sub.currency, sub.creator.profile?.purpose, feeMode)
       const subscriberAmount = feeCalc.grossCents
 
+      // Generate manage URL for direct access (no login required)
+      const manageUrl = generateManageUrl(sub.id)
+
       await sendPaymentFailedEmail(
         sub.subscriber.email,
         sub.creator.profile.displayName,
         subscriberAmount,
         sub.currency,
-        retryDate
+        retryDate,
+        manageUrl
       )
 
       await db.notificationLog.create({

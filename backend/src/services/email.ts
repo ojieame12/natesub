@@ -199,7 +199,7 @@ export async function sendOtpEmail(to: string, otp: string): Promise<EmailResult
   const result = await _sendEmail({
     from: env.EMAIL_FROM,
     to,
-    subject: sanitizeEmailSubject(`${otp} is your ${BRAND_NAME} verification code`),
+    subject: sanitizeEmailSubject(`${otp} is your verification code`),
     html: baseTemplate({
       preheader: `Your verification code is ${otp}. It expires in ${env.MAGIC_LINK_EXPIRES_MINUTES} minutes.`,
       headline: 'Your verification code',
@@ -230,7 +230,7 @@ export async function sendWelcomeEmail(to: string, displayName: string): Promise
   return sendEmail({
     from: env.EMAIL_FROM,
     to,
-    subject: `Welcome to ${BRAND_NAME}!`,
+    subject: `You're all set, ${displayName}!`,
     html: baseTemplate({
       preheader: `Welcome ${displayName}! Your page is live and ready to receive payments.`,
       headline: `Welcome, ${safeName}!`,
@@ -256,7 +256,7 @@ export async function sendOnboardingIncompleteEmail(
 ): Promise<EmailResult> {
   const subject = isSecondReminder
     ? "Don't forget to finish setting up your page"
-    : `Finish setting up your ${BRAND_NAME} page`
+    : 'Finish setting up your page'
 
   return sendEmail({
     from: env.EMAIL_FROM,
@@ -266,7 +266,7 @@ export async function sendOnboardingIncompleteEmail(
       preheader: 'Complete your profile to start receiving payments.',
       headline: isSecondReminder ? 'Your page is waiting' : 'Almost there!',
       body: `
-          <p style="margin: 0 0 16px 0;">You started setting up your ${BRAND_NAME} page but didn't finish. Complete your profile to start receiving payments.</p>
+          <p style="margin: 0 0 16px 0;">You started setting up your page but didn't finish. Complete your profile to start receiving payments.</p>
           <p style="margin: 0; font-size: 14px; color: #888888;">It only takes a few minutes to complete.</p>
         `,
       ctaText: 'Continue Setup',
@@ -480,9 +480,9 @@ export async function sendPaymentFailedEmail(
   // Use direct portal URL if provided, otherwise fall back to my-subscriptions
   const manageLink = manageUrl || `${env.APP_URL}/my-subscriptions`
 
-  const retryMessage = retryDate
-    ? `We'll automatically retry on ${retryDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}.`
-    : 'Please update your payment method to continue your subscription.'
+  const retryInfo = retryDate
+    ? `Auto-retry: ${retryDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+    : 'Update payment method required'
 
   return sendEmail({
     from: env.EMAIL_FROM,
@@ -491,12 +491,16 @@ export async function sendPaymentFailedEmail(
     html: baseTemplate({
       preheader: `We couldn't process your ${formattedAmount} payment. Please update your payment method.`,
       headline: 'Payment failed',
+      badge: { text: 'Action required', type: 'action' },
       body: `
-          <p style="margin: 0 0 16px 0;">
-            We couldn't process your <strong>${escapeHtml(formattedAmount)}</strong> payment for your subscription to <strong>${safeProviderName}</strong>.
-          </p>
-          <p style="margin: 0; font-size: 14px; color: #888888;">${escapeHtml(retryMessage)}</p>
-        `,
+        <p style="margin: 0 0 20px 0;">We couldn't process your payment for your subscription to <strong>${safeProviderName}</strong>.</p>
+        ${receiptCard([
+          { label: 'Amount', value: formattedAmount, highlight: true },
+          { label: 'Status', value: 'Failed' },
+          { label: 'Next step', value: retryInfo },
+        ])}
+        ${mutedText('Update your payment method to avoid losing access.')}
+      `,
       ctaText: 'Update Payment Method',
       ctaUrl: escapeHtml(manageLink),
       ctaColor: '#dc2626',
@@ -511,19 +515,19 @@ export async function sendSubscriptionCanceledEmail(
 ): Promise<EmailResult> {
   const safeProviderName = escapeHtml(providerName)
 
-  let reasonMessage: string
+  let reasonLabel: string
   switch (reason) {
     case 'payment_failed':
-      reasonMessage = 'has been canceled due to payment issues'
+      reasonLabel = 'Payment issues'
       break
     case 'user_canceled':
-      reasonMessage = 'has been canceled as requested'
+      reasonLabel = 'Your request'
       break
     case 'provider_deactivated':
-      reasonMessage = 'has ended because the service provider deactivated their account'
+      reasonLabel = 'Provider deactivated'
       break
     default:
-      reasonMessage = 'has ended'
+      reasonLabel = 'Ended'
   }
 
   return sendEmail({
@@ -531,16 +535,17 @@ export async function sendSubscriptionCanceledEmail(
     to,
     subject: sanitizeEmailSubject(`Subscription to ${providerName} has ended`),
     html: baseTemplate({
-      preheader: `Your subscription to ${providerName} ${reasonMessage}.`,
-      headline: 'Your subscription has ended',
+      preheader: `Your subscription to ${providerName} has ended.`,
+      headline: 'Subscription ended',
+      badge: { text: 'Ended', type: 'info' },
       body: `
-          <p style="margin: 0 0 16px 0;">
-            Your subscription to <strong>${safeProviderName}</strong> ${reasonMessage}.
-          </p>
-          <p style="margin: 0; font-size: 14px; color: #888888;">
-            You can resubscribe anytime if you'd like to continue.
-          </p>
-        `,
+        ${identityBlock(safeProviderName, 'Subscription')}
+        ${receiptCard([
+          { label: 'Status', value: 'Canceled' },
+          { label: 'Reason', value: reasonLabel },
+        ])}
+        ${mutedText('You can resubscribe anytime if you\'d like to continue.')}
+      `,
       ctaText: 'Resubscribe',
       ctaUrl: env.APP_URL,
     }),
@@ -566,40 +571,31 @@ export async function sendCancellationConfirmationEmail(
     year: 'numeric',
   })
 
+  // Calculate days until access ends
+  const daysLeft = Math.ceil((accessUntil.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+
   return sendEmail({
     from: env.EMAIL_FROM,
     to,
     subject: sanitizeEmailSubject(`Subscription canceled: ${providerName}`),
     html: baseTemplate({
       preheader: `Your subscription to ${providerName} has been canceled. Access until ${formattedDate}.`,
-      headline: 'Subscription Canceled',
+      headline: 'Subscription canceled',
+      badge: { text: 'Confirmed', type: 'info' },
       body: `
-          <p style="margin: 0 0 16px 0;">
-            Hey ${safeSubscriberName}, your subscription to <strong>${safeProviderName}</strong> has been canceled as requested.
-          </p>
-
-          <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin: 20px 0;">
-            <tr>
-              <td style="background-color: #FEF3C7; border-radius: 12px; padding: 20px; text-align: center; border-left: 4px solid #F59E0B;">
-                <p style="margin: 0 0 8px 0; font-size: 14px; color: #92400E;">You'll have access until:</p>
-                <p style="margin: 0; font-size: 24px; font-weight: 700; color: #78350F;">${escapeHtml(formattedDate)}</p>
-              </td>
-            </tr>
-          </table>
-
-          <p style="margin: 0 0 16px 0; font-size: 14px; color: #4a4a4a;">
-            <strong>What happens next:</strong>
-          </p>
-          <ul style="margin: 0 0 20px 0; padding-left: 20px; color: #4a4a4a; font-size: 14px;">
-            <li style="margin-bottom: 6px;">You won't be charged again</li>
-            <li style="margin-bottom: 6px;">Access continues until ${escapeHtml(formattedDate)}</li>
-            <li style="margin-bottom: 6px;">You can resubscribe anytime</li>
-          </ul>
-
-          <p style="margin: 0; font-size: 14px; color: #888888;">
-            Changed your mind? Click below to resubscribe.
-          </p>
-        `,
+        <p style="margin: 0 0 20px 0;">Hey ${safeSubscriberName}, your subscription to <strong>${safeProviderName}</strong> has been canceled as requested.</p>
+        ${daysLeft > 0 ? countdownChip(daysLeft, false) : ''}
+        ${receiptCard([
+          { label: 'Access until', value: formattedDate, highlight: true },
+          { label: 'Status', value: 'Canceling' },
+        ])}
+        ${checklist([
+          'You won\'t be charged again',
+          `Access continues until ${formattedDate}`,
+          'You can resubscribe anytime',
+        ])}
+        ${mutedText('Changed your mind? Click below to resubscribe.')}
+      `,
       ctaText: 'Resubscribe',
       ctaUrl: resubscribeUrl,
       footerText: 'Thank you for your support.',
@@ -618,17 +614,6 @@ export async function sendRequestEmail(
   requestLink: string
 ): Promise<EmailResult> {
   const safeSenderName = escapeHtml(senderName)
-  const safeMessage = message ? escapeHtml(message) : null
-
-  const messageHtml = safeMessage
-    ? `<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin: 16px 0;">
-        <tr>
-          <td style="background-color: #f8f8f8; border-radius: 8px; padding: 16px; border-left: 4px solid ${BRAND_COLOR};">
-            <p style="margin: 0; font-style: italic; color: #4a4a4a;">"${safeMessage}"</p>
-          </td>
-        </tr>
-      </table>`
-    : ''
 
   return sendEmail({
     from: env.EMAIL_FROM,
@@ -636,11 +621,13 @@ export async function sendRequestEmail(
     subject: sanitizeEmailSubject(`${senderName} sent you a request`),
     html: baseTemplate({
       preheader: `${senderName} sent you a payment request.`,
-      headline: `${safeSenderName} sent you a request`,
+      headline: 'New payment request',
+      badge: { text: 'Action required', type: 'action' },
       body: `
-          ${messageHtml}
-          <p style="margin: 0; font-size: 14px; color: #888888;">Click below to view the details and respond.</p>
-        `,
+        ${identityBlock(safeSenderName, 'sent you a request')}
+        ${message ? quoteCard(escapeHtml(message)) : ''}
+        ${mutedText('View the details and respond below.')}
+      `,
       ctaText: 'View Request',
       ctaUrl: requestLink,
     }),
@@ -665,12 +652,11 @@ export async function sendRequestUnopenedEmail(
     html: baseTemplate({
       preheader: `${senderName} sent you a request${isSecondReminder ? ' and is waiting for your response' : ''}.`,
       headline: isSecondReminder ? 'Friendly reminder' : 'You have a request',
+      badge: { text: 'Reminder', type: 'reminder' },
       body: `
-          <p style="margin: 0 0 16px 0;">
-            <strong>${safeSenderName}</strong> sent you a request${isSecondReminder ? ' and is waiting for your response' : ''}.
-          </p>
-          <p style="margin: 0; font-size: 14px; color: #888888;">This request will expire if not responded to.</p>
-        `,
+        ${identityBlock(safeSenderName, isSecondReminder ? 'is waiting for your response' : 'sent you a request')}
+        ${mutedText('This request will expire if not responded to.')}
+      `,
       ctaText: 'View Request',
       ctaUrl: requestLink,
     }),
@@ -694,11 +680,15 @@ export async function sendRequestUnpaidEmail(
     html: baseTemplate({
       preheader: `You viewed a request for ${formattedAmount} but haven't completed payment.`,
       headline: 'Complete your payment',
+      badge: { text: 'Pending', type: 'reminder' },
       body: `
-          <p style="margin: 0 0 16px 0;">
-            You viewed a request from <strong>${safeSenderName}</strong> for <strong>${escapeHtml(formattedAmount)}</strong> but haven't completed the payment yet.
-          </p>
-        `,
+        ${identityBlock(safeSenderName, 'Payment request')}
+        ${receiptCard([
+          { label: 'Amount', value: formattedAmount, highlight: true },
+          { label: 'Status', value: 'Awaiting payment' },
+        ])}
+        ${mutedText('You viewed this request but haven\'t completed payment yet.')}
+      `,
       ctaText: 'Complete Payment',
       ctaUrl: requestLink,
     }),
@@ -719,11 +709,12 @@ export async function sendRequestExpiringEmail(
     html: baseTemplate({
       preheader: `The request from ${senderName} will expire in 24 hours.`,
       headline: 'Request expiring soon',
+      badge: { text: 'Urgent', type: 'action' },
       body: `
-          <p style="margin: 0 0 16px 0;">
-            The request from <strong>${safeSenderName}</strong> will expire in <strong>24 hours</strong>. After that, you won't be able to respond.
-          </p>
-        `,
+        ${identityBlock(safeSenderName, 'Payment request')}
+        ${countdownChip(1, true)}
+        ${mutedText('After that, you won\'t be able to respond to this request.')}
+      `,
       ctaText: 'Respond Now',
       ctaUrl: requestLink,
       ctaColor: '#dc2626',
@@ -752,6 +743,7 @@ export async function sendInvoiceDueEmail(
     year: 'numeric',
   })
   const urgencyText = daysUntilDue === 1 ? 'tomorrow' : `in ${daysUntilDue} days`
+  const isUrgent = daysUntilDue <= 3
 
   return sendEmail({
     from: env.EMAIL_FROM,
@@ -759,12 +751,16 @@ export async function sendInvoiceDueEmail(
     subject: sanitizeEmailSubject(`Invoice from ${senderName} due ${urgencyText}`),
     html: baseTemplate({
       preheader: `Your invoice for ${formattedAmount} is due ${urgencyText}.`,
-      headline: `Invoice due ${urgencyText}`,
+      headline: 'Invoice due soon',
+      badge: { text: isUrgent ? 'Due soon' : 'Reminder', type: isUrgent ? 'action' : 'reminder' },
       body: `
-          <p style="margin: 0 0 16px 0;">
-            Your invoice from <strong>${safeSenderName}</strong> for <strong>${escapeHtml(formattedAmount)}</strong> is due on <strong>${escapeHtml(formattedDate)}</strong>.
-          </p>
-        `,
+        ${identityBlock(safeSenderName, 'Invoice')}
+        ${countdownChip(daysUntilDue, isUrgent)}
+        ${receiptCard([
+          { label: 'Amount', value: formattedAmount, highlight: true },
+          { label: 'Due date', value: formattedDate },
+        ])}
+      `,
       ctaText: 'Pay Now',
       ctaUrl: requestLink,
     }),
@@ -794,11 +790,16 @@ export async function sendInvoiceOverdueEmail(
     html: baseTemplate({
       preheader: `Your invoice for ${formattedAmount} is ${daysOverdue} days overdue.`,
       headline: 'Invoice overdue',
+      badge: { text: 'Overdue', type: 'action' },
       body: `
-          <p style="margin: 0 0 16px 0;">
-            Your invoice from <strong>${safeSenderName}</strong> for <strong>${escapeHtml(formattedAmount)}</strong> was due on ${escapeHtml(formattedDate)} <strong>(${daysOverdue} day${daysOverdue > 1 ? 's' : ''} ago)</strong>.
-          </p>
-        `,
+        ${identityBlock(safeSenderName, 'Invoice')}
+        ${receiptCard([
+          { label: 'Amount', value: formattedAmount, highlight: true },
+          { label: 'Due date', value: formattedDate },
+          { label: 'Status', value: `${daysOverdue} day${daysOverdue > 1 ? 's' : ''} overdue` },
+        ])}
+        ${mutedText('Please pay as soon as possible to avoid any issues.')}
+      `,
       ctaText: 'Pay Now',
       ctaUrl: requestLink,
       ctaColor: '#dc2626',
@@ -933,14 +934,18 @@ export async function sendPayoutFailedEmail(
     html: baseTemplate({
       preheader: `We couldn't complete your payout of ${formattedAmount}.`,
       headline: 'Payout failed',
+      badge: { text: 'Action required', type: 'action' },
       body: `
-          <p style="margin: 0 0 16px 0;">
-            Hey ${safeName}, we couldn't complete your payout of <strong>${escapeHtml(formattedAmount)}</strong>.
-          </p>
-          <p style="margin: 0; font-size: 14px; color: #888888;">
-            Please check that your bank details are correct. We'll retry the transfer automatically.
-          </p>
-        `,
+        <p style="margin: 0 0 20px 0;">Hey ${safeName}, we couldn't complete your payout.</p>
+        ${receiptCard([
+          { label: 'Amount', value: formattedAmount, highlight: true },
+          { label: 'Status', value: 'Failed' },
+        ])}
+        ${checklist([
+          'Check your bank details are correct',
+          'We\'ll retry the transfer automatically',
+        ])}
+      `,
       ctaText: 'Check Bank Details',
       ctaUrl: `${env.APP_URL}/settings`,
       ctaColor: '#dc2626',
@@ -964,12 +969,12 @@ export async function sendBankSetupIncompleteEmail(
     html: baseTemplate({
       preheader: `You have ${formattedAmount} ready to be paid out.`,
       headline: 'Your earnings are waiting',
+      badge: { text: 'Action required', type: 'action' },
       body: `
-          <p style="margin: 0 0 16px 0;">
-            Hey ${safeName}, you have <strong>${escapeHtml(formattedAmount)}</strong> ready to be paid out, but we need your bank details first.
-          </p>
-          ${amountCard('Pending payout', formattedAmount, BRAND_COLOR)}
-        `,
+        <p style="margin: 0 0 20px 0;">Hey ${safeName}, you have earnings ready to be paid out, but we need your bank details first.</p>
+        ${amountCard('Pending payout', formattedAmount, BRAND_COLOR)}
+        ${mutedText('Add your bank details below to receive your earnings.')}
+      `,
       ctaText: 'Add Bank Details',
       ctaUrl: `${env.APP_URL}/settings`,
       ctaColor: '#dc2626',
@@ -1000,13 +1005,15 @@ export async function sendPayrollReadyEmail(
     html: baseTemplate({
       preheader: `Your pay statement for ${periodLabel} is ready. Net earnings: ${formattedAmount}`,
       headline: 'Pay statement ready',
+      badge: { text: 'Available', type: 'success' },
       body: `
-          <p style="margin: 0 0 16px 0;">
-            Hey ${safeName}, your pay statement for <strong>${escapeHtml(periodLabel)}</strong> is now available.
-          </p>
-          ${amountCard('Net earnings', formattedAmount, '#16a34a')}
-          <p style="margin: 0; font-size: 14px; color: #888888;">Use this statement for income verification, taxes, or your records.</p>
-        `,
+        <p style="margin: 0 0 20px 0;">Hey ${safeName}, your pay statement is now available.</p>
+        ${receiptCard([
+          { label: 'Period', value: periodLabel },
+          { label: 'Net earnings', value: formattedAmount, highlight: true },
+        ])}
+        ${mutedText('Use this statement for income verification, taxes, or your records.')}
+      `,
       ctaText: 'View Statement',
       ctaUrl: `${env.APP_URL}/payroll`,
     }),
@@ -1236,33 +1243,22 @@ export async function sendDisputeCreatedEmail(
     subject: sanitizeEmailSubject(`Dispute filed: ${formattedAmount} on hold`),
     html: baseTemplate({
       preheader: `A subscriber has disputed a ${formattedAmount} payment. Funds are temporarily on hold.`,
-      headline: 'Payment Dispute Filed',
+      headline: 'Payment dispute filed',
+      badge: { text: 'Dispute', type: 'action' },
       body: `
-          <p style="margin: 0 0 16px 0;">
-            Hey ${safeName}, a subscriber has filed a dispute (chargeback) with their bank for a recent payment.
-          </p>
-
-          ${amountCard('Amount on hold', formattedAmount, '#DC2626')}
-
-          <div style="background: #FEF3C7; border-left: 4px solid #F59E0B; padding: 12px 16px; margin: 16px 0; border-radius: 4px;">
-            <p style="margin: 0; font-size: 14px; color: #92400E;">
-              <strong>Reason cited:</strong> ${safeReason}
-            </p>
-          </div>
-
-          <p style="margin: 0 0 16px 0;">
-            <strong>What happens now:</strong>
-          </p>
-          <ul style="margin: 0 0 16px 0; padding-left: 20px; color: #4a4a4a;">
-            <li style="margin-bottom: 8px;">The disputed amount is temporarily held</li>
-            <li style="margin-bottom: 8px;">The payment processor will review the case</li>
-            <li style="margin-bottom: 8px;">We'll notify you of the outcome</li>
-          </ul>
-
-          <p style="margin: 0; font-size: 14px; color: #666666;">
-            If you have transaction records or communication with this subscriber, keep them handy in case they're needed.
-          </p>
-        `,
+        <p style="margin: 0 0 20px 0;">Hey ${safeName}, a subscriber has filed a dispute (chargeback) with their bank.</p>
+        ${receiptCard([
+          { label: 'Amount on hold', value: formattedAmount, highlight: true },
+          { label: 'Reason', value: safeReason },
+          { label: 'Status', value: 'Under review' },
+        ])}
+        ${checklist([
+          'Disputed amount is temporarily held',
+          'Payment processor will review the case',
+          'We\'ll notify you of the outcome',
+        ])}
+        ${mutedText('If you have transaction records or communication with this subscriber, keep them handy.')}
+      `,
       ctaText: 'View Dashboard',
       ctaUrl: `${env.APP_URL}/dashboard`,
       ctaColor: '#DC2626',
@@ -1283,39 +1279,30 @@ export async function sendDisputeResolvedEmail(
   const formattedAmount = formatAmountForEmail(amount, currency)
   const safeName = escapeHtml(displayName)
 
-  const headline = won ? 'Dispute Won - Funds Restored' : 'Dispute Lost - Funds Deducted'
+  const headline = won ? 'Dispute resolved in your favor' : 'Dispute resolved'
   const preheader = won
     ? `Good news! The ${formattedAmount} dispute was resolved in your favor.`
     : `The ${formattedAmount} dispute was resolved in the subscriber's favor.`
 
   const body = won
     ? `
-        <p style="margin: 0 0 16px 0;">
-          Great news, ${safeName}! The dispute has been resolved in your favor.
-        </p>
-
-        ${amountCard('Funds restored', formattedAmount, '#16A34A')}
-
-        <p style="margin: 0; font-size: 14px; color: #666666;">
-          The held funds have been restored to your account balance and will be included in your next payout.
-        </p>
+        <p style="margin: 0 0 20px 0;">Great news, ${safeName}! The dispute has been resolved in your favor.</p>
+        ${receiptCard([
+          { label: 'Amount restored', value: formattedAmount, highlight: true },
+          { label: 'Status', value: 'Won' },
+        ])}
+        ${mutedText('The held funds have been restored and will be included in your next payout.')}
       `
     : `
-        <p style="margin: 0 0 16px 0;">
-          Hey ${safeName}, unfortunately the dispute was resolved in the subscriber's favor.
-        </p>
-
-        ${amountCard('Funds deducted', formattedAmount, '#DC2626')}
-
-        <div style="background: #FEE2E2; border-left: 4px solid #DC2626; padding: 12px 16px; margin: 16px 0; border-radius: 4px;">
-          <p style="margin: 0; font-size: 14px; color: #991B1B;">
-            The subscriber's subscription has been automatically canceled to prevent future disputes.
-          </p>
-        </div>
-
-        <p style="margin: 0; font-size: 14px; color: #666666;">
-          If you believe this was an error, you may contact your payment processor directly. We're here to help if you need assistance.
-        </p>
+        <p style="margin: 0 0 20px 0;">Hey ${safeName}, unfortunately the dispute was resolved in the subscriber's favor.</p>
+        ${receiptCard([
+          { label: 'Amount deducted', value: formattedAmount, highlight: true },
+          { label: 'Status', value: 'Lost' },
+        ])}
+        ${checklist([
+          'Subscriber\'s subscription automatically canceled',
+          'Contact payment processor if you believe this was an error',
+        ])}
       `
 
   return sendEmail({
@@ -1325,6 +1312,7 @@ export async function sendDisputeResolvedEmail(
     html: baseTemplate({
       preheader,
       headline,
+      badge: { text: won ? 'Won' : 'Lost', type: won ? 'success' : 'action' },
       body,
       ctaText: 'View Dashboard',
       ctaUrl: `${env.APP_URL}/dashboard`,
@@ -1352,19 +1340,14 @@ export async function sendSupportTicketConfirmationEmail(
     html: baseTemplate({
       preheader: 'Your support request has been submitted',
       headline: 'We got your message',
+      badge: { text: 'Received', type: 'success' },
       body: `
-        <p style="color: #374151; font-size: 16px; line-height: 1.6;">
-          Thank you for reaching out. We've received your support request and will get back to you within 1-2 business days.
-        </p>
-        <p style="color: #6B7280; font-size: 14px; margin-top: 16px;">
-          <strong>Subject:</strong> ${escapeHtml(subject)}
-        </p>
-        <p style="color: #6B7280; font-size: 14px;">
-          <strong>Ticket ID:</strong> ${ticketId.slice(0, 8)}
-        </p>
-        <p style="color: #374151; font-size: 16px; line-height: 1.6; margin-top: 16px;">
-          If you need to add more information, simply reply to this email.
-        </p>
+        <p style="margin: 0 0 20px 0;">Thank you for reaching out. We've received your support request and will get back to you within 1-2 business days.</p>
+        ${receiptCard([
+          { label: 'Subject', value: escapeHtml(subject) },
+          { label: 'Ticket ID', value: ticketId.slice(0, 8) },
+        ])}
+        ${mutedText('If you need to add more information, simply reply to this email.')}
       `,
     }),
   })
@@ -1391,20 +1374,13 @@ export async function sendSupportTicketReplyEmail(
     to,
     subject: sanitizeEmailSubject(`Re: ${ticketSubject}`),
     html: baseTemplate({
-      preheader: 'NatePay Support has responded to your request',
-      headline: 'We\'ve responded to your request',
+      preheader: 'Support has responded to your request',
+      headline: 'We\'ve responded',
+      badge: { text: 'Reply', type: 'info' },
       body: `
-        <p style="color: #374151; font-size: 16px; line-height: 1.6;">
-          We've responded to your support request regarding "${escapeHtml(ticketSubject)}":
-        </p>
-        <div style="background: #F3F4F6; border-left: 4px solid #FF941A; padding: 16px; margin: 16px 0; border-radius: 0 8px 8px 0;">
-          <p style="color: #374151; font-size: 15px; line-height: 1.6; white-space: pre-wrap; margin: 0;">
-            ${escapeHtml(replyMessage)}
-          </p>
-        </div>
-        <p style="color: #374151; font-size: 16px; line-height: 1.6;">
-          If you have any follow-up questions, simply reply to this email.
-        </p>
+        <p style="margin: 0 0 16px 0;">We've responded to your support request regarding "${escapeHtml(ticketSubject)}":</p>
+        ${quoteCard(escapeHtml(replyMessage))}
+        ${mutedText('If you have any follow-up questions, simply reply to this email.')}
       `,
     }),
   })
@@ -1436,7 +1412,7 @@ export async function sendCreatorAccountCreatedEmail(
 ): Promise<EmailResult> {
   const safeName = escapeHtml(displayName)
   const formattedAmount = formatAmountForEmail(amount * 100, currency) // amount is in major units, convert to cents for formatting
-  const subject = `Your ${BRAND_NAME} page is ready!`
+  const subject = `Your page is ready, ${displayName}!`
 
   const result = await sendEmail({
     from: env.EMAIL_FROM,
@@ -1447,7 +1423,7 @@ export async function sendCreatorAccountCreatedEmail(
       headline: `Welcome, ${safeName}!`,
       body: `
         <p style="color: #374151; font-size: 16px; line-height: 1.6;">
-          Great news! Your ${BRAND_NAME} page has been set up and is ready to accept payments.
+          Great news! Your page has been set up and is ready to accept payments.
         </p>
 
         <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin: 24px 0;">
@@ -1469,7 +1445,7 @@ export async function sendCreatorAccountCreatedEmail(
         </p>
 
         <p style="color: #374151; font-size: 16px; line-height: 1.6; margin-top: 20px;">
-          <strong>To access your dashboard:</strong> Visit ${BRAND_NAME} and sign in with this email address. You'll receive a one-time code to verify your identity.
+          <strong>To access your dashboard:</strong> Sign in with this email address. You'll receive a one-time code to verify your identity.
         </p>
 
         <p style="color: #6B7280; font-size: 14px; margin-top: 24px;">
@@ -1478,7 +1454,7 @@ export async function sendCreatorAccountCreatedEmail(
       `,
       ctaText: 'Go to Dashboard',
       ctaUrl: `${env.APP_URL}/dashboard`,
-      footerText: 'This account was set up on your behalf by NatePay support.',
+      footerText: 'This account was set up on your behalf by our support team.',
     }),
   })
 

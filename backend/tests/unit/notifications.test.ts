@@ -100,7 +100,8 @@ describe('Notification Jobs', () => {
         'Creator',
         5225,
         'USD',
-        expect.any(Date) // retry date
+        expect.any(Date), // retry date
+        expect.any(String) // manage URL
       )
     })
 

@@ -27,8 +27,15 @@ const COLORS = {
     white: '#FFFFFF',
 }
 
-// Success overlay component
-function SuccessOverlay({ email, onReset }: { email: string; onReset: () => void }) {
+// Success overlay component - shows creator info instead of platform branding
+interface SuccessOverlayProps {
+    email: string
+    onReset: () => void
+    creatorName: string
+    creatorAvatar?: string | null
+}
+
+function SuccessOverlay({ email, onReset, creatorName, creatorAvatar }: SuccessOverlayProps) {
     return (
         <div style={{
             position: 'fixed',
@@ -41,24 +48,60 @@ function SuccessOverlay({ email, onReset }: { email: string; onReset: () => void
             zIndex: 100,
             animation: 'fadeIn 0.3s ease-out',
         }}>
-            <div style={{
-                width: 80,
-                height: 80,
-                background: '#10b981',
-                borderRadius: '50%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                marginBottom: 24,
-                color: 'white',
-                boxShadow: '0 10px 30px rgba(16, 185, 129, 0.3)',
-            }}>
-                <Check size={40} strokeWidth={2.5} />
+            {/* Creator Avatar with checkmark badge */}
+            <div style={{ position: 'relative', marginBottom: 24 }}>
+                <div style={{
+                    width: 80,
+                    height: 80,
+                    borderRadius: '50%',
+                    overflow: 'hidden',
+                    background: COLORS.neutral100,
+                }}>
+                    {creatorAvatar ? (
+                        <img
+                            src={creatorAvatar}
+                            alt={creatorName}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
+                    ) : (
+                        <div style={{
+                            width: '100%',
+                            height: '100%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            background: 'linear-gradient(135deg, #FFD208 0%, #FF941A 100%)',
+                            fontSize: 32,
+                            fontWeight: 700,
+                            color: COLORS.white,
+                        }}>
+                            {creatorName.charAt(0).toUpperCase()}
+                        </div>
+                    )}
+                </div>
+                {/* Success checkmark badge */}
+                <div style={{
+                    position: 'absolute',
+                    bottom: -4,
+                    right: -4,
+                    width: 28,
+                    height: 28,
+                    background: '#10b981',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'white',
+                    boxShadow: '0 2px 8px rgba(16, 185, 129, 0.4)',
+                    border: '3px solid white',
+                }}>
+                    <Check size={16} strokeWidth={3} />
+                </div>
             </div>
             <h2 style={{ fontSize: 24, fontWeight: 700, color: COLORS.neutral900, margin: 0 }}>
-                Payment Complete
+                You're subscribed!
             </h2>
-            <p style={{ fontSize: 15, color: COLORS.neutral500, marginTop: 8 }}>
+            <p style={{ fontSize: 15, color: COLORS.neutral500, marginTop: 8, textAlign: 'center' }}>
                 Receipt sent to {email || 'your email'}
             </p>
             <button
@@ -75,11 +118,6 @@ function SuccessOverlay({ email, onReset }: { email: string; onReset: () => void
             >
                 Start New
             </button>
-            <img
-                src="/logo.svg"
-                alt="NatePay"
-                style={{ height: 24, marginTop: 48, opacity: 0.6 }}
-            />
             <style>{`
                 @keyframes fadeIn {
                     from { opacity: 0; }
@@ -687,19 +725,62 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                     padding: '16px',
                 }}>
                     {isOwner ? (
-                        /* Owner View: Simple subscription display */
-                        <div style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                        }}>
-                            <span style={{ fontSize: 15, fontWeight: 600, color: COLORS.neutral900 }}>
-                                Subscription
-                            </span>
-                            <span style={{ fontSize: 18, fontWeight: 700, color: COLORS.neutral900 }}>
-                                {formatCurrency(pricing.currentAmount, pricing.currency)}/month
-                            </span>
-                        </div>
+                        /* Owner View: Breakdown showing what they receive after fee */
+                        <>
+                            {/* Subscription Row */}
+                            <div style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                            }}>
+                                <span style={{ fontSize: 15, color: COLORS.neutral600 }}>
+                                    Subscription
+                                </span>
+                                <span style={{ fontSize: 15, color: COLORS.neutral700, fontWeight: 500 }}>
+                                    {formatCurrency(pricing.currentAmount, pricing.currency)}/month
+                                </span>
+                            </div>
+
+                            {/* Dashed Separator */}
+                            <div style={{
+                                borderBottom: `1px dashed ${COLORS.neutral200}`,
+                                margin: '10px 0',
+                            }} />
+
+                            {/* Platform Fee Row */}
+                            <div style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                            }}>
+                                <span style={{ fontSize: 15, color: COLORS.neutral600 }}>
+                                    Platform fee (4.5%)
+                                </span>
+                                <span style={{ fontSize: 15, color: COLORS.neutral700 }}>
+                                    -{formatCurrency(pricing.currentAmount * 0.045, pricing.currency)}
+                                </span>
+                            </div>
+
+                            {/* Dashed Separator */}
+                            <div style={{
+                                borderBottom: `1px dashed ${COLORS.neutral200}`,
+                                margin: '10px 0',
+                            }} />
+
+                            {/* You Receive Row */}
+                            <div style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                            }}>
+                                <span style={{ fontSize: 15, fontWeight: 600, color: COLORS.neutral900 }}>
+                                    You receive
+                                </span>
+                                <span style={{ fontSize: 18, fontWeight: 700, color: COLORS.neutral900 }}>
+                                    {formatCurrency(pricing.currentAmount * 0.955, pricing.currency)}/month
+                                </span>
+                            </div>
+                        </>
                     ) : (
                         /* Subscriber View: Full breakdown with fees */
                         <>
@@ -877,7 +958,7 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                     )}
                 </div>
 
-                {/* Footer */}
+                {/* Footer - logo icon + legal links */}
                 <div style={{
                     marginTop: 'auto',
                     paddingBottom: 12,
@@ -886,7 +967,7 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                     <img
                         src="/logo.svg"
                         alt="NatePay"
-                        style={{ height: 28 }}
+                        style={{ height: 28, opacity: 0.5 }}
                     />
                     <div style={{
                         marginTop: 12,
@@ -928,7 +1009,14 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
             </div>
 
             {/* Success Overlay */}
-            {isSuccess && <SuccessOverlay email={subscriberEmail} onReset={handleReset} />}
+            {isSuccess && (
+                <SuccessOverlay
+                    email={subscriberEmail}
+                    onReset={handleReset}
+                    creatorName={profile.displayName || profile.username || 'Creator'}
+                    creatorAvatar={profile.avatarUrl}
+                />
+            )}
         </div>
     )
 }

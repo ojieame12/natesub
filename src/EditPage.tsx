@@ -19,9 +19,6 @@ const PURPOSE_OPTIONS: { value: Purpose; label: string; icon: React.ReactNode }[
   { value: 'other', label: 'Other', icon: <MoreHorizontal size={20} /> },
 ]
 
-// Frequency options
-type Interval = 'month' | 'one_time'
-
 export default function EditPage() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -42,7 +39,6 @@ export default function EditPage() {
   const [singleAmount, setSingleAmount] = useState<number>(10)
   const [priceInput, setPriceInput] = useState<string>('10')
   const [purpose, setPurpose] = useState<Purpose>('support')
-  const [interval, setInterval] = useState<Interval>('month')
   const [showPurposeDrawer, setShowPurposeDrawer] = useState(false)
   const [hasChanges, setHasChanges] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
@@ -70,7 +66,6 @@ export default function EditPage() {
       setDisplayName(profile.displayName || '')
       setAvatarUrl(profile.avatarUrl)
       setPurpose((profile.purpose as Purpose) || 'support')
-      // Note: interval is per-subscription, not stored on profile. Default to 'month'
 
       const amt = profile.singleAmount ? centsToDisplayAmount(profile.singleAmount, currency) : 10
       setSingleAmount(amt)
@@ -139,7 +134,10 @@ export default function EditPage() {
       return
     }
     try {
-      const result = await generateBannerMutation.mutateAsync({})
+      // Pass current bio so AI uses latest text (not stale saved version)
+      const result = await generateBannerMutation.mutateAsync({
+        serviceDescription: bio.trim() || undefined,
+      })
       setBannerUrl(result.bannerUrl)
       toast.success(result.wasGenerated ? 'Banner generated' : 'Using avatar as banner')
     } catch (err: any) {
@@ -253,7 +251,7 @@ export default function EditPage() {
 
     // Warn if service mode user has fewer than 3 perks (non-blocking)
     if (isServiceMode && perks.length > 0 && perks.length < 3) {
-      toast.warning(`Only ${perks.length} perk${perks.length === 1 ? '' : 's'} - subscribers see 3 on your page`)
+      toast.warning(`Only ${perks.length} perk${perks.length === 1 ? '' : 's'} - at least 3 required`)
     }
 
     try {
@@ -605,23 +603,7 @@ export default function EditPage() {
 
         {/* Pricing Section */}
         <section className="edit-section">
-          <h3 className="section-title">Pricing</h3>
-
-          {/* Frequency toggle */}
-          <div className="pricing-toggle">
-            <Pressable
-              className={`toggle-option ${interval === 'month' ? 'active' : ''}`}
-              onClick={() => setInterval('month')}
-            >
-              Monthly
-            </Pressable>
-            <Pressable
-              className={`toggle-option ${interval === 'one_time' ? 'active' : ''}`}
-              onClick={() => setInterval('one_time')}
-            >
-              One-time
-            </Pressable>
-          </div>
+          <h3 className="section-title">Monthly Price</h3>
 
           <div className="single-price-card">
             <span className="price-currency">{currencySymbol}</span>
@@ -633,7 +615,7 @@ export default function EditPage() {
               onChange={handlePriceChange}
               placeholder="0.00"
             />
-            <span className="price-period">{interval === 'month' ? '/month' : ''}</span>
+            <span className="price-period">/month</span>
           </div>
         </section>
 

@@ -20,6 +20,7 @@ import webhooks from './routes/webhooks/index.js'
 import media from './routes/media.js'
 import subscriptions from './routes/subscriptions.js'
 import mySubscriptions from './routes/my-subscriptions.js'
+import subscriptionManage from './routes/subscription-manage.js'
 import activity from './routes/activity.js'
 import requests from './routes/requests.js'
 import updates from './routes/updates.js'
@@ -31,6 +32,7 @@ import analytics from './routes/analytics.js'
 import admin from './routes/admin/index.js'
 import support from './routes/support.js'
 import config from './routes/config.js'
+import subscriber from './routes/subscriber.js'
 
 const app = new Hono()
 
@@ -326,6 +328,7 @@ app.route('/webhooks', webhooks)
 app.route('/media', media)
 app.route('/subscriptions', subscriptions)
 app.route('/my-subscriptions', mySubscriptions)
+app.route('/subscription/manage', subscriptionManage)
 app.route('/activity', activity)
 app.route('/requests', requests)
 app.route('/updates', updates)
@@ -336,6 +339,7 @@ app.route('/billing', billing)
 app.route('/analytics', analytics)
 app.route('/admin', admin)
 app.route('/support', support)
+app.route('/subscriber', subscriber)  // Public subscriber portal
 
 // 404 handler
 app.notFound((c) => c.json({ error: 'Not found' }, 404))

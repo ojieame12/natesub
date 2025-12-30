@@ -85,7 +85,7 @@ function getClientIp(c: Context): string | null {
   return null
 }
 
-function getClientIdentifier(c: Context): string {
+export function getClientIdentifier(c: Context): string {
   const ip = getClientIp(c)
   if (ip) return ip
 

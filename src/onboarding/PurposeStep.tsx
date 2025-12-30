@@ -22,12 +22,14 @@ export default function PurposeStep() {
         setPurpose(value)
 
         // Persist purpose to backend for cross-device resume and step count calculation
-        // Silent fail - local store is primary, backend is for durability
+        // Local store is primary, backend is for durability
         api.auth.saveOnboardingProgress({
             step: currentStep,
             stepKey: 'purpose', // Canonical step key for safe resume
             data: { purpose: value },
-        }).catch(() => {})
+        }).catch((err) => {
+            console.warn('[onboarding] Failed to save purpose:', err)
+        })
 
         nextStep()
     }

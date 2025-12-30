@@ -5,7 +5,7 @@ import { Prisma } from '@prisma/client'
 import { db } from '../db/client.js'
 import { env } from '../config/env.js'
 import { requireAuth } from '../middleware/auth.js'
-import { publicStrictRateLimit, publicRateLimit } from '../middleware/rateLimit.js'
+import { publicStrictRateLimit, publicRateLimit, aiRateLimit } from '../middleware/rateLimit.js'
 import { sendWelcomeEmail } from '../services/email.js'
 import { cancelOnboardingReminders } from '../jobs/reminders.js'
 import { RESERVED_USERNAMES, isStripeCrossBorderSupported } from '../utils/constants.js'
@@ -922,6 +922,7 @@ const generatePerksSchema = z.object({
 profile.post(
   '/generate-perks',
   requireAuth,
+  aiRateLimit,
   zValidator('json', generatePerksSchema),
   async (c) => {
     const userId = c.get('userId')

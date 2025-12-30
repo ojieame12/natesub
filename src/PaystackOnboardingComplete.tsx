@@ -33,11 +33,15 @@ export default function PaystackOnboardingComplete() {
     hydrateFromServer: s.hydrateFromServer,
   })))
 
-  const { data: profileData } = useProfile()
-  const { data: userData } = useCurrentUser()
+  const { data: profileData, isLoading: isLoadingProfile } = useProfile()
+  const { data: userData, isLoading: isLoadingUser } = useCurrentUser()
   const profile = profileData?.profile
   const hasProcessed = useRef(false)
   const hasHydrated = useRef(false)
+
+  // Wait for data to be available before making redirect decision
+  // We need at least one data source (store, profile, or userData) to have purpose
+  const isDataReady = !isLoadingProfile && !isLoadingUser
 
   // Use store → profile → backend onboardingData fallback chain (most robust)
   // This handles cases where localStorage is cleared (Safari, storage reset)
@@ -85,41 +89,43 @@ export default function PaystackOnboardingComplete() {
   }
 
   useEffect(() => {
-    if (!hasProcessed.current) {
-      hasProcessed.current = true
+    // Wait for data to be ready before redirecting
+    if (!isDataReady) return
+    if (hasProcessed.current) return
 
-      // Set flag so AuthRedirect knows payment is active (survives page refresh)
-      setPaymentConfirmed()
+    hasProcessed.current = true
 
-      // Optimistic cache update for payment status
-      queryClient.setQueryData(['currentUser'], (oldData: any) => {
-        if (!oldData) return oldData
-        return {
-          ...oldData,
-          onboarding: {
-            ...oldData.onboarding,
-            hasActivePayment: true,
-          },
-        }
-      })
+    // Set flag so AuthRedirect knows payment is active (survives page refresh)
+    setPaymentConfirmed()
 
-      queryClient.setQueryData(['profile'], (oldData: any) => {
-        if (!oldData?.profile) return oldData
-        return {
-          ...oldData,
-          profile: {
-            ...oldData.profile,
-            payoutStatus: 'active',
-          },
-        }
-      })
+    // Optimistic cache update for payment status
+    queryClient.setQueryData(['currentUser'], (oldData: any) => {
+      if (!oldData) return oldData
+      return {
+        ...oldData,
+        onboarding: {
+          ...oldData.onboarding,
+          hasActivePayment: true,
+        },
+      }
+    })
 
-      // Navigate to the correct step using step key (not numeric index)
-      // This ensures service users go through service-desc and ai-gen steps
-      const returnStepKey = getReturnStepKey()
-      navigate(`/onboarding?step=${returnStepKey}`, { replace: true })
-    }
-  }, [navigate, queryClient, resolvedPurpose, serviceDescription, servicePerks])
+    queryClient.setQueryData(['profile'], (oldData: any) => {
+      if (!oldData?.profile) return oldData
+      return {
+        ...oldData,
+        profile: {
+          ...oldData.profile,
+          payoutStatus: 'active',
+        },
+      }
+    })
+
+    // Navigate to the correct step using step key (not numeric index)
+    // This ensures service users go through service-desc and ai-gen steps
+    const returnStepKey = getReturnStepKey()
+    navigate(`/onboarding?step=${returnStepKey}`, { replace: true })
+  }, [navigate, queryClient, resolvedPurpose, serviceDescription, servicePerks, isDataReady])
 
   // Show minimal loading state while redirecting
   return (
