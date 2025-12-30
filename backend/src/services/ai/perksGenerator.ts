@@ -94,12 +94,17 @@ export async function generatePerks(input: PerksInput): Promise<Perk[]> {
       return getGenericPerks(input.serviceType)
     }
 
-    // Validate perk content
-    const validPerks = parsed.perks.every(
-      (p: string) => typeof p === 'string' && p.length >= 3 && p.length <= 60
-    )
+    // Validate perk content (character length and word count)
+    const validPerks = parsed.perks.every((p: string) => {
+      if (typeof p !== 'string') return false
+      if (p.length < 3 || p.length > 50) return false
+      // Enforce 6 words max
+      const wordCount = p.trim().split(/\s+/).length
+      if (wordCount > 6) return false
+      return true
+    })
     if (!validPerks) {
-      console.warn('[perks] Invalid perk format, using fallback')
+      console.warn('[perks] Invalid perk format (too long or wrong count), using fallback')
       return getGenericPerks(input.serviceType)
     }
 
@@ -198,7 +203,7 @@ YOUR TASK: Create 3 perks that answer "What do I actually GET for my money?"
 
 PERK REQUIREMENTS:
 ✓ EXACTLY 3 perks (not 2, not 4)
-✓ Each perk: 3-7 words
+✓ Each perk: 2-6 words MAX (short and punchy)
 ✓ Must describe a TANGIBLE deliverable or access
 ✓ Must be SPECIFIC to this service (not generic)
 ✓ Match the value expectation of ${tier} tier ($${input.pricePerMonth}/mo)
@@ -208,9 +213,10 @@ ${tier === 'premium' ? '- PREMIUM ($500+): High-touch, exclusive access, persona
   tier === 'mid-tier' ? '- MID-TIER ($100-499): Active engagement, regular 1-on-1 time, customized deliverables' :
   '- ENTRY ($10-99): Access-based, community/group format, structured content or check-ins'}
 
-FORMULA FOR GREAT PERKS:
-[Frequency/Quantity] + [Specific Deliverable] + [Optional: Method/Access]
-Examples: "Weekly 1-on-1 coaching calls", "Custom meal plans monthly", "Direct WhatsApp access"
+FORMULA FOR GREAT PERKS (keep it SHORT):
+[Frequency] + [Deliverable] = 2-6 words total
+Good: "Weekly coaching calls", "Custom meal plans", "Direct WhatsApp access"
+Bad: "Access to weekly one-on-one personalized coaching sessions" (too long!)
 
 ❌ BANNED PHRASES (too vague):
 - "Support", "Help", "Guidance", "Resources", "Updates", "Access to content"
