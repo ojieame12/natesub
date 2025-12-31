@@ -145,7 +145,7 @@ jobs:
         run: npm test -- tests/integration
         working-directory: backend
         env:
-          DATABASE_URL: postgres://postgres:postgres@localhost:5432/nate_test
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/nate_test?connection_limit=10
           REDIS_URL: redis://localhost:6379
           NODE_ENV: test
 
@@ -214,10 +214,14 @@ jobs:
       - name: Run E2E Tests
         run: npx playwright test
         env:
-          DATABASE_URL: postgres://postgres:postgres@localhost:5432/nate_test
+          # Add connection_limit to prevent pool exhaustion in parallel test setup
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/nate_test?connection_limit=10
           REDIS_URL: redis://localhost:6379
           NODE_ENV: test
           PAYMENTS_MODE: stub
+          E2E_MODE: 'true'
+          E2E_API_KEY: e2e-local-dev-key
+          JOBS_API_KEY: test-jobs-api-key-for-ci
           JWT_SECRET: test-secret-key-for-ci
 
       - name: Upload Test Results

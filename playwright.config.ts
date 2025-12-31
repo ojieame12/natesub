@@ -48,6 +48,8 @@ export default defineConfig({
   expect: {
     timeout: 10 * 1000, // 10s for assertions
   },
+  // Clean up all E2E test data after suite completes
+  globalTeardown: './e2e/global-teardown.ts',
   use: {
     // Always prefer local dev server for E2E unless explicitly overridden.
     // NOTE: APP_URL is a backend/runtime setting and may point at production.
@@ -95,6 +97,9 @@ export default defineConfig({
       env: {
         PAYMENTS_MODE: 'stub',
         NODE_ENV: 'test',
+        E2E_MODE: 'true', // Enable E2E testing endpoints
+        E2E_API_KEY: 'e2e-local-dev-key', // Required for /e2e/* endpoints
+        JOBS_API_KEY: 'test-jobs-api-key', // Required for /jobs/* endpoints
         HOST: '127.0.0.1',
         APP_URL: 'http://localhost:5173',
         API_URL: 'http://localhost:3001',
