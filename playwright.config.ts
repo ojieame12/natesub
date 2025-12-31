@@ -66,14 +66,15 @@ export default defineConfig({
       name: 'webkit',
       use: { ...devices['Desktop Safari'] },
     },
+    // Mobile - iOS Safari viewport behavior
+    {
+      name: 'mobile-safari',
+      use: { ...devices['iPhone 12'] },
+    },
     // Uncomment for full browser coverage (slower)
     // {
     //   name: 'firefox',
     //   use: { ...devices['Desktop Firefox'] },
-    // },
-    // {
-    //   name: 'Mobile Chrome',
-    //   use: { ...devices['Pixel 5'] },
     // },
   ],
   // Start both backend and frontend before tests
