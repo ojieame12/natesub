@@ -248,8 +248,10 @@ export async function setupOnboardingStubs(page: Page, user: TestUser) {
     });
   });
 
-  // Stub Paystack bank list (route is /paystack/banks/:country)
-  await page.route('**/paystack/banks/*', async (route) => {
+  // Stub Paystack bank list - STRICT pattern to avoid swallowing unrelated routes
+  // Matches: /paystack/banks/NG, /admin/paystack/banks/GH, etc.
+  // Paystack countries: NG (Nigeria), GH (Ghana), KE (Kenya), ZA (South Africa)
+  await page.route(/.*paystack\/banks\/(NG|GH|KE|ZA)$/i, async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',

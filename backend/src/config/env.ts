@@ -26,6 +26,8 @@ function normalizeUrlEnv(value: unknown): unknown {
 const envSchema = z.object({
   // App
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+  E2E_MODE: z.string().optional(), // Set to 'true' to enable E2E testing endpoints
+  E2E_API_KEY: z.string().optional(), // Optional API key for E2E endpoints (additional security)
   PORT: z.string().default('3001'),
   APP_URL: z.preprocess(normalizeUrlEnv, z.string().url()),
   API_URL: z.preprocess(normalizeUrlEnv, z.string().url()),
@@ -144,6 +146,21 @@ function loadEnv() {
     if (!data.ENCRYPTION_KEY) {
       console.error('❌ FATAL: ENCRYPTION_KEY is required in production for PII protection')
       console.error('   Generate one with: openssl rand -base64 32')
+      process.exit(1)
+    }
+
+    // Jobs API key: Required in production for scheduled task execution
+    if (!data.JOBS_API_KEY) {
+      console.error('❌ FATAL: JOBS_API_KEY is required in production')
+      console.error('   Without it, scheduled jobs (billing, cleanup, reminders) will not run')
+      console.error('   Generate one with: openssl rand -base64 24')
+      process.exit(1)
+    }
+
+    // Redis: Required in production for rate limiting, caching, and queues
+    if (!data.REDIS_URL) {
+      console.error('❌ FATAL: REDIS_URL is required in production')
+      console.error('   Without it, rate limiting will fail open and job queues will not work')
       process.exit(1)
     }
 

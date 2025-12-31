@@ -3,6 +3,7 @@ import { db } from '../../../db/client.js'
 import { isStripeCrossBorderSupported } from '../../../utils/constants.js'
 import { sendPaymentSetupCompleteEmail } from '../../../services/email.js'
 import { invalidatePublicProfileCache } from '../../../utils/cache.js'
+import { logEmailSent, logEmailFailed } from '../../../utils/logger.js'
 
 // Handle Connect account updated
 export async function handleAccountUpdated(event: Stripe.Event) {
@@ -61,9 +62,9 @@ export async function handleAccountUpdated(event: Stripe.Event) {
         profile.displayName,
         shareUrl
       )
-      console.log(`[stripe] Sent payment setup complete email to ${profile.user.email}`)
+      logEmailSent('payment setup complete', profile.user.email, { provider: 'stripe' })
     } catch (err) {
-      console.error('[stripe] Failed to send payment setup complete email:', err)
+      logEmailFailed('payment setup complete', profile.user.email, err, { provider: 'stripe' })
     }
   }
 }

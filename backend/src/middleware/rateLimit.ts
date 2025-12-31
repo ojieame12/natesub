@@ -103,6 +103,12 @@ export function rateLimit(options: Partial<RateLimitOptions> = {}) {
   const config = { ...defaultOptions, ...options }
 
   return async (c: Context, next: Next) => {
+    // Skip rate limiting in test environment
+    if (process.env.NODE_ENV === 'test') {
+      await next()
+      return
+    }
+
     // Get user ID from auth middleware (if authenticated)
     const userId = c.get('userId') as string | undefined
 

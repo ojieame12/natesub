@@ -16,7 +16,7 @@
  */
 
 import { Hono } from 'hono'
-import { adminAuth } from '../../middleware/adminAuth.js'
+import { adminAuth, requireValidAdminOrigin, requireAllowedIp } from '../../middleware/adminAuth.js'
 import { adminReadRateLimit } from '../../middleware/rateLimit.js'
 
 // Import controllers
@@ -52,6 +52,14 @@ admin.use('*', async (c, next) => {
   // All other routes require full admin auth
   await adminAuth(c, next)
 })
+
+// Apply IP allowlist for API key auth (when ADMIN_IP_ALLOWLIST is configured)
+// Must run after adminAuth so we know the auth method
+admin.use('*', requireAllowedIp)
+
+// Apply CSRF protection for session-based state-changing requests
+// API key auth bypasses this (used in trusted automated contexts)
+admin.use('*', requireValidAdminOrigin)
 
 // Apply rate limiting to all admin routes (100 req/min per admin)
 // Prevents bulk scraping if admin credentials are compromised

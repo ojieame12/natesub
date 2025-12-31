@@ -238,8 +238,10 @@ async function processReminder(reminder: {
  * Process all due reminders
  * Run this hourly via cron
  * Uses distributed locking to prevent duplicate processing across workers
+ *
+ * @param effectiveNow - Optional time override for E2E testing
  */
-export async function processDueReminders(): Promise<ReminderResult> {
+export async function processDueReminders(effectiveNow?: Date): Promise<ReminderResult> {
   const result: ReminderResult = {
     processed: 0,
     sent: 0,
@@ -247,7 +249,7 @@ export async function processDueReminders(): Promise<ReminderResult> {
     errors: [],
   }
 
-  const now = new Date()
+  const now = effectiveNow || new Date()
 
   // Find all scheduled reminders that are due
   const dueReminders = await db.reminder.findMany({

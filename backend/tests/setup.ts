@@ -1,3 +1,7 @@
+// Force UTC timezone for all tests to match BUSINESS_TIMEZONE in production
+// This prevents flaky tests when local time differs from UTC (e.g., month boundaries)
+process.env.TZ = 'UTC'
+
 /**
  * Test Setup - In-Memory Mocks for Prisma and Redis
  *

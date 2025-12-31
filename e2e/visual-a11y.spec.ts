@@ -343,7 +343,7 @@ test.describe('Security: CSRF Protection', () => {
 
   test('management tokens are validated', async ({ request }) => {
     // Attempt to access management endpoint with invalid token
-    const response = await request.get(`${API_URL}/subscriptions/manage/invalid-token-here`)
+    const response = await request.get(`${API_URL}/subscription/manage/invalid-token-here`)
 
     // Should return 400 or 404, not 500
     expect([400, 404]).toContain(response.status())

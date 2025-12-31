@@ -10,6 +10,7 @@ import { requireAuth } from '../middleware/auth.js'
 import { publicRateLimit } from '../middleware/rateLimit.js'
 import { createSubscriberPortalSession, cancelSubscription, reactivateSubscription } from '../services/stripe.js'
 import { sendCancellationConfirmationEmail } from '../services/email.js'
+import { logSubscriptionEvent } from '../services/systemLog.js'
 import { env } from '../config/env.js'
 import { centsToDisplayAmount } from '../utils/currency.js'
 import { validateCancelToken, validatePortalToken, validateExpressDashboardToken } from '../utils/cancelToken.js'
@@ -141,6 +142,15 @@ mySubscriptions.get(
         payments: {
           orderBy: { createdAt: 'desc' },
           take: 10,
+          select: {
+            id: true,
+            grossCents: true,
+            amountCents: true,
+            subscriberFeeCents: true,
+            currency: true,
+            status: true,
+            occurredAt: true,
+          },
         },
       },
     })
@@ -169,7 +179,11 @@ mySubscriptions.get(
         hasStripe: !!subscription.stripeSubscriptionId,
         payments: subscription.payments.map(p => ({
           id: p.id,
-          amount: centsToDisplayAmount(p.amountCents, p.currency),
+          // Show subscriber what they actually paid (gross amount)
+          amount: centsToDisplayAmount(
+            p.grossCents ?? (p.amountCents + (p.subscriberFeeCents ?? 0)),
+            p.currency
+          ),
           currency: p.currency,
           status: p.status,
           occurredAt: p.occurredAt,
@@ -230,6 +244,16 @@ mySubscriptions.post(
   }
 )
 
+// Cancel reason enum - for analytics parity with public/OTP portals
+const CancelReasonSchema = z.enum([
+  'too_expensive',
+  'not_enough_value',
+  'taking_break',
+  'found_alternative',
+  'technical_issues',
+  'other',
+])
+
 // Cancel my subscription
 // Subscribers can cancel subscriptions they have
 mySubscriptions.post(
@@ -238,12 +262,16 @@ mySubscriptions.post(
   zValidator('param', z.object({ id: z.string().uuid() })),
   zValidator('json', z.object({
     immediate: z.boolean().default(false),
+    reason: CancelReasonSchema.optional(),
+    comment: z.string().max(500).optional(),
   }).optional()),
   async (c) => {
     const userId = c.get('userId')
     const { id } = c.req.valid('param')
     const body = c.req.valid('json')
     const immediate = body?.immediate || false
+    const reason = body?.reason
+    const comment = body?.comment?.replace(/[<>]/g, '').trim() || null
 
     const subscription = await db.subscription.findFirst({
       where: {
@@ -277,8 +305,8 @@ mySubscriptions.post(
       if (subscription.subscriber?.email && subscription.creator.profile?.displayName) {
         const accessUntil = subscription.currentPeriodEnd || new Date()
         const resubscribeUrl = subscription.creator.profile.username
-          ? `${env.APP_URL}/${subscription.creator.profile.username}`
-          : env.APP_URL
+          ? `${env.PUBLIC_PAGE_URL}/${subscription.creator.profile.username}`
+          : env.PUBLIC_PAGE_URL
 
         sendCancellationConfirmationEmail(
           subscription.subscriber.email,
@@ -302,6 +330,34 @@ mySubscriptions.post(
             cancelAtPeriodEnd: result.cancelAtPeriodEnd,
             canceledAt: result.canceledAt,
           },
+        })
+
+        // Record cancel feedback for analytics (if provided)
+        if (reason) {
+          await db.activity.create({
+            data: {
+              userId: subscription.creatorId,
+              type: 'subscription_cancel_feedback',
+              payload: {
+                subscriptionId: subscription.id,
+                subscriberId: userId,
+                reason,
+                comment,
+                source: 'in_app',
+              },
+            },
+          })
+        }
+
+        // Log cancellation event for audit trail
+        await logSubscriptionEvent({
+          event: 'cancel',
+          subscriptionId: subscription.id,
+          subscriberId: userId,
+          creatorId: subscription.creatorId,
+          provider: 'stripe',
+          source: 'in_app',
+          reason,
         })
 
         // Send confirmation email (non-blocking)
@@ -330,6 +386,34 @@ mySubscriptions.post(
         cancelAtPeriodEnd: !immediate,
         canceledAt: immediate ? new Date() : null,
       },
+    })
+
+    // Record cancel feedback for analytics (if provided)
+    if (reason) {
+      await db.activity.create({
+        data: {
+          userId: subscription.creatorId,
+          type: 'subscription_cancel_feedback',
+          payload: {
+            subscriptionId: subscription.id,
+            subscriberId: userId,
+            reason,
+            comment,
+            source: 'in_app',
+          },
+        },
+      })
+    }
+
+    // Log cancellation event for audit trail
+    await logSubscriptionEvent({
+      event: 'cancel',
+      subscriptionId: subscription.id,
+      subscriberId: userId,
+      creatorId: subscription.creatorId,
+      provider: 'paystack',
+      source: 'in_app',
+      reason,
     })
 
     // Send confirmation email (non-blocking)
@@ -388,6 +472,16 @@ mySubscriptions.post(
           },
         })
 
+        // Log reactivation event for audit trail
+        await logSubscriptionEvent({
+          event: 'reactivate',
+          subscriptionId: subscription.id,
+          subscriberId: userId,
+          creatorId: subscription.creatorId,
+          provider: 'stripe',
+          source: 'in_app',
+        })
+
         return c.json({
           success: true,
           subscription: {
@@ -409,6 +503,16 @@ mySubscriptions.post(
         cancelAtPeriodEnd: false,
         canceledAt: null,
       },
+    })
+
+    // Log reactivation event for audit trail
+    await logSubscriptionEvent({
+      event: 'reactivate',
+      subscriptionId: subscription.id,
+      subscriberId: userId,
+      creatorId: subscription.creatorId,
+      provider: 'paystack',
+      source: 'in_app',
     })
 
     return c.json({
@@ -589,8 +693,8 @@ mySubscriptions.post(
         if (subscription.subscriber?.email && subscription.creator.profile?.displayName) {
           const accessUntil = subscription.currentPeriodEnd || new Date()
           const resubscribeUrl = subscription.creator.profile.username
-            ? `${env.APP_URL}/${subscription.creator.profile.username}`
-            : env.APP_URL
+            ? `${env.PUBLIC_PAGE_URL}/${subscription.creator.profile.username}`
+            : env.PUBLIC_PAGE_URL
 
           sendCancellationConfirmationEmail(
             subscription.subscriber.email,
@@ -640,8 +744,8 @@ mySubscriptions.post(
       if (subscription.subscriber?.email && subscription.creator.profile?.displayName) {
         const accessUntil = subscription.currentPeriodEnd || new Date()
         const resubscribeUrl = subscription.creator.profile.username
-          ? `${env.APP_URL}/${subscription.creator.profile.username}`
-          : env.APP_URL
+          ? `${env.PUBLIC_PAGE_URL}/${subscription.creator.profile.username}`
+          : env.PUBLIC_PAGE_URL
 
         sendCancellationConfirmationEmail(
           subscription.subscriber.email,

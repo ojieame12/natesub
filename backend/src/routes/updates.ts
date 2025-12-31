@@ -7,6 +7,7 @@ import { updateSendRateLimit } from '../middleware/rateLimit.js'
 import { sendUpdateEmail } from '../services/email.js'
 import { acquireLock, releaseLock } from '../services/lock.js'
 import { updateEmailQueue } from '../lib/queue.js'
+import { logEmailFailed } from '../utils/logger.js'
 import type { UpdateEmailJobData } from '../workers/updateEmailProcessor.js'
 
 const updates = new Hono()
@@ -553,7 +554,7 @@ updates.post(
 
         successCount++
       } catch (error: any) {
-        console.error(`Retry failed for ${delivery.subscriber.email}:`, error.message)
+        logEmailFailed('update retry', delivery.subscriber.email, error)
 
         await db.updateDelivery.update({
           where: { id: delivery.id },

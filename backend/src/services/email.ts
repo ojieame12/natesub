@@ -6,6 +6,7 @@
 import { Resend, type CreateEmailOptions } from 'resend'
 import { env } from '../config/env.js'
 import { logEmailSent, logEmailFailed } from './systemLog.js'
+import { logEmailFailed as logEmailFailedConsole } from '../utils/logger.js'
 import { emailQueue } from '../lib/queue.js'
 import {
   MAX_RETRIES,
@@ -34,6 +35,9 @@ import {
   textLink,
   mutedText,
   otpCode,
+  // URL helpers
+  getAppUrl,
+  getPublicUrl,
 } from './emailTemplates.js'
 
 const resend = new Resend(env.RESEND_API_KEY)
@@ -161,7 +165,7 @@ export async function sendTestEmail(to: string): Promise<EmailResult> {
         <p style="margin: 0; font-size: 14px; color: #888888;">Sent at: ${new Date().toISOString()}</p>
       `,
       ctaText: 'Go to Dashboard',
-      ctaUrl: `${env.APP_URL}/dashboard`,
+      ctaUrl: getAppUrl('/dashboard'),
       ctaColor: '#16a34a',
     }),
   })
@@ -214,7 +218,7 @@ export async function sendOtpEmail(to: string, otp: string): Promise<EmailResult
   console.log(`[email] OTP send result: success=${result.success}, messageId=${result.messageId || 'none'}, attempts=${result.attempts}`)
 
   if (!result.success) {
-    console.error('[email] Failed to send OTP email:', { to, error: result.error })
+    logEmailFailedConsole('OTP', to, result.error || 'Unknown error')
     throw new Error('Failed to send verification code. Please try again.')
   }
 
@@ -244,7 +248,7 @@ export async function sendWelcomeEmail(to: string, displayName: string): Promise
         ])}
       `,
       ctaText: 'Go to Dashboard',
-      ctaUrl: `${env.APP_URL}/dashboard`,
+      ctaUrl: getAppUrl('/dashboard'),
       footerText: 'Questions? Just reply to this email.',
     }),
   })
@@ -270,7 +274,7 @@ export async function sendOnboardingIncompleteEmail(
           <p style="margin: 0; font-size: 14px; color: #888888;">It only takes a few minutes to complete.</p>
         `,
       ctaText: 'Continue Setup',
-      ctaUrl: `${env.APP_URL}/onboarding`,
+      ctaUrl: getAppUrl('/onboarding'),
     }),
   })
 }
@@ -307,7 +311,7 @@ export async function sendNoSubscribersEmail(
           </table>
         `,
       ctaText: 'Go to Dashboard',
-      ctaUrl: `${env.APP_URL}/dashboard`,
+      ctaUrl: getAppUrl('/dashboard'),
     }),
   })
 }
@@ -344,7 +348,7 @@ export async function sendNewSubscriberEmail(
         ${amountCard('Monthly earnings', `+${formattedAmount}`, '#34C759')}
       `,
       ctaText: 'View Subscribers',
-      ctaUrl: `${env.APP_URL}/subscribers`,
+      ctaUrl: getAppUrl('/subscribers'),
       ctaColor: '#34C759',
       ctaSecondaryText: dashboardUrl ? 'Open Payment Dashboard →' : undefined,
       ctaSecondaryUrl: dashboardUrl,
@@ -382,7 +386,7 @@ export async function sendSubscriptionConfirmationEmail(
   const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 
   // Use direct portal URL if provided, otherwise fall back to my-subscriptions
-  const manageLink = manageUrl || `${env.APP_URL}/my-subscriptions`
+  const manageLink = manageUrl || getPublicUrl('/subscriptions')
 
   return sendEmail({
     from: env.EMAIL_FROM,
@@ -406,7 +410,7 @@ export async function sendSubscriptionConfirmationEmail(
         ])}
       `,
       ctaText: `View ${safeProviderName}'s Page`,
-      ctaUrl: `${env.APP_URL}/${escapeHtml(providerUsername)}`,
+      ctaUrl: getPublicUrl(`/${escapeHtml(providerUsername)}`),
       ctaColor: '#34C759',
       ctaSecondaryText: 'Manage subscription →',
       ctaSecondaryUrl: manageLink,
@@ -437,7 +441,7 @@ export async function sendRenewalReminderEmail(
   const isUrgent = daysUntil <= 3
 
   // Use direct portal URL if provided, otherwise fall back to my-subscriptions
-  const manageLink = manageUrl || `${env.APP_URL}/my-subscriptions`
+  const manageLink = manageUrl || getPublicUrl('/subscriptions')
 
   return sendEmail({
     from: env.EMAIL_FROM,
@@ -478,7 +482,7 @@ export async function sendPaymentFailedEmail(
   const safeProviderName = escapeHtml(providerName)
 
   // Use direct portal URL if provided, otherwise fall back to my-subscriptions
-  const manageLink = manageUrl || `${env.APP_URL}/my-subscriptions`
+  const manageLink = manageUrl || getPublicUrl('/subscriptions')
 
   const retryInfo = retryDate
     ? `Auto-retry: ${retryDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
@@ -547,7 +551,7 @@ export async function sendSubscriptionCanceledEmail(
         ${mutedText('You can resubscribe anytime if you\'d like to continue.')}
       `,
       ctaText: 'Resubscribe',
-      ctaUrl: env.APP_URL,
+      ctaUrl: getPublicUrl(),
     }),
   })
 }
@@ -840,7 +844,7 @@ export async function sendUpdateEmail(
   // Build view online link if username provided
   const viewOnlineHtml = options?.creatorUsername ? `
     <p style="margin: 16px 0 0 0;">
-      <a href="${env.APP_URL}/${escapeHtml(options.creatorUsername)}" style="color: ${BRAND_COLOR}; text-decoration: none;">View ${safeSenderName}'s page →</a>
+      <a href="${getPublicUrl(`/${escapeHtml(options.creatorUsername)}`)}" style="color: ${BRAND_COLOR}; text-decoration: none;">View ${safeSenderName}'s page →</a>
     </p>
   ` : ''
 
@@ -912,7 +916,7 @@ export async function sendPayoutCompletedEmail(
         ${mutedText('Funds typically arrive within 1-2 business days.')}
       `,
       ctaText: 'View Dashboard',
-      ctaUrl: `${env.APP_URL}/dashboard`,
+      ctaUrl: getAppUrl('/dashboard'),
       ctaColor: '#34C759',
     }),
   })
@@ -947,7 +951,7 @@ export async function sendPayoutFailedEmail(
         ])}
       `,
       ctaText: 'Check Bank Details',
-      ctaUrl: `${env.APP_URL}/settings`,
+      ctaUrl: getAppUrl('/settings'),
       ctaColor: '#dc2626',
     }),
   })
@@ -976,7 +980,7 @@ export async function sendBankSetupIncompleteEmail(
         ${mutedText('Add your bank details below to receive your earnings.')}
       `,
       ctaText: 'Add Bank Details',
-      ctaUrl: `${env.APP_URL}/settings`,
+      ctaUrl: getAppUrl('/settings'),
       ctaColor: '#dc2626',
     }),
   })
@@ -1015,7 +1019,7 @@ export async function sendPayrollReadyEmail(
         ${mutedText('Use this statement for income verification, taxes, or your records.')}
       `,
       ctaText: 'View Statement',
-      ctaUrl: `${env.APP_URL}/payroll`,
+      ctaUrl: getAppUrl('/payroll'),
     }),
   })
 }
@@ -1066,7 +1070,7 @@ export async function sendPlatformDebitNotification(
           ${closeToCapWarning}
         `,
       ctaText: 'Update Payment Method',
-      ctaUrl: `${env.APP_URL}/settings/billing`,
+      ctaUrl: getAppUrl('/settings/billing'),
     }),
   })
 }
@@ -1121,7 +1125,7 @@ export async function sendPlatformDebitRecoveredNotification(
       headline: remainingDebit > 0 ? 'Balance partially recovered' : 'Balance cleared',
       body: bodyContent,
       ctaText: remainingDebit > 0 ? 'Update Payment Method' : 'View Billing',
-      ctaUrl: `${env.APP_URL}/settings/billing`,
+      ctaUrl: getAppUrl('/settings/billing'),
       ctaColor: remainingDebit > 0 ? undefined : '#10B981',
     }),
   })
@@ -1166,7 +1170,7 @@ export async function sendPaymentSetupCompleteEmail(
           </p>
         `,
       ctaText: 'Go to Dashboard',
-      ctaUrl: `${env.APP_URL}/dashboard`,
+      ctaUrl: getAppUrl('/dashboard'),
       ctaColor: '#16a34a',
     }),
   })
@@ -1213,7 +1217,7 @@ export async function sendPlatformDebitCapReachedNotification(
           </p>
         `,
       ctaText: 'Clear Balance Now',
-      ctaUrl: `${env.APP_URL}/settings/billing`,
+      ctaUrl: getAppUrl('/settings/billing'),
       ctaColor: '#DC2626',
     }),
   })
@@ -1260,7 +1264,7 @@ export async function sendDisputeCreatedEmail(
         ${mutedText('If you have transaction records or communication with this subscriber, keep them handy.')}
       `,
       ctaText: 'View Dashboard',
-      ctaUrl: `${env.APP_URL}/dashboard`,
+      ctaUrl: getAppUrl('/dashboard'),
       ctaColor: '#DC2626',
     }),
   })
@@ -1315,7 +1319,7 @@ export async function sendDisputeResolvedEmail(
       badge: { text: won ? 'Won' : 'Lost', type: won ? 'success' : 'action' },
       body,
       ctaText: 'View Dashboard',
-      ctaUrl: `${env.APP_URL}/dashboard`,
+      ctaUrl: getAppUrl('/dashboard'),
       ctaColor: won ? '#16A34A' : '#DC2626',
     }),
   })
@@ -1453,7 +1457,7 @@ export async function sendCreatorAccountCreatedEmail(
         </p>
       `,
       ctaText: 'Go to Dashboard',
-      ctaUrl: `${env.APP_URL}/dashboard`,
+      ctaUrl: getAppUrl('/dashboard'),
       footerText: 'This account was set up on your behalf by our support team.',
     }),
   })
@@ -1538,7 +1542,7 @@ export async function sendPayoutsPausedEmail(
         </p>
       `,
       ctaText: 'View Disputes',
-      ctaUrl: `${env.APP_URL}/dashboard/disputes`,
+      ctaUrl: getAppUrl('/dashboard/disputes'),
       footerText: 'If you believe this is an error, please contact support.',
     }),
   })
@@ -1612,7 +1616,7 @@ export async function sendAccountSuspendedEmail(
         </p>
       `,
       ctaText: 'Contact Support',
-      ctaUrl: `${env.APP_URL}/support?reason=dispute_suspension`,
+      ctaUrl: getAppUrl('/support?reason=dispute_suspension'),
       footerText: 'This action was taken automatically based on dispute rate thresholds.',
     }),
   })
@@ -1674,7 +1678,7 @@ export async function sendPayoutsResumedEmail(
         </p>
       `,
       ctaText: 'View Dashboard',
-      ctaUrl: `${env.APP_URL}/dashboard`,
+      ctaUrl: getAppUrl('/dashboard'),
     }),
   })
 

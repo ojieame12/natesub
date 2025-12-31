@@ -106,6 +106,33 @@ const FONT_STACK = "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe 
 const FONT_STACK_MONO = "'SF Mono', 'Consolas', 'Monaco', 'Courier New', monospace"
 
 // ============================================
+// URL HELPERS
+// ============================================
+// Centralized URL generation to ensure consistency:
+// - APP_URL: Authenticated app routes (dashboard, settings, etc.)
+// - PUBLIC_PAGE_URL: Public routes (creator pages, unsubscribe, subscriber portal)
+
+/**
+ * Generate URL for authenticated app routes
+ * Use for: dashboard, settings, login redirects
+ */
+export function getAppUrl(path: string = ''): string {
+  const base = env.APP_URL.replace(/\/$/, '')
+  const cleanPath = path.startsWith('/') ? path : `/${path}`
+  return path ? `${base}${cleanPath}` : base
+}
+
+/**
+ * Generate URL for public routes (no auth required)
+ * Use for: creator pages, unsubscribe links, subscriber portal, resubscribe links
+ */
+export function getPublicUrl(path: string = ''): string {
+  const base = env.PUBLIC_PAGE_URL.replace(/\/$/, '')
+  const cleanPath = path.startsWith('/') ? path : `/${path}`
+  return path ? `${base}${cleanPath}` : base
+}
+
+// ============================================
 // LOGO HANDLING
 // ============================================
 

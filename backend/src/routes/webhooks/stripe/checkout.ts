@@ -14,6 +14,7 @@ import { normalizeEmailAddress } from '../utils.js'
 import { invalidateAdminRevenueCache } from '../../../utils/cache.js'
 import { getReportingCurrencyData } from '../../../services/fx.js'
 import { generateManageUrl, generateExpressDashboardUrl } from '../../../utils/cancelToken.js'
+import { logger } from '../../../utils/logger.js'
 
 async function resolveStripeCheckoutCustomer(session: Stripe.Checkout.Session): Promise<{ email: string; name: string | null }> {
   const directEmail = session.customer_details?.email || session.customer_email || null
@@ -35,7 +36,7 @@ async function resolveStripeCheckoutCustomer(session: Stripe.Checkout.Session): 
         }
       }
     } catch (err) {
-      console.error(`[stripe] Failed to retrieve customer ${sanitizeForLog(customerId)} for session ${session.id}:`, err)
+      logger.error('Failed to retrieve customer for session', err as Error, { sessionId: session.id })
     }
   }
 
@@ -54,19 +55,19 @@ export async function handleCheckoutCompleted(event: Stripe.Event) {
   // For ONE-TIME payments with async payment: defer to checkout.session.async_payment_succeeded
   // For SUBSCRIPTIONS with async payment: create subscription record now, invoice.paid will create payment
   if (isAsyncPayment && !isSubscriptionMode) {
-    console.log(`[checkout.session.completed] Skipping one-time session ${session.id} with payment_status: ${session.payment_status}`)
+    logger.debug('Skipping one-time session with pending payment', { sessionId: session.id, paymentStatus: session.payment_status })
     return
   }
 
   if (isAsyncPayment && isSubscriptionMode) {
-    console.log(`[checkout.session.completed] Creating subscription record for async payment session ${session.id}`)
+    logger.info('Creating subscription record for async payment session', { sessionId: session.id })
     // Continue processing to create subscription record, but skip payment creation
   }
 
   // Validate webhook metadata - provider signature already verified, this validates data integrity
   const metadataValidation = validateCheckoutMetadata(session.metadata as Record<string, string>)
   if (!metadataValidation.valid) {
-    console.error(`[checkout.session.completed] Invalid metadata for session ${session.id}: ${metadataValidation.error}`)
+    logger.error('Invalid metadata for session', null, { sessionId: session.id, error: metadataValidation.error })
     throw new Error(`Invalid metadata: ${metadataValidation.error}`)
   }
 
@@ -98,7 +99,7 @@ export async function handleCheckoutCompleted(event: Stripe.Event) {
   const checkoutAcceptLanguage = validatedMeta.checkoutAcceptLanguage || null
 
   // Log with sanitized values for audit trail
-  console.log(`[checkout.session.completed] Processing session ${session.id} for creator ${sanitizeForLog(creatorId)}`)
+  logger.info('Processing checkout session', { sessionId: session.id, creatorId })
 
   // Server-side conversion tracking (more reliable than client-side)
   // IMPORTANT: Only mark as completed if payment actually succeeded
@@ -288,7 +289,7 @@ export async function handleCheckoutCompleted(event: Stripe.Event) {
             const paymentIntent = await stripe.paymentIntents.retrieve(session.payment_intent as string)
             stripeChargeId = paymentIntent.latest_charge as string || null
           } catch (err) {
-            console.warn('Could not retrieve payment intent for charge ID:', err)
+            logger.warn('Could not retrieve payment intent for charge ID', { sessionId: session.id, error: (err as Error).message })
           }
         }
 
@@ -331,7 +332,7 @@ export async function handleCheckoutCompleted(event: Stripe.Event) {
             },
           }).catch((err: any) => {
             // Non-fatal - don't fail the payment if evidence can't be saved
-            console.warn(`[checkout] Failed to create dispute evidence:`, err.message)
+            logger.warn('Failed to create dispute evidence', { error: err.message })
           })
         }
 
@@ -357,7 +358,7 @@ export async function handleCheckoutCompleted(event: Stripe.Event) {
             },
           })
 
-          console.log(`[checkout] Recovered $${(platformDebitRecovered / 100).toFixed(2)} platform debit from creator ${creatorId}`)
+          logger.info('Recovered platform debit from creator', { creatorId, amountCents: platformDebitRecovered })
         }
       }
 
@@ -390,7 +391,7 @@ export async function handleCheckoutCompleted(event: Stripe.Event) {
 
   // If lock couldn't be acquired, another process is handling this
   if (!subscription) {
-    console.log(`[checkout.session.completed] Lock not acquired for ${lockKey}, skipping (another process handling)`)
+    logger.debug('Lock not acquired, skipping', { lockKey })
     return
   }
 
@@ -401,7 +402,7 @@ export async function handleCheckoutCompleted(event: Stripe.Event) {
       await setSubscriptionDefaultFee(session.subscription as string, serviceFee)
     } catch (err) {
       // Non-fatal: log but continue
-      console.error(`[stripe] Failed to set default fee on subscription:`, err)
+      logger.error('Failed to set default fee on subscription', err as Error, { subscriptionId: session.subscription as string })
     }
   }
 
@@ -446,7 +447,7 @@ export async function handleCheckoutCompleted(event: Stripe.Event) {
           manageUrl
         )
       } catch (emailErr) {
-        console.error(`[checkout] Failed to send subscriber confirmation email:`, emailErr)
+        logger.error('Failed to send subscriber confirmation email', emailErr as Error, { creatorId })
       }
     }
 
@@ -461,7 +462,7 @@ export async function handleCheckoutCompleted(event: Stripe.Event) {
           remainingDebit
         )
       } catch (emailErr) {
-        console.error(`[checkout] Failed to send debit recovery email:`, emailErr)
+        logger.error('Failed to send debit recovery email', emailErr as Error, { creatorId })
       }
     }
   }
@@ -479,19 +480,19 @@ export async function handleCheckoutCompleted(event: Stripe.Event) {
 export async function handleAsyncPaymentSucceeded(event: Stripe.Event) {
   const session = event.data.object as Stripe.Checkout.Session
 
-  console.log(`[async_payment_succeeded] Processing session ${session.id}`)
+  logger.info('Processing async payment succeeded', { sessionId: session.id })
 
   // For subscriptions, invoice.paid handles the payment
   // This handler is primarily for one-time payments with async methods
   if (session.mode === 'subscription') {
-    console.log(`[async_payment_succeeded] Subscription mode - invoice.paid will handle payment`)
+    logger.debug('Subscription mode - invoice.paid will handle payment', { sessionId: session.id })
     return
   }
 
   // Validate webhook metadata
   const metadataValidation = validateCheckoutMetadata(session.metadata as Record<string, string>)
   if (!metadataValidation.valid) {
-    console.error(`[async_payment_succeeded] Invalid metadata for session ${session.id}: ${metadataValidation.error}`)
+    logger.error('Invalid metadata for async payment session', null, { sessionId: session.id, error: metadataValidation.error })
     throw new Error(`Invalid metadata: ${metadataValidation.error}`)
   }
 
@@ -514,7 +515,7 @@ export async function handleAsyncPaymentSucceeded(event: Stripe.Event) {
   const creatorFeeCents = parseMetadataAmount(validatedMeta.creatorFeeCents)
   const baseAmountCents = parseMetadataAmount(validatedMeta.baseAmountCents)
 
-  console.log(`[async_payment_succeeded] Processing session ${session.id} for creator ${sanitizeForLog(creatorId)}`)
+  logger.info('Processing async payment session for creator', { sessionId: session.id, creatorId })
 
   // Conversion tracking
   if (viewId) {
@@ -713,14 +714,14 @@ export async function handleAsyncPaymentSucceeded(event: Stripe.Event) {
               exchangeRate: result.data.exchangeRate,
             },
           })
-          console.log(`[checkout] Stored FX data for payment ${checkoutPayment.id}: ${result.data.originalCurrency} → ${result.data.payoutCurrency} @ ${result.data.exchangeRate}`)
+          logger.info('Stored FX data for payment', { paymentId: checkoutPayment.id, originalCurrency: result.data.originalCurrency, payoutCurrency: result.data.payoutCurrency, exchangeRate: result.data.exchangeRate })
         } else {
           // pending/no_fx/error - activity.ts will handle on-demand backfill
-          console.log(`[checkout] FX lookup status for payment ${checkoutPayment.id}: ${result.status}`)
+          logger.debug('FX lookup status', { paymentId: checkoutPayment.id, status: result.status })
         }
       }
     }).catch((err) => {
-      console.warn(`[checkout] Could not fetch FX data for payment ${checkoutPayment.id}:`, err.message)
+      logger.warn('Could not fetch FX data for payment', { paymentId: checkoutPayment.id, error: err.message })
     })
   }
 
@@ -793,7 +794,7 @@ export async function handleAsyncPaymentSucceeded(event: Stripe.Event) {
 
       // Only create activity if we actually unlocked (count > 0)
       if (unlockResult.count > 0) {
-        console.log(`[async_payment_succeeded] Unlocked Salary Mode for creator ${creatorId} after ${updatedProfile.totalSuccessfulPayments} successful payments`)
+        logger.info('Unlocked Salary Mode for creator', { creatorId, successfulPayments: updatedProfile.totalSuccessfulPayments })
         await db.activity.create({
           data: {
             userId: creatorId,
@@ -808,7 +809,7 @@ export async function handleAsyncPaymentSucceeded(event: Stripe.Event) {
     }
   }
 
-  console.log(`[async_payment_succeeded] Created subscription ${subscription.id} for async payment`)
+  logger.info('Created subscription for async payment', { subscriptionId: subscription.id })
 }
 
 // Handle checkout session expired (user abandoned payment)
@@ -839,5 +840,5 @@ export async function handleCheckoutExpired(event: Stripe.Event) {
     },
   })
 
-  console.log(`Checkout expired for request ${requestId}, reverted to sent status`)
+  logger.info('Checkout expired for request, reverted to sent status', { requestId })
 }

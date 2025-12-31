@@ -132,22 +132,24 @@ describe('countryConfig', () => {
 
   describe('constant arrays', () => {
     it('SKIP_ADDRESS_COUNTRIES contains exactly NG, GH, KE', () => {
-      expect([...SKIP_ADDRESS_COUNTRIES]).toEqual(['NG', 'GH', 'KE'])
+      // Use Set comparison - order doesn't matter for this logic
+      expect(new Set(SKIP_ADDRESS_COUNTRIES)).toEqual(new Set(['NG', 'GH', 'KE']))
+      expect(SKIP_ADDRESS_COUNTRIES).toHaveLength(3)
     })
 
     it('PAYSTACK_COUNTRIES contains exactly NG, KE, ZA (no GH)', () => {
-      expect([...PAYSTACK_COUNTRIES]).toEqual(['NG', 'KE', 'ZA'])
+      expect(new Set(PAYSTACK_COUNTRIES)).toEqual(new Set(['NG', 'KE', 'ZA']))
       expect(PAYSTACK_COUNTRIES).not.toContain('GH')
       expect(PAYSTACK_COUNTRIES).not.toContain('CI')
     })
 
     it('STRIPE_CROSS_BORDER_COUNTRIES contains exactly NG, GH, KE', () => {
-      expect([...STRIPE_CROSS_BORDER_COUNTRIES]).toEqual(['NG', 'GH', 'KE'])
+      expect(new Set(STRIPE_CROSS_BORDER_COUNTRIES)).toEqual(new Set(['NG', 'GH', 'KE']))
       expect(STRIPE_CROSS_BORDER_COUNTRIES).not.toContain('ZA')
     })
 
     it('PAYSTACK_PAYER_COUNTRIES includes GH (for checkout routing)', () => {
-      expect([...PAYSTACK_PAYER_COUNTRIES]).toEqual(['NG', 'KE', 'ZA', 'GH'])
+      expect(new Set(PAYSTACK_PAYER_COUNTRIES)).toEqual(new Set(['NG', 'KE', 'ZA', 'GH']))
       // GH payers can use Paystack to pay NG/KE/ZA creators
       expect(PAYSTACK_PAYER_COUNTRIES).toContain('GH')
     })

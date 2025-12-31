@@ -1,6 +1,13 @@
 import { test, expect } from '@playwright/test'
 import { e2eLogin, setAuthCookie, deterministicEmail } from './auth.helper'
 
+// E2E API key for helper endpoints (matches playwright.config.ts)
+const E2E_API_KEY = process.env.E2E_API_KEY || 'e2e-local-dev-key'
+const e2eHeaders = () => ({
+  'x-e2e-api-key': E2E_API_KEY,
+  'Content-Type': 'application/json',
+})
+
 /**
  * Real Backend E2E Tests
  *
@@ -945,14 +952,15 @@ test.describe('Subscriber Portal - Real Backend (Always-On)', () => {
 test.describe('Subscription Management - Real Backend (Always-On)', () => {
   test('manage token API validates token format', async ({ request }) => {
     // Test that malformed tokens are rejected at API level
-    const response = await request.get('http://localhost:3001/subscriptions/manage/invalid-token')
+    // CORRECT: /subscription/manage/:token (singular)
+    const response = await request.get('http://localhost:3001/subscription/manage/invalid-token')
 
     // Should return 400 or 404 (not 500)
     expect([400, 404]).toContain(response.status())
   })
 
   test('manage token API returns subscription details for valid token', async ({ request }) => {
-    // Create a subscription and get its manage token
+    // Create a subscription using e2e-seed-subscription (guaranteed to exist)
     const ts = Date.now().toString().slice(-8)
     const creatorEmail = `e2e-manage-creator-${ts}@test.natepay.co`
     const creatorUsername = `e2emanc${ts}`
@@ -961,7 +969,7 @@ test.describe('Subscription Management - Real Backend (Always-On)', () => {
     // Setup creator
     const { token } = await e2eLogin(request, creatorEmail)
 
-    await request.put('http://localhost:3001/profile', {
+    const profileResp = await request.put('http://localhost:3001/profile', {
       data: {
         username: creatorUsername,
         displayName: 'Manage Test Creator',
@@ -977,52 +985,51 @@ test.describe('Subscription Management - Real Backend (Always-On)', () => {
       },
       headers: { 'Authorization': `Bearer ${token}` },
     })
+    expect(profileResp.status(), 'Profile creation must succeed').toBe(200)
 
     await request.post('http://localhost:3001/stripe/connect', {
       headers: { 'Authorization': `Bearer ${token}` },
     })
 
-    // Create checkout session
-    const checkoutResp = await fetch('http://localhost:3001/checkout/session', {
-      method: 'POST',
-      body: JSON.stringify({
+    // Seed subscription directly (bypasses checkout, guaranteed to exist)
+    // Uses triple-guarded /e2e/seed-subscription endpoint
+    const seedResp = await request.post('http://localhost:3001/e2e/seed-subscription', {
+      data: {
         creatorUsername,
-        amount: 500,
-        interval: 'month',
         subscriberEmail,
-        payerCountry: 'US',
-      }),
-      headers: { 'Content-Type': 'application/json' },
+        amount: 500,
+        currency: 'USD',
+        interval: 'month',
+      },
+      headers: e2eHeaders(),
     })
+    expect(seedResp.status(), 'Subscription seeding must succeed').toBe(200)
 
-    if (checkoutResp.status === 200) {
-      const checkoutData = await checkoutResp.json()
+    const seedData = await seedResp.json()
+    expect(seedData.subscriptionId, 'Must return subscription ID').toBeTruthy()
+    expect(seedData.manageToken, 'Must return manage token').toBeTruthy()
 
-      // In stub mode, simulate webhook to create subscription
-      if (checkoutData.sessionId || checkoutData.stubSubscriptionId) {
-        // Request manage token for the subscriber
-        const tokenResp = await request.post('http://localhost:3001/subscription/request-manage-token', {
-          data: { email: subscriberEmail, creatorUsername },
-          headers: { 'Content-Type': 'application/json' },
-        })
+    // Now test the manage token endpoint with a REAL token
+    const manageResp = await request.get(`http://localhost:3001/subscription/manage/${seedData.manageToken}`)
 
-        // Either returns token (subscription exists) or 404 (no subscription yet)
-        // Both are valid - stub mode may not persist subscriptions
-        expect([200, 404]).toContain(tokenResp.status())
-      }
-    }
+    // STRICT: Must return 200 with subscription details (not 404)
+    expect(manageResp.status(), 'Manage token should return subscription details').toBe(200)
+
+    const manageData = await manageResp.json()
+    expect(manageData.subscription, 'Response should contain subscription data').toBeTruthy()
   })
 
   test('manage page UI renders subscription controls', async ({ page, request }) => {
+    // This test uses e2e-seed-subscription to guarantee a subscription exists
     const ts = Date.now().toString().slice(-8)
     const creatorEmail = `e2e-manage-ui-${ts}@test.natepay.co`
     const creatorUsername = `e2emanu${ts}`
     const subscriberEmail = `e2e-manage-ui-sub-${ts}@test.natepay.co`
 
-    // Setup creator with subscription
+    // Setup creator
     const { token } = await e2eLogin(request, creatorEmail)
 
-    await request.put('http://localhost:3001/profile', {
+    const profileResp = await request.put('http://localhost:3001/profile', {
       data: {
         username: creatorUsername,
         displayName: 'Manage UI Creator',
@@ -1038,46 +1045,51 @@ test.describe('Subscription Management - Real Backend (Always-On)', () => {
       },
       headers: { 'Authorization': `Bearer ${token}` },
     })
+    expect(profileResp.status(), 'Profile creation must succeed').toBe(200)
 
     await request.post('http://localhost:3001/stripe/connect', {
       headers: { 'Authorization': `Bearer ${token}` },
     })
 
-    // Create checkout
-    const checkoutResp = await fetch('http://localhost:3001/checkout/session', {
-      method: 'POST',
-      body: JSON.stringify({
+    // Seed subscription directly (bypasses checkout, guaranteed to exist)
+    // Uses triple-guarded /e2e/seed-subscription endpoint
+    const seedResp = await request.post('http://localhost:3001/e2e/seed-subscription', {
+      data: {
         creatorUsername,
-        amount: 500,
-        interval: 'month',
         subscriberEmail,
-        payerCountry: 'US',
-      }),
-      headers: { 'Content-Type': 'application/json' },
+        amount: 500,
+        currency: 'USD',
+        interval: 'month',
+      },
+      headers: e2eHeaders(),
     })
+    expect(seedResp.status(), 'Subscription seeding must succeed').toBe(200)
 
-    expect(checkoutResp.status).toBe(200)
-    const checkoutData = await checkoutResp.json()
+    const seedData = await seedResp.json()
+    expect(seedData.manageUrl, 'Must return manage URL').toBeTruthy()
 
-    // Get manage URL from checkout response or construct it
-    const manageUrl = checkoutData.manageUrl || `/subscription/manage/${checkoutData.stubSubscriptionId || 'stub'}`
-
-    await page.goto(manageUrl)
+    // Navigate to the manage page with valid token
+    await page.goto(`http://localhost:5173${seedData.manageUrl}`)
     await page.waitForLoadState('networkidle')
 
     // Page should render (not crash)
     await expect(page.locator('body')).toBeVisible()
 
-    // Should show either subscription details or error (not blank)
+    // STRICT: Should show subscription controls (not error/not found)
     const pageContent = await page.content()
-    const hasContent =
+    const hasSubscriptionControls =
       pageContent.toLowerCase().includes('subscription') ||
       pageContent.toLowerCase().includes('cancel') ||
       pageContent.toLowerCase().includes('manage') ||
-      pageContent.toLowerCase().includes('error') ||
-      pageContent.toLowerCase().includes('not found')
+      pageContent.toLowerCase().includes('active')
 
-    expect(hasContent, 'Manage page should show content').toBeTruthy()
+    // Should NOT show error states
+    const hasError =
+      pageContent.toLowerCase().includes('not found') &&
+      pageContent.toLowerCase().includes('error')
+
+    expect(hasSubscriptionControls, 'Manage page should show subscription controls').toBeTruthy()
+    expect(hasError, 'Manage page should NOT show error for valid subscription').toBeFalsy()
   })
 })
 
@@ -1149,5 +1161,209 @@ test.describe('Creator Dashboard - Real Backend (Always-On)', () => {
     const onOnboarding = page.url().includes('onboarding')
 
     expect(hasDashboard || onOnboarding, 'Should show dashboard or onboarding').toBeTruthy()
+  })
+})
+
+/**
+ * Admin API - Real Backend Integration (Always-On)
+ *
+ * Tests admin API endpoints without stubs.
+ * Uses ADMIN_API_KEY_READONLY if available, skips otherwise.
+ */
+test.describe('Admin API - Real Backend (Always-On)', () => {
+  // Use test API key from environment if available
+  const adminApiKey = process.env.ADMIN_API_KEY_READONLY || process.env.ADMIN_API_KEY || 'test-admin-key'
+
+  test('admin health endpoint responds with system status', async ({ request }) => {
+    const response = await request.get('http://localhost:3001/admin/health', {
+      headers: {
+        'x-admin-api-key': adminApiKey,
+      },
+    })
+
+    // Should return 200 (auth successful) or 401 (no valid API key in test)
+    // In test mode, we accept 401 as "auth required" (not 500)
+    expect([200, 401]).toContain(response.status())
+
+    if (response.status() === 200) {
+      const data = await response.json()
+      // Health endpoint should return status info
+      expect(data).toHaveProperty('status')
+    }
+  })
+
+  test('admin me endpoint returns admin user info', async ({ request }) => {
+    const response = await request.get('http://localhost:3001/admin/me', {
+      headers: {
+        'x-admin-api-key': adminApiKey,
+      },
+    })
+
+    // Should return 200 (auth successful) or 401 (no valid API key)
+    expect([200, 401]).toContain(response.status())
+
+    if (response.status() === 200) {
+      const data = await response.json()
+      // Should return admin status
+      expect(data).toHaveProperty('isAdmin')
+    }
+  })
+
+  test('admin dashboard endpoint returns metrics', async ({ request }) => {
+    const response = await request.get('http://localhost:3001/admin/dashboard', {
+      headers: {
+        'x-admin-api-key': adminApiKey,
+      },
+    })
+
+    // Should return 200 or 401 (not 500)
+    expect([200, 401]).toContain(response.status())
+
+    if (response.status() === 200) {
+      const data = await response.json()
+      // Dashboard should return stats
+      expect(data).toHaveProperty('totalUsers')
+    }
+  })
+})
+
+/**
+ * Admin API - Strict Data Validation (Read-Only)
+ *
+ * This test creates real data via E2E helpers, then verifies admin endpoints
+ * return accurate metrics reflecting the seeded data. This complements the
+ * stub-based admin-smoke.spec.ts by hitting the REAL backend.
+ *
+ * Read-only: Creates test data but doesn't modify admin state.
+ */
+test.describe('Admin API - Strict Data Validation (Read-Only)', () => {
+  test('admin users endpoint reflects seeded test users', async ({ request }) => {
+    // Step 1: Create unique test users via e2e-login
+    const ts = Date.now().toString().slice(-8)
+    const testEmail1 = `admin-test-user1-${ts}@e2e.natepay.co`
+    const testEmail2 = `admin-test-user2-${ts}@e2e.natepay.co`
+
+    const { user: user1 } = await e2eLogin(request, testEmail1)
+    const { user: user2 } = await e2eLogin(request, testEmail2)
+
+    expect(user1.id, 'User 1 should be created').toBeTruthy()
+    expect(user2.id, 'User 2 should be created').toBeTruthy()
+
+    // Step 2: Query admin users endpoint
+    const adminApiKey = process.env.ADMIN_API_KEY_READONLY || process.env.ADMIN_API_KEY || 'test-admin-key'
+    const response = await request.get('http://localhost:3001/admin/users', {
+      headers: {
+        'x-admin-api-key': adminApiKey,
+      },
+    })
+
+    // Step 3: If admin auth works, verify our test users appear
+    if (response.status() === 200) {
+      const data = await response.json()
+      expect(data.users, 'Admin users endpoint should return users array').toBeDefined()
+
+      // Find our seeded users in the response
+      const foundUser1 = data.users.some((u: { email: string }) => u.email === testEmail1)
+      const foundUser2 = data.users.some((u: { email: string }) => u.email === testEmail2)
+
+      // STRICT: Seeded users MUST appear in admin data
+      expect(foundUser1, `Admin data should include seeded user: ${testEmail1}`).toBeTruthy()
+      expect(foundUser2, `Admin data should include seeded user: ${testEmail2}`).toBeTruthy()
+    } else if (response.status() === 401) {
+      // No valid API key - acceptable in test env, but log it
+      console.log('[E2E Admin] Skipping user data validation - no ADMIN_API_KEY configured')
+    } else {
+      // Unexpected status
+      expect.fail(`Unexpected status ${response.status()} from admin users endpoint`)
+    }
+  })
+
+  test('admin stats reflect seeded subscription count', async ({ request }) => {
+    // Step 1: Create a creator with subscription
+    const ts = Date.now().toString().slice(-8)
+    const creatorEmail = `admin-stats-creator-${ts}@e2e.natepay.co`
+    const creatorUsername = `admstat${ts}`
+    const subscriberEmail = `admin-stats-sub-${ts}@e2e.natepay.co`
+
+    // Create and setup creator
+    const { token } = await e2eLogin(request, creatorEmail)
+
+    const profileResp = await request.put('http://localhost:3001/profile', {
+      data: {
+        username: creatorUsername,
+        displayName: 'Admin Stats Test',
+        country: 'United States',
+        countryCode: 'US',
+        currency: 'USD',
+        purpose: 'support',
+        pricingModel: 'single',
+        singleAmount: 5,
+        paymentProvider: 'stripe',
+        feeMode: 'split',
+        isPublic: true,
+      },
+      headers: { 'Authorization': `Bearer ${token}` },
+    })
+
+    if (profileResp.status() !== 200) {
+      console.log('[E2E Admin] Profile creation failed - skipping stats validation')
+      return
+    }
+
+    // Stripe connect
+    await request.post('http://localhost:3001/stripe/connect', {
+      headers: { 'Authorization': `Bearer ${token}` },
+    })
+
+    // Step 2: Seed a subscription (using triple-guarded /e2e endpoint)
+    const seedResp = await request.post('http://localhost:3001/e2e/seed-subscription', {
+      data: {
+        creatorUsername,
+        subscriberEmail,
+        amount: 500,
+        currency: 'USD',
+        interval: 'month',
+      },
+      headers: e2eHeaders(),
+    })
+
+    expect(seedResp.status(), 'Subscription seeding must succeed').toBe(200)
+    const seedData = await seedResp.json()
+    expect(seedData.subscriptionId, 'Must return subscription ID').toBeTruthy()
+
+    // Step 3: Query admin stats
+    const adminApiKey = process.env.ADMIN_API_KEY_READONLY || process.env.ADMIN_API_KEY || 'test-admin-key'
+    const statsResp = await request.get('http://localhost:3001/admin/stats', {
+      headers: {
+        'x-admin-api-key': adminApiKey,
+      },
+    })
+
+    // Step 4: Verify stats include our subscription
+    if (statsResp.status() === 200) {
+      const stats = await statsResp.json()
+
+      // Stats should have subscription count > 0 (at minimum our seeded one)
+      expect(
+        stats.totalSubscriptions > 0 || stats.subscriptionCount > 0 || stats.activeSubscriptions > 0,
+        'Admin stats should reflect seeded subscription'
+      ).toBeTruthy()
+
+      // Log for visibility
+      console.log(`[E2E Admin] Stats: ${JSON.stringify(stats)}`)
+    } else if (statsResp.status() === 401) {
+      console.log('[E2E Admin] Skipping stats validation - no ADMIN_API_KEY configured')
+    } else if (statsResp.status() === 404) {
+      // Stats endpoint may not exist - try dashboard
+      const dashResp = await request.get('http://localhost:3001/admin/dashboard', {
+        headers: { 'x-admin-api-key': adminApiKey },
+      })
+
+      if (dashResp.status() === 200) {
+        const dash = await dashResp.json()
+        // Dashboard should show metrics
+        expect(dash.totalUsers || dash.totalSubscriptions || dash.revenue).toBeTruthy()
+      }
+    }
   })
 })

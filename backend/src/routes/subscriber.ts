@@ -22,7 +22,7 @@ import { db } from '../db/client.js'
 import { redis } from '../db/redis.js'
 import { env } from '../config/env.js'
 import { sendOtpEmail } from '../services/email.js'
-import { cancelSubscription, createSubscriberPortalSession } from '../services/stripe.js'
+import { cancelSubscription, reactivateSubscription, createSubscriberPortalSession } from '../services/stripe.js'
 import { centsToDisplayAmount } from '../utils/currency.js'
 import { logSubscriptionEvent } from '../services/systemLog.js'
 import { rateLimit, getClientIdentifier } from '../middleware/rateLimit.js'
@@ -122,21 +122,40 @@ async function requireSubscriberSession(c: any, next: () => Promise<void>) {
 
 // CSRF protection for state-changing routes
 // Validates Origin header matches allowed domains (prevents cross-site POST attacks)
-// Note: ALLOWED_ORIGINS is evaluated at load time. Dev origins are always included
-// but the production check in requireValidOrigin skips validation in non-production.
-const ALLOWED_ORIGINS = [
-  'https://natepay.co',
-  'https://www.natepay.co',
-  'https://liquid-glass-app.vercel.app',
-  'http://localhost:5173',
-  'http://localhost:3000',
-]
+/**
+ * Get allowed origins dynamically from env vars
+ * This ensures we handle deployments correctly
+ */
+function getAllowedOrigins(): string[] {
+  const origins = new Set<string>()
+
+  // Add configured app URLs
+  try {
+    if (env.APP_URL) origins.add(new URL(env.APP_URL).origin)
+    if (env.PUBLIC_PAGE_URL) origins.add(new URL(env.PUBLIC_PAGE_URL).origin)
+  } catch {
+    // Invalid URLs - skip
+  }
+
+  // Add known production domains
+  origins.add('https://natepay.co')
+  origins.add('https://www.natepay.co')
+
+  // Dev/test origins (never in production for security)
+  if (process.env.NODE_ENV !== 'production') {
+    origins.add('http://localhost:5173')
+    origins.add('http://localhost:3000')
+    origins.add('http://localhost:3001')
+  }
+
+  return Array.from(origins)
+}
 
 /**
  * Check if origin matches exactly (no prefix attack possible)
  */
 function isAllowedOrigin(origin: string): boolean {
-  return ALLOWED_ORIGINS.includes(origin)
+  return getAllowedOrigins().includes(origin)
 }
 
 /**
@@ -148,7 +167,7 @@ function isAllowedReferer(referer: string): boolean {
   try {
     const url = new URL(referer)
     // url.origin gives us scheme + host (e.g., "https://natepay.co")
-    return ALLOWED_ORIGINS.includes(url.origin)
+    return getAllowedOrigins().includes(url.origin)
   } catch {
     // Invalid URL - reject
     return false
@@ -351,8 +370,13 @@ subscriber.get(
   '/subscriptions',
   portalRateLimit,
   requireSubscriberSession,
+  zValidator('query', z.object({
+    cursor: z.string().uuid().optional(),
+    limit: z.coerce.number().int().min(1).max(100).default(50),
+  })),
   async (c) => {
     const email = c.get('subscriberEmail')
+    const { cursor, limit } = c.req.valid('query')
 
     const user = await db.user.findFirst({
       where: { email },
@@ -360,10 +384,10 @@ subscriber.get(
     })
 
     if (!user) {
-      return c.json({ subscriptions: [] })
+      return c.json({ subscriptions: [], hasMore: false, nextCursor: null })
     }
 
-    // Get all subscriptions (active, past_due, and recently canceled)
+    // Get subscriptions with cursor-based pagination
     // Don't include payments here - we'll aggregate them separately for efficiency
     const subscriptions = await db.subscription.findMany({
       where: {
@@ -395,7 +419,9 @@ subscriber.get(
           }
         },
       },
-      orderBy: { updatedAt: 'desc' }
+      orderBy: { updatedAt: 'desc' },
+      take: limit + 1, // Fetch one extra to check if there are more
+      ...(cursor && { cursor: { id: cursor }, skip: 1 }),
     })
 
     // Get payment aggregates for all subscriptions in a single efficient query
@@ -422,6 +448,11 @@ subscriber.get(
       paymentAggregates.map(agg => [agg.subscriptionId, agg])
     )
 
+    // Check if there are more results
+    const hasMore = subscriptions.length > limit
+    const paginatedSubscriptions = hasMore ? subscriptions.slice(0, limit) : subscriptions
+    const nextCursor = hasMore ? paginatedSubscriptions[paginatedSubscriptions.length - 1]?.id : null
+
     // Sort by urgency: past_due first, then active, then others
     const statusPriority: Record<string, number> = {
       past_due: 0,
@@ -430,11 +461,11 @@ subscriber.get(
       paused: 3,
       canceled: 4,
     }
-    subscriptions.sort((a, b) =>
+    paginatedSubscriptions.sort((a, b) =>
       (statusPriority[a.status] ?? 5) - (statusPriority[b.status] ?? 5)
     )
 
-    const mapped = subscriptions.map(sub => {
+    const mapped = paginatedSubscriptions.map(sub => {
       const provider = sub.stripeSubscriptionId ? 'stripe' : 'paystack'
       const canUpdatePayment = provider === 'stripe' && !!sub.stripeCustomerId
       const displayName = sub.creator.profile?.displayName || 'Creator'
@@ -473,10 +504,28 @@ subscriber.get(
       }
     })
 
+    // Audit log: subscriber viewed their subscriptions list
+    const ip = c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ||
+               c.req.header('x-real-ip') || 'unknown'
+    const userAgent = c.req.header('user-agent') || 'unknown'
+
+    // Fire-and-forget log (don't await to keep response fast)
+    logSubscriptionEvent({
+      event: 'list_subscriptions',
+      subscriberEmail: email,
+      subscriberId: user.id,
+      subscriptionCount: mapped.length,
+      source: 'subscriber_portal',
+      ip,
+      userAgent: userAgent.slice(0, 200),
+    }).catch(() => {}) // Ignore logging errors
+
     return c.json({
       email,
       maskedEmail: maskEmail(email),
       subscriptions: mapped,
+      hasMore,
+      nextCursor,
     })
   }
 )
@@ -566,6 +615,24 @@ subscriber.get(
     const resubscribeUrl = subscription.creator.profile?.username
       ? `${env.PUBLIC_PAGE_URL}/${subscription.creator.profile.username}`
       : env.PUBLIC_PAGE_URL
+
+    // Audit log: subscriber viewed subscription detail
+    const ip = c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ||
+               c.req.header('x-real-ip') || 'unknown'
+    const userAgent = c.req.header('user-agent') || 'unknown'
+
+    // Fire-and-forget log (don't await to keep response fast)
+    logSubscriptionEvent({
+      event: 'view_detail',
+      subscriptionId: subscription.id,
+      subscriberEmail: email,
+      subscriberId: user.id,
+      creatorId: subscription.creatorId,
+      provider,
+      source: 'subscriber_portal',
+      ip,
+      userAgent: userAgent.slice(0, 200),
+    }).catch(() => {}) // Ignore logging errors
 
     return c.json({
       subscription: {
@@ -761,6 +828,119 @@ subscriber.post(
       return c.json({
         error: 'Failed to cancel subscription. Please try again.',
         code: 'CANCEL_FAILED',
+      }, 500)
+    }
+  }
+)
+
+// POST /subscriber/subscriptions/:id/reactivate - Undo cancel at period end
+subscriber.post(
+  '/subscriptions/:id/reactivate',
+  portalRateLimit,
+  requireValidOrigin,
+  requireSubscriberSession,
+  async (c) => {
+    const email = c.get('subscriberEmail')
+    const { id } = c.req.param()
+
+    const ip = c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ||
+               c.req.header('x-real-ip') || 'unknown'
+    const userAgent = c.req.header('user-agent') || 'unknown'
+
+    const user = await db.user.findFirst({
+      where: { email },
+      select: { id: true }
+    })
+
+    if (!user) {
+      return c.json({ error: 'Subscription not found', code: 'NOT_FOUND' }, 404)
+    }
+
+    const subscription = await db.subscription.findFirst({
+      where: {
+        id,
+        subscriberId: user.id,
+      },
+      include: {
+        creator: {
+          select: {
+            id: true,
+            profile: {
+              select: { displayName: true, username: true }
+            }
+          }
+        }
+      }
+    })
+
+    if (!subscription) {
+      return c.json({ error: 'Subscription not found', code: 'NOT_FOUND' }, 404)
+    }
+
+    const resubscribeUrl = subscription.creator.profile?.username
+      ? `${env.PUBLIC_PAGE_URL}/${subscription.creator.profile.username}`
+      : env.PUBLIC_PAGE_URL
+
+    // Can only reactivate if cancelAtPeriodEnd is true
+    if (!subscription.cancelAtPeriodEnd) {
+      return c.json({
+        error: 'This subscription is not scheduled for cancellation.',
+        code: 'NOT_CANCELING',
+      }, 400)
+    }
+
+    // Already fully canceled
+    if (subscription.status === 'canceled') {
+      return c.json({
+        error: 'This subscription has already ended. Please resubscribe to continue.',
+        code: 'ALREADY_CANCELED',
+        resubscribeUrl,
+      }, 400)
+    }
+
+    const provider = subscription.stripeSubscriptionId ? 'stripe' : 'paystack'
+
+    try {
+      // Reactivate in Stripe if applicable
+      if (subscription.stripeSubscriptionId) {
+        await reactivateSubscription(subscription.stripeSubscriptionId)
+      }
+
+      // Update local state
+      await db.subscription.update({
+        where: { id: subscription.id },
+        data: {
+          cancelAtPeriodEnd: false,
+          canceledAt: null,
+        },
+      })
+
+      // Log reactivation event
+      await logSubscriptionEvent({
+        event: 'reactivate',
+        subscriptionId: subscription.id,
+        subscriberId: user.id,
+        creatorId: subscription.creator.id,
+        provider,
+        source: 'subscriber_portal',
+        ip,
+        userAgent: userAgent.slice(0, 200),
+      })
+
+      return c.json({
+        success: true,
+        message: `Your subscription to ${subscription.creator.profile?.displayName || 'this creator'} will continue. You won't be charged until your next billing date.`,
+        subscription: {
+          id: subscription.id,
+          status: subscription.status,
+          cancelAtPeriodEnd: false,
+        },
+      })
+    } catch (err: any) {
+      console.error('[subscriber] Reactivation failed:', err)
+      return c.json({
+        error: 'Failed to reactivate subscription. Please try again.',
+        code: 'REACTIVATE_FAILED',
       }, 500)
     }
   }

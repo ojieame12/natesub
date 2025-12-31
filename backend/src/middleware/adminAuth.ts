@@ -21,6 +21,7 @@ import { getCookie } from 'hono/cookie'
 import { createHash } from 'crypto'
 import { db } from '../db/client.js'
 import { redis } from '../db/redis.js'
+import { env } from '../config/env.js'
 import { validateSession, validateSessionWithDetails } from '../services/auth.js'
 import type { UserRole } from '@prisma/client'
 
@@ -519,4 +520,205 @@ export function requireFreshSession(c: Context, next: Next): Promise<void> | voi
   throw new HTTPException(403, {
     message: 'This action requires session authentication',
   })
+}
+
+// ============================================
+// CSRF PROTECTION
+// ============================================
+
+/**
+ * Allowed origins for admin CSRF protection
+ * Dynamically built from env vars to handle deployments
+ */
+function getAllowedAdminOrigins(): string[] {
+  const origins = new Set<string>()
+
+  // Add configured app URLs
+  if (env.APP_URL) origins.add(new URL(env.APP_URL).origin)
+  if (env.PUBLIC_PAGE_URL) origins.add(new URL(env.PUBLIC_PAGE_URL).origin)
+
+  // Add known production domains
+  origins.add('https://natepay.co')
+  origins.add('https://www.natepay.co')
+
+  // Dev/test origins (never in production)
+  if (env.NODE_ENV !== 'production') {
+    origins.add('http://localhost:5173')
+    origins.add('http://localhost:3000')
+    origins.add('http://localhost:3001')
+  }
+
+  return Array.from(origins)
+}
+
+/**
+ * Check if origin is allowed (exact match only, no prefix attacks)
+ */
+function isAllowedAdminOrigin(origin: string): boolean {
+  const allowed = getAllowedAdminOrigins()
+  return allowed.includes(origin)
+}
+
+/**
+ * Extract origin from referer URL
+ */
+function extractOriginFromReferer(referer: string): string | null {
+  try {
+    return new URL(referer).origin
+  } catch {
+    return null
+  }
+}
+
+/**
+ * CSRF protection middleware for admin routes
+ * Validates Origin/Referer header for state-changing requests (POST/PUT/DELETE/PATCH)
+ *
+ * API key auth bypasses CSRF check (used in trusted automated contexts like Retool)
+ */
+export async function requireValidAdminOrigin(c: Context, next: Next): Promise<void> {
+  const method = c.req.method.toUpperCase()
+  const authMethod = c.get('adminAuthMethod')
+
+  // Only check state-changing requests
+  if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') {
+    return next()
+  }
+
+  // API key auth bypasses CSRF (trusted automated context)
+  if (authMethod === 'api-key' || authMethod === 'api-key-legacy') {
+    return next()
+  }
+
+  // In production, require valid origin for session-based state-changing requests
+  if (env.NODE_ENV === 'production') {
+    const origin = c.req.header('origin')
+    const referer = c.req.header('referer')
+
+    if (origin) {
+      if (!isAllowedAdminOrigin(origin)) {
+        console.warn(`[admin] CSRF blocked: invalid origin ${origin}`)
+        await logAdminAccess(c, false, { reason: `CSRF blocked: invalid origin ${origin}` })
+        throw new HTTPException(403, { message: 'Invalid request origin' })
+      }
+    } else if (referer) {
+      const refererOrigin = extractOriginFromReferer(referer)
+      if (!refererOrigin || !isAllowedAdminOrigin(refererOrigin)) {
+        console.warn(`[admin] CSRF blocked: invalid referer ${referer}`)
+        await logAdminAccess(c, false, { reason: `CSRF blocked: invalid referer ${referer}` })
+        throw new HTTPException(403, { message: 'Invalid request origin' })
+      }
+    }
+    // Note: If neither origin nor referer present, allow (same-origin behavior)
+  }
+
+  return next()
+}
+
+// ============================================
+// IP ALLOWLIST
+// ============================================
+
+/**
+ * Parse IP allowlist from comma-separated env var
+ * Supports both individual IPs and CIDR notation (e.g., "10.0.0.0/8,192.168.1.100")
+ */
+function parseIpAllowlist(): string[] | null {
+  const allowlist = process.env.ADMIN_IP_ALLOWLIST
+  if (!allowlist || allowlist.trim() === '') return null
+
+  return allowlist
+    .split(',')
+    .map(ip => ip.trim())
+    .filter(ip => ip.length > 0)
+}
+
+/**
+ * Check if an IP matches a CIDR block
+ * Simplified implementation for IPv4
+ */
+function ipMatchesCidr(ip: string, cidr: string): boolean {
+  // Handle exact match
+  if (!cidr.includes('/')) {
+    return ip === cidr
+  }
+
+  const [network, prefixStr] = cidr.split('/')
+  const prefix = parseInt(prefixStr, 10)
+  if (isNaN(prefix) || prefix < 0 || prefix > 32) return false
+
+  const ipParts = ip.split('.').map(Number)
+  const networkParts = network.split('.').map(Number)
+
+  if (ipParts.length !== 4 || networkParts.length !== 4) return false
+  if (ipParts.some(isNaN) || networkParts.some(isNaN)) return false
+
+  const ipNum = (ipParts[0] << 24) | (ipParts[1] << 16) | (ipParts[2] << 8) | ipParts[3]
+  const networkNum = (networkParts[0] << 24) | (networkParts[1] << 16) | (networkParts[2] << 8) | networkParts[3]
+  const mask = prefix === 0 ? 0 : (~0 << (32 - prefix)) >>> 0
+
+  return (ipNum & mask) === (networkNum & mask)
+}
+
+/**
+ * Check if IP is in the allowlist
+ */
+function isIpAllowed(clientIp: string, allowlist: string[]): boolean {
+  // Extract first IP if multiple (proxy chain)
+  const ip = clientIp.split(',')[0].trim()
+
+  for (const allowed of allowlist) {
+    if (ipMatchesCidr(ip, allowed)) return true
+  }
+
+  return false
+}
+
+/**
+ * IP allowlist middleware for admin API keys
+ *
+ * When ADMIN_IP_ALLOWLIST env var is set, API key requests must come from allowed IPs.
+ * Session-based auth is NOT affected (allows admins to use dashboard from any IP).
+ *
+ * Format: Comma-separated IPs or CIDRs (e.g., "10.0.0.0/8,192.168.1.100,203.0.113.0/24")
+ */
+export async function requireAllowedIp(c: Context, next: Next): Promise<void> {
+  const authMethod = c.get('adminAuthMethod')
+
+  // Only apply to API key auth (session auth is not restricted by IP)
+  if (authMethod !== 'api-key' && authMethod !== 'api-key-legacy') {
+    return next()
+  }
+
+  const allowlist = parseIpAllowlist()
+
+  // If no allowlist configured, allow all
+  if (!allowlist) {
+    return next()
+  }
+
+  const clientIp = c.req.header('cf-connecting-ip') // Cloudflare
+    || c.req.header('x-real-ip')                    // nginx
+    || c.req.header('x-forwarded-for')?.split(',')[0].trim()
+    || 'unknown'
+
+  if (clientIp === 'unknown') {
+    console.warn('[admin] IP allowlist: cannot determine client IP, denying request')
+    await logAdminAccess(c, false, {
+      authMethod,
+      reason: 'IP allowlist: cannot determine client IP',
+    })
+    throw new HTTPException(403, { message: 'Cannot verify request origin' })
+  }
+
+  if (!isIpAllowed(clientIp, allowlist)) {
+    console.warn(`[admin] IP allowlist: blocked request from ${clientIp}`)
+    await logAdminAccess(c, false, {
+      authMethod,
+      reason: `IP allowlist: blocked ${clientIp}`,
+    })
+    throw new HTTPException(403, { message: 'Request from unauthorized IP address' })
+  }
+
+  return next()
 }

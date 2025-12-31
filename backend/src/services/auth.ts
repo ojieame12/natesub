@@ -582,3 +582,16 @@ export async function clearOnboardingState(userId: string) {
     },
   })
 }
+
+// Reset onboarding to initial state (called when user clicks "Start over")
+// Sets step to 0 and clears all data, allowing a fresh start
+export async function resetOnboardingProgress(userId: string) {
+  await db.user.update({
+    where: { id: userId },
+    data: {
+      onboardingStep: 0,
+      onboardingBranch: null,
+      onboardingData: Prisma.DbNull, // Clear all saved progress
+    },
+  })
+}

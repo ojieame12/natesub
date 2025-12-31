@@ -33,6 +33,7 @@ import admin from './routes/admin/index.js'
 import support from './routes/support.js'
 import config from './routes/config.js'
 import subscriber from './routes/subscriber.js'
+import e2e from './routes/e2e.js'
 
 const app = new Hono()
 
@@ -474,6 +475,12 @@ app.route('/analytics', analytics)
 app.route('/admin', admin)
 app.route('/support', support)
 app.route('/subscriber', subscriber)  // Public subscriber portal
+
+// E2E testing routes (only in non-production with E2E_MODE=true)
+if (env.NODE_ENV !== 'production' && env.E2E_MODE === 'true') {
+  app.route('/e2e', e2e)
+  console.log('[app] E2E testing routes enabled')
+}
 
 // 404 handler
 app.notFound((c) => c.json({ error: 'Not found' }, 404))

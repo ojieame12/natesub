@@ -10,6 +10,7 @@ import { reconcilePaystackTransactions } from '../jobs/reconciliation.js'
 import { processDueReminders, scanAndScheduleMissedReminders } from '../jobs/reminders.js'
 import { cleanupOldPageViews } from '../jobs/cleanup.js'
 import { syncAllActiveBalances } from '../services/balanceSync.js'
+import { logger, safeError, ErrorCodes } from '../utils/logger.js'
 import {
   monitorDisputeRatio,
   monitorFirstPaymentDisputes,
@@ -70,8 +71,7 @@ jobs.post('/billing', async (c) => {
     })
     return c.json({ success: true, message: 'Billing job queued', durationMs })
   } catch (error: any) {
-    console.error('[jobs] Failed to queue billing job:', error.message)
-    return c.json({ error: 'Failed to queue billing job', message: error.message }, 500)
+    return c.json(safeError(ErrorCodes.JOB_FAILED, error, 'jobs/billing'), 500)
   }
 })
 
@@ -86,8 +86,7 @@ jobs.post('/retries', async (c) => {
     })
     return c.json({ success: true, message: 'Retry job queued', durationMs })
   } catch (error: any) {
-    console.error('[jobs] Failed to queue retry job:', error.message)
-    return c.json({ error: 'Failed to queue retry job', message: error.message }, 500)
+    return c.json(safeError(ErrorCodes.JOB_FAILED, error, 'jobs/retries'), 500)
   }
 })
 
@@ -106,8 +105,7 @@ jobs.post('/payroll', async (c) => {
       durationMs,
     })
   } catch (error: any) {
-    console.error('[jobs] Payroll job failed:', error.message)
-    return c.json({ error: 'Payroll job failed', message: error.message }, 500)
+    return c.json(safeError(ErrorCodes.JOB_FAILED, error, 'jobs/payroll'), 500)
   }
 })
 
@@ -130,8 +128,7 @@ jobs.post('/dunning', async (c) => {
       durationMs,
     })
   } catch (error: any) {
-    console.error('[jobs] Dunning job failed:', error.message)
-    return c.json({ error: 'Dunning job failed', message: error.message }, 500)
+    return c.json(safeError(ErrorCodes.JOB_FAILED, error, 'jobs/dunning'), 500)
   }
 })
 
@@ -150,8 +147,7 @@ jobs.post('/cancellations', async (c) => {
       durationMs,
     })
   } catch (error: any) {
-    console.error('[jobs] Cancellations job failed:', error.message)
-    return c.json({ error: 'Cancellations job failed', message: error.message }, 500)
+    return c.json(safeError(ErrorCodes.JOB_FAILED, error, 'jobs/cancellations'), 500)
   }
 })
 
@@ -172,8 +168,7 @@ jobs.post('/notifications', async (c) => {
       cancellations,
     })
   } catch (error: any) {
-    console.error('[jobs] Notifications job failed:', error.message)
-    return c.json({ error: 'Notifications job failed', message: error.message }, 500)
+    return c.json(safeError(ErrorCodes.JOB_FAILED, error, 'jobs/notifications'), 500)
   }
 })
 
@@ -192,8 +187,7 @@ jobs.post('/transfers', async (c) => {
       durationMs,
     })
   } catch (error: any) {
-    console.error('[jobs] Transfer monitoring job failed:', error.message)
-    return c.json({ error: 'Transfer monitoring job failed', message: error.message }, 500)
+    return c.json(safeError(ErrorCodes.JOB_FAILED, error, 'jobs/transfers'), 500)
   }
 })
 
@@ -218,18 +212,56 @@ jobs.post('/reconciliation', async (c) => {
       durationMs,
     })
   } catch (error: any) {
-    console.error('[jobs] Reconciliation job failed:', error.message)
-    return c.json({ error: 'Reconciliation job failed', message: error.message }, 500)
+    return c.json(safeError(ErrorCodes.JOB_FAILED, error, 'jobs/reconciliation'), 500)
   }
 })
 
 // Process scheduled reminders (run hourly)
 // This handles request/invoice/payout/payroll/onboarding reminders
+// Supports ?now=ISO_DATE for E2E testing (only in E2E_MODE with valid API key)
 jobs.post('/scheduled-reminders', async (c) => {
+  // Support time override for E2E testing with strict validation
+  const nowParam = c.req.query('now')
+  let effectiveNow: Date | undefined
+
+  if (nowParam && env.E2E_MODE === 'true') {
+    // Require E2E API key for time override (prevents abuse)
+    const e2eApiKey = c.req.header('x-e2e-api-key')
+    if (!env.E2E_API_KEY || e2eApiKey !== env.E2E_API_KEY) {
+      console.warn('[jobs] Time override rejected: invalid E2E API key')
+      // Silently ignore invalid override attempt
+    } else {
+      // Validate ISO format (strict: must be valid ISO 8601)
+      const isoRegex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z$/
+      if (!isoRegex.test(nowParam)) {
+        console.warn(`[jobs] Time override rejected: invalid ISO format: ${nowParam}`)
+      } else {
+        const parsedDate = new Date(nowParam)
+
+        // Validate date is valid and within bounds (±30 days)
+        const now = new Date()
+        const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000
+        const minDate = new Date(now.getTime() - thirtyDaysMs)
+        const maxDate = new Date(now.getTime() + thirtyDaysMs)
+
+        if (isNaN(parsedDate.getTime())) {
+          console.warn(`[jobs] Time override rejected: invalid date: ${nowParam}`)
+        } else if (parsedDate < minDate || parsedDate > maxDate) {
+          console.warn(`[jobs] Time override rejected: out of bounds (±30 days): ${nowParam}`)
+        } else {
+          effectiveNow = parsedDate
+          console.log(`[jobs] E2E time override: ${effectiveNow.toISOString()}`)
+        }
+      }
+    }
+  }
+
   console.log('[jobs] Starting scheduled reminders job')
 
   try {
-    const { result, durationMs } = await runTrackedJob('scheduled-reminders', processDueReminders)
+    const { result, durationMs } = await runTrackedJob('scheduled-reminders', () =>
+      processDueReminders(effectiveNow)
+    )
 
     console.log(`[jobs] Scheduled reminders complete: ${result.sent}/${result.processed} sent, ${result.failed} failed`)
 
@@ -239,8 +271,7 @@ jobs.post('/scheduled-reminders', async (c) => {
       durationMs,
     })
   } catch (error: any) {
-    console.error('[jobs] Scheduled reminders job failed:', error.message)
-    return c.json({ error: 'Scheduled reminders job failed', message: error.message }, 500)
+    return c.json(safeError(ErrorCodes.JOB_FAILED, error, 'jobs/reminders'), 500)
   }
 })
 
@@ -258,8 +289,7 @@ jobs.post('/scan-missed-reminders', async (c) => {
       scheduled,
     })
   } catch (error: any) {
-    console.error('[jobs] Scan missed reminders job failed:', error.message)
-    return c.json({ error: 'Scan missed reminders job failed', message: error.message }, 500)
+    return c.json(safeError(ErrorCodes.JOB_FAILED, error, 'jobs/scan-reminders'), 500)
   }
 })
 
@@ -279,8 +309,7 @@ jobs.post('/cleanup-sessions', async (c) => {
       deleted: result.count,
     })
   } catch (error: any) {
-    console.error('[jobs] Session cleanup job failed:', error.message)
-    return c.json({ error: 'Session cleanup job failed', message: error.message }, 500)
+    return c.json(safeError(ErrorCodes.JOB_FAILED, error, 'jobs/cleanup-sessions'), 500)
   }
 })
 
@@ -300,8 +329,7 @@ jobs.post('/cleanup-otps', async (c) => {
       deleted: result.count,
     })
   } catch (error: any) {
-    console.error('[jobs] OTP cleanup job failed:', error.message)
-    return c.json({ error: 'OTP cleanup job failed', message: error.message }, 500)
+    return c.json(safeError(ErrorCodes.JOB_FAILED, error, 'jobs/cleanup-otps'), 500)
   }
 })
 
@@ -327,8 +355,7 @@ jobs.post('/cleanup-auth', async (c) => {
       durationMs,
     })
   } catch (error: any) {
-    console.error('[jobs] Auth cleanup job failed:', error.message)
-    return c.json({ error: 'Auth cleanup job failed', message: error.message }, 500)
+    return c.json(safeError(ErrorCodes.JOB_FAILED, error, 'jobs/cleanup-auth'), 500)
   }
 })
 
@@ -347,8 +374,7 @@ jobs.post('/cleanup-pageviews', async (c) => {
       durationMs,
     })
   } catch (error: any) {
-    console.error('[jobs] Page views cleanup job failed:', error.message)
-    return c.json({ error: 'Page views cleanup job failed', message: error.message }, 500)
+    return c.json(safeError(ErrorCodes.JOB_FAILED, error, 'jobs/cleanup-pageviews'), 500)
   }
 })
 
@@ -377,8 +403,7 @@ jobs.post('/stats-aggregate', async (c) => {
       durationMs,
     })
   } catch (error: any) {
-    console.error('[jobs] Stats aggregation job failed:', error.message)
-    return c.json({ error: 'Stats aggregation job failed', message: error.message }, 500)
+    return c.json(safeError(ErrorCodes.JOB_FAILED, error, 'jobs/stats-aggregate'), 500)
   }
 })
 
@@ -400,8 +425,7 @@ jobs.post('/stats-backfill', async (c) => {
       message: `Stats backfilled for ${numDays} days`,
     })
   } catch (error: any) {
-    console.error('[jobs] Stats backfill job failed:', error.message)
-    return c.json({ error: 'Stats backfill job failed', message: error.message }, 500)
+    return c.json(safeError(ErrorCodes.JOB_FAILED, error, 'jobs/stats-backfill'), 500)
   }
 })
 
@@ -430,8 +454,7 @@ jobs.post('/dispute-monitoring', async (c) => {
       durationMs,
     })
   } catch (error: any) {
-    console.error('[jobs] Dispute monitoring job failed:', error.message)
-    return c.json({ error: 'Dispute monitoring job failed', message: error.message }, 500)
+    return c.json(safeError(ErrorCodes.JOB_FAILED, error, 'jobs/dispute-monitoring'), 500)
   }
 })
 
@@ -451,8 +474,7 @@ jobs.post('/sync-balances', async (c) => {
       durationMs,
     })
   } catch (error: any) {
-    console.error('[jobs] Balance sync job failed:', error.message)
-    return c.json({ error: 'Balance sync job failed', message: error.message }, 500)
+    return c.json(safeError(ErrorCodes.JOB_FAILED, error, 'jobs/balance-sync'), 500)
   }
 })
 

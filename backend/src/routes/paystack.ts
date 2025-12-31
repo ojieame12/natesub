@@ -243,6 +243,31 @@ paystackRoutes.post(
       })
     }
 
+    // STUB MODE: Skip actual Paystack API for E2E tests
+    if (env.PAYMENTS_MODE === 'stub') {
+      const stubSubaccountCode = `stub_subaccount_${Date.now()}`
+
+      await db.profile.update({
+        where: { userId },
+        data: {
+          paystackSubaccountCode: stubSubaccountCode,
+          paystackBankCode: data.bankCode,
+          paystackAccountNumber: 'stub_encrypted',
+          paystackAccountName: data.accountName,
+          paymentProvider: 'paystack',
+          payoutStatus: 'active',
+        },
+      })
+
+      console.log(`[paystack/connect] Stub mode: created fake subaccount ${stubSubaccountCode} for user ${userId}`)
+
+      return c.json({
+        success: true,
+        subaccountCode: stubSubaccountCode,
+        message: 'Payment account connected (stub mode)',
+      })
+    }
+
     try {
       // Create subaccount
       const result = await createSubaccount({

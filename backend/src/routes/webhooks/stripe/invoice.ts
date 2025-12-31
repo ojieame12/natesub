@@ -431,7 +431,7 @@ export async function handleInvoicePaid(event: Stripe.Event) {
       } else {
         // Invoice.created webhook may have failed - use calculated fee
         feeCents = feeCalc.feeCents
-        console.error(`[ALERT][invoice.paid] No application_fee on invoice ${invoice.id}, using calculated: ${feeCents}. Invoice.created webhook may have failed.`)
+        logger.error('ALERT: No application_fee on invoice, using calculated fee', null, { invoiceId: invoice.id, calculatedFee: feeCents, issue: 'Invoice.created webhook may have failed' })
         // Create activity for monitoring - this is a critical issue
         await db.activity.create({
           data: {
@@ -486,7 +486,7 @@ export async function handleInvoicePaid(event: Stripe.Event) {
     })
 
     if (needsActivation) {
-      console.log(`[invoice.paid] Activated subscription ${subscription.id} from ${subscription.status} to active`)
+      logger.info('Activated subscription from past_due/pending to active', { subscriptionId: subscription.id, previousStatus: subscription.status })
     }
 
     // Create payment record with charge ID
@@ -529,7 +529,7 @@ export async function handleInvoicePaid(event: Stripe.Event) {
       },
     })
 
-    console.log(`[invoice.paid] Created Payment ${recurringPayment.id}: netCents=${netCents}, feeCents=${feeCents}, grossCents=${grossCents}`)
+    logger.info('Created recurring payment', { paymentId: recurringPayment.id, netCents, feeCents, grossCents })
 
     // Fetch FX data for cross-border payments (e.g., USD → NGN)
     // Do this async after payment creation so it doesn't block the main flow
@@ -547,14 +547,14 @@ export async function handleInvoicePaid(event: Stripe.Event) {
                 exchangeRate: result.data.exchangeRate,
               },
             })
-            console.log(`[invoice.paid] Stored FX data for payment ${recurringPayment.id}: ${result.data.originalCurrency} → ${result.data.payoutCurrency} @ ${result.data.exchangeRate}`)
+            logger.info('Stored FX data for payment', { paymentId: recurringPayment.id, originalCurrency: result.data.originalCurrency, payoutCurrency: result.data.payoutCurrency, exchangeRate: result.data.exchangeRate })
           } else {
             // pending/no_fx/error - activity.ts will handle on-demand backfill
-            console.log(`[invoice.paid] FX lookup status for payment ${recurringPayment.id}: ${result.status}`)
+            logger.debug('FX lookup status', { paymentId: recurringPayment.id, status: result.status })
           }
         })
         .catch((err) => {
-          console.warn(`[invoice.paid] Could not fetch FX data for payment ${recurringPayment.id}:`, err.message)
+          logger.warn('Could not fetch FX data for payment', { paymentId: recurringPayment.id, error: err.message })
         })
     }
 
@@ -572,7 +572,7 @@ export async function handleInvoicePaid(event: Stripe.Event) {
         },
       }).catch((err: any) => {
         // Non-fatal - don't fail the payment if evidence can't be saved
-        console.warn(`[invoice.paid] Could not save dispute evidence for payment ${recurringPayment.id}:`, err.message)
+        logger.warn('Could not save dispute evidence for payment', { paymentId: recurringPayment.id, error: err.message })
       })
     }
 
@@ -582,7 +582,7 @@ export async function handleInvoicePaid(event: Stripe.Event) {
     // ASYNC PAYMENT FOLLOW-UP: Complete conversion tracking and request acceptance
     // These were deferred in checkout.session.completed when payment_status !== 'paid'
     if (subscription.asyncViewId || subscription.asyncRequestId) {
-      console.log(`[invoice.paid] Processing async payment follow-up for subscription ${subscription.id}`)
+      logger.info('Processing async payment follow-up', { subscriptionId: subscription.id })
 
       // Complete conversion tracking
       if (subscription.asyncViewId) {
@@ -591,7 +591,7 @@ export async function handleInvoicePaid(event: Stripe.Event) {
           data: { startedCheckout: true, completedCheckout: true },
         }).catch(() => { }) // Ignore if view doesn't exist
 
-        console.log(`[invoice.paid] Marked pageView ${subscription.asyncViewId} as converted`)
+        logger.debug('Marked pageView as converted', { viewId: subscription.asyncViewId })
       }
 
       // Accept the request
@@ -621,7 +621,7 @@ export async function handleInvoicePaid(event: Stripe.Event) {
           })
         }
 
-        console.log(`[invoice.paid] Marked request ${subscription.asyncRequestId} as accepted`)
+        logger.debug('Marked request as accepted', { requestId: subscription.asyncRequestId })
       }
 
       // Clear async follow-up data (one-time action)
@@ -676,7 +676,7 @@ export async function handleInvoicePaid(event: Stripe.Event) {
 
         // Only create activity if we actually unlocked (count > 0)
         if (unlockResult.count > 0) {
-          console.log(`[invoice.paid] Unlocked Salary Mode for creator ${subscription.creatorId} after ${updatedProfile.totalSuccessfulPayments} successful payments`)
+          logger.info('Unlocked Salary Mode for creator', { creatorId: subscription.creatorId, successfulPayments: updatedProfile.totalSuccessfulPayments })
           await db.activity.create({
             data: {
               userId: subscription.creatorId,
@@ -695,10 +695,10 @@ export async function handleInvoicePaid(event: Stripe.Event) {
     // Visa VAMP compliance: pre-billing notifications reduce friendly fraud
     try {
       await scheduleSubscriptionRenewalReminders(subscription.id)
-      console.log(`[invoice.paid] Scheduled renewal reminders for subscription ${subscription.id}`)
+      logger.debug('Scheduled renewal reminders', { subscriptionId: subscription.id })
     } catch (reminderErr) {
       // Don't fail the webhook if reminder scheduling fails
-      console.error(`[invoice.paid] Failed to schedule renewal reminders for ${subscription.id}:`, reminderErr)
+      logger.error('Failed to schedule renewal reminders', reminderErr as Error, { subscriptionId: subscription.id })
     }
 
     // PLATFORM DEBIT RECOVERY for subscription renewals
@@ -792,14 +792,14 @@ export async function handleInvoicePaid(event: Stripe.Event) {
                   Math.max(0, remainingDebit)
                 )
               } catch (emailErr) {
-                console.error(`[invoice.paid] Failed to send debit recovery email:`, emailErr)
+                logger.error('Failed to send debit recovery email', emailErr as Error, { creatorId: subscription.creatorId })
               }
             }
 
-            console.log(`[invoice.paid] Recovered $${(debitToRecover / 100).toFixed(2)} platform debit from creator ${subscription.creatorId}`)
+            logger.info('Recovered platform debit from creator', { creatorId: subscription.creatorId, amountCents: debitToRecover })
           }
         } else {
-          console.log(`[invoice.paid] No payment method for debit recovery, debit remains: $${(creatorProfile.platformDebitCents / 100).toFixed(2)}`)
+          logger.debug('No payment method for debit recovery', { creatorId: subscription.creatorId, remainingDebitCents: creatorProfile.platformDebitCents })
         }
       } catch (recoveryErr: any) {
         // Recovery failed - debit stays, will try again on next payment
@@ -808,7 +808,7 @@ export async function handleInvoicePaid(event: Stripe.Event) {
         // Handle SCA authentication required
         if (recoveryErr.code === 'authentication_required' ||
           recoveryErr.type === 'StripeCardError' && recoveryErr.code === 'card_declined') {
-          console.log(`[invoice.paid] SCA/authentication required for debit recovery from ${subscription.creatorId}, will retry later`)
+          logger.info('SCA/authentication required for debit recovery, will retry later', { creatorId: subscription.creatorId })
           // Create activity noting SCA requirement
           await db.activity.create({
             data: {
@@ -825,7 +825,7 @@ export async function handleInvoicePaid(event: Stripe.Event) {
           return
         }
 
-        console.error(`[invoice.paid] Platform debit recovery failed for ${subscription.creatorId}:`, recoveryErr.message)
+        logger.error('Platform debit recovery failed', recoveryErr, { creatorId: subscription.creatorId })
 
         // Create activity for visibility
         await db.activity.create({
@@ -847,7 +847,7 @@ export async function handleInvoicePaid(event: Stripe.Event) {
   }) // End of withLock
 
   if (!processed) {
-    console.log(`[invoice.paid] Could not acquire lock for invoice ${invoice.id}, will retry`)
+    logger.warn('Could not acquire lock for invoice, will retry', { invoiceId: invoice.id })
   }
 }
 
@@ -898,5 +898,5 @@ export async function handleInvoicePaymentFailed(event: Stripe.Event) {
     },
   })
 
-  console.log(`Stripe invoice payment failed for subscription ${subscription.id}, invoice: ${invoice.id}`)
+  logger.info('Stripe invoice payment failed', { subscriptionId: subscription.id, invoiceId: invoice.id })
 }
