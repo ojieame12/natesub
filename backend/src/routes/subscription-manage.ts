@@ -17,7 +17,7 @@ import { z } from 'zod'
 import { db } from '../db/client.js'
 import { publicRateLimit } from '../middleware/rateLimit.js'
 import { validateManageToken } from '../utils/cancelToken.js'
-import { cancelSubscription } from '../services/stripe.js'
+import { cancelSubscription, reactivateSubscription } from '../services/stripe.js'
 import { createSubscriberPortalSession } from '../services/stripe.js'
 import { sendCancellationConfirmationEmail } from '../services/email.js'
 import { logSubscriptionEvent } from '../services/systemLog.js'
@@ -92,6 +92,15 @@ subscriptionManage.get(
         error: 'Subscription not found',
         code: 'NOT_FOUND',
       }, 404)
+    }
+
+    // Validate nonce if the subscription has one (token revocation support)
+    // If subscription has a nonce but token doesn't match, token was revoked
+    if (subscription.manageTokenNonce && decoded.nonce !== subscription.manageTokenNonce) {
+      return c.json({
+        error: 'This link has been revoked. Please request a new one.',
+        code: 'TOKEN_REVOKED',
+      }, 400)
     }
 
     // Get accurate total supported using aggregation (grossCents = what subscriber paid)
@@ -283,6 +292,14 @@ subscriptionManage.post(
       }, 404)
     }
 
+    // Validate nonce if the subscription has one (token revocation support)
+    if (subscription.manageTokenNonce && decoded.nonce !== subscription.manageTokenNonce) {
+      return c.json({
+        error: 'This link has been revoked. Please request a new one.',
+        code: 'TOKEN_REVOKED',
+      }, 400)
+    }
+
     // Build resubscribe URL for response
     // Use PUBLIC_PAGE_URL for creator pages (may differ from app URL)
     const resubscribeUrl = subscription.creator.profile?.username
@@ -468,6 +485,14 @@ subscriptionManage.get(
       }, 404)
     }
 
+    // Validate nonce if the subscription has one (token revocation support)
+    if (subscription.manageTokenNonce && decoded.nonce !== subscription.manageTokenNonce) {
+      return c.json({
+        error: 'This link has been revoked. Please request a new one.',
+        code: 'TOKEN_REVOKED',
+      }, 400)
+    }
+
     // Build resubscribe URL for Paystack fallback
     // Use PUBLIC_PAGE_URL for creator pages (may differ from app URL)
     const resubscribeUrl = subscription.creator.profile?.username
@@ -487,7 +512,7 @@ subscriptionManage.get(
     }
 
     try {
-      const returnUrl = `${env.APP_URL}/subscription/manage/${token}`
+      const returnUrl = `${env.PUBLIC_PAGE_URL}/subscription/manage/${token}`
       const { url } = await createSubscriberPortalSession(subscription.stripeCustomerId, returnUrl)
 
       // Log portal redirect for analytics
@@ -515,6 +540,148 @@ subscriptionManage.get(
         retryable: true,
       }, 500)
     }
+  }
+)
+
+// ============================================
+// REACTIVATE SUBSCRIPTION (Undo Cancel)
+// ============================================
+
+// POST /subscription/manage/:token/reactivate - Undo cancel at period end
+subscriptionManage.post(
+  '/:token/reactivate',
+  publicRateLimit,
+  async (c) => {
+    const token = c.req.param('token')
+
+    // Validate token
+    const decoded = validateManageToken(token)
+    if (!decoded) {
+      return c.json({ error: 'Invalid or expired link' }, 400)
+    }
+
+    const { subscriptionId } = decoded
+
+    // Get subscription with current state
+    const subscription = await db.subscription.findUnique({
+      where: { id: subscriptionId },
+      include: {
+        creator: {
+          select: {
+            profile: { select: { displayName: true, username: true } },
+          },
+        },
+      },
+    })
+
+    if (!subscription) {
+      return c.json({ error: 'Subscription not found' }, 404)
+    }
+
+    // Validate nonce if the subscription has one (token revocation support)
+    // If subscription has a nonce but token doesn't match, token was revoked
+    if (subscription.manageTokenNonce && decoded.nonce !== subscription.manageTokenNonce) {
+      return c.json({
+        error: 'This link has been revoked. Please request a new one.',
+        code: 'TOKEN_REVOKED',
+      }, 400)
+    }
+
+    // Can only reactivate if cancelAtPeriodEnd is true and not fully canceled
+    if (!subscription.cancelAtPeriodEnd) {
+      return c.json({
+        error: 'This subscription is not scheduled for cancellation',
+        code: 'NOT_CANCELING',
+      }, 400)
+    }
+
+    if (subscription.status === 'canceled') {
+      const resubscribeUrl = subscription.creator.profile?.username
+        ? `${env.PUBLIC_PAGE_URL}/${subscription.creator.profile.username}`
+        : env.PUBLIC_PAGE_URL
+
+      return c.json({
+        error: 'This subscription has already ended. Please resubscribe to continue.',
+        code: 'ALREADY_CANCELED',
+        resubscribeUrl,
+      }, 400)
+    }
+
+    // Get audit metadata
+    const ip = c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ||
+               c.req.header('x-real-ip') || 'unknown'
+    const userAgent = c.req.header('user-agent') || 'unknown'
+
+    // Reactivate in Stripe if it's a Stripe subscription
+    if (subscription.stripeSubscriptionId) {
+      try {
+        await reactivateSubscription(subscription.stripeSubscriptionId)
+
+        await db.subscription.update({
+          where: { id: subscriptionId },
+          data: {
+            cancelAtPeriodEnd: false,
+            canceledAt: null,
+          },
+        })
+
+        // Log reactivation event
+        await logSubscriptionEvent({
+          event: 'reactivate',
+          subscriptionId: subscription.id,
+          subscriberId: subscription.subscriberId || undefined,
+          creatorId: subscription.creatorId,
+          provider: 'stripe',
+          source: 'manage_page',
+          ip,
+          userAgent: userAgent.slice(0, 200),
+        })
+
+        return c.json({
+          success: true,
+          message: `Your subscription to ${subscription.creator.profile?.displayName || 'this creator'} will continue. You won't be charged until your next billing date.`,
+          subscription: {
+            id: subscription.id,
+            status: subscription.status,
+            cancelAtPeriodEnd: false,
+          },
+        })
+      } catch (err: any) {
+        console.error('[manage] Reactivation failed:', err)
+        return c.json({ error: 'Failed to reactivate subscription' }, 500)
+      }
+    }
+
+    // For non-Stripe subscriptions (Paystack), update local status
+    await db.subscription.update({
+      where: { id: subscriptionId },
+      data: {
+        cancelAtPeriodEnd: false,
+        canceledAt: null,
+      },
+    })
+
+    // Log reactivation event
+    await logSubscriptionEvent({
+      event: 'reactivate',
+      subscriptionId: subscription.id,
+      subscriberId: subscription.subscriberId || undefined,
+      creatorId: subscription.creatorId,
+      provider: 'paystack',
+      source: 'manage_page',
+      ip,
+      userAgent: userAgent.slice(0, 200),
+    })
+
+    return c.json({
+      success: true,
+      message: `Your subscription to ${subscription.creator.profile?.displayName || 'this creator'} will continue.`,
+      subscription: {
+        id: subscription.id,
+        status: subscription.status,
+        cancelAtPeriodEnd: false,
+      },
+    })
   }
 )
 

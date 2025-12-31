@@ -356,13 +356,15 @@ export async function logPayoutFailed(params: {
 
 /**
  * Log subscription events for audit and analytics
- * Events: cancel, update_payment, view_manage_page
+ * Events: cancel, reactivate, update_payment, view_manage, portal_redirect, list_subscriptions, view_detail
  */
 export async function logSubscriptionEvent(params: {
-  event: 'cancel' | 'update_payment' | 'view_manage' | 'portal_redirect'
-  subscriptionId: string
+  event: 'cancel' | 'reactivate' | 'update_payment' | 'view_manage' | 'portal_redirect' | 'list_subscriptions' | 'view_detail'
+  subscriptionId?: string
   subscriberId?: string
-  creatorId: string
+  creatorId?: string
+  subscriberEmail?: string
+  subscriptionCount?: number
   provider?: string
   reason?: string
   source?: string
@@ -375,10 +377,14 @@ export async function logSubscriptionEvent(params: {
     userId: params.creatorId,
     entityType: 'subscription',
     entityId: params.subscriptionId,
-    message: `Subscription ${params.event}: ${params.subscriptionId}`,
+    message: params.subscriptionId
+      ? `Subscription ${params.event}: ${params.subscriptionId}`
+      : `Subscription ${params.event}${params.subscriberEmail ? ` by ${params.subscriberEmail.substring(0, 3)}***` : ''}`,
     metadata: {
       event: params.event,
       subscriberId: params.subscriberId,
+      subscriberEmail: params.subscriberEmail,
+      subscriptionCount: params.subscriptionCount,
       provider: params.provider,
       reason: params.reason,
       source: params.source,

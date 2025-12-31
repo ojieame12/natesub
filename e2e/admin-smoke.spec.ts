@@ -17,19 +17,26 @@ test.describe('Admin smoke', () => {
       localStorage.setItem('nate_has_session', 'true')
     })
 
-    // Auth bootstrap (backend)
-    const authMePatterns = [
-      '**://localhost:3001/auth/me',
-      '**://127.0.0.1:3001/auth/me',
-    ]
-    for (const pattern of authMePatterns) {
-      await page.route(pattern, async (route) => {
+    // Auth bootstrap (backend) - use flexible pattern to match any host/port
+    await page.route('**/auth/me', async (route) => {
       await route.fulfill(
         json({
           id: 'user_admin_1',
           email: 'admin@test.com',
           createdAt: now,
-          profile: null,
+          profile: {
+            id: 'profile_admin_1',
+            userId: 'user_admin_1',
+            username: 'admin',
+            displayName: 'Admin User',
+            bio: null,
+            avatarUrl: null,
+            paymentProvider: 'stripe',
+            stripeAccountId: 'acct_admin',
+            country: 'US',
+            currency: 'USD',
+            isAdmin: true,
+          },
           onboarding: {
             hasProfile: true,
             hasActivePayment: true,
@@ -40,16 +47,10 @@ test.describe('Admin smoke', () => {
           },
         })
       )
-      })
-    }
+    })
 
     // Admin API stubs (UI smoke only; avoids hitting real Stripe/Paystack)
-    const adminApiPatterns = [
-      '**://localhost:3001/admin/**',
-      '**://127.0.0.1:3001/admin/**',
-    ]
-    for (const pattern of adminApiPatterns) {
-      await page.route(pattern, async (route) => {
+    await page.route('**/admin/**', async (route) => {
       const url = new URL(route.request().url())
       const path = url.pathname
 
@@ -446,7 +447,6 @@ test.describe('Admin smoke', () => {
       // Default fallback: return 200 with empty payload to avoid unhandled 404s
       return route.fulfill(json({}))
     })
-    }
   })
 
   test('navigates all admin pages without runtime errors', async ({ page }) => {

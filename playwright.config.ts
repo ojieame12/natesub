@@ -24,13 +24,25 @@ dotenv.config({ path: resolve(__dirname, '.env') });
  *
  * First time setup:
  *   npx playwright install           # Install browsers
+ *
+ * SERVER STARTUP & RELIABILITY NOTES:
+ * -----------------------------------
+ * - Backend uses /health/live for startup check (no DB dependency)
+ * - This avoids Neon serverless cold-start delays during test setup
+ * - Tests that need DB will naturally warm it on first API call
+ * - If tests fail due to DB timeouts, try running again (cold-start issue)
+ * - For more reliable E2E, consider using a local Postgres instead of Neon
+ *
+ * KNOWN LIMITATIONS:
+ * - Heavy route stubbing in fixtures.ts means tests validate UI, not full E2E
+ * - See e2e/fixtures.ts and e2e/auth.helper.ts for the UI Smoke vs Integration split
  */
 export default defineConfig({
   testDir: './e2e',
-  fullyParallel: true,
+  fullyParallel: false, // Serial execution to avoid Neon connection pool exhaustion
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  workers: 1, // Single worker to prevent Neon transaction timeouts
   reporter: process.env.CI ? 'github' : 'html',
   timeout: 60 * 1000, // 60s per test
   expect: {
@@ -49,14 +61,15 @@ export default defineConfig({
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
     },
+    // WebKit/Safari - enabled for enterprise cross-browser coverage
+    {
+      name: 'webkit',
+      use: { ...devices['Desktop Safari'] },
+    },
     // Uncomment for full browser coverage (slower)
     // {
     //   name: 'firefox',
     //   use: { ...devices['Desktop Firefox'] },
-    // },
-    // {
-    //   name: 'webkit',
-    //   use: { ...devices['Desktop Safari'] },
     // },
     // {
     //   name: 'Mobile Chrome',
@@ -69,7 +82,9 @@ export default defineConfig({
       // Backend API server with stubbed payments
       // Load .env for secrets, env config ensures PAYMENTS_MODE=stub
       command: 'cd backend && npx dotenv -e ../.env -- npm start',
-      url: 'http://localhost:3001/health',
+      // Use /health/live (no DB check) for faster startup
+      // This avoids Neon cold-start blocking test startup
+      url: 'http://localhost:3001/health/live',
       reuseExistingServer: false, // Always start fresh for E2E tests
       timeout: 120 * 1000,
       stdout: 'pipe',

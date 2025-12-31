@@ -144,3 +144,74 @@ jobs:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/nate_test
           REDIS_URL: redis://localhost:6379
           NODE_ENV: test
+
+  e2e-tests:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: nate_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            backend/package-lock.json
+
+      - name: Install Frontend deps
+        run: npm ci
+
+      - name: Install Backend deps
+        run: npm ci
+        working-directory: backend
+
+      - name: Setup Test DB
+        run: npm run db:push
+        working-directory: backend
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/nate_test
+
+      - name: Install Playwright Browsers
+        run: npx playwright install chromium webkit --with-deps
+
+      - name: Run E2E Tests
+        run: npx playwright test
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/nate_test
+          REDIS_URL: redis://localhost:6379
+          NODE_ENV: test
+          PAYMENTS_MODE: stub
+          JWT_SECRET: test-secret-key-for-ci
+
+      - name: Upload Test Results
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
