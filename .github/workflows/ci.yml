@@ -140,6 +140,7 @@ jobs:
         working-directory: backend
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/nate_test
+          DIRECT_DATABASE_URL: postgres://postgres:postgres@localhost:5432/nate_test
       
       - name: Run Integration Tests
         run: npm test -- tests/integration
@@ -203,6 +204,7 @@ jobs:
         working-directory: backend
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/nate_test
+          DIRECT_DATABASE_URL: postgres://postgres:postgres@localhost:5432/nate_test
 
       - name: Build Backend
         run: npm run build
