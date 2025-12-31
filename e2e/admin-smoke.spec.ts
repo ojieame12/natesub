@@ -483,4 +483,133 @@ test.describe('Admin smoke', () => {
     expect(pageErrors).toEqual([])
     expect(consoleErrors).toEqual([])
   })
+
+  test('dashboard displays revenue metrics', async ({ page }) => {
+    await page.goto('/admin')
+    await expect(page.locator('h1.admin-page-title')).toHaveText('Overview')
+
+    // STRICT: Revenue data must be displayed
+    await expect(page.locator('text=$80').or(page.locator('text=80.00'))).toBeVisible({ timeout: 5000 })
+    // User count from stub
+    await expect(page.locator('text=100')).toBeVisible({ timeout: 5000 })
+    // Active subscriptions from stub
+    await expect(page.locator('text=40')).toBeVisible({ timeout: 5000 })
+  })
+
+  test('revenue page displays provider breakdown', async ({ page }) => {
+    await page.goto('/admin/revenue')
+    await expect(page.locator('h1.admin-page-title')).toHaveText('Revenue Analytics')
+
+    // STRICT: All-time volume from stub ($1,000.00)
+    await expect(page.locator('text=$1,000').or(page.locator('text=1,000.00').or(page.locator('text=1000')))).toBeVisible({ timeout: 5000 })
+
+    // Platform fees visible ($80)
+    await expect(page.locator('text=$80').or(page.locator('text=80.00'))).toBeVisible({ timeout: 5000 })
+
+    // Payment count visible
+    await expect(page.locator('text=50')).toBeVisible({ timeout: 5000 })
+  })
+
+  test('users page displays creator data', async ({ page }) => {
+    await page.goto('/admin/users')
+    await expect(page.locator('h1.admin-page-title')).toHaveText('Users')
+
+    // STRICT: Creator email from stub
+    await expect(page.locator('text=creator@example.com')).toBeVisible({ timeout: 5000 })
+
+    // Username from stub
+    await expect(page.locator('text=creator')).toBeVisible({ timeout: 5000 })
+
+    // Country from stub
+    await expect(page.locator('text=US')).toBeVisible({ timeout: 5000 })
+  })
+
+  test('payments page displays transaction data', async ({ page }) => {
+    await page.goto('/admin/payments')
+    await expect(page.locator('h1.admin-page-title')).toHaveText('Payments')
+
+    // STRICT: Payment amount from stub ($15.00)
+    await expect(page.locator('text=$15').or(page.locator('text=15.00'))).toBeVisible({ timeout: 5000 })
+
+    // Status from stub
+    await expect(page.locator('text=succeeded').or(page.locator('text=Succeeded'))).toBeVisible({ timeout: 5000 })
+
+    // Provider from stub
+    await expect(page.locator('text=stripe').or(page.locator('text=Stripe'))).toBeVisible({ timeout: 5000 })
+  })
+
+  test('subscriptions page displays active subscription', async ({ page }) => {
+    await page.goto('/admin/subscriptions')
+    await expect(page.locator('h1.admin-page-title')).toHaveText('Subscriptions')
+
+    // STRICT: Subscription amount from stub ($12.00)
+    await expect(page.locator('text=$12').or(page.locator('text=12.00'))).toBeVisible({ timeout: 5000 })
+
+    // Status from stub
+    await expect(page.locator('text=active').or(page.locator('text=Active'))).toBeVisible({ timeout: 5000 })
+
+    // Subscriber email from stub
+    await expect(page.locator('text=sub@example.com')).toBeVisible({ timeout: 5000 })
+  })
+
+  test('stripe page displays connected account', async ({ page }) => {
+    await page.goto('/admin/stripe')
+    await expect(page.locator('h1.admin-page-title')).toHaveText('Stripe')
+
+    // STRICT: Account data from stub
+    await expect(page.locator('text=creator@example.com')).toBeVisible({ timeout: 5000 })
+
+    // Stripe account ID
+    await expect(page.locator('text=acct_test')).toBeVisible({ timeout: 5000 })
+
+    // Status indicators
+    await expect(page.locator('text=active').or(page.locator('text=Active').or(page.locator('text=enabled')))).toBeVisible({ timeout: 5000 })
+  })
+
+  test('emails page displays sent email', async ({ page }) => {
+    await page.goto('/admin/emails')
+    await expect(page.locator('h1.admin-page-title')).toHaveText('Email Logs')
+
+    // STRICT: Email data from stub
+    await expect(page.locator('text=sub@example.com')).toBeVisible({ timeout: 5000 })
+
+    // Subject from stub
+    await expect(page.locator('text=Welcome')).toBeVisible({ timeout: 5000 })
+
+    // Status from stub
+    await expect(page.locator('text=sent').or(page.locator('text=Sent'))).toBeVisible({ timeout: 5000 })
+  })
+
+  test('logs page displays system log entry', async ({ page }) => {
+    await page.goto('/admin/logs')
+    await expect(page.locator('h1.admin-page-title')).toHaveText('System Logs')
+
+    // STRICT: Log data from stub
+    await expect(page.locator('text=email_sent').or(page.locator('text=Sent email'))).toBeVisible({ timeout: 5000 })
+
+    // Log level from stub
+    await expect(page.locator('text=info').or(page.locator('text=Info'))).toBeVisible({ timeout: 5000 })
+  })
+
+  test('invoices page displays invoice data', async ({ page }) => {
+    await page.goto('/admin/invoices')
+    await expect(page.locator('h1.admin-page-title')).toHaveText('Invoices')
+
+    // STRICT: Invoice data from stub
+    await expect(page.locator('text=client@example.com')).toBeVisible({ timeout: 5000 })
+
+    // Amount from stub ($25.00)
+    await expect(page.locator('text=$25').or(page.locator('text=25.00'))).toBeVisible({ timeout: 5000 })
+
+    // Status from stub
+    await expect(page.locator('text=sent').or(page.locator('text=Sent'))).toBeVisible({ timeout: 5000 })
+  })
+
+  test('operations page displays health status', async ({ page }) => {
+    await page.goto('/admin/ops')
+    await expect(page.locator('h1.admin-page-title')).toHaveText('Operations')
+
+    // STRICT: Health status from stub
+    await expect(page.locator('text=healthy').or(page.locator('text=Healthy'))).toBeVisible({ timeout: 5000 })
+  })
 })

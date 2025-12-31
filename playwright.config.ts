@@ -56,26 +56,28 @@ export default defineConfig({
     screenshot: 'only-on-failure',
     video: 'on-first-retry',
   },
+  // Projects: chromium always, webkit/mobile-safari only in CI
+  // This allows local dev without installing all browsers
   projects: [
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
     },
-    // WebKit/Safari - enabled for enterprise cross-browser coverage
-    {
+    // WebKit/Safari - CI only (requires: npx playwright install webkit)
+    ...(process.env.CI ? [{
       name: 'webkit',
       use: { ...devices['Desktop Safari'] },
-    },
-    // Mobile - iOS Safari viewport behavior
-    {
+    }] : []),
+    // Mobile Safari - CI only (requires: npx playwright install webkit)
+    ...(process.env.CI ? [{
       name: 'mobile-safari',
       use: { ...devices['iPhone 12'] },
-    },
-    // Uncomment for full browser coverage (slower)
-    // {
-    //   name: 'firefox',
-    //   use: { ...devices['Desktop Firefox'] },
-    // },
+    }] : []),
+    // Firefox - CI only (requires: npx playwright install firefox)
+    ...(process.env.CI ? [{
+      name: 'firefox',
+      use: { ...devices['Desktop Firefox'] },
+    }] : []),
   ],
   // Start both backend and frontend before tests
   webServer: [
