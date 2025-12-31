@@ -65,6 +65,7 @@ export function sanitizeMultiLine(input: string, maxLength = 5000): string {
  */
 export function sanitizeName(input: string, maxLength = 100): string {
   return stripHtml(input)
+    // eslint-disable-next-line no-control-regex
     .replace(/[\x00-\x1F\x7F]/g, '') // Remove control characters
     .replace(/[\r\n]+/g, ' ')         // Replace newlines with space
     .replace(/\s+/g, ' ')             // Collapse multiple spaces

@@ -95,7 +95,7 @@ export interface IncomeStatementData {
 }
 
 // Legacy type alias for backward compatibility
-export interface PayStatementData extends IncomeStatementData {}
+export type PayStatementData = IncomeStatementData
 
 // ============================================
 // FORMATTING HELPERS

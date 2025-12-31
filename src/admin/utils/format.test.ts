@@ -34,7 +34,7 @@ describe('Admin Format Utils', () => {
 
     it('handles NaN/invalid inputs', () => {
       expect(formatCurrency(NaN)).toBe('0.00')
-      // @ts-expect-error
+      // @ts-expect-error - testing invalid input
       expect(formatCurrency(null)).toBe('0.00')
     })
   })

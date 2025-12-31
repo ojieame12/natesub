@@ -124,7 +124,8 @@ describe('safe localStorage wrapper', () => {
 
     // Re-import to test the createSafeStorage function
     // Note: This would need module reset to fully test, but we verify the concept
-    expect(mockStorage.setItem).not.toThrow // Would throw if called directly
+    // Verify mockStorage is callable (would throw if called with invalid args)
+    expect(typeof mockStorage.setItem).toBe('function')
 
     // Restore
     Object.defineProperty(window, 'localStorage', { value: originalLocalStorage, writable: true })
