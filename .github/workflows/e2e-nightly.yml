@@ -1,0 +1,176 @@
+name: E2E Nightly (Real Providers)
+
+on:
+  schedule:
+    # Run at 3:00 AM UTC every day
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+    # Allow manual trigger for testing
+    inputs:
+      debug:
+        description: 'Enable debug logging'
+        required: false
+        default: 'false'
+
+concurrency:
+  group: e2e-nightly
+  cancel-in-progress: true
+
+jobs:
+  real-provider-e2e:
+    name: Real Provider E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: nate_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            backend/package-lock.json
+
+      - name: Install Frontend deps
+        run: npm ci
+
+      - name: Install Backend deps
+        run: npm ci
+        working-directory: backend
+
+      - name: Generate Prisma Client
+        run: npm run db:generate
+        working-directory: backend
+
+      - name: Setup Test DB
+        run: npm run db:push
+        working-directory: backend
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/nate_test
+
+      - name: Build Backend
+        run: npm run build
+        working-directory: backend
+
+      - name: Install Playwright Browsers
+        run: npx playwright install chromium --with-deps
+
+      - name: Run Real Provider E2E Tests
+        run: npx playwright test real-backend.spec.ts --project=chromium
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/nate_test
+          REDIS_URL: redis://localhost:6379
+          NODE_ENV: test
+          # Real provider mode
+          REAL_PROVIDERS: 'true'
+          PAYMENTS_MODE: 'live'
+          # Stripe test keys (from secrets)
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_TEST_SECRET_KEY }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_TEST_WEBHOOK_SECRET }}
+          # Paystack test keys (from secrets)
+          PAYSTACK_SECRET_KEY: ${{ secrets.PAYSTACK_TEST_SECRET_KEY }}
+          # Test creator usernames (optional - for seeded creators)
+          TEST_CREATOR_USERNAME: ${{ vars.TEST_CREATOR_USERNAME }}
+          TEST_NG_CREATOR_USERNAME: ${{ vars.TEST_NG_CREATOR_USERNAME }}
+          # JWT for e2e-login
+          JWT_SECRET: ${{ secrets.JWT_SECRET || 'test-jwt-secret-for-e2e' }}
+
+      - name: Upload Test Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nightly-playwright-report
+          path: playwright-report/
+          retention-days: 14
+
+      - name: Upload Test Screenshots
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: nightly-test-screenshots
+          path: test-results/
+          retention-days: 14
+
+  notify-on-failure:
+    name: Notify on Failure
+    runs-on: ubuntu-latest
+    needs: real-provider-e2e
+    if: failure()
+    steps:
+      - name: Send Slack Notification
+        if: ${{ secrets.SLACK_WEBHOOK_URL }}
+        uses: slackapi/slack-github-action@v1.24.0
+        with:
+          payload: |
+            {
+              "text": "🚨 Nightly E2E Failed",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "🚨 *Nightly E2E Tests Failed*\n\nReal provider checkout tests failed. This may indicate payment integration issues.\n\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Run>"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+
+      - name: Create GitHub Issue on Failure
+        if: ${{ vars.CREATE_ISSUE_ON_FAILURE == 'true' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = `🚨 Nightly E2E Failed - ${new Date().toISOString().split('T')[0]}`;
+            const body = `## Nightly E2E Test Failure
+
+            The nightly real-provider E2E tests failed.
+
+            **Run:** [View Details](${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID})
+
+            **Time:** ${new Date().toISOString()}
+
+            This may indicate:
+            - Stripe/Paystack API changes
+            - Test key expiration
+            - Payment flow regression
+
+            Please investigate and resolve.
+            `;
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: title,
+              body: body,
+              labels: ['bug', 'e2e', 'payments', 'nightly']
+            });
