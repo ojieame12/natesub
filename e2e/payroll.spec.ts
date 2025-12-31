@@ -338,7 +338,7 @@ test.describe('Public Verification', () => {
 // ============================================
 
 test.describe('Income Statement Generation', () => {
-  test('POST /payroll/statement generates custom range statement', async ({ request }) => {
+  test('POST /payroll/custom-statement generates custom range statement', async ({ request }) => {
     const { token, username } = await setupServiceCreator(request, 'stmt')
 
     // Seed payment
@@ -357,7 +357,7 @@ test.describe('Income Statement Generation', () => {
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
     const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0)
 
-    const response = await request.post(`${API_URL}/payroll/statement`, {
+    const response = await request.post(`${API_URL}/payroll/custom-statement`, {
       data: {
         startDate: startOfMonth.toISOString(),
         endDate: endOfMonth.toISOString(),
@@ -376,7 +376,7 @@ test.describe('Income Statement Generation', () => {
   })
 
   test('income statement requires auth', async ({ request }) => {
-    const response = await request.post(`${API_URL}/payroll/statement`, {
+    const response = await request.post(`${API_URL}/payroll/custom-statement`, {
       data: {
         startDate: new Date().toISOString(),
         endDate: new Date().toISOString(),
