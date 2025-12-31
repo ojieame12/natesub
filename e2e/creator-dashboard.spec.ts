@@ -469,7 +469,7 @@ test.describe('Pricing Management', () => {
     // Update to tiered pricing
     const response = await request.put(`${API_URL}/profile`, {
       data: {
-        pricingModel: 'tiered',
+        pricingModel: 'tiers',
         tiers: [
           { name: 'Basic', amount: 500, perks: ['Perk 1'] },
           { name: 'Pro', amount: 1000, perks: ['Perk 1', 'Perk 2'] },

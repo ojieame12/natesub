@@ -102,9 +102,10 @@ test.describe('Admin API', () => {
     expect(response.status(), 'Admin dashboard must succeed with valid admin key').toBe(200)
     const data = await response.json()
     expect(
-      data.totalUsers !== undefined ||
-      data.totalSubscriptions !== undefined ||
-      data.metrics !== undefined
+      data.users !== undefined ||
+      data.subscriptions !== undefined ||
+      data.revenue !== undefined ||
+      data.flags !== undefined
     ).toBeTruthy()
   })
 

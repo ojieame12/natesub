@@ -507,11 +507,12 @@ test.describe('Subscription Management - Full Flow (Real Backend)', () => {
       // Create a test subscription for validation
       const email = deterministicEmail('manage-flow-test')
       const { token } = await e2eLogin(request, email)
+      const shortId = Date.now().toString(36).slice(-6)
 
       // Create a test creator profile
       const creatorResponse = await request.put('http://localhost:3001/profile', {
         data: {
-          username: `managetest${Date.now()}`,
+          username: `managet${shortId}`,
           displayName: 'Manage Test Creator',
           country: 'United States',
           countryCode: 'US',
@@ -1221,8 +1222,8 @@ test.describe('Admin API - Real Backend (Always-On)', () => {
 
     if (response.status() === 200) {
       const data = await response.json()
-      // Dashboard should return stats
-      expect(data).toHaveProperty('totalUsers')
+      // Dashboard should return structured stats
+      expect(data.users?.total ?? data.subscriptions?.active ?? data.revenue).toBeDefined()
     }
   })
 })
@@ -1362,7 +1363,7 @@ test.describe('Admin API - Strict Data Validation (Read-Only)', () => {
       if (dashResp.status() === 200) {
         const dash = await dashResp.json()
         // Dashboard should show metrics
-        expect(dash.totalUsers || dash.totalSubscriptions || dash.revenue).toBeTruthy()
+        expect(dash.users?.total ?? dash.subscriptions?.active ?? dash.revenue).toBeDefined()
       }
     }
   })

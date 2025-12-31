@@ -184,8 +184,9 @@ test.describe('Stripe Connect', () => {
 
     expect(data.countries).toBeDefined()
     expect(data.total).toBeGreaterThan(0)
-    expect(data.countries).toContain('US')
-    expect(data.countries).toContain('GB')
+    const codes = data.countries.map((country: { code: string }) => country.code)
+    expect(codes).toContain('US')
+    expect(codes).toContain('GB')
   })
 })
 

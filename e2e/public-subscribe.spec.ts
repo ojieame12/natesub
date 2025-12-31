@@ -31,7 +31,7 @@ async function setupPublicCreator(
   request: import('@playwright/test').APIRequestContext,
   suffix: string,
   options?: {
-    pricingModel?: 'single' | 'tiered'
+    pricingModel?: 'single' | 'tiers'
     amount?: number
     isPublic?: boolean
   }
@@ -57,7 +57,7 @@ async function setupPublicCreator(
     bio: 'Support my work!',
   }
 
-  if (options?.pricingModel === 'tiered') {
+  if (options?.pricingModel === 'tiers') {
     profileData.tiers = [
       { name: 'Supporter', amount: 500, perks: ['Access to updates'] },
       { name: 'Super Fan', amount: 1000, perks: ['Access to updates', 'Exclusive content'] },
@@ -262,7 +262,7 @@ test.describe('Checkout Initiation', () => {
 test.describe('Tiered Pricing', () => {
   test('tiered creator shows multiple pricing options', async ({ page, request }) => {
     const { username } = await setupPublicCreator(request, 'tiered', {
-      pricingModel: 'tiered',
+      pricingModel: 'tiers',
     })
 
     await page.goto(`/${username}`)
@@ -281,7 +281,7 @@ test.describe('Tiered Pricing', () => {
 
   test('can select different tiers', async ({ page, request }) => {
     const { username } = await setupPublicCreator(request, 'tiersel', {
-      pricingModel: 'tiered',
+      pricingModel: 'tiers',
     })
 
     await page.goto(`/${username}`)

@@ -48,6 +48,11 @@ async function setupServiceCreator(
       paymentProvider: 'stripe',
       feeMode: 'split',
       isPublic: true,
+      perks: [
+        { id: `perk_${ts}_1`, title: 'Monthly payroll summary', enabled: true },
+        { id: `perk_${ts}_2`, title: 'Income statement PDF', enabled: true },
+        { id: `perk_${ts}_3`, title: 'Audit-ready breakdown', enabled: true },
+      ],
       address: '123 E2E Test Street',
       city: 'San Francisco',
       state: 'CA',
@@ -128,6 +133,11 @@ test.describe('Payroll Periods API', () => {
         paymentProvider: 'stripe',
         feeMode: 'split',
         isPublic: true,
+        perks: [
+          { id: `perk_noaddr_${ts}_1`, title: 'Monthly payroll summary', enabled: true },
+          { id: `perk_noaddr_${ts}_2`, title: 'Income statement PDF', enabled: true },
+          { id: `perk_noaddr_${ts}_3`, title: 'Audit-ready breakdown', enabled: true },
+        ],
         // No address fields
       },
       headers: { 'Authorization': `Bearer ${token}` },
