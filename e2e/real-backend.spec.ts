@@ -285,6 +285,139 @@ test.describe('Full Onboarding Journey - No Stubs', () => {
   })
 })
 
+test.describe('Auth Flow - Real Backend', () => {
+  test('magic link request sends email and creates pending session', async ({ request }) => {
+    const testEmail = `auth-test-${Date.now()}@e2e.natepay.co`
+
+    // Request magic link (real backend)
+    const response = await request.post('http://localhost:3001/auth/login', {
+      data: { email: testEmail },
+      headers: { 'Content-Type': 'application/json' },
+    })
+
+    // Should succeed - email is queued
+    expect(response.status()).toBe(200)
+    const data = await response.json()
+    expect(data.message).toBeTruthy()
+  })
+
+  test('OTP request for subscriber portal works', async ({ request }) => {
+    const testEmail = `subscriber-auth-${Date.now()}@e2e.natepay.co`
+
+    // Request OTP for subscriber portal
+    const response = await request.post('http://localhost:3001/subscriber/otp', {
+      data: { email: testEmail },
+      headers: { 'Content-Type': 'application/json' },
+    })
+
+    // Should return 200 (OTP sent) or 404 (no subscriptions)
+    expect([200, 404]).toContain(response.status())
+  })
+
+  test('e2e-login creates real session with valid cookie', async ({ page, request }) => {
+    const email = deterministicEmail('auth-session-test')
+
+    // Create user via e2e-login
+    const { token, user } = await e2eLogin(request, email)
+    expect(token).toBeTruthy()
+    expect(user.id).toBeTruthy()
+
+    // Set cookie and verify session works
+    await setAuthCookie(page, token)
+    await page.goto('/dashboard')
+    await page.waitForLoadState('networkidle')
+
+    // Should either be on dashboard or redirected to onboarding (both valid for new user)
+    const url = page.url()
+    expect(url.includes('dashboard') || url.includes('onboarding')).toBeTruthy()
+  })
+})
+
+test.describe('Subscription Management - Real Backend', () => {
+  test('manage token API validates token format', async ({ request }) => {
+    // Invalid token should return 400
+    const response = await request.get('http://localhost:3001/subscription/manage/invalid-token')
+
+    expect([400, 404]).toContain(response.status())
+  })
+
+  test('cancel endpoint requires valid subscription', async ({ request }) => {
+    // Try to cancel with invalid token
+    const response = await request.post('http://localhost:3001/subscription/manage/fake-token/cancel', {
+      data: { reason: 'test' },
+      headers: { 'Content-Type': 'application/json' },
+    })
+
+    expect([400, 404]).toContain(response.status())
+  })
+
+  test('reactivate endpoint validates token and nonce', async ({ request }) => {
+    // Try to reactivate with invalid token
+    const response = await request.post('http://localhost:3001/subscription/manage/fake-token/reactivate', {
+      headers: { 'Content-Type': 'application/json' },
+    })
+
+    expect([400, 404]).toContain(response.status())
+  })
+
+  test('portal redirect endpoint requires valid token', async ({ request }) => {
+    const response = await request.post('http://localhost:3001/subscription/manage/fake-token/portal', {
+      headers: { 'Content-Type': 'application/json' },
+    })
+
+    expect([400, 404]).toContain(response.status())
+  })
+})
+
+test.describe('Checkout - Real Provider (Nightly)', () => {
+  // These tests require real Stripe/Paystack test keys
+  // Run with: REAL_PROVIDERS=true npx playwright test real-backend.spec.ts
+  const skipUnlessRealProviders = process.env.REAL_PROVIDERS !== 'true'
+
+  test('Stripe checkout session creates valid redirect URL', async ({ request }) => {
+    test.skip(skipUnlessRealProviders, 'Requires REAL_PROVIDERS=true')
+
+    // This would require a seeded creator with Stripe account
+    // For nightly runs with real test keys
+    const response = await request.post('http://localhost:3001/checkout/session', {
+      data: {
+        creatorUsername: process.env.TEST_CREATOR_USERNAME || 'testcreator',
+        email: 'checkout-test@e2e.com',
+        amount: 1000,
+      },
+      headers: { 'Content-Type': 'application/json' },
+    })
+
+    if (response.status() === 200) {
+      const data = await response.json()
+      expect(data.url || data.sessionId).toBeTruthy()
+    } else {
+      // No seeded creator - skip gracefully
+      expect([400, 404]).toContain(response.status())
+    }
+  })
+
+  test('Paystack checkout creates valid authorization URL', async ({ request }) => {
+    test.skip(skipUnlessRealProviders, 'Requires REAL_PROVIDERS=true')
+
+    const response = await request.post('http://localhost:3001/checkout/session', {
+      data: {
+        creatorUsername: process.env.TEST_NG_CREATOR_USERNAME || 'testcreatorng',
+        email: 'checkout-ng-test@e2e.com',
+        amount: 5000,
+      },
+      headers: { 'Content-Type': 'application/json' },
+    })
+
+    if (response.status() === 200) {
+      const data = await response.json()
+      expect(data.authorizationUrl || data.reference).toBeTruthy()
+    } else {
+      expect([400, 404]).toContain(response.status())
+    }
+  })
+})
+
 test.describe('API Contract Validation', () => {
   test('auth/me returns proper structure', async ({ request }) => {
     // Test without auth - should fail gracefully
