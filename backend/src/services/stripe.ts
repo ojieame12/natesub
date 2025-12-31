@@ -614,6 +614,17 @@ export async function createCheckoutSession(params: {
 // Returns balance for primary currency only (first in available array)
 // Multi-currency accounts: only sums amounts matching primary currency to avoid mixing
 export async function getAccountBalance(stripeAccountId: string) {
+  // Stub mode: return mock balance for E2E tests
+  if (env.PAYMENTS_MODE === 'stub') {
+    return {
+      available: 10000, // $100.00
+      pending: 5000,    // $50.00
+      currency: 'usd',
+      nextPayoutDate: null,
+      nextPayoutAmount: null,
+    }
+  }
+
   const [balance, upcomingPayouts] = await Promise.all([
     stripe.balance.retrieve({ stripeAccount: stripeAccountId }),
     // Get pending/in_transit payouts to show upcoming payout date
