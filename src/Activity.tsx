@@ -1,3 +1,5 @@
+'use no memo' // Skip React Compiler - refs accessed during render
+
 import { useMemo, useRef, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {

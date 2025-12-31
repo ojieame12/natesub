@@ -1,3 +1,5 @@
+'use no memo' // Skip React Compiler - refs accessed during render
+
 /**
  * BottomDrawer - Swipe-to-dismiss bottom sheet component
  *

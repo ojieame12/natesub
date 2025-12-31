@@ -2,6 +2,7 @@
 // Schedule: Daily at 08:00 UTC
 
 import type { VercelRequest, VercelResponse } from '@vercel/node'
+import { getErrorInfo } from './utils'
 
 const API_URL = process.env.API_URL || 'https://natesub-production.up.railway.app'
 const JOBS_API_KEY = process.env.JOBS_API_KEY
@@ -50,16 +51,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       timestamp: new Date().toISOString(),
       ...data,
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     clearTimeout(timeout)
-    if (error.name === 'AbortError') {
+    const { name, message } = getErrorInfo(error)
+    if (name === 'AbortError') {
       console.error('[cron/notifications] Request timed out after 8s')
       return res.status(504).json({ error: 'Railway request timeout' })
     }
-    console.error('[cron/notifications] Error:', error.message)
+    console.error('[cron/notifications] Error:', message)
     return res.status(500).json({
       error: 'Failed to run notifications job',
-      message: error.message,
+      message,
     })
   }
 }

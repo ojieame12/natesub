@@ -1,3 +1,5 @@
+'use no memo' // Skip React Compiler - manual memoization with specific deps
+
 /**
  * useAuthState - Centralized auth state management
  *

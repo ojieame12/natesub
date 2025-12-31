@@ -41,6 +41,8 @@ export default defineConfig([
       'react-hooks/set-state-in-effect': 'warn',
       'react-hooks/purity': 'warn',
       'react-hooks/immutability': 'warn',
+      'react-hooks/preserve-manual-memoization': 'warn', // React Compiler memoization
+      'react-hooks/refs': 'warn', // React Compiler ref access during render
       'react-refresh/only-export-components': 'warn',
     },
   },

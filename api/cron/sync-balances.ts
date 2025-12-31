@@ -2,6 +2,7 @@
 // Schedule: Every 15 minutes
 
 import type { VercelRequest, VercelResponse } from '@vercel/node'
+import { getErrorInfo } from './utils'
 
 const API_URL = process.env.API_URL || 'https://natesub-production-b530.up.railway.app'
 const JOBS_API_KEY = process.env.JOBS_API_KEY
@@ -51,16 +52,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       timestamp: new Date().toISOString(),
       ...data,
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     clearTimeout(timeout)
-    if (error.name === 'AbortError') {
+    const { name, message } = getErrorInfo(error)
+    if (name === 'AbortError') {
       console.error('[cron/sync-balances] Request timed out after 8s')
       return res.status(504).json({ error: 'Railway request timeout' })
     }
-    console.error('[cron/sync-balances] Error:', error.message)
+    console.error('[cron/sync-balances] Error:', message)
     return res.status(500).json({
       error: 'Failed to run balance sync job',
-      message: error.message,
+      message,
     })
   }
 }

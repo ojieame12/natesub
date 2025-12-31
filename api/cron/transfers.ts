@@ -2,6 +2,7 @@
 // Schedule: Hourly at minute 30
 
 import type { VercelRequest, VercelResponse } from '@vercel/node'
+import { getErrorInfo } from './utils'
 
 const API_URL = process.env.API_URL || 'https://natesub-production.up.railway.app'
 const JOBS_API_KEY = process.env.JOBS_API_KEY
@@ -51,16 +52,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       timestamp: new Date().toISOString(),
       ...data,
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     clearTimeout(timeout)
-    if (error.name === 'AbortError') {
+    const { name, message } = getErrorInfo(error)
+    if (name === 'AbortError') {
       console.error('[cron/transfers] Request timed out after 8s')
       return res.status(504).json({ error: 'Railway request timeout' })
     }
-    console.error('[cron/transfers] Error:', error.message)
+    console.error('[cron/transfers] Error:', message)
     return res.status(500).json({
       error: 'Failed to run transfer monitoring job',
-      message: error.message,
+      message,
     })
   }
 }
