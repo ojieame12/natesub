@@ -1,6 +1,8 @@
 import { Page, expect, APIRequestContext } from '@playwright/test'
 
-const API_URL = process.env.API_URL || 'http://localhost:3001'
+// E2E tests always run against local backend - hardcode to avoid CI env var conflicts
+// (CI may have API_URL set to production, but E2E tests need the local stub server)
+const API_URL = 'http://localhost:3001'
 
 /**
  * E2E Auth Helpers
@@ -145,16 +147,36 @@ export interface SeedCreatorOptions {
   country?: 'US' | 'NG' | 'GB' | 'GH' | 'KE'
   paymentProvider?: 'stripe' | 'paystack'
   singleAmount?: number
+  purpose?: 'support' | 'service'
+}
+
+// Country code to full name mapping
+const COUNTRY_NAMES: Record<string, string> = {
+  US: 'United States',
+  NG: 'Nigeria',
+  GB: 'United Kingdom',
+  GH: 'Ghana',
+  KE: 'Kenya',
+}
+
+// Country code to currency mapping
+const COUNTRY_CURRENCIES: Record<string, string> = {
+  US: 'USD',
+  NG: 'NGN',
+  GB: 'GBP',
+  GH: 'GHS',
+  KE: 'KES',
 }
 
 /**
  * Seed a complete creator profile
  *
  * Creates a user via e2e-login, then creates their profile
- * via the profile/save endpoint.
+ * via the PUT /profile endpoint.
  *
- * NOTE: This requires the profile creation endpoints to work,
- * which depends on Stripe/Paystack being in test mode.
+ * NOTE: In PAYMENTS_MODE=stub, Stripe/Paystack account creation is stubbed.
+ * The profile will be created but may not have payment capabilities
+ * until the payment provider flow is completed.
  *
  * @example
  * const creator = await seedTestCreator(request, {
@@ -168,20 +190,50 @@ export interface SeedCreatorOptions {
 export async function seedTestCreator(
   request: APIRequestContext,
   options: SeedCreatorOptions
-): Promise<{ user: E2ELoginResult['user']; token: string; username: string }> {
+): Promise<{ user: E2ELoginResult['user']; token: string; username: string; profileCreated: boolean }> {
+  const countryCode = options.country || 'US'
+  const country = COUNTRY_NAMES[countryCode] || 'United States'
+  const currency = COUNTRY_CURRENCIES[countryCode] || 'USD'
+  const paymentProvider = options.paymentProvider || (countryCode === 'NG' ? 'paystack' : 'stripe')
+  const singleAmount = options.singleAmount || 500 // $5.00 default
+  const purpose = options.purpose || 'support'
+
   // Step 1: Create user via e2e-login
   const loginResult = await e2eLogin(request, options.email)
 
-  // Step 2: Save profile (this would need the profile/save endpoint to accept test data)
-  // For now, this is a placeholder - full implementation would call profile/save
-  // with the auth cookie set
+  // Step 2: Create profile via PUT /profile
+  const profileResponse = await request.put(`${API_URL}/profile`, {
+    data: {
+      username: options.username.toLowerCase(),
+      displayName: options.displayName,
+      country,
+      countryCode,
+      currency,
+      purpose,
+      pricingModel: 'single',
+      singleAmount,
+      paymentProvider,
+      feeMode: 'split',
+      isPublic: false, // Start as private, can be made public later
+    },
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${loginResult.token}`,
+    },
+  })
 
-  console.log(`[seedTestCreator] Created user ${loginResult.user.id} - profile creation requires additional setup`)
+  const profileCreated = profileResponse.ok()
+
+  if (!profileCreated) {
+    const errorText = await profileResponse.text()
+    console.warn(`[seedTestCreator] Profile creation failed: ${profileResponse.status()} - ${errorText}`)
+  }
 
   return {
     user: loginResult.user,
     token: loginResult.token,
-    username: options.username,
+    username: options.username.toLowerCase(),
+    profileCreated,
   }
 }
 
