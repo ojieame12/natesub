@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { Loader2 } from 'lucide-react'
 import { setPaymentConfirmed } from './utils/paymentConfirmed'
+import { safeSessionGetItem, safeSessionRemoveItem } from './api'
 import { useOnboardingStore, useShallow, type OnboardingStepKey } from './onboarding/store'
 import { useProfile, useCurrentUser } from './api/hooks'
 import './StripeComplete.css'
@@ -64,12 +65,13 @@ export default function PaystackOnboardingComplete() {
    */
   const getReturnStepKey = (): OnboardingStepKey => {
     // 1. Check sessionStorage first (set by PaymentMethodStep before navigation)
-    const sessionReturnTo = sessionStorage.getItem('paystack_return_to')
+    // Use safe wrapper to handle Safari private mode
+    const sessionReturnTo = safeSessionGetItem('paystack_return_to')
     if (sessionReturnTo) {
       // Extract step key from URL like "/onboarding?step=service-desc"
       const match = sessionReturnTo.match(/[?&]step=([^&]+)/)
       if (match) {
-        sessionStorage.removeItem('paystack_return_to') // Clean up
+        safeSessionRemoveItem('paystack_return_to') // Clean up
         return match[1] as OnboardingStepKey
       }
     }
@@ -80,8 +82,13 @@ export default function PaystackOnboardingComplete() {
     }
 
     // 3. Service users: determine based on existing data
-    const hasDescription = serviceDescription?.trim()
-    const hasPerks = servicePerks?.length >= 3
+    // Use server data fallback chain (most robust for cross-device scenarios)
+    const serverData = userData?.onboarding?.data
+    const resolvedDescription = serverData?.serviceDescription || profile?.bio || serviceDescription
+    const resolvedPerks = serverData?.servicePerks || profile?.perks || servicePerks
+
+    const hasDescription = resolvedDescription?.trim?.() || (typeof resolvedDescription === 'string' && resolvedDescription.trim())
+    const hasPerks = Array.isArray(resolvedPerks) && resolvedPerks.length >= 3
 
     if (!hasDescription) return 'service-desc'
     if (!hasPerks) return 'ai-gen'
@@ -125,7 +132,8 @@ export default function PaystackOnboardingComplete() {
     // This ensures service users go through service-desc and ai-gen steps
     const returnStepKey = getReturnStepKey()
     navigate(`/onboarding?step=${returnStepKey}`, { replace: true })
-  }, [navigate, queryClient, resolvedPurpose, serviceDescription, servicePerks, isDataReady])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navigate, queryClient, isDataReady])
 
   // Show minimal loading state while redirecting
   return (

@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { CheckCircle, AlertCircle, Loader2, Building2, Calendar, ExternalLink, ArrowLeft } from 'lucide-react'
-import { api } from './api'
+import { api, safeSessionGetItem, safeSessionSetItem, safeSessionRemoveItem } from './api'
 import { useCurrentUser } from './api/hooks'
 import { useOnboardingStore } from './onboarding/store'
 import { setPaymentConfirmed } from './utils/paymentConfirmed'
@@ -78,13 +78,13 @@ export default function StripeComplete() {
   const hasProcessedSuccess = useRef(false)
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // Read source from sessionStorage on mount
+  // Read source from sessionStorage on mount (use safe wrapper for Safari private mode)
   useEffect(() => {
-    const storedSource = sessionStorage.getItem('stripe_onboarding_source') as FlowSource | null
+    const storedSource = safeSessionGetItem('stripe_onboarding_source') as FlowSource | null
     setSource(storedSource || 'unknown')
     // Clear it so we don't reuse stale state
-    sessionStorage.removeItem('stripe_onboarding_source')
-    sessionStorage.removeItem('stripe_onboarding_started_at')
+    safeSessionRemoveItem('stripe_onboarding_source')
+    safeSessionRemoveItem('stripe_onboarding_started_at')
   }, [])
 
   // Cleanup intervals on unmount
@@ -244,10 +244,10 @@ export default function StripeComplete() {
   // Manual continue - trust the optimistic update, don't refetch
   const handleContinue = useCallback(() => {
     setIsNavigating(true)
-    const returnTo = sessionStorage.getItem('stripe_return_to')
+    const returnTo = safeSessionGetItem('stripe_return_to')
 
     if (returnTo) {
-      sessionStorage.removeItem('stripe_return_to')
+      safeSessionRemoveItem('stripe_return_to')
       navigate(returnTo, { replace: true })
     } else if (source === 'onboarding') {
       // Return to next step using step KEY (not numeric index)
@@ -297,9 +297,9 @@ export default function StripeComplete() {
       }
     })
 
-    const returnTo = sessionStorage.getItem('stripe_return_to')
+    const returnTo = safeSessionGetItem('stripe_return_to')
     if (returnTo) {
-      sessionStorage.removeItem('stripe_return_to')
+      safeSessionRemoveItem('stripe_return_to')
       navigate(returnTo, { replace: true })
     } else if (source === 'onboarding') {
       // Return to next step using step KEY (not numeric index)
@@ -317,8 +317,8 @@ export default function StripeComplete() {
       const result = await api.stripe.refreshOnboarding()
       if (result.onboardingUrl) {
         // Preserve the source for when they return
-        sessionStorage.setItem('stripe_onboarding_source', source)
-        sessionStorage.setItem('stripe_onboarding_started_at', Date.now().toString())
+        safeSessionSetItem('stripe_onboarding_source', source)
+        safeSessionSetItem('stripe_onboarding_started_at', Date.now().toString())
         window.location.href = result.onboardingUrl
       } else {
         setRetryError('Unable to get onboarding link. Please try again.')

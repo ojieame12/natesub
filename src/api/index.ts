@@ -1,5 +1,5 @@
 // API exports
-export { api, default as apiClient } from './client'
+export { api, default as apiClient, safeSessionGetItem, safeSessionSetItem, safeSessionRemoveItem } from './client'
 export type {
   ApiError,
   User,

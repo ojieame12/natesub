@@ -52,6 +52,7 @@ export default function SubscriberPortal() {
   const [selectedReason, setSelectedReason] = useState<CancelReason | null>(null)
   const [comment, setComment] = useState('')
   const [loading, setLoading] = useState(false)
+  const [reactivating, setReactivating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const otpRefs = useRef<(HTMLInputElement | null)[]>([])
@@ -224,6 +225,31 @@ export default function SubscriberPortal() {
       setError(err.message || 'Failed to cancel subscription')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleReactivate = async () => {
+    if (!selectedSub) return
+
+    setReactivating(true)
+    setError(null)
+
+    try {
+      const result = await api.subscriberPortal.reactivateSubscription(selectedSub.id)
+      if (result.success) {
+        setSuccessMessage(result.message || 'Subscription reactivated!')
+        // Refresh the subscription data
+        const data = await api.subscriberPortal.getSubscription(selectedSub.id)
+        setSelectedSub(data.subscription)
+        setPayments(data.payments)
+        setResubscribeUrl(data.actions.resubscribeUrl)
+        // Also refresh the list
+        await loadSubscriptions()
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to reactivate subscription')
+    } finally {
+      setReactivating(false)
     }
   }
 
@@ -535,6 +561,7 @@ export default function SubscriberPortal() {
                           color: COLORS.neutral500,
                           marginTop: 2,
                         }}>
+                          <span style={{ color: COLORS.neutral400, fontSize: 11 }}>Plan </span>
                           {formatCurrency(sub.amount, sub.currency)}/{sub.interval}
                         </div>
                         <div style={{
@@ -621,6 +648,7 @@ export default function SubscriberPortal() {
                     {selectedSub.creator.displayName}
                   </div>
                   <div style={{ fontSize: 14, color: COLORS.neutral500 }}>
+                    <span style={{ color: COLORS.neutral400, fontSize: 12 }}>Plan </span>
                     {formatCurrency(selectedSub.amount, selectedSub.currency)}/{selectedSub.interval}
                   </div>
                 </div>
@@ -810,7 +838,30 @@ export default function SubscriberPortal() {
                 </button>
               )}
 
-              {(selectedSub.cancelAtPeriodEnd || selectedSub.status === 'canceled') && resubscribeUrl && (
+              {/* Undo Cancel - when scheduled to cancel but still has access */}
+              {selectedSub.cancelAtPeriodEnd && selectedSub.status !== 'canceled' && (
+                <button
+                  onClick={handleReactivate}
+                  disabled={reactivating}
+                  style={{
+                    width: '100%',
+                    padding: '14px 16px',
+                    background: COLORS.neutral900,
+                    border: 'none',
+                    borderRadius: 12,
+                    fontSize: 14,
+                    fontWeight: 600,
+                    color: COLORS.white,
+                    cursor: reactivating ? 'wait' : 'pointer',
+                    opacity: reactivating ? 0.7 : 1,
+                  }}
+                >
+                  {reactivating ? 'Reactivating...' : 'Keep My Subscription'}
+                </button>
+              )}
+
+              {/* Resubscribe - only when fully canceled */}
+              {selectedSub.status === 'canceled' && resubscribeUrl && (
                 <button
                   onClick={() => window.location.href = resubscribeUrl}
                   style={{

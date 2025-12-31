@@ -33,6 +33,31 @@ function safeRemoveItem(key: string): void {
   }
 }
 
+// Safe sessionStorage wrapper - handles Safari private mode, in-app browsers, etc.
+export function safeSessionGetItem(key: string): string | null {
+  try {
+    return sessionStorage.getItem(key)
+  } catch {
+    return null
+  }
+}
+
+export function safeSessionSetItem(key: string, value: string): void {
+  try {
+    sessionStorage.setItem(key, value)
+  } catch {
+    // Storage blocked - silently fail
+  }
+}
+
+export function safeSessionRemoveItem(key: string): void {
+  try {
+    sessionStorage.removeItem(key)
+  } catch {
+    // Storage blocked - silently fail
+  }
+}
+
 // Token storage utilities (works on web and Capacitor)
 export function getAuthToken(): string | null {
   return safeGetItem(AUTH_TOKEN_KEY)
@@ -40,25 +65,37 @@ export function getAuthToken(): string | null {
 
 export function setAuthToken(token: string): void {
   safeSetItem(AUTH_TOKEN_KEY, token)
+  // Store session flag in both localStorage and sessionStorage for Safari resilience
   safeSetItem(AUTH_SESSION_KEY, 'true')
+  safeSessionSetItem(AUTH_SESSION_KEY, 'true')
 }
 
 export function clearAuthToken(): void {
   safeRemoveItem(AUTH_TOKEN_KEY)
   safeRemoveItem(AUTH_SESSION_KEY)
+  safeSessionRemoveItem(AUTH_SESSION_KEY)
 }
 
 // Session flag for cookie-based auth (no token stored)
+// Uses both localStorage AND sessionStorage for resilience
+// Safari can clear localStorage on navigation, but sessionStorage is more stable
 export function hasAuthSession(): boolean {
-  return safeGetItem(AUTH_SESSION_KEY) === 'true'
+  // Check localStorage first, then fallback to sessionStorage
+  // This handles Safari's aggressive localStorage clearing
+  const localFlag = safeGetItem(AUTH_SESSION_KEY) === 'true'
+  const sessionFlag = safeSessionGetItem(AUTH_SESSION_KEY) === 'true'
+  return localFlag || sessionFlag
 }
 
 export function setAuthSession(): void {
   safeSetItem(AUTH_SESSION_KEY, 'true')
+  // Also store in sessionStorage as Safari-resilient backup
+  safeSessionSetItem(AUTH_SESSION_KEY, 'true')
 }
 
 export function clearAuthSession(): void {
   safeRemoveItem(AUTH_SESSION_KEY)
+  safeSessionRemoveItem(AUTH_SESSION_KEY)
   // Also clear onboarding state to prevent data leaks between sessions
   safeRemoveItem('natepay-onboarding')
 }
@@ -422,6 +459,12 @@ export const auth = {
     apiFetch<{ success: boolean }>('/auth/onboarding', {
       method: 'PUT',
       body: JSON.stringify(data),
+    }),
+
+  // Reset onboarding progress (user clicked "Start over")
+  resetOnboardingProgress: () =>
+    apiFetch<{ success: boolean }>('/auth/onboarding', {
+      method: 'DELETE',
     }),
 
   deleteAccount: async () => {
@@ -1497,6 +1540,20 @@ const subscriptionManage = {
   // Get Stripe portal URL for payment updates
   getPortalUrl: (token: string): Promise<{ url: string }> =>
     apiFetch(`/subscription/manage/${token}/portal`),
+
+  // Reactivate a canceled subscription (undo cancel)
+  reactivate: (token: string): Promise<{
+    success: boolean
+    message: string
+    subscription?: {
+      status: string
+      cancelAtPeriodEnd: boolean
+      currentPeriodEnd?: string
+    }
+  }> =>
+    apiFetch(`/subscription/manage/${token}/reactivate`, {
+      method: 'POST',
+    }),
 }
 
 // ============================================
@@ -1587,6 +1644,20 @@ const subscriberPortal = {
     apiFetch(`/subscriber/subscriptions/${id}/cancel`, {
       method: 'POST',
       body: JSON.stringify({ reason, comment }),
+    }),
+
+  // Reactivate subscription (undo cancel)
+  reactivateSubscription: (id: string): Promise<{
+    success: boolean
+    message: string
+    subscription?: {
+      status: string
+      cancelAtPeriodEnd: boolean
+      currentPeriodEnd?: string
+    }
+  }> =>
+    apiFetch(`/subscriber/subscriptions/${id}/reactivate`, {
+      method: 'POST',
     }),
 
   // Get portal URL

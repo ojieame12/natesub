@@ -63,6 +63,7 @@ export default function ManageSubscription() {
   const [selectedReason, setSelectedReason] = useState<CancelReason | null>(null)
   const [comment, setComment] = useState('')
   const [canceling, setCanceling] = useState(false)
+  const [reactivating, setReactivating] = useState(false)
   const [portalLoading, setPortalLoading] = useState(false)
 
   // Load subscription data
@@ -112,6 +113,27 @@ export default function ManageSubscription() {
       setError(err.message || 'Failed to cancel subscription. Please try again.')
     } finally {
       setCanceling(false)
+    }
+  }
+
+  // Handle reactivation (undo cancel)
+  const handleReactivate = async () => {
+    if (!token) return
+
+    setReactivating(true)
+    setError(null)
+    try {
+      const result = await api.subscriptionManage.reactivate(token)
+      if (result.success) {
+        // Refresh data to get updated state
+        const updated = await api.subscriptionManage.get(token)
+        setData(updated)
+        setView('details')
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to reactivate subscription. Please try again.')
+    } finally {
+      setReactivating(false)
     }
   }
 
@@ -818,21 +840,69 @@ export default function ManageSubscription() {
                 </div>
               </div>
 
+              {/* Error Alert */}
+              {error && (
+                <div style={{
+                  background: '#FEF3C7',
+                  border: '1px solid #FDE68A',
+                  borderRadius: 12,
+                  padding: '12px 16px',
+                  marginBottom: 16,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                }}>
+                  <AlertCircle size={18} color="#D97706" />
+                  <span style={{ fontSize: 13, color: '#92400E', flex: 1 }}>{error}</span>
+                  <button
+                    onClick={() => setError(null)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      padding: 4,
+                      cursor: 'pointer',
+                      color: '#92400E',
+                    }}
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              )}
+
+              {/* Undo Cancel - Primary action */}
+              <button
+                onClick={handleReactivate}
+                disabled={reactivating}
+                style={{
+                  width: '100%',
+                  padding: '16px',
+                  background: COLORS.neutral900,
+                  color: COLORS.white,
+                  border: 'none',
+                  borderRadius: 12,
+                  fontSize: 15,
+                  fontWeight: 600,
+                  cursor: reactivating ? 'wait' : 'pointer',
+                  opacity: reactivating ? 0.7 : 1,
+                  marginBottom: 12,
+                }}
+              >
+                {reactivating ? 'Reactivating...' : 'Keep My Subscription'}
+              </button>
+
               {data.actions?.resubscribeUrl && (
                 <button
                   onClick={() => window.location.href = data.actions.resubscribeUrl!}
                   style={{
-                    padding: '14px 28px',
-                    background: COLORS.neutral900,
-                    color: COLORS.white,
+                    padding: '12px 24px',
+                    background: 'transparent',
+                    color: COLORS.neutral500,
                     border: 'none',
-                    borderRadius: 12,
-                    fontSize: 15,
-                    fontWeight: 600,
+                    fontSize: 14,
                     cursor: 'pointer',
                   }}
                 >
-                  Resubscribe Now
+                  Or start fresh with a new subscription
                 </button>
               )}
             </div>

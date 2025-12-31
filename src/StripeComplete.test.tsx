@@ -5,7 +5,7 @@ import { renderWithProviders } from './test/testUtils'
 import { api } from './api'
 import { useOnboardingStore } from './onboarding/store'
 
-// Mock API
+// Mock API (include safe session storage helpers)
 vi.mock('./api', () => ({
   api: {
     stripe: {
@@ -17,6 +17,10 @@ vi.mock('./api', () => ({
       updateSettings: vi.fn(),
     },
   },
+  // Safe sessionStorage wrappers - use real sessionStorage for testing
+  safeSessionSetItem: (key: string, value: string) => sessionStorage.setItem(key, value),
+  safeSessionGetItem: (key: string) => sessionStorage.getItem(key),
+  safeSessionRemoveItem: (key: string) => sessionStorage.removeItem(key),
 }))
 
 // Mock hooks - useCurrentUser includes profile (no separate useProfile call)

@@ -42,6 +42,22 @@ describe('api/client', () => {
     expect(hasAuthSession()).toBe(false)
   })
 
+  it('clearAuthSession also clears onboarding localStorage', () => {
+    // Simulate user with onboarding state saved
+    localStorage.setItem('natepay-onboarding', JSON.stringify({
+      state: { currentStep: 5, email: 'test@example.com' },
+      version: 1,
+    }))
+    setAuthSession()
+
+    expect(localStorage.getItem('natepay-onboarding')).not.toBeNull()
+
+    clearAuthSession()
+
+    // Onboarding state should be cleared to prevent data leaks between users
+    expect(localStorage.getItem('natepay-onboarding')).toBeNull()
+  })
+
   it('auth.verify prefers cookie-based auth on web when /auth/me succeeds', async () => {
     // Seed a stale token to ensure verify clears it first.
     setAuthToken('stale')
