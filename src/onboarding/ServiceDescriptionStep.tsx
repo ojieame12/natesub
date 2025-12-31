@@ -154,6 +154,7 @@ export default function ServiceDescriptionStep() {
               placeholder={placeholder}
               rows={4}
               autoFocus
+              data-testid="service-description-input"
             />
             <div className="service-description-step-hint">
               {descLength < 20 ? (
@@ -178,6 +179,7 @@ export default function ServiceDescriptionStep() {
                 value={localPrice}
                 onChange={handlePriceChange}
                 placeholder={String(minAmount)}
+                data-testid="service-price-input"
               />
               <span className="service-price-period">/month</span>
             </div>
@@ -198,6 +200,7 @@ export default function ServiceDescriptionStep() {
             fullWidth
             onClick={handleContinue}
             disabled={!isValid || isSaving}
+            data-testid="service-desc-continue-btn"
           >
             {isSaving ? (
               <Loader2 size={20} className="spin" />

@@ -775,6 +775,7 @@ export default function PersonalReviewStep() {
                         fullWidth
                         onClick={handleLaunch}
                         disabled={launching || isUploading}
+                        data-testid="launch-btn"
                     >
                         {launching ? (
                             <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

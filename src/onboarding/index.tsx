@@ -1,5 +1,6 @@
 import { useRef, useEffect, useLayoutEffect, useState, useMemo } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { AlertCircle } from 'lucide-react'
 import {
     useOnboardingStore,
     useShallow,
@@ -62,7 +63,19 @@ const STEP_COMPONENTS: Record<OnboardingStepKey, React.ReactElement> = {
 
 export default function OnboardingFlow() {
     const location = useLocation()
+    const navigate = useNavigate()
     const { onboarding, status } = useAuthState()
+    const [showAuthError, setShowAuthError] = useState(false)
+
+    // Listen for auth errors (401) from API calls
+    // Event is dispatched by the API client when a 401 is received
+    useEffect(() => {
+        const handleAuthError = () => {
+            setShowAuthError(true)
+        }
+        window.addEventListener('nate:auth_error', handleAuthError)
+        return () => window.removeEventListener('nate:auth_error', handleAuthError)
+    }, [])
 
     // Extract primitives from onboarding to prevent object reference issues in useEffect deps
     const onboardingStep = onboarding?.step ?? null
@@ -86,6 +99,25 @@ export default function OnboardingFlow() {
     })
     // Track if we're ready to render (prevents flash of step 0 on reload)
     const [isReadyToRender, setIsReadyToRender] = useState(false)
+    // Minimum time to show resuming shell (prevents jarring flash)
+    const shellShowTimeRef = useRef<number>(Date.now())
+    const MIN_SHELL_DURATION = 300 // ms
+
+    // Helper to mark ready with minimum shell duration for resume flows
+    const markReadyToRender = (immediate = false) => {
+        if (immediate) {
+            setIsReadyToRender(true)
+            return
+        }
+        const elapsed = Date.now() - shellShowTimeRef.current
+        const remaining = MIN_SHELL_DURATION - elapsed
+        if (remaining <= 0) {
+            setIsReadyToRender(true)
+        } else {
+            setTimeout(() => setIsReadyToRender(true), remaining)
+        }
+    }
+
     const prevStepRef = useRef(currentStep)
     const hasHydratedFromServer = useRef(false)
     const lastAppliedUrlStep = useRef<string | null>(null)
@@ -149,7 +181,7 @@ export default function OnboardingFlow() {
     useLayoutEffect(() => {
         // For unauthenticated users (fresh start), render immediately
         if (status === 'unauthenticated') {
-            setIsReadyToRender(true)
+            markReadyToRender(true) // immediate - no shell needed for fresh users
             return
         }
 
@@ -192,7 +224,7 @@ export default function OnboardingFlow() {
                     })
                 }
             }
-            setIsReadyToRender(true)
+            markReadyToRender() // URL-based resume - use min shell duration
             return
         }
 
@@ -225,8 +257,8 @@ export default function OnboardingFlow() {
             }
         }
 
-        // Ready to render after hydration
-        setIsReadyToRender(true)
+        // Ready to render after hydration - use min shell duration for resume flows
+        markReadyToRender()
     }, [location.search, status, onboardingStep, onboardingStepKey, onboardingData, hydrateFromServer, visibleStepKeys, stepConfig, steps.length])
 
     // Sync step key when effectiveStep changes (e.g., after nextStep/prevStep)
@@ -265,8 +297,16 @@ export default function OnboardingFlow() {
 
     const currentStepComponent = steps[effectiveStep] || <StartStep />
 
-    // Progress bar logic
-    const progress = Math.min(((effectiveStep + 1) / steps.length) * 100, 100)
+    // Progress bar logic - use stable step count to prevent jumps
+    // Track max step count seen to avoid backward progress bar shifts
+    // when step config changes (e.g., address/service steps inserted)
+    const stableStepCountRef = useRef(steps.length)
+    if (steps.length > stableStepCountRef.current) {
+        stableStepCountRef.current = steps.length
+    }
+    // Only lock after identity step (step 3+) when config is likely settled
+    const stableStepCount = effectiveStep >= 3 ? stableStepCountRef.current : steps.length
+    const progress = Math.min(((effectiveStep + 1) / stableStepCount) * 100, 100)
     const showProgress = effectiveStep > 0 && effectiveStep < steps.length - 1
 
     // Show resuming shell while waiting for auth/hydration
@@ -277,6 +317,45 @@ export default function OnboardingFlow() {
 
     return (
         <div className="onboarding-wrapper">
+            {/* Auth Error Banner */}
+            {showAuthError && (
+                <div className="auth-error-banner" style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    zIndex: 1000,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 12,
+                    padding: '12px 16px',
+                    background: 'rgba(239, 68, 68, 0.95)',
+                    color: 'white',
+                    fontSize: 14,
+                    fontWeight: 500,
+                    backdropFilter: 'blur(8px)',
+                }}>
+                    <AlertCircle size={18} />
+                    <span>Your session has expired.</span>
+                    <button
+                        onClick={() => navigate('/login?redirect=/onboarding')}
+                        style={{
+                            padding: '6px 14px',
+                            background: 'white',
+                            color: 'var(--error, #dc2626)',
+                            border: 'none',
+                            borderRadius: 6,
+                            fontSize: 13,
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                        }}
+                    >
+                        Sign in again
+                    </button>
+                </div>
+            )}
+
             {/* Progress Bar */}
             {showProgress && (
                 <div className="onboarding-progress">

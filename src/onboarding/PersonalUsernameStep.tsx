@@ -110,6 +110,7 @@ export default function PersonalUsernameStep() {
                             placeholder="yourname"
                             maxLength={20}
                             autoFocus
+                            data-testid="username-input"
                         />
                         <div className="username-status-icon">
                             {renderStatusIcon()}
@@ -134,7 +135,7 @@ export default function PersonalUsernameStep() {
                             </span>
                         )}
                         {isFormatValid && isAvailable && (
-                            <span className="username-helper-success">
+                            <span className="username-helper-success" data-testid="username-available">
                                 ✓ Available
                             </span>
                         )}
@@ -153,6 +154,7 @@ export default function PersonalUsernameStep() {
                         fullWidth
                         onClick={handleContinue}
                         disabled={!canContinue || isSaving}
+                        data-testid="username-continue-btn"
                     >
                         {isSaving ? (
                             <Loader2 size={20} className="spin" />

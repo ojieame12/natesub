@@ -70,6 +70,9 @@ export default function OtpStep() {
             if (result.onboardingStep && result.onboardingStep >= 3) {
                 hydrateFromServer({
                     step: result.onboardingStep,
+                    // Extract stepKey from onboardingData for reliable resume
+                    // (stepKey is canonical; numeric step can drift if flow changes)
+                    stepKey: result.onboardingData?.stepKey,
                     data: result.onboardingData,
                 })
             }

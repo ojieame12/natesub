@@ -5,7 +5,7 @@ import { renderWithProviders } from '../test/testUtils'
 import { useOnboardingStore } from './store'
 import { api } from '../api'
 
-// Mock API
+// Mock API (include safe session storage helpers)
 vi.mock('../api', () => ({
   api: {
     profile: {
@@ -19,6 +19,10 @@ vi.mock('../api', () => ({
       connect: vi.fn(),
     },
   },
+  // Safe sessionStorage wrappers - use real sessionStorage for testing
+  safeSessionSetItem: (key: string, value: string) => sessionStorage.setItem(key, value),
+  safeSessionGetItem: (key: string) => sessionStorage.getItem(key),
+  safeSessionRemoveItem: (key: string) => sessionStorage.removeItem(key),
 }))
 
 // Mock navigation

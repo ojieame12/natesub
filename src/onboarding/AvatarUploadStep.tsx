@@ -4,7 +4,7 @@ import { useOnboardingStore } from './store'
 import { Pressable } from './components'
 import { InlineError, LoadingButton } from '../components'
 import { uploadFile } from '../api/hooks'
-import { api } from '../api'
+import { saveRetryQueue } from './saveRetryQueue'
 import '../Dashboard.css'
 import './onboarding.css'
 
@@ -52,12 +52,12 @@ export default function AvatarUploadStep() {
             setAvatarUrl(publicUrl)
             // Clear any AI-generated banners since they were based on the old avatar
             clearBannerOptions()
-            // Persist avatar for cross-device continuity (fire-and-forget)
-            api.auth.saveOnboardingProgress({
+            // Persist avatar for cross-device continuity (with retry)
+            saveRetryQueue.enqueue({
                 step: currentStep,
                 stepKey: 'avatar',
                 data: { avatarUrl: publicUrl },
-            }).catch(err => console.warn('[AvatarUploadStep] Failed to save progress:', err))
+            })
             // Clean up local preview URL
             URL.revokeObjectURL(localPreview)
         } catch (err: any) {
@@ -81,6 +81,12 @@ export default function AvatarUploadStep() {
         if (fileInputRef.current) {
             fileInputRef.current.value = ''
         }
+        // Persist removal to server so refresh/resume doesn't restore old avatar
+        saveRetryQueue.enqueue({
+            step: currentStep,
+            stepKey: 'avatar',
+            data: { avatarUrl: null },
+        })
     }
 
     const handleChangePhoto = () => {
@@ -115,7 +121,7 @@ export default function AvatarUploadStep() {
 
                     {avatarPreview ? (
                         /* Photo uploaded - show preview with actions */
-                        <div className="avatar-uploaded">
+                        <div className="avatar-uploaded" data-testid="avatar-preview">
                             <div className="avatar-preview-large">
                                 <img src={avatarPreview} alt="Avatar" style={{ opacity: isUploading ? 0.5 : 1 }} />
                                 {isUploading && (
@@ -137,7 +143,7 @@ export default function AvatarUploadStep() {
                         </div>
                     ) : (
                         /* No photo - show upload area */
-                        <Pressable className="avatar-upload-area" onClick={handleChangePhoto}>
+                        <Pressable className="avatar-upload-area" onClick={handleChangePhoto} data-testid="avatar-upload-area">
                             <div className="avatar-upload-icon">
                                 <User size={40} />
                                 <div className="avatar-upload-camera">
@@ -158,6 +164,7 @@ export default function AvatarUploadStep() {
                         onClick={nextStep}
                         loading={isUploading}
                         fullWidth
+                        data-testid="avatar-continue-btn"
                     >
                         {avatarPreview ? 'Continue' : 'Skip for now'}
                     </LoadingButton>

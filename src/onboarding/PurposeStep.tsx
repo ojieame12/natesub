@@ -85,13 +85,14 @@ export default function PurposeStep() {
                 </div>
 
                 <div className="step-body">
-                    <div className="purpose-step-list">
+                    <div className="purpose-step-list" data-testid="purpose-list">
                         {PURPOSE_OPTIONS.map((option) => (
                             <Pressable
                                 key={option.value}
                                 className={`purpose-step-card ${purpose === option.value ? 'selected' : ''} ${isSaving ? 'disabled' : ''}`}
                                 onClick={() => !isSaving && handleSelect(option.value)}
                                 style={isSaving ? { opacity: savingValue === option.value ? 1 : 0.5, pointerEvents: 'none' } : undefined}
+                                data-testid={`purpose-${option.value}`}
                             >
                                 <span className="purpose-step-icon">{option.icon}</span>
                                 <div className="purpose-step-text">

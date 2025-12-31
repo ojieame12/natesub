@@ -1,10 +1,13 @@
 import { useState, useCallback, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import { ChevronLeft, CreditCard, Check, Loader2, AlertCircle } from 'lucide-react'
 import { useOnboardingStore, useShallow, type PaymentProvider } from './store'
 import { Button, Pressable } from './components'
 import { SwiftCodeLookup } from '../components'
-import { api } from '../api'
+import { api, safeSessionSetItem } from '../api'
+import { queryKeys } from '../api/queryKeys'
+import { saveRetryQueue } from './saveRetryQueue'
 import { getMinimumAmount, getCurrencySymbol, getSuggestedAmounts } from '../utils/currency'
 import { needsSwiftCodeHelp } from '../utils/swiftCodes'
 import {
@@ -38,6 +41,7 @@ function PaymentMethodCard({ name, description, logo, recommended, disabled, sel
             className={`payment-method-card ${selected ? 'selected' : ''} ${disabled ? 'disabled' : ''}`}
             onClick={onSelect}
             disabled={disabled}
+            data-testid={`payment-method-${name.toLowerCase().replace(/\s+/g, '-')}`}
         >
             <div className="payment-method-icon">
                 {logo ? (
@@ -64,6 +68,8 @@ function PaymentMethodCard({ name, description, logo, recommended, disabled, sel
 
 export default function PaymentMethodStep() {
     const navigate = useNavigate()
+    const queryClient = useQueryClient()
+
     // Use useShallow to prevent re-renders when unrelated store values change
     const store = useOnboardingStore(useShallow((s) => ({
         countryCode: s.countryCode,
@@ -103,6 +109,18 @@ export default function PaymentMethodStep() {
             setSelectedMethod(paymentProvider)
         }
     }, [paymentProvider]) // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Prefetch Paystack banks for cross-border countries
+    // This eliminates loading delay when user navigates to PaystackConnect
+    useEffect(() => {
+        if (isCrossBorderCountry(countryCode?.toUpperCase() || '')) {
+            queryClient.prefetchQuery({
+                queryKey: queryKeys.paystack.banks(countryCode?.toUpperCase() || ''),
+                queryFn: () => api.paystack.getBanks(countryCode?.toUpperCase() || ''),
+                staleTime: 5 * 60 * 1000, // 5 minutes - matches usePaystackBanks
+            })
+        }
+    }, [countryCode, queryClient])
 
     // SWIFT code lookup modal state (for cross-border African countries)
     const [showSwiftLookup, setShowSwiftLookup] = useState(false)
@@ -158,8 +176,9 @@ export default function PaymentMethodStep() {
             finalCurrency = expectedPaystackCurrency
         }
 
-        // Get suggested amounts for the FINAL currency
-        const suggestedAmounts = getSuggestedAmounts(finalCurrency, 'personal')
+        // Get suggested amounts for the FINAL currency (use purpose-aware suggestions)
+        const pricingType = store.purpose === 'service' ? 'service' : 'personal'
+        const suggestedAmounts = getSuggestedAmounts(finalCurrency, pricingType)
         const minAmount = getMinimumAmount(finalCurrency)
         const currencySymbol = getCurrencySymbol(finalCurrency)
 
@@ -252,8 +271,8 @@ export default function PaymentMethodStep() {
             // This prevents resume landing on a later step with incomplete profile
             await api.profile.update(profileData)
 
-            // Only save progress after profile succeeds (fire-and-forget, non-blocking)
-            api.auth.saveOnboardingProgress({
+            // Only save progress after profile succeeds (with retry queue for durability)
+            saveRetryQueue.enqueue({
                 step: currentStep + 1,
                 stepKey: nextStepKey,
                 data: {
@@ -261,8 +280,6 @@ export default function PaymentMethodStep() {
                     countryCode: store.countryCode,
                     purpose: store.purpose,
                 },
-            }).catch(err => {
-                console.error('[PaymentMethodStep] Failed to save onboarding progress:', err)
             })
 
             // Handle Stripe connect flow
@@ -272,11 +289,12 @@ export default function PaymentMethodStep() {
 
                     if (result.onboardingUrl) {
                         // Store source for redirect handling when user returns from Stripe
-                        sessionStorage.setItem('stripe_onboarding_source', 'onboarding')
-                        sessionStorage.setItem('stripe_onboarding_started_at', Date.now().toString())
+                        // Use safe wrapper to handle Safari private mode
+                        safeSessionSetItem('stripe_onboarding_source', 'onboarding')
+                        safeSessionSetItem('stripe_onboarding_started_at', Date.now().toString())
                         // Fallback: return to next step after Payment
                         // Use step key (not numeric index) for safe resume regardless of step array changes
-                        sessionStorage.setItem('stripe_return_to', `/onboarding?step=${nextStepKey}`)
+                        safeSessionSetItem('stripe_return_to', `/onboarding?step=${nextStepKey}`)
 
                         // Prefetch StripeComplete chunk so return doesn't show skeleton
                         prefetchStripeComplete()
@@ -320,10 +338,11 @@ export default function PaymentMethodStep() {
             // Handle Paystack connect flow - navigate to bank account step
             if (selectedMethod === 'paystack') {
                 // Store source for redirect handling when user returns from Paystack
-                sessionStorage.setItem('paystack_onboarding_source', 'onboarding')
+                // Use safe wrapper to handle Safari private mode
+                safeSessionSetItem('paystack_onboarding_source', 'onboarding')
                 // Fallback: return to next step after Payment (using step key for safe resume)
                 const nextStepKey = store.purpose === 'service' ? 'service-desc' : 'review'
-                sessionStorage.setItem('paystack_return_to', `/onboarding?step=${nextStepKey}`)
+                safeSessionSetItem('paystack_return_to', `/onboarding?step=${nextStepKey}`)
                 navigate('/onboarding/paystack')
                 return
             }
@@ -442,6 +461,7 @@ export default function PaymentMethodStep() {
                         fullWidth
                         onClick={handleContinue}
                         disabled={!selectedMethod || saving}
+                        data-testid="payments-continue-btn"
                     >
                         {saving ? (
                             <>

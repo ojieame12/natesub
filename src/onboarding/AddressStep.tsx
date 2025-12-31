@@ -85,12 +85,14 @@ export default function AddressStep() {
                             onChange={(e) => setAddress(e.target.value)}
                             placeholder="Street address"
                             autoFocus
+                            data-testid="address-street"
                         />
                         <input
                             className="input"
                             value={city}
                             onChange={(e) => setCity(e.target.value)}
                             placeholder="City"
+                            data-testid="address-city"
                         />
                         <div className="address-row">
                             <input
@@ -98,12 +100,14 @@ export default function AddressStep() {
                                 value={state}
                                 onChange={(e) => setState(e.target.value)}
                                 placeholder="State/Province"
+                                data-testid="address-state"
                             />
                             <input
                                 className="input zip"
                                 value={zip}
                                 onChange={(e) => setZip(e.target.value)}
                                 placeholder="ZIP/Postal"
+                                data-testid="address-zip"
                             />
                         </div>
                     </div>
@@ -121,6 +125,7 @@ export default function AddressStep() {
                         fullWidth
                         onClick={handleContinue}
                         disabled={!isValid || isSaving}
+                        data-testid="address-continue-btn"
                     >
                         {isSaving ? (
                             <Loader2 size={20} className="spin" />

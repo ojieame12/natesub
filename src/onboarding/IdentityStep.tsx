@@ -96,18 +96,21 @@ export default function IdentityStep() {
                             onChange={(e) => setFirstName(e.target.value)}
                             placeholder="First name"
                             autoFocus
+                            data-testid="identity-first-name"
                         />
                         <input
                             className="input"
                             value={lastName}
                             onChange={(e) => setLastName(e.target.value)}
                             placeholder="Last name"
+                            data-testid="identity-last-name"
                         />
                     </div>
 
                     <Pressable
                         className="country-selector"
                         onClick={() => setShowCountryPicker(true)}
+                        data-testid="country-selector"
                     >
                         {selectedCountry ? (
                             <>
@@ -131,6 +134,7 @@ export default function IdentityStep() {
                         fullWidth
                         onClick={handleContinue}
                         disabled={!firstName.trim() || !lastName.trim() || !countryCode || isSaving}
+                        data-testid="identity-continue-btn"
                     >
                         {isSaving ? (
                             <Loader2 size={20} className="spin" />
@@ -166,12 +170,13 @@ export default function IdentityStep() {
                             />
                         </div>
 
-                        <div className="country-list">
+                        <div className="country-list" data-testid="country-list">
                             {filteredCountries.map((c) => (
                                 <Pressable
                                     key={c.code}
                                     className={`country-option ${c.code === countryCode ? 'selected' : ''}`}
                                     onClick={() => handleSelectCountry(c)}
+                                    data-testid={`country-option-${c.code.toLowerCase()}`}
                                 >
                                     <span className="country-option-flag">{c.flag}</span>
                                     <span className="country-option-name">{c.name}</span>

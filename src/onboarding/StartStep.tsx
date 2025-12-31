@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Mail, RefreshCw } from 'lucide-react'
+import { Mail, RefreshCw, AlertCircle } from 'lucide-react'
 import { useOnboardingStore } from './store'
 import { Button } from './components'
 import { useReducedMotion } from '../hooks'
 import { TERMS_URL, PRIVACY_URL } from '../utils/constants'
+import { api } from '../api/client'
 import '../Dashboard.css'
 import './onboarding.css'
 
@@ -34,6 +35,17 @@ const VALUE_PROPS = [
 const ROTATION_INTERVAL = 4000 // 4 seconds per slide
 const TRANSITION_MS = 350
 
+// Check if we're on a fast connection (Wi-Fi, ethernet, or 4G)
+// Returns true if connection API not supported (err on side of preloading)
+function isOnFastConnection(): boolean {
+    if (typeof navigator === 'undefined') return true
+    const conn = (navigator as any).connection
+    if (!conn) return true // API not supported, assume fast
+    // effectiveType: 'slow-2g', '2g', '3g', '4g'
+    // type: 'wifi', 'cellular', 'bluetooth', 'ethernet', etc.
+    return conn.effectiveType === '4g' || conn.type === 'wifi' || conn.type === 'ethernet'
+}
+
 export default function StartStep() {
     const nextStep = useOnboardingStore((s) => s.nextStep)
     const reset = useOnboardingStore((s) => s.reset)
@@ -52,6 +64,8 @@ export default function StartStep() {
     const preloadingRef = useRef<Set<string>>(new Set())
 
     const hasExistingProgress = Boolean(email || firstName)
+    const [resetWarning, setResetWarning] = useState(false)
+    const [isResetting, setIsResetting] = useState(false)
 
     const markImageLoaded = useCallback((src: string) => {
         if (loadedImagesRef.current.has(src)) return
@@ -66,6 +80,8 @@ export default function StartStep() {
     const preloadImage = useCallback((src: string) => {
         if (typeof window === 'undefined') return
         if (loadedImagesRef.current.has(src) || preloadingRef.current.has(src)) return
+        // Skip speculative preloading on slow connections to save mobile data
+        if (!isOnFastConnection()) return
 
         preloadingRef.current.add(src)
         const img = new Image()
@@ -197,8 +213,23 @@ export default function StartStep() {
         touchStartRef.current = null
     }
 
-    const handleStartOver = () => {
+    const handleStartOver = async () => {
+        setIsResetting(true)
+        setResetWarning(false)
+
+        // Reset local state immediately for instant feedback
         reset()
+
+        // Reset server-side onboarding state for cross-device consistency
+        try {
+            await api.auth.resetOnboardingProgress()
+        } catch (err) {
+            console.warn('[onboarding] Failed to reset server state:', err)
+            // Show warning but don't block - user can still proceed
+            setResetWarning(true)
+        }
+
+        setIsResetting(false)
         setTimeout(nextStep, 50)
     }
 
@@ -283,11 +314,28 @@ export default function StartStep() {
                                 <Button
                                     variant="ghost"
                                     size="sm"
-                                    icon={<RefreshCw size={16} />}
+                                    icon={<RefreshCw size={16} className={isResetting ? 'spin' : ''} />}
                                     onClick={handleStartOver}
+                                    disabled={isResetting}
                                 >
-                                    Start over
+                                    {isResetting ? 'Resetting...' : 'Start over'}
                                 </Button>
+                            )}
+
+                            {resetWarning && (
+                                <p style={{
+                                    fontSize: 12,
+                                    color: 'var(--warning, #f59e0b)',
+                                    textAlign: 'center',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: 4,
+                                    marginTop: 8,
+                                }}>
+                                    <AlertCircle size={14} />
+                                    Progress may not sync across devices.
+                                </p>
                             )}
                         </div>
 

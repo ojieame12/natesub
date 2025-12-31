@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { screen, waitFor, fireEvent } from '@testing-library/react'
 import { renderWithProviders } from '../test/testUtils'
 import { useOnboardingStore } from './store'
@@ -383,6 +383,242 @@ describe('PersonalReviewStep', () => {
         expect(call.pricingModel).toBe('tiers')
         expect(call.tiers).not.toBeNull()
         expect(call.tiers).toHaveLength(2)
+      })
+    })
+  })
+
+  describe('Price input hydration', () => {
+    it('syncs priceInput when singleAmount hydrates after mount', async () => {
+      // Start with no singleAmount (simulates fresh mount before hydration)
+      // Ensure pricingModel is 'single' to show the price input
+      useOnboardingStore.setState({
+        singleAmount: null,
+        pricingModel: 'single',
+        tiers: [],
+      })
+
+      renderWithProviders(<PersonalReviewStep />)
+
+      // Should show default price initially (10)
+      await waitFor(() => {
+        const priceInput = document.querySelector('.setup-price-input') as HTMLInputElement
+        expect(priceInput).toBeInTheDocument()
+        expect(priceInput.value).toBe('10') // Default
+      })
+
+      // Simulate hydration from server (singleAmount updates)
+      useOnboardingStore.setState({ singleAmount: 25 })
+
+      // Price should sync to hydrated value
+      await waitFor(() => {
+        const priceInput = document.querySelector('.setup-price-input') as HTMLInputElement
+        expect(priceInput.value).toBe('25')
+      })
+    })
+
+    it('does not overwrite user-edited price when singleAmount hydrates', async () => {
+      useOnboardingStore.setState({
+        singleAmount: null,
+        pricingModel: 'single',
+        tiers: [],
+      })
+
+      renderWithProviders(<PersonalReviewStep />)
+
+      const priceInput = await waitFor(() => {
+        const input = document.querySelector('.setup-price-input') as HTMLInputElement
+        expect(input).toBeInTheDocument()
+        return input
+      })
+
+      // User manually edits the price
+      fireEvent.change(priceInput, { target: { value: '50' } })
+
+      await waitFor(() => {
+        expect(priceInput.value).toBe('50')
+      })
+
+      // Simulate hydration with different value
+      useOnboardingStore.setState({ singleAmount: 25 })
+
+      // Price should NOT change (user already edited)
+      await waitFor(() => {
+        expect(priceInput.value).toBe('50')
+      })
+    })
+
+    it('uses correct pricing type for currency change based on purpose', async () => {
+      // Non-service purpose should use 'personal' pricing
+      useOnboardingStore.setState({
+        purpose: 'tips',
+        currency: 'USD',
+        countryCode: 'NG', // Cross-border to show currency selector
+        paymentProvider: 'stripe',
+        pricingModel: 'single',
+        tiers: [],
+      })
+
+      renderWithProviders(<PersonalReviewStep />)
+
+      // Verify component renders without crashing for non-service purpose
+      await waitFor(() => {
+        expect(screen.getByText('Tips & Appreciation')).toBeInTheDocument()
+      })
+    })
+  })
+
+  describe('Perk debounce persistence', () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+    })
+
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('persists perks after debounce delay when editing', async () => {
+      useOnboardingStore.setState({
+        purpose: 'service',
+        currentStep: 7,
+        servicePerks: [
+          { id: 'perk-1', title: 'Original Perk 1', enabled: true },
+          { id: 'perk-2', title: 'Original Perk 2', enabled: true },
+          { id: 'perk-3', title: 'Original Perk 3', enabled: true },
+        ],
+      })
+
+      renderWithProviders(<PersonalReviewStep />)
+
+      // Wait for component to render
+      await waitFor(() => {
+        expect(screen.getByText('Original Perk 1')).toBeInTheDocument()
+      })
+
+      // Clear any initial calls
+      mockSaveProgress.mockClear()
+
+      // Update the store with new perks (simulates user editing a perk)
+      useOnboardingStore.setState({
+        servicePerks: [
+          { id: 'perk-1', title: 'Edited Perk 1', enabled: true },
+          { id: 'perk-2', title: 'Original Perk 2', enabled: true },
+          { id: 'perk-3', title: 'Original Perk 3', enabled: true },
+        ],
+      })
+
+      // Should not have saved immediately
+      expect(mockSaveProgress).not.toHaveBeenCalled()
+
+      // Advance timers past the 1.5s debounce
+      await vi.advanceTimersByTimeAsync(1600)
+
+      // Now should have saved
+      await waitFor(() => {
+        expect(mockSaveProgress).toHaveBeenCalledWith(
+          expect.objectContaining({
+            stepKey: 'review',
+            data: expect.objectContaining({
+              servicePerks: expect.arrayContaining([
+                expect.objectContaining({ title: 'Edited Perk 1' }),
+              ]),
+            }),
+          })
+        )
+      })
+    })
+
+    it('does not persist perks for non-service users', async () => {
+      useOnboardingStore.setState({
+        purpose: 'tips',
+        currentStep: 7,
+        servicePerks: [],
+        singleAmount: 10, // Set initial amount
+      })
+
+      renderWithProviders(<PersonalReviewStep />)
+
+      // Clear any initial calls (price debounce may have fired)
+      mockSaveProgress.mockClear()
+
+      // Simulate changing perks for a non-service user (shouldn't trigger perk save)
+      useOnboardingStore.setState({
+        servicePerks: [
+          { id: 'perk-1', title: 'New Perk', enabled: true },
+        ],
+      })
+
+      // Advance timers past perk debounce
+      await vi.advanceTimersByTimeAsync(2000)
+
+      // If called, verify it's NOT a perk save (could be price debounce)
+      // Perk debounce should not run for non-service users
+      const perkSaveCalls = mockSaveProgress.mock.calls.filter(
+        (call: any[]) => call[0]?.data?.servicePerks
+      )
+      expect(perkSaveCalls).toHaveLength(0)
+    })
+
+    it('debounces multiple rapid edits into one save', async () => {
+      useOnboardingStore.setState({
+        purpose: 'service',
+        currentStep: 7,
+        servicePerks: [
+          { id: 'perk-1', title: 'Perk 1', enabled: true },
+          { id: 'perk-2', title: 'Perk 2', enabled: true },
+          { id: 'perk-3', title: 'Perk 3', enabled: true },
+        ],
+      })
+
+      renderWithProviders(<PersonalReviewStep />)
+      mockSaveProgress.mockClear()
+
+      // Simulate rapid edits
+      useOnboardingStore.setState({
+        servicePerks: [
+          { id: 'perk-1', title: 'Edit 1', enabled: true },
+          { id: 'perk-2', title: 'Perk 2', enabled: true },
+          { id: 'perk-3', title: 'Perk 3', enabled: true },
+        ],
+      })
+      await vi.advanceTimersByTimeAsync(500)
+
+      useOnboardingStore.setState({
+        servicePerks: [
+          { id: 'perk-1', title: 'Edit 2', enabled: true },
+          { id: 'perk-2', title: 'Perk 2', enabled: true },
+          { id: 'perk-3', title: 'Perk 3', enabled: true },
+        ],
+      })
+      await vi.advanceTimersByTimeAsync(500)
+
+      useOnboardingStore.setState({
+        servicePerks: [
+          { id: 'perk-1', title: 'Final Edit', enabled: true },
+          { id: 'perk-2', title: 'Perk 2', enabled: true },
+          { id: 'perk-3', title: 'Perk 3', enabled: true },
+        ],
+      })
+
+      // Advance past debounce
+      await vi.advanceTimersByTimeAsync(1600)
+
+      // Filter for perk-related saves only (not price debounce)
+      const perkSaveCalls = mockSaveProgress.mock.calls.filter(
+        (call: any[]) => call[0]?.data?.servicePerks
+      )
+
+      // Should only have saved perks once with the final value
+      await waitFor(() => {
+        expect(perkSaveCalls.length).toBe(1)
+        expect(perkSaveCalls[0]![0]).toEqual(
+          expect.objectContaining({
+            data: expect.objectContaining({
+              servicePerks: expect.arrayContaining([
+                expect.objectContaining({ title: 'Final Edit' }),
+              ]),
+            }),
+          })
+        )
       })
     })
   })

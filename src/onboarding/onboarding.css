@@ -3142,6 +3142,68 @@ button.btn .spinning {
     border-radius: var(--radius-xl);
 }
 
+/* Tiered pricing summary (read-only display) */
+.setup-tiers-summary {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: var(--space-lg);
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-xl);
+}
+
+.setup-tiers-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    text-align: center;
+}
+
+.setup-tiers-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.setup-tier-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: var(--bg-subtle);
+    border-radius: var(--radius-md);
+}
+
+.setup-tier-item.popular {
+    background: var(--primary-subtle, rgba(var(--primary-rgb), 0.1));
+    border: 1px solid var(--primary-muted, rgba(var(--primary-rgb), 0.2));
+}
+
+.setup-tier-name {
+    flex: 1;
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.setup-tier-price {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.setup-tier-badge {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 2px 6px;
+    background: var(--primary);
+    color: white;
+    border-radius: var(--radius-sm);
+}
+
 .setup-price-currency {
     font-size: 24px;
     font-weight: 600;

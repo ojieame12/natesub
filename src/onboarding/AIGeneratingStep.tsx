@@ -3,7 +3,7 @@ import { AlertCircle, Check, RefreshCw, Sparkles, Upload, Circle, CheckCircle2, 
 import { useOnboardingStore } from './store'
 import { useGeneratePerks, useGenerateBanner, uploadFile, useAIConfig } from '../api/hooks'
 import { Button, Pressable } from './components'
-import { api } from '../api'
+import { saveRetryQueue } from './saveRetryQueue'
 import './onboarding.css'
 
 type GenerationPhase =
@@ -15,6 +15,10 @@ type GenerationPhase =
   | 'preview'  // Shows generated content for review
   | 'error'
   | 'ai_unavailable'  // AI is disabled/unavailable
+  | 'timeout'  // AI generation took too long
+
+// Timeout after 15 seconds of generation
+const AI_GENERATION_TIMEOUT_MS = 15000
 
 const PHASE_MESSAGES: Record<GenerationPhase, string> = {
   starting: 'Getting ready...',
@@ -25,6 +29,7 @@ const PHASE_MESSAGES: Record<GenerationPhase, string> = {
   preview: 'Review your page',
   error: 'Something went wrong',
   ai_unavailable: 'AI is currently unavailable',
+  timeout: 'Taking longer than expected',
 }
 
 // Max 5 AI-generated banners per user (global limit, survives onboarding)
@@ -59,12 +64,38 @@ export default function AIGeneratingStep() {
   const [generationsRemaining, setGenerationsRemaining] = useState<number | null>(null)
   const [saveWarning, setSaveWarning] = useState(false) // Show if backend save fails
   const hasStarted = useRef(false)
+
+  // Subscribe to retry queue failures
+  useEffect(() => {
+    return saveRetryQueue.subscribe((hasFailures) => {
+      if (hasFailures) setSaveWarning(true)
+    })
+  }, [])
+
+  // Timeout detection - if generation takes too long, show escape hatch
+  useEffect(() => {
+    // Only track timeout during active generation phases
+    const isGenerating = ['starting', 'analyzing', 'perks', 'banner'].includes(phase)
+    if (!isGenerating) return
+
+    const timeoutId = setTimeout(() => {
+      // Only trigger timeout if still in a generation phase
+      if (['starting', 'analyzing', 'perks', 'banner'].includes(phase)) {
+        setPhase('timeout')
+      }
+    }, AI_GENERATION_TIMEOUT_MS)
+
+    return () => clearTimeout(timeoutId)
+  }, [phase])
+
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const generatePerksMutation = useGeneratePerks()
   const generateBannerMutation = useGenerateBanner()
-  const { data: aiConfig, isLoading: isLoadingAIConfig } = useAIConfig()
-  const isAIAvailable = aiConfig?.available ?? true // Default to true while loading
+  const { data: aiConfig, isLoading: isLoadingAIConfig, isError: isAIConfigError } = useAIConfig()
+  // Default to false - if config fetch fails or isn't loaded, treat as unavailable
+  // This prevents attempting AI generation that will fail anyway
+  const isAIAvailable = isAIConfigError ? false : (aiConfig?.available ?? false)
 
   const displayName = `${firstName} ${lastName}`.trim()
 
@@ -204,22 +235,20 @@ export default function AIGeneratingStep() {
       }
 
       // Persist to backend (with new BannerOption format)
-      const bannerOptionsToSave = generatedBanner
-        ? [{ url: generatedBanner, variant: 'standard' as const }]
-        : []
-      api.auth.saveOnboardingProgress({
+      // Only include banner fields if a banner was actually generated to avoid wiping existing choices
+      const saveData: Record<string, any> = {
+        servicePerks: generatedPerks,
+        purpose: purpose || 'service',
+        serviceDescription,
+      }
+      if (generatedBanner) {
+        saveData.bannerUrl = generatedBanner
+        saveData.bannerOptions = [{ url: generatedBanner, variant: 'standard' as const }]
+      }
+      saveRetryQueue.enqueue({
         step: currentStep,
         stepKey: 'ai-gen',
-        data: {
-          servicePerks: generatedPerks,
-          bannerUrl: generatedBanner,
-          bannerOptions: bannerOptionsToSave,
-          purpose: purpose || 'service',
-          serviceDescription,
-        },
-      }).catch((err) => {
-        console.warn('[onboarding] Failed to save AI-generated content:', err)
-        setSaveWarning(true)
+        data: saveData,
       })
 
       setPhase('finishing')
@@ -255,7 +284,7 @@ export default function AIGeneratingStep() {
         }
 
         // Persist to backend
-        api.auth.saveOnboardingProgress({
+        saveRetryQueue.enqueue({
           step: currentStep,
           stepKey: 'ai-gen',
           data: {
@@ -264,9 +293,6 @@ export default function AIGeneratingStep() {
             purpose: purpose || 'service',
             serviceDescription,
           },
-        }).catch((err) => {
-          console.warn('[onboarding] Failed to save regenerated banner:', err)
-          setSaveWarning(true)
         })
       }
     } catch (err: any) {
@@ -315,7 +341,7 @@ export default function AIGeneratingStep() {
       setCustomBannerPreview(url) // Update preview to uploaded URL
 
       // Persist to backend
-      api.auth.saveOnboardingProgress({
+      saveRetryQueue.enqueue({
         step: currentStep,
         stepKey: 'ai-gen',
         data: {
@@ -325,9 +351,6 @@ export default function AIGeneratingStep() {
           purpose: purpose || 'service',
           serviceDescription,
         },
-      }).catch((err) => {
-        console.warn('[onboarding] Failed to save custom banner:', err)
-        setSaveWarning(true)
       })
     } catch (err) {
       console.error('Custom banner upload failed:', err)
@@ -354,6 +377,19 @@ export default function AIGeneratingStep() {
   }
 
   const handleSkip = () => {
+    // Persist skip so refresh doesn't drop back into AI generation
+    saveRetryQueue.enqueue({
+      step: currentStep + 1,
+      stepKey: 'review', // After ai-gen is always review
+      data: {
+        purpose: purpose || 'service',
+        serviceDescription,
+        // Preserve existing perks/banner if any
+        ...(servicePerks.length > 0 && { servicePerks }),
+        ...(bannerUrl && { bannerUrl }),
+        ...(bannerOptions.length > 0 && { bannerOptions }),
+      },
+    })
     nextStep()
   }
 
@@ -371,7 +407,7 @@ export default function AIGeneratingStep() {
 
     // Persist final selection
     // Save NEXT step key so resume lands on the step user is going to
-    api.auth.saveOnboardingProgress({
+    saveRetryQueue.enqueue({
       step: currentStep + 1,
       stepKey: 'review', // After ai-gen is always review
       data: {
@@ -381,9 +417,6 @@ export default function AIGeneratingStep() {
         purpose: purpose || 'service',
         serviceDescription,
       },
-    }).catch((err) => {
-      console.warn('[onboarding] Failed to save final selection:', err)
-      setSaveWarning(true)
     })
 
     nextStep()
@@ -405,6 +438,36 @@ export default function AIGeneratingStep() {
             <div className="ai-generating-error-actions">
               <Button variant="primary" size="lg" onClick={handleSkip}>
                 Continue to Review
+              </Button>
+              <Button variant="ghost" size="md" onClick={prevStep}>
+                Go Back
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Timeout state - AI generation is taking too long
+  if (phase === 'timeout') {
+    return (
+      <div className="onboarding">
+        <div className="onboarding-logo-header">
+          <img src="/logo.svg" alt="NatePay" />
+        </div>
+
+        <div className="ai-generating-container">
+          <div className="ai-generating-error">
+            <Loader2 size={48} className="spin" style={{ opacity: 0.6 }} />
+            <h2>Taking Longer Than Expected</h2>
+            <p>AI generation is still running. You can wait, try again, or continue without AI-generated content.</p>
+            <div className="ai-generating-error-actions">
+              <Button variant="primary" size="lg" onClick={handleRetry}>
+                Try Again
+              </Button>
+              <Button variant="secondary" size="lg" onClick={handleSkip}>
+                Continue Without AI
               </Button>
               <Button variant="ghost" size="md" onClick={prevStep}>
                 Go Back
@@ -642,6 +705,7 @@ export default function AIGeneratingStep() {
               fullWidth
               onClick={handleContinue}
               disabled={isUploadingCustom || (selectedBannerIndex === 'custom' && !bannerUrl)}
+              data-testid="ai-gen-continue-btn"
             >
               {isUploadingCustom ? 'Uploading...' : 'Continue'}
             </Button>

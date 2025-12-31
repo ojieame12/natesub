@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { screen } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
 import { renderWithProviders } from '../test/testUtils'
 import { useOnboardingStore } from './store'
 import OnboardingFlow from './index'
@@ -37,7 +37,7 @@ describe('OnboardingFlow', () => {
   // US (with address): 10 steps (non-service) or 12 steps (service)
 
   describe('dynamic step rendering based on country', () => {
-    it('shows AddressStep for US users at step 4', () => {
+    it('shows AddressStep for US users at step 4', async () => {
       // US users see the address step (10-step flow for non-service)
       useOnboardingStore.setState({
         countryCode: 'US',
@@ -49,11 +49,14 @@ describe('OnboardingFlow', () => {
 
       renderWithProviders(<OnboardingFlow />)
 
-      // AddressStep should render with its heading
-      expect(screen.getByText("What's your address?")).toBeInTheDocument()
+      // Wait for min shell duration to complete
+      await waitFor(() => {
+        // AddressStep should render with its heading
+        expect(screen.getByText("What's your address?")).toBeInTheDocument()
+      })
     })
 
-    it('shows PurposeStep for NG users at step 4 (no address step)', () => {
+    it('shows PurposeStep for NG users at step 4 (no address step)', async () => {
       // NG users skip the address step - step 4 is PurposeStep
       useOnboardingStore.setState({
         countryCode: 'NG',
@@ -65,12 +68,15 @@ describe('OnboardingFlow', () => {
 
       renderWithProviders(<OnboardingFlow />)
 
-      // Should be at PurposeStep, not AddressStep
-      expect(screen.queryByText("What's your address?")).not.toBeInTheDocument()
-      expect(screen.getByText("What's this for?")).toBeInTheDocument()
+      // Wait for min shell duration to complete
+      await waitFor(() => {
+        // Should be at PurposeStep, not AddressStep
+        expect(screen.queryByText("What's your address?")).not.toBeInTheDocument()
+        expect(screen.getByText("What's this for?")).toBeInTheDocument()
+      })
     })
 
-    it('shows AddressStep for UK users at step 4', () => {
+    it('shows AddressStep for UK users at step 4', async () => {
       // UK users see the address step
       useOnboardingStore.setState({
         countryCode: 'GB',
@@ -82,10 +88,13 @@ describe('OnboardingFlow', () => {
 
       renderWithProviders(<OnboardingFlow />)
 
-      expect(screen.getByText("What's your address?")).toBeInTheDocument()
+      // Wait for min shell duration to complete
+      await waitFor(() => {
+        expect(screen.getByText("What's your address?")).toBeInTheDocument()
+      })
     })
 
-    it('skips address step for GH users', () => {
+    it('skips address step for GH users', async () => {
       // GH (Ghana) is a cross-border country, no address step - step 4 is PurposeStep
       useOnboardingStore.setState({
         countryCode: 'GH',
@@ -97,11 +106,14 @@ describe('OnboardingFlow', () => {
 
       renderWithProviders(<OnboardingFlow />)
 
-      expect(screen.queryByText("What's your address?")).not.toBeInTheDocument()
-      expect(screen.getByText("What's this for?")).toBeInTheDocument()
+      // Wait for min shell duration to complete
+      await waitFor(() => {
+        expect(screen.queryByText("What's your address?")).not.toBeInTheDocument()
+        expect(screen.getByText("What's this for?")).toBeInTheDocument()
+      })
     })
 
-    it('skips address step for KE users', () => {
+    it('skips address step for KE users', async () => {
       // KE (Kenya) is a cross-border country, no address step - step 4 is PurposeStep
       useOnboardingStore.setState({
         countryCode: 'KE',
@@ -113,13 +125,16 @@ describe('OnboardingFlow', () => {
 
       renderWithProviders(<OnboardingFlow />)
 
-      expect(screen.queryByText("What's your address?")).not.toBeInTheDocument()
-      expect(screen.getByText("What's this for?")).toBeInTheDocument()
+      // Wait for min shell duration to complete
+      await waitFor(() => {
+        expect(screen.queryByText("What's your address?")).not.toBeInTheDocument()
+        expect(screen.getByText("What's this for?")).toBeInTheDocument()
+      })
     })
   })
 
   describe('step indices match flow length', () => {
-    it('has 10 steps for US non-service flow (with address)', () => {
+    it('has 10 steps for US non-service flow (with address)', async () => {
       // Flow: Start(0) → Email(1) → OTP(2) → Identity(3) → Address(4) → Purpose(5) → Avatar(6) → Username(7) → Payment(8) → Review(9)
       useOnboardingStore.setState({
         countryCode: 'US',
@@ -132,11 +147,14 @@ describe('OnboardingFlow', () => {
 
       renderWithProviders(<OnboardingFlow />)
 
-      // Step 9 is PersonalReviewStep in 10-step flow (non-service)
-      expect(screen.getByText('Set up your page')).toBeInTheDocument()
+      // Wait for min shell duration to complete (resume flow shows loading shell briefly)
+      await waitFor(() => {
+        // Step 9 is PersonalReviewStep in 10-step flow (non-service)
+        expect(screen.getByText('Set up your page')).toBeInTheDocument()
+      })
     })
 
-    it('has 9 steps for NG non-service flow (no address)', () => {
+    it('has 9 steps for NG non-service flow (no address)', async () => {
       // Flow: Start(0) → Email(1) → OTP(2) → Identity(3) → Purpose(4) → Avatar(5) → Username(6) → Payment(7) → Review(8)
       useOnboardingStore.setState({
         countryCode: 'NG',
@@ -149,8 +167,11 @@ describe('OnboardingFlow', () => {
 
       renderWithProviders(<OnboardingFlow />)
 
-      // Step 8 is PersonalReviewStep in 9-step flow (non-service)
-      expect(screen.getByText('Set up your page')).toBeInTheDocument()
+      // Wait for min shell duration to complete (resume flow shows loading shell briefly)
+      await waitFor(() => {
+        // Step 8 is PersonalReviewStep in 9-step flow (non-service)
+        expect(screen.getByText('Set up your page')).toBeInTheDocument()
+      })
     })
   })
 })
