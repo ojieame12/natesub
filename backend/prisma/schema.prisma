@@ -338,6 +338,10 @@ model Subscription {
   feeModel String? // 'split_v1' for new, 'flat' for v1, null for legacy
   feeMode  String? // 'split' | 'absorb' | 'pass_to_subscriber' - how platform fee is distributed
 
+  // Token security - nonce for revocation of manage/cancel tokens
+  // Rotating this nonce invalidates all outstanding email tokens for this subscription
+  manageTokenNonce String?
+
   // Timestamps
   startedAt  DateTime  @default(now())
   canceledAt DateTime?
