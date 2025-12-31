@@ -9,11 +9,13 @@ import {
   getCurrentUser,
   getCurrentUserWithOnboarding,
   saveOnboardingProgress,
+  resetOnboardingProgress,
   hashToken,
   generateToken,
   computeOnboardingState,
   rotateSessionToken,
 } from '../services/auth.js'
+// NOTE: generateManageToken/generateTokenNonce moved to e2e.ts for subscription seeding
 import { requireAuth } from '../middleware/auth.js'
 import { authVerifyRateLimit, authMagicLinkRateLimit } from '../middleware/rateLimit.js'
 import { env } from '../config/env.js'
@@ -296,6 +298,11 @@ const onboardingDataSchema = z.object({
     enabled: z.boolean(),
   })).optional(),
   bannerUrl: z.string().url().nullable().optional(),
+  // AI-generated banner options (user can select from multiple styles)
+  bannerOptions: z.array(z.object({
+    url: z.string().url(),
+    variant: z.string(), // 'standard', 'artistic', 'fallback', etc.
+  })).max(5).optional(),
 
   // Fee mode - who pays the platform fee
   feeMode: z.enum(['split', 'pass_to_subscriber', 'absorb']).optional(),
@@ -327,6 +334,23 @@ auth.put(
       return c.json({ success: true })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to save progress'
+      return c.json({ error: message }, 400)
+    }
+  }
+)
+
+// Reset onboarding progress (user clicked "Start over")
+auth.delete(
+  '/onboarding',
+  requireAuth,
+  async (c) => {
+    const userId = c.get('userId')
+
+    try {
+      await resetOnboardingProgress(userId)
+      return c.json({ success: true })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to reset onboarding'
       return c.json({ error: message }, 400)
     }
   }
@@ -387,10 +411,17 @@ if (env.NODE_ENV !== 'production') {
       return c.json({
         success: true,
         token: sessionToken,
+        user: {
+          id: user.id,
+          email: user.email,
+        },
         onboarding,
       })
     }
   )
+
+  // NOTE: Subscription seeding moved to /e2e/seed-subscription (triple-guarded endpoint)
+  // See backend/src/routes/e2e.ts for the secure implementation
 }
 
 // Delete account (soft delete)
