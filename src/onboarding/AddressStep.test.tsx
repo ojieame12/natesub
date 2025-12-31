@@ -129,7 +129,7 @@ describe('AddressStep', () => {
       })
     })
 
-    it('still advances if save fails (graceful degradation)', async () => {
+    it('does not advance and shows error if save fails', async () => {
       mockSaveProgress.mockRejectedValueOnce(new Error('Network error'))
       vi.spyOn(console, 'warn').mockImplementation(() => {})
 
@@ -144,8 +144,10 @@ describe('AddressStep', () => {
       await user.click(screen.getByRole('button', { name: /continue/i }))
 
       await waitFor(() => {
-        // Should still advance despite save failure
-        expect(useOnboardingStore.getState().currentStep).toBe(5)
+        // Should NOT advance when save fails - blocking behavior
+        expect(useOnboardingStore.getState().currentStep).toBe(4)
+        // Should show error message
+        expect(screen.getByText(/Failed to save/i)).toBeInTheDocument()
       })
     })
   })

@@ -1,9 +1,9 @@
-import { useState } from 'react'
-import { ChevronLeft, AlertCircle } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { ChevronLeft, AlertCircle, Loader2 } from 'lucide-react'
 import { useOnboardingStore } from './store'
 import { Button, Pressable } from './components'
 import { getCurrencySymbol, getMinimumAmount } from '../utils/currency'
-import { api } from '../api'
+import { useSaveOnboardingProgress } from '../api/hooks'
 import './onboarding.css'
 
 const PLACEHOLDER_EXAMPLES = [
@@ -26,9 +26,28 @@ export default function ServiceDescriptionStep() {
     currentStep,
   } = useOnboardingStore()
 
+  const { mutateAsync: saveProgress } = useSaveOnboardingProgress()
   const [localDescription, setLocalDescription] = useState(serviceDescription)
   const [localPrice, setLocalPrice] = useState(String(singleAmount || ''))
-  const [saveWarning, setSaveWarning] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+
+  // Track if user has manually edited - don't override their input with hydrated values
+  const userHasEditedPrice = useRef(false)
+  const userHasEditedDescription = useRef(false)
+
+  // Sync local state when store is hydrated from server (only if user hasn't edited)
+  useEffect(() => {
+    if (!userHasEditedPrice.current && singleAmount && singleAmount !== parseFloat(localPrice)) {
+      setLocalPrice(String(singleAmount))
+    }
+  }, [singleAmount])
+
+  useEffect(() => {
+    if (!userHasEditedDescription.current && serviceDescription && serviceDescription !== localDescription) {
+      setLocalDescription(serviceDescription)
+    }
+  }, [serviceDescription])
 
   // Rotate placeholder on mount
   const [placeholderIndex] = useState(() => Math.floor(Math.random() * PLACEHOLDER_EXAMPLES.length))
@@ -39,6 +58,7 @@ export default function ServiceDescriptionStep() {
   const priceNum = parseFloat(localPrice) || 0
 
   const handlePriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    userHasEditedPrice.current = true
     const val = e.target.value.replace(/[^0-9.]/g, '')
     // Allow only one decimal point
     const parts = val.split('.')
@@ -46,30 +66,37 @@ export default function ServiceDescriptionStep() {
     setLocalPrice(val)
   }
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     if (!localDescription.trim()) return
     if (priceNum < minAmount) return
+
+    // Block navigation until save succeeds
+    setIsSaving(true)
+    setSaveError(null)
     setServiceDescription(localDescription.trim())
     setPricing('single', [], priceNum)
 
-    // Persist service description and price to backend for cross-device resume
-    // Local store is primary, backend is for durability
-    // Include purpose redundantly to ensure backend knows this is service flow
-    // Save NEXT step key so resume lands on the step user is going to
-    api.auth.saveOnboardingProgress({
-      step: currentStep + 1,
-      stepKey: 'ai-gen', // After service-desc is always ai-gen
-      data: {
-        serviceDescription: localDescription.trim(),
-        singleAmount: priceNum,
-        purpose: 'service', // Redundant - ensures backend knows service flow
-      },
-    }).catch((err) => {
-      console.warn('[onboarding] Failed to save service description:', err)
-      setSaveWarning(true) // Show warning so user knows to complete on this device
-    })
-
-    nextStep()
+    try {
+      // Persist service description and price to backend for cross-device resume
+      // Include purpose redundantly to ensure backend knows this is service flow
+      // Save NEXT step key so resume lands on the step user is going to
+      await saveProgress({
+        step: currentStep + 1,
+        stepKey: 'ai-gen', // After service-desc is always ai-gen
+        data: {
+          serviceDescription: localDescription.trim(),
+          singleAmount: priceNum,
+          purpose: 'service', // Redundant - ensures backend knows service flow
+        },
+      })
+      // Only advance on success
+      nextStep()
+    } catch (err) {
+      console.warn('[ServiceDescriptionStep] Failed to save progress:', err)
+      setSaveError('Failed to save. Please try again.')
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   const MAX_DESCRIPTION_LENGTH = 500 // Backend caps bio at 500
@@ -90,21 +117,21 @@ export default function ServiceDescriptionStep() {
       </div>
 
       <div className="onboarding-content">
-        {/* Save warning - shown if backend sync failed */}
-        {saveWarning && (
+        {/* Save error - shown if save failed */}
+        {saveError && (
           <div className="ai-save-warning" style={{
             display: 'flex',
             alignItems: 'center',
             gap: 10,
             padding: '10px 14px',
-            background: '#FEF3C7',
+            background: '#FEE2E2',
             borderRadius: 10,
             marginBottom: 16,
             fontSize: 13,
-            color: '#92400E',
+            color: '#DC2626',
           }}>
             <AlertCircle size={18} />
-            <span>Your progress may not sync across devices. Complete setup on this device.</span>
+            <span>{saveError}</span>
           </div>
         )}
 
@@ -120,7 +147,10 @@ export default function ServiceDescriptionStep() {
             <textarea
               className="service-description-step-input"
               value={localDescription}
-              onChange={(e) => setLocalDescription(e.target.value)}
+              onChange={(e) => {
+                userHasEditedDescription.current = true
+                setLocalDescription(e.target.value)
+              }}
               placeholder={placeholder}
               rows={4}
               autoFocus
@@ -167,9 +197,13 @@ export default function ServiceDescriptionStep() {
             size="lg"
             fullWidth
             onClick={handleContinue}
-            disabled={!isValid}
+            disabled={!isValid || isSaving}
           >
-            Continue
+            {isSaving ? (
+              <Loader2 size={20} className="spin" />
+            ) : (
+              'Continue'
+            )}
           </Button>
         </div>
       </div>

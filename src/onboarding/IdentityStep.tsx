@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronLeft, ChevronDown, Check, Search, AlertCircle } from 'lucide-react'
+import { ChevronLeft, ChevronDown, Check, Search, AlertCircle, Loader2 } from 'lucide-react'
 import { useOnboardingStore } from './store'
 import { Button, Pressable } from './components'
 import { useSaveOnboardingProgress } from '../api/hooks'
@@ -14,7 +14,8 @@ export default function IdentityStep() {
     const { firstName, lastName, setFirstName, setLastName, country, countryCode, currency, setCountry, setCurrency, nextStep, prevStep, currentStep } = useOnboardingStore()
     const [showCountryPicker, setShowCountryPicker] = useState(false)
     const [searchQuery, setSearchQuery] = useState('')
-    const [saveWarning, setSaveWarning] = useState(false)
+    const [isSaving, setIsSaving] = useState(false)
+    const [saveError, setSaveError] = useState<string | null>(null)
     const { mutateAsync: saveProgress } = useSaveOnboardingProgress()
 
     const selectedCountry = countries.find(c => c.code === countryCode)
@@ -31,20 +32,27 @@ export default function IdentityStep() {
         setSearchQuery('')
     }
 
-    const handleContinue = () => {
-        // Fire and forget - don't block navigation on save
-        // Save NEXT step key so resume lands on the step user is going to
-        const nextStepKey = shouldSkipAddress(countryCode) ? 'purpose' : 'address'
-        saveProgress({
-            step: currentStep + 1,
-            stepKey: nextStepKey,
-            data: { firstName, lastName, country, countryCode, currency },
-        }).catch(err => {
-            console.warn('[IdentityStep] Failed to save progress:', err)
-            setSaveWarning(true)
-        })
+    const handleContinue = async () => {
+        // Block navigation until save succeeds
+        setIsSaving(true)
+        setSaveError(null)
 
-        nextStep()
+        try {
+            // Save NEXT step key so resume lands on the step user is going to
+            const nextStepKey = shouldSkipAddress(countryCode) ? 'purpose' : 'address'
+            await saveProgress({
+                step: currentStep + 1,
+                stepKey: nextStepKey,
+                data: { firstName, lastName, country, countryCode, currency },
+            })
+            // Only advance on success
+            nextStep()
+        } catch (err) {
+            console.warn('[IdentityStep] Failed to save progress:', err)
+            setSaveError('Failed to save. Please try again.')
+        } finally {
+            setIsSaving(false)
+        }
     }
 
     return (
@@ -59,20 +67,20 @@ export default function IdentityStep() {
             </div>
 
             <div className="onboarding-content">
-                {saveWarning && (
+                {saveError && (
                     <div style={{
                         display: 'flex',
                         alignItems: 'center',
                         gap: 10,
                         padding: '10px 14px',
-                        background: '#FEF3C7',
+                        background: '#FEE2E2',
                         borderRadius: 10,
                         marginBottom: 16,
                         fontSize: 13,
-                        color: '#92400E',
+                        color: '#DC2626',
                     }}>
                         <AlertCircle size={18} />
-                        <span>Your progress may not sync across devices. Complete setup on this device.</span>
+                        <span>{saveError}</span>
                     </div>
                 )}
                 <div className="step-header">
@@ -122,9 +130,13 @@ export default function IdentityStep() {
                         size="lg"
                         fullWidth
                         onClick={handleContinue}
-                        disabled={!firstName.trim() || !lastName.trim() || !countryCode}
+                        disabled={!firstName.trim() || !lastName.trim() || !countryCode || isSaving}
                     >
-                        Continue
+                        {isSaving ? (
+                            <Loader2 size={20} className="spin" />
+                        ) : (
+                            'Continue'
+                        )}
                     </Button>
                 </div>
             </div>

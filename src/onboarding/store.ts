@@ -267,6 +267,8 @@ interface OnboardingStore {
     // No debouncing - for use after async operations (e.g., API calls)
     navigateToStep: (key: OnboardingStepKey) => void
     reset: () => void
+    // Atomic reset of just service-related fields (for "Start over" within service flow)
+    resetServiceFields: () => void
     // Hydrate from server data (for resume flows)
     // Supports both legacy numeric step and new stepKey
     hydrateFromServer: (data: {
@@ -419,6 +421,7 @@ export const useOnboardingStore = create<OnboardingStore>()(
                     currentStep: stepIndex,
                 }
             }),
+            // Full reset - uses replace: true for atomic state replacement
             reset: () => set({
                 ...initialState,
                 // Reset specific fields to their initial values,
@@ -441,9 +444,26 @@ export const useOnboardingStore = create<OnboardingStore>()(
                 bannerOptions: [],
             }),
 
+            // Atomic reset of service-related fields only
+            // Used for "Start over" within service flow without resetting identity/payment info
+            resetServiceFields: () => set({
+                serviceDescription: '',
+                servicePerks: [],
+                bannerUrl: null,
+                bannerOptions: [],
+                purpose: null,
+            }),
+
             // Hydrate from server data (for resume flows)
-            hydrateFromServer: (serverData) => set(() => {
-                const updates: Partial<typeof initialState> = {}
+            // Server-authoritative: server data REPLACES local state (not merge)
+            // This ensures consistent resume behavior across devices
+            hydrateFromServer: (serverData) => set((state) => {
+                // Start with initial state to ensure clean slate, but preserve some transient fields
+                const updates: Partial<typeof initialState> = {
+                    ...initialState,
+                    // Preserve transient fields that are not persisted to server
+                    avatarFile: state.avatarFile, // In-memory upload blob
+                }
 
                 // Prefer stepKey over numeric step (stepKey is the canonical identifier)
                 if (serverData.stepKey) {
@@ -454,7 +474,7 @@ export const useOnboardingStore = create<OnboardingStore>()(
                     updates.currentStep = serverData.step
                 }
 
-                // Merge server data with local state (server wins for key fields)
+                // Apply server data (server is source of truth)
                 if (serverData.data) {
                     const d = serverData.data
                     // Identity (support both old 'name' and new firstName/lastName)

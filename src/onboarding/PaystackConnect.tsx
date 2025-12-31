@@ -12,13 +12,35 @@ interface Bank {
     type: string
 }
 
+// Timeout for waiting on country hydration (prevents infinite spinner)
+const HYDRATION_TIMEOUT_MS = 10000
+
+// Timeout for connect mutation (prevents infinite connecting state)
+const CONNECT_TIMEOUT_MS = 10000
+
 export default function PaystackConnect() {
     const navigate = useNavigate()
     const store = useOnboardingStore()
-    const { data: profileData } = useProfile()
+    const { data: profileData, isLoading: isLoadingProfile, isError: isProfileError } = useProfile()
 
     // Use onboarding store countryCode, fallback to profile (for Settings → Paystack flow)
-    const countryCode = store.countryCode || profileData?.profile?.countryCode || ''
+    // Keep as undefined until hydrated to prevent premature bank fetch
+    const countryCode = store.countryCode || profileData?.profile?.countryCode
+    const isHydrated = !!countryCode
+
+    // Track hydration timeout
+    const [hydrationTimedOut, setHydrationTimedOut] = useState(false)
+
+    // Start timeout when component mounts if not hydrated
+    useEffect(() => {
+        if (isHydrated) return
+
+        const timeout = setTimeout(() => {
+            setHydrationTimedOut(true)
+        }, HYDRATION_TIMEOUT_MS)
+
+        return () => clearTimeout(timeout)
+    }, [isHydrated])
 
     // Refs
     const dropdownRef = useRef<HTMLDivElement>(null)
@@ -215,21 +237,64 @@ export default function PaystackConnect() {
 
         setConnectError(null)
         try {
-            await connectPaystack.mutateAsync({
+            // Wrap mutation in a timeout to prevent indefinite hang
+            const connectPromise = connectPaystack.mutateAsync({
                 bankCode: selectedBank.code,
                 accountNumber,
                 accountName: effectiveAccountName,
                 ...(isSouthAfrica && { idNumber }),
             })
 
+            const timeoutPromise = new Promise<never>((_, reject) => {
+                setTimeout(() => reject(new Error('Connection timed out')), CONNECT_TIMEOUT_MS)
+            })
+
+            await Promise.race([connectPromise, timeoutPromise])
+
             // Success - go to success page (don't reset here, success page will do it)
             navigate('/onboarding/paystack/complete')
         } catch (err: any) {
-            setConnectError(err?.error || 'Failed to connect bank account. Please try again.')
+            if (err?.message === 'Connection timed out') {
+                setConnectError('Connection is taking too long. Please check your internet connection and try again.')
+            } else {
+                setConnectError(err?.error || 'Failed to connect bank account. Please try again.')
+            }
         }
     }
 
-    if (loadingBanks) {
+    // Show timeout/error state if hydration failed
+    if (!isHydrated && (hydrationTimedOut || (isProfileError && !isLoadingProfile))) {
+        return (
+            <div className="onboarding">
+                <div className="onboarding-logo-header">
+                    <img src="/logo.svg" alt="NatePay" />
+                </div>
+                <div className="onboarding-header">
+                    <Pressable className="onboarding-back" onClick={handleBack}>
+                        <ChevronLeft size={24} />
+                    </Pressable>
+                </div>
+                <div className="onboarding-content">
+                    <div className="paystack-error" style={{ marginTop: 32 }}>
+                        <AlertCircle size={18} />
+                        <span>
+                            {isProfileError
+                                ? 'Failed to load your profile. Please check your connection and try again.'
+                                : 'Could not determine your country. Please go back and try again.'}
+                        </span>
+                    </div>
+                    <div style={{ marginTop: 16 }}>
+                        <Button variant="secondary" size="lg" fullWidth onClick={handleBack}>
+                            Go Back
+                        </Button>
+                    </div>
+                </div>
+            </div>
+        )
+    }
+
+    // Show loading state until country is hydrated and banks are loaded
+    if (!isHydrated || loadingBanks) {
         return (
             <div className="onboarding">
                 <div className="onboarding-content" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
@@ -239,8 +304,8 @@ export default function PaystackConnect() {
         )
     }
 
-    // Banks API error
-    if (banksError) {
+    // Banks API error (only show if we have a countryCode and fetch actually failed)
+    if (banksError && countryCode) {
         return (
             <div className="onboarding">
                 <div className="onboarding-logo-header">

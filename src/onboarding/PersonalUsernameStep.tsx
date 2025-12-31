@@ -11,7 +11,8 @@ export default function PersonalUsernameStep() {
     const { username, setUsername, nextStep, prevStep, currentStep } = useOnboardingStore()
     const { mutateAsync: saveProgress } = useSaveOnboardingProgress()
     const [debouncedUsername, setDebouncedUsername] = useState(username)
-    const [saveWarning, setSaveWarning] = useState(false)
+    const [isSaving, setIsSaving] = useState(false)
+    const [saveError, setSaveError] = useState<string | null>(null)
 
     // Debounce username for API check
     useEffect(() => {
@@ -44,19 +45,26 @@ export default function PersonalUsernameStep() {
         return null
     }
 
-    const handleContinue = () => {
-        // Fire and forget - don't block navigation on save
-        // Save NEXT step key so resume lands on the step user is going to
-        saveProgress({
-            step: currentStep + 1,
-            stepKey: 'payments', // After username is always payments
-            data: { username },
-        }).catch(err => {
-            console.warn('[PersonalUsernameStep] Failed to save progress:', err)
-            setSaveWarning(true)
-        })
+    const handleContinue = async () => {
+        // Block navigation until save succeeds
+        setIsSaving(true)
+        setSaveError(null)
 
-        nextStep()
+        try {
+            // Save NEXT step key so resume lands on the step user is going to
+            await saveProgress({
+                step: currentStep + 1,
+                stepKey: 'payments', // After username is always payments
+                data: { username },
+            })
+            // Only advance on success
+            nextStep()
+        } catch (err) {
+            console.warn('[PersonalUsernameStep] Failed to save progress:', err)
+            setSaveError('Failed to save. Please try again.')
+        } finally {
+            setIsSaving(false)
+        }
     }
 
     return (
@@ -71,20 +79,20 @@ export default function PersonalUsernameStep() {
             </div>
 
             <div className="onboarding-content">
-                {saveWarning && (
+                {saveError && (
                     <div style={{
                         display: 'flex',
                         alignItems: 'center',
                         gap: 10,
                         padding: '10px 14px',
-                        background: '#FEF3C7',
+                        background: '#FEE2E2',
                         borderRadius: 10,
                         marginBottom: 16,
                         fontSize: 13,
-                        color: '#92400E',
+                        color: '#DC2626',
                     }}>
                         <AlertCircle size={18} />
-                        <span>Your progress may not sync across devices. Complete setup on this device.</span>
+                        <span>{saveError}</span>
                     </div>
                 )}
                 <div className="step-header">
@@ -144,9 +152,13 @@ export default function PersonalUsernameStep() {
                         size="lg"
                         fullWidth
                         onClick={handleContinue}
-                        disabled={!canContinue}
+                        disabled={!canContinue || isSaving}
                     >
-                        Continue
+                        {isSaving ? (
+                            <Loader2 size={20} className="spin" />
+                        ) : (
+                            'Continue'
+                        )}
                     </Button>
                 </div>
             </div>

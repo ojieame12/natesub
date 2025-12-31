@@ -91,7 +91,7 @@ describe('onboarding/store', () => {
       expect(hydrated.lastName).toBe('Jane Watson')
     })
 
-    it('preserves local state for fields not in server data', () => {
+    it('resets local state to initial for fields not in server data (server-authoritative)', () => {
       const store = useOnboardingStore.getState()
 
       // Set local state
@@ -111,8 +111,8 @@ describe('onboarding/store', () => {
       // Server data applied
       expect(hydrated.firstName).toBe('Server')
       expect(hydrated.lastName).toBe('User')
-      // Local data preserved (if not overwritten)
-      expect(hydrated.email).toBe('local@example.com')
+      // Local data NOT in server is reset to initial values (server-authoritative)
+      expect(hydrated.email).toBe('') // Reset to initial
     })
   })
 

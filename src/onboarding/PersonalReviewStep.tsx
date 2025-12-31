@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { ChevronLeft, ChevronDown, Check, Loader2, AlertCircle, Camera, RefreshCw, Heart, Gift, Briefcase, Star, Sparkles, Wallet, MoreHorizontal, Edit3, Wand2, Plus, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useOnboardingStore, useShallow } from './store'
@@ -13,6 +13,7 @@ import {
 } from '../utils/regionConfig'
 import { api } from '../api'
 import { uploadFile, useGeneratePerks, useAIConfig, useCurrentUser } from '../api/hooks'
+import { saveRetryQueue } from './saveRetryQueue'
 import './onboarding.css'
 
 // Purpose options with icons for visual differentiation
@@ -42,8 +43,9 @@ export default function PersonalReviewStep() {
     const [isAddingPerk, setIsAddingPerk] = useState(false)
     const [newPerkValue, setNewPerkValue] = useState('')
     const generatePerksMutation = useGeneratePerks()
-    const { data: aiConfig } = useAIConfig()
-    const isAIAvailable = aiConfig?.available ?? false
+    const { data: aiConfig, isError: isAIConfigError } = useAIConfig()
+    // Fail-closed: if config fetch fails, treat AI as unavailable
+    const isAIAvailable = isAIConfigError ? false : (aiConfig?.available ?? false)
     const { data: userData } = useCurrentUser()
 
     // Use useShallow to prevent re-renders when unrelated store values change
@@ -112,30 +114,110 @@ export default function PersonalReviewStep() {
         bannerUrl: s.bannerUrl,
     })))
 
-    // Check if we're in service mode
-    const isServiceMode = purpose === 'service'
-
     // Use store → backend onboardingData fallback chain (handles localStorage cleared)
-    const resolvedPaymentProvider = paymentProvider || userData?.onboarding?.data?.paymentProvider
+    // This ensures service creators aren't misclassified if localStorage is cleared
+    const serverData = userData?.onboarding?.data
+    const resolvedPurpose = purpose || serverData?.purpose || 'support'
+    const resolvedCountryCode = countryCode || serverData?.countryCode || ''
+    const resolvedCountry = country || serverData?.country || ''
+    const resolvedCurrency = currency || serverData?.currency || 'USD'
+    const resolvedAvatarUrl = avatarUrl || serverData?.avatarUrl
+    const resolvedPaymentProvider = paymentProvider || serverData?.paymentProvider
+
+    // Check if we're in service mode (use resolved purpose for accuracy)
+    const isServiceMode = resolvedPurpose === 'service'
 
     // Determine if user is a cross-border creator using Stripe
-    const isCrossBorderStripe = resolvedPaymentProvider === 'stripe' && isCrossBorderCountry(countryCode)
-    const localCurrencyName = getLocalCurrencyName(countryCode)
+    const isCrossBorderStripe = resolvedPaymentProvider === 'stripe' && isCrossBorderCountry(resolvedCountryCode)
+    const localCurrencyName = getLocalCurrencyName(resolvedCountryCode)
 
     // Construct display name from first/last name
     const displayName = `${firstName} ${lastName}`.trim()
 
-    const resolvedPurpose = purpose || 'support'
-    const currencySymbol = getCurrencySymbol(currency)
+    const currencySymbol = getCurrencySymbol(resolvedCurrency)
 
     // Price input as string for free editing
     const [priceInput, setPriceInput] = useState(String(singleAmount || 10))
+    const priceDebounceRef = useRef<NodeJS.Timeout | null>(null)
+    // Track if user has manually edited the price (prevents overwriting their input on hydration)
+    const hasUserEditedPriceRef = useRef(false)
+
+    // Sync priceInput when singleAmount hydrates from server (resume flow)
+    // Only sync if user hasn't manually edited the price yet
+    useEffect(() => {
+        if (singleAmount && !hasUserEditedPriceRef.current) {
+            setPriceInput(String(singleAmount))
+        }
+    }, [singleAmount])
+
+    // Persist price changes to server with debounce (for cross-device resume)
+    useEffect(() => {
+        // Skip initial render and empty values
+        const numVal = parseFloat(priceInput)
+        if (isNaN(numVal) || numVal <= 0) return
+
+        // Clear previous debounce
+        if (priceDebounceRef.current) {
+            clearTimeout(priceDebounceRef.current)
+        }
+
+        // Debounce 1.5s to avoid hammering server on every keystroke
+        priceDebounceRef.current = setTimeout(() => {
+            saveRetryQueue.enqueue({
+                step: currentStep,
+                stepKey: 'review',
+                data: {
+                    singleAmount: numVal,
+                    pricingModel: pricingModel,
+                    ...(pricingModel === 'tiers' && tiers.length > 0 && { tiers }),
+                },
+            })
+        }, 1500)
+
+        return () => {
+            if (priceDebounceRef.current) {
+                clearTimeout(priceDebounceRef.current)
+            }
+        }
+    }, [priceInput, currentStep, pricingModel, tiers])
+
+    // Persist perk edits to server with debounce (for cross-device resume)
+    const perkDebounceRef = useRef<NodeJS.Timeout | null>(null)
+    useEffect(() => {
+        // Only persist for service mode with at least 3 perks
+        if (!isServiceMode || servicePerks.length < 3) return
+
+        // Clear previous debounce
+        if (perkDebounceRef.current) {
+            clearTimeout(perkDebounceRef.current)
+        }
+
+        // Debounce 1.5s to avoid hammering server on every edit
+        perkDebounceRef.current = setTimeout(() => {
+            saveRetryQueue.enqueue({
+                step: currentStep,
+                stepKey: 'review',
+                data: {
+                    servicePerks,
+                    purpose: resolvedPurpose,
+                },
+            })
+        }, 1500)
+
+        return () => {
+            if (perkDebounceRef.current) {
+                clearTimeout(perkDebounceRef.current)
+            }
+        }
+    }, [servicePerks, currentStep, isServiceMode, resolvedPurpose])
 
     // Handle currency change - adjust price to sensible default for new currency
     const handleCurrencyChange = (newCurrency: string) => {
         setCurrency(newCurrency)
         // Set a sensible default price for the new currency
-        const suggestedAmounts = getSuggestedAmounts(newCurrency, 'personal')
+        // Map purpose to pricing type: 'service' uses service pricing, all others use 'personal'
+        const pricingType: 'personal' | 'service' = resolvedPurpose === 'service' ? 'service' : 'personal'
+        const suggestedAmounts = getSuggestedAmounts(newCurrency, pricingType)
         const newPrice = suggestedAmounts[0] || 10
         setPriceInput(String(newPrice))
         setPricing('single', [], newPrice)
@@ -174,9 +256,17 @@ export default function PersonalReviewStep() {
         const rawVal = parseFormattedNumber(e.target.value)
         // Only allow digits and one decimal
         if (rawVal === '' || /^\d*\.?\d*$/.test(rawVal)) {
+            // Mark that user has manually edited (prevents hydration overwrite)
+            hasUserEditedPriceRef.current = true
             setPriceInput(rawVal)
             const numVal = parseFloat(rawVal) || 0
-            setPricing('single', [], numVal)
+            // Preserve existing pricing model - don't force 'single' if tiers exist
+            if (pricingModel === 'tiers' && tiers.length > 0) {
+                // Tiers mode: updating singleAmount as fallback, but keep tiers
+                setPricing('tiers', tiers, numVal)
+            } else {
+                setPricing('single', [], numVal)
+            }
         }
     }
 
@@ -222,8 +312,8 @@ export default function PersonalReviewStep() {
         }
     }
 
-    // Get minimum amount for current currency
-    const minAmount = getMinimumAmount(currency)
+    // Get minimum amount for current currency (use resolved for accuracy)
+    const minAmount = getMinimumAmount(resolvedCurrency)
 
     // Service mode: Generate perks when description changes and we have enough context
     const handleGeneratePerks = async () => {
@@ -304,7 +394,7 @@ export default function PersonalReviewStep() {
             return
         }
 
-        if (!avatarUrl) {
+        if (!resolvedAvatarUrl) {
             setError('Please add a profile photo.')
             return
         }
@@ -321,15 +411,27 @@ export default function PersonalReviewStep() {
             }
         }
 
-        // Validate single pricing amount
+        // Parse single amount for use in validation and API call
         const finalAmount = parseFloat(priceInput) || 0
-        if (finalAmount <= 0) {
-            setError('Please set a price.')
-            return
-        }
-        if (finalAmount < minAmount) {
-            setError(`Minimum price is ${currencySymbol}${minAmount.toLocaleString()} for ${currency}.`)
-            return
+
+        // Validate pricing based on model
+        if (pricingModel === 'tiers' && tiers.length > 0) {
+            // Validate tiered pricing - check each tier has valid amount
+            const invalidTier = tiers.find(t => !t.amount || t.amount < minAmount)
+            if (invalidTier) {
+                setError(`Tier "${invalidTier.name}" must be at least ${currencySymbol}${minAmount.toLocaleString()}.`)
+                return
+            }
+        } else {
+            // Validate single pricing amount
+            if (finalAmount <= 0) {
+                setError('Please set a price.')
+                return
+            }
+            if (finalAmount < minAmount) {
+                setError(`Minimum price is ${currencySymbol}${minAmount.toLocaleString()} for ${resolvedCurrency}.`)
+                return
+            }
         }
         setLaunching(true)
         setError(null)
@@ -340,11 +442,11 @@ export default function PersonalReviewStep() {
                 await api.profile.update({
                     username,
                     displayName,
-                    avatarUrl,
+                    avatarUrl: resolvedAvatarUrl,
                     purpose: resolvedPurpose,
-                    currency,
-                    country,
-                    countryCode,
+                    currency: resolvedCurrency,
+                    country: resolvedCountry || undefined, // Omit if empty to avoid validation error
+                    countryCode: resolvedCountryCode,
                     pricingModel: pricingModel,
                     singleAmount: pricingModel === 'single' ? finalAmount : null,
                     tiers: pricingModel === 'tiers' ? tiers.map(t => ({
@@ -380,19 +482,15 @@ export default function PersonalReviewStep() {
 
             // 3. Complete Onboarding - dynamic step based on flow length
             // Backend uses countryCode + purpose to determine completion threshold
-            try {
-                await api.auth.saveOnboardingProgress({
-                    step: currentStep + 1,
-                    stepKey: 'review', // Current step is review - completion triggers clear
-                    data: {
-                        countryCode,
-                        purpose, // Redundant - ensures backend knows flow type for completion check
-                    },
-                })
-            } catch (err: any) {
-                // Page is live, just onboarding progress failed - non-critical, continue
-                console.warn('Onboarding progress save failed (non-critical):', err)
-            }
+            // Non-critical: page is live, use retry queue for durability
+            saveRetryQueue.enqueue({
+                step: currentStep + 1,
+                stepKey: 'review', // Current step is review - completion triggers clear
+                data: {
+                    countryCode: resolvedCountryCode,
+                    purpose: resolvedPurpose, // Ensures backend knows flow type for completion check
+                },
+            })
 
             // 4. Go to their new page (owner view with share button)
             reset()
@@ -427,8 +525,8 @@ export default function PersonalReviewStep() {
                     <div className="setup-card">
                         {/* Avatar */}
                         <Pressable className="setup-avatar" onClick={handleAvatarClick} disabled={isUploading}>
-                            {avatarUrl ? (
-                                <img src={avatarUrl} alt="" className="setup-avatar-image" />
+                            {resolvedAvatarUrl ? (
+                                <img src={resolvedAvatarUrl} alt="" className="setup-avatar-image" />
                             ) : (
                                 <div className="setup-avatar-placeholder">
                                     {firstName ? firstName.charAt(0).toUpperCase() : 'U'}
@@ -611,31 +709,48 @@ export default function PersonalReviewStep() {
                         </div>
                     )}
 
-                    {/* Pricing Card */}
-                    <div className="setup-price-card">
-                        {isCrossBorderStripe ? (
-                            <Pressable
-                                className="setup-price-currency-btn"
-                                onClick={() => setShowCurrencyDrawer(true)}
-                                style={{ fontSize: Math.max(16, getPriceFontSize(priceInput) / 2) }}
-                            >
-                                {currencySymbol}
-                                <ChevronDown size={14} style={{ marginLeft: 2, opacity: 0.5 }} />
-                            </Pressable>
-                        ) : (
-                            <span className="setup-price-currency" style={{ fontSize: Math.max(16, getPriceFontSize(priceInput) / 2) }}>{currencySymbol}</span>
-                        )}
-                        <input
-                            type="text"
-                            inputMode="decimal"
-                            className="setup-price-input"
-                            value={displayPrice}
-                            onChange={handlePriceChange}
-                            placeholder="10"
-                            style={{ fontSize: getPriceFontSize(priceInput) }}
-                        />
-                        <span className="setup-price-period">/month</span>
-                    </div>
+                    {/* Pricing Card - shows tier summary or single price input */}
+                    {pricingModel === 'tiers' && tiers.length > 0 ? (
+                        <div className="setup-tiers-summary">
+                            <span className="setup-tiers-label">Subscription Tiers</span>
+                            <div className="setup-tiers-list">
+                                {tiers.map((tier) => (
+                                    <div key={tier.id} className={`setup-tier-item ${tier.isPopular ? 'popular' : ''}`}>
+                                        <span className="setup-tier-name">{tier.name}</span>
+                                        <span className="setup-tier-price">
+                                            {currencySymbol}{tier.amount.toLocaleString()}/mo
+                                        </span>
+                                        {tier.isPopular && <span className="setup-tier-badge">Popular</span>}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="setup-price-card">
+                            {isCrossBorderStripe ? (
+                                <Pressable
+                                    className="setup-price-currency-btn"
+                                    onClick={() => setShowCurrencyDrawer(true)}
+                                    style={{ fontSize: Math.max(16, getPriceFontSize(priceInput) / 2) }}
+                                >
+                                    {currencySymbol}
+                                    <ChevronDown size={14} style={{ marginLeft: 2, opacity: 0.5 }} />
+                                </Pressable>
+                            ) : (
+                                <span className="setup-price-currency" style={{ fontSize: Math.max(16, getPriceFontSize(priceInput) / 2) }}>{currencySymbol}</span>
+                            )}
+                            <input
+                                type="text"
+                                inputMode="decimal"
+                                className="setup-price-input"
+                                value={displayPrice}
+                                onChange={handlePriceChange}
+                                placeholder="10"
+                                style={{ fontSize: getPriceFontSize(priceInput) }}
+                            />
+                            <span className="setup-price-period">/month</span>
+                        </div>
+                    )}
 
                     {/* Conversion note for cross-border creators */}
                     {isCrossBorderStripe && (

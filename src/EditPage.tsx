@@ -27,8 +27,9 @@ export default function EditPage() {
   const { mutateAsync: updateProfile, isPending: isSaving } = useUpdateProfile()
   const generatePerksMutation = useGeneratePerks()
   const generateBannerMutation = useGenerateBanner()
-  const { data: aiConfig } = useAIConfig()
-  const isAIAvailable = aiConfig?.available ?? false
+  const { data: aiConfig, isError: isAIConfigError } = useAIConfig()
+  // Fail-closed: if config fetch fails, treat AI as unavailable
+  const isAIAvailable = isAIConfigError ? false : (aiConfig?.available ?? false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const profile = profileData?.profile
