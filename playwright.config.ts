@@ -1,14 +1,19 @@
 import { defineConfig, devices } from '@playwright/test';
 import { fileURLToPath } from 'url';
 import { dirname, resolve } from 'path';
+import { existsSync } from 'fs';
 import dotenv from 'dotenv';
 
 // ESM equivalent of __dirname
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Read from default .env or .env.local
-dotenv.config({ path: resolve(__dirname, '.env') });
+const rootEnvPath = resolve(__dirname, '.env');
+
+// Read from default .env or .env.local (if present)
+if (existsSync(rootEnvPath)) {
+  dotenv.config({ path: rootEnvPath });
+}
 
 /**
  * Playwright E2E Configuration
@@ -58,35 +63,23 @@ export default defineConfig({
     screenshot: 'only-on-failure',
     video: 'on-first-retry',
   },
-  // Projects: chromium always, webkit/mobile-safari only in CI
-  // This allows local dev without installing all browsers
+  // Projects: chromium only for now
+  // Multi-browser testing was causing CI timeout issues (15m+ for 4 browsers)
+  // Re-enable webkit/firefox once E2E suite is optimized
   projects: [
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
     },
-    // WebKit/Safari - CI only (requires: npx playwright install webkit)
-    ...(process.env.CI ? [{
-      name: 'webkit',
-      use: { ...devices['Desktop Safari'] },
-    }] : []),
-    // Mobile Safari - CI only (requires: npx playwright install webkit)
-    ...(process.env.CI ? [{
-      name: 'mobile-safari',
-      use: { ...devices['iPhone 12'] },
-    }] : []),
-    // Firefox - CI only (requires: npx playwright install firefox)
-    ...(process.env.CI ? [{
-      name: 'firefox',
-      use: { ...devices['Desktop Firefox'] },
-    }] : []),
   ],
   // Start both backend and frontend before tests
   webServer: [
     {
       // Backend API server with stubbed payments
       // Load .env for secrets, env config ensures PAYMENTS_MODE=stub
-      command: 'cd backend && npx dotenv -e ../.env -- npm start',
+      command: existsSync(rootEnvPath)
+        ? 'cd backend && npx dotenv -e ../.env -- npm start'
+        : 'cd backend && npm start',
       // Use /health/live (no DB check) for faster startup
       // This avoids Neon cold-start blocking test startup
       url: 'http://localhost:3001/health/live',

@@ -153,7 +153,7 @@ jobs:
   e2e-tests:
     name: E2E Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     services:
       postgres:
         image: postgres:15
@@ -211,10 +211,10 @@ jobs:
         working-directory: backend
 
       - name: Install Playwright Browsers
-        run: npx playwright install chromium webkit firefox --with-deps
+        run: npx playwright install chromium --with-deps
 
-      - name: Run E2E Tests
-        run: npx playwright test
+      - name: Run E2E Tests (Chromium only for CI speed)
+        run: npx playwright test --project=chromium
         env:
           # Add connection_limit to prevent pool exhaustion in parallel test setup
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/nate_test?connection_limit=10
