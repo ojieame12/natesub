@@ -15,7 +15,7 @@ import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import app from '../../../src/app.js'
 import { db } from '../../../src/db/client.js'
 import { resetDatabase, disconnectDatabase } from '../../helpers/db.js'
-// @ts-ignore - mock module
+// @ts-expect-error - mock module
 import { __reset as resetRedis } from '../../../src/db/redis.js'
 
 const adminHeaders = {
@@ -65,8 +65,10 @@ describe('admin revenue', () => {
       },
     })
 
-    // Use real time for occurredAt since we're not using fake timers
+    // Use actual current time for "today" payments so daily reports work
+    // But ensure UTC hours are set to noon to avoid boundary issues
     const now = new Date()
+    now.setUTCHours(12, 0, 0, 0)
 
     const paymentStripeToday = await db.payment.create({
       data: {
@@ -83,9 +85,10 @@ describe('admin revenue', () => {
       },
     })
 
+    // Two days ago - use UTC methods
     const twoDaysAgo = new Date(now)
-    twoDaysAgo.setDate(now.getDate() - 2)
-    twoDaysAgo.setHours(9, 0, 0, 0)
+    twoDaysAgo.setUTCDate(now.getUTCDate() - 2)
+    twoDaysAgo.setUTCHours(9, 0, 0, 0)
 
     const paymentPaystack = await db.payment.create({
       data: {
@@ -102,10 +105,9 @@ describe('admin revenue', () => {
       },
     })
 
-    const lastMonth = new Date(now)
-    lastMonth.setMonth(now.getMonth() - 1)
-    lastMonth.setDate(10)
-    lastMonth.setHours(9, 0, 0, 0)
+    // Last month payment - ensure it's definitely in the previous UTC month
+    // Use Date.UTC with month-1 to get a date in the previous month (handles year rollover)
+    const lastMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 10, 9, 0, 0, 0))
 
     const paymentLastMonth = await db.payment.create({
       data: {

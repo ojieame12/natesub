@@ -11,7 +11,7 @@ import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import app from '../../../src/app.js'
 import { db } from '../../../src/db/client.js'
 import { resetDatabase, disconnectDatabase } from '../../helpers/db.js'
-// @ts-ignore - test mock export
+// @ts-expect-error - test mock export
 import { __reset as resetRedis } from '../../../src/db/redis.js'
 
 // Mock email service

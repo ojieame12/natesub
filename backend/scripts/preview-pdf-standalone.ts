@@ -174,7 +174,7 @@ async function generateIncomeStatement(data: IncomeStatementData): Promise<Buffe
       // PAYEE SECTION
       // ==========================================
 
-      let y = 125
+      const y = 125
 
       // Payee header with accent
       doc.rect(margin, y, 3, 40).fill(COLORS.accent)

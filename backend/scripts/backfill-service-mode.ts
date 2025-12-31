@@ -61,7 +61,7 @@ async function main() {
 
   let perksGenerated = 0
   let bannersGenerated = 0
-  let errors: string[] = []
+  const errors: string[] = []
 
   for (const profile of profiles) {
     console.log(`\n--- Processing: @${profile.username} (${profile.displayName}) ---`)

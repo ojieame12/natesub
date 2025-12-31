@@ -14,7 +14,7 @@ import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import app from '../../../src/app.js'
 import { db } from '../../../src/db/client.js'
 import { resetDatabase, disconnectDatabase } from '../../helpers/db.js'
-// @ts-ignore - mock module
+// @ts-expect-error - mock module
 import { __reset as resetRedis } from '../../../src/db/redis.js'
 
 // Mock Stripe

@@ -126,7 +126,7 @@ financials.get('/reconciliation', auditSensitiveRead('financial_reconciliation')
   type BalanceByCurrency = Record<string, number>
   let stripeBalances: BalanceByCurrency | null = null
   let paystackBalances: BalanceByCurrency | null = null
-  let balanceErrors: string[] = []
+  const balanceErrors: string[] = []
 
   // Stripe balance - grouped by currency
   if (env.STRIPE_SECRET_KEY) {
