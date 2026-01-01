@@ -54,8 +54,18 @@ test.describe('Onboarding - Real Backend', () => {
     const { token } = await e2eLogin(request, email)
     await setAuthCookie(page, token)
 
-    // Go to identity step
-    await page.goto('/onboarding?step=identity')
+    // Force onboarding to identity step
+    await request.put('http://localhost:3001/auth/onboarding', {
+      data: {
+        step: 3,
+        stepKey: 'identity',
+        data: { countryCode: 'US', purpose: 'support' },
+      },
+      headers: { 'Authorization': `Bearer ${token}` },
+    })
+
+    // Go to onboarding
+    await page.goto('/onboarding')
     await page.waitForLoadState('networkidle')
     await waitForAuthReady(page)
 
@@ -94,8 +104,18 @@ test.describe('Onboarding - Real Backend', () => {
     const { token } = await e2eLogin(request, email)
     await setAuthCookie(page, token)
 
-    // Go to username step
-    await page.goto('/onboarding?step=username')
+    // Force onboarding to username step
+    await request.put('http://localhost:3001/auth/onboarding', {
+      data: {
+        step: 7,
+        stepKey: 'username',
+        data: { countryCode: 'US', purpose: 'support' },
+      },
+      headers: { 'Authorization': `Bearer ${token}` },
+    })
+
+    // Go to onboarding
+    await page.goto('/onboarding')
     await page.waitForLoadState('networkidle')
     await waitForAuthReady(page)
 
@@ -125,18 +145,19 @@ test.describe('Onboarding - Real Backend', () => {
 
 test.describe('Checkout - Real Backend', () => {
   test('public page loads for non-existent creator (404)', async ({ page }) => {
+    const missingUsername = buildUsername('missing', 'creator', Date.now().toString().slice(-8))
+
     // Try to load a definitely non-existent creator
-    await page.goto('/nonexistuser1')
+    await page.goto(`/${missingUsername}`)
     await page.waitForLoadState('networkidle')
 
     // Should show error or redirect (real backend returns 404)
-    const content = await page.content()
-    const hasError = content.includes('not found') ||
-                     content.includes('404') ||
-                     content.includes("doesn't exist")
+    const notFoundContainer = page.locator('.sub-not-found')
+    const hasNotFound = await notFoundContainer.isVisible({ timeout: 5000 }).catch(() => false)
+    const redirected = !page.url().includes(missingUsername)
 
     // Either shows error or redirected away
-    expect(hasError || !page.url().includes('nonexistuser1')).toBeTruthy()
+    expect(hasNotFound || redirected).toBeTruthy()
   })
 
   test('checkout session creation requires valid creator', async ({ request }) => {
@@ -196,8 +217,18 @@ test.describe('Full Onboarding Journey - No Stubs', () => {
     await setAuthCookie(page, token)
 
     // Step 2: Navigate to identity step
-    await page.goto('/onboarding?step=identity')
+    await request.put('http://localhost:3001/auth/onboarding', {
+      data: {
+        step: 3,
+        stepKey: 'identity',
+        data: { countryCode: 'US', purpose: 'support' },
+      },
+      headers: { 'Authorization': `Bearer ${token}` },
+    })
+
+    await page.goto('/onboarding')
     await page.waitForLoadState('networkidle')
+    await waitForAuthReady(page)
     await waitForAuthReady(page)
 
     // Fill identity form
@@ -267,8 +298,18 @@ test.describe('Full Onboarding Journey - No Stubs', () => {
     const { token } = await e2eLogin(request, email)
     await setAuthCookie(page, token)
 
-    await page.goto('/onboarding?step=identity')
+    await request.put('http://localhost:3001/auth/onboarding', {
+      data: {
+        step: 3,
+        stepKey: 'identity',
+        data: { countryCode: 'US', purpose: 'support' },
+      },
+      headers: { 'Authorization': `Bearer ${token}` },
+    })
+
+    await page.goto('/onboarding')
     await page.waitForLoadState('networkidle')
+    await waitForAuthReady(page)
     await waitForAuthReady(page)
 
     // Identity form MUST be visible - fail if UI doesn't render
@@ -657,7 +698,7 @@ test.describe('API Contract Validation', () => {
 
   test('profile check-username validates format', async ({ request }) => {
     // Invalid username (too short)
-    const response = await request.get('http://localhost:3001/profile/check-username?username=ab')
+    const response = await request.get('http://localhost:3001/profile/check-username/ab')
 
     // Should return 400 for invalid format
     expect(response.status()).toBe(400)
