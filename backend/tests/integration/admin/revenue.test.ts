@@ -89,9 +89,10 @@ describeFn('admin revenue', () => {
       },
     })
 
-    // Two days ago - use UTC methods
+    // Two days ago - keep within the same month to avoid month-boundary flakes
     const twoDaysAgo = new Date(now)
-    twoDaysAgo.setUTCDate(now.getUTCDate() - 2)
+    const safeDaysBack = Math.min(2, now.getUTCDate() - 1)
+    twoDaysAgo.setUTCDate(now.getUTCDate() - safeDaysBack)
     twoDaysAgo.setUTCHours(9, 0, 0, 0)
 
     const paymentPaystack = await db.payment.create({
