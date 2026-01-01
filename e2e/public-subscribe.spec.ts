@@ -40,7 +40,8 @@ async function setupPublicCreator(
   const email = `public-creator-${suffix}-${ts}@e2e.natepay.co`
   const username = buildUsername('pub', suffix, ts)
 
-  let { token, user } = await e2eLogin(request, email)
+  const { token: initialToken, user } = await e2eLogin(request, email)
+  let token = initialToken
 
   const profileData: Record<string, unknown> = {
     username,
