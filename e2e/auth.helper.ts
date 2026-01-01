@@ -152,6 +152,18 @@ export async function setAuthCookie(page: Page, token: string) {
   }
 }
 
+/**
+ * Wait for auth state to be ready before interacting with protected pages
+ */
+export async function waitForAuthReady(page: Page) {
+  await page.waitForSelector('.onboarding-resuming', {
+    state: 'hidden',
+    timeout: 3000
+  }).catch(() => {})
+
+  await page.waitForTimeout(300)
+}
+
 export interface SeedCreatorOptions {
   email: string
   username: string

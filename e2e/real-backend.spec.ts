@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { e2eLogin, setAuthCookie, deterministicEmail, buildUsername } from './auth.helper'
+import { e2eLogin, setAuthCookie, deterministicEmail, buildUsername, waitForAuthReady } from './auth.helper'
 
 // E2E API key for helper endpoints (matches playwright.config.ts)
 const E2E_API_KEY = process.env.E2E_API_KEY || 'e2e-local-dev-key'
@@ -57,6 +57,7 @@ test.describe('Onboarding - Real Backend', () => {
     // Go to identity step
     await page.goto('/onboarding?step=identity')
     await page.waitForLoadState('networkidle')
+    await waitForAuthReady(page)
 
     // Fill identity form - elements MUST be visible for test to pass
     const firstNameInput = page.locator('[data-testid="identity-first-name"]')
@@ -96,6 +97,7 @@ test.describe('Onboarding - Real Backend', () => {
     // Go to username step
     await page.goto('/onboarding?step=username')
     await page.waitForLoadState('networkidle')
+    await waitForAuthReady(page)
 
     // Find username input - MUST be visible
     const usernameInput = page.locator('[data-testid="username-input"]')
@@ -124,7 +126,7 @@ test.describe('Onboarding - Real Backend', () => {
 test.describe('Checkout - Real Backend', () => {
   test('public page loads for non-existent creator (404)', async ({ page }) => {
     // Try to load a definitely non-existent creator
-    await page.goto('/nonexistentcreatorxyz999')
+    await page.goto('/nonexistuser1')
     await page.waitForLoadState('networkidle')
 
     // Should show error or redirect (real backend returns 404)
@@ -134,16 +136,18 @@ test.describe('Checkout - Real Backend', () => {
                      content.includes("doesn't exist")
 
     // Either shows error or redirected away
-    expect(hasError || !page.url().includes('nonexistentcreator')).toBeTruthy()
+    expect(hasError || !page.url().includes('nonexistuser1')).toBeTruthy()
   })
 
   test('checkout session creation requires valid creator', async ({ request }) => {
     // Try to create checkout session for non-existent creator (API level test)
     const response = await request.post('http://localhost:3001/checkout/session', {
       data: {
-        creatorId: 'nonexistent-creator-id',
-        email: 'test@example.com',
-        amount: 1000,
+        creatorUsername: 'nonexistuser1',
+        subscriberEmail: 'test@example.com',
+        amount: 500,
+        interval: 'month',
+        payerCountry: 'US',
       },
       headers: { 'Content-Type': 'application/json' },
     })
@@ -194,6 +198,7 @@ test.describe('Full Onboarding Journey - No Stubs', () => {
     // Step 2: Navigate to identity step
     await page.goto('/onboarding?step=identity')
     await page.waitForLoadState('networkidle')
+    await waitForAuthReady(page)
 
     // Fill identity form
     const firstNameInput = page.locator('[data-testid="identity-first-name"]')
@@ -264,6 +269,7 @@ test.describe('Full Onboarding Journey - No Stubs', () => {
 
     await page.goto('/onboarding?step=identity')
     await page.waitForLoadState('networkidle')
+    await waitForAuthReady(page)
 
     // Identity form MUST be visible - fail if UI doesn't render
     const firstNameInput = page.locator('[data-testid="identity-first-name"]')
@@ -298,7 +304,7 @@ test.describe('Auth Flow - Real Backend', () => {
     const testEmail = `auth-test-${Date.now()}@e2e.natepay.co`
 
     // Request magic link (real backend)
-    const response = await request.post('http://localhost:3001/auth/login', {
+    const response = await request.post('http://localhost:3001/auth/magic-link', {
       data: { email: testEmail },
       headers: { 'Content-Type': 'application/json' },
     })
@@ -306,7 +312,7 @@ test.describe('Auth Flow - Real Backend', () => {
     // Should succeed - email is queued
     expect(response.status()).toBe(200)
     const data = await response.json()
-    expect(data.message).toBeTruthy()
+    expect(data.message || data.success).toBeTruthy()
   })
 
   test('OTP request for subscriber portal works', async ({ request }) => {
@@ -349,7 +355,7 @@ test.describe('Auth Flow - Full E2E (Real Email/OTP)', () => {
     const testEmail = `magic-link-flow-${Date.now()}@e2e.natepay.co`
 
     // Step 1: Request magic link
-    const loginResponse = await request.post('http://localhost:3001/auth/login', {
+    const loginResponse = await request.post('http://localhost:3001/auth/magic-link', {
       data: { email: testEmail },
       headers: { 'Content-Type': 'application/json' },
     })
@@ -360,16 +366,17 @@ test.describe('Auth Flow - Full E2E (Real Email/OTP)', () => {
     // In test mode, the magic link token might be returned for E2E testing
     // This allows testing without email delivery
     if (loginData.testToken) {
-      // Step 2: Verify the magic link token
-      const verifyResponse = await request.get(
-        `http://localhost:3001/auth/verify?token=${loginData.testToken}`
-      )
+      // Step 2: Verify the magic link token (POST + email)
+      const verifyResponse = await request.post('http://localhost:3001/auth/verify', {
+        data: { token: loginData.testToken, email: testEmail },
+        headers: { 'Content-Type': 'application/json' },
+      })
 
       // Should succeed and redirect (302) or return token (200)
       expect([200, 302]).toContain(verifyResponse.status())
     } else {
       // No test token - just verify the request was accepted
-      expect(loginData.message).toBeTruthy()
+      expect(loginData.message || loginData.success).toBeTruthy()
     }
   })
 

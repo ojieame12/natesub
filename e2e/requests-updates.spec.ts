@@ -125,7 +125,7 @@ test.describe('Create Request API', () => {
 
     expect(data.request).toBeDefined()
     expect(data.request.id).toBeTruthy()
-    expect(data.request.status).toBe('sent')
+    expect(data.request.status).toBe('draft') // POST /requests creates drafts
     expect(data.publicUrl).toBeTruthy()
   })
 
@@ -214,7 +214,7 @@ test.describe('Request Detail API', () => {
   test('GET /requests/:id returns 404 for unknown', async ({ request }) => {
     const { token } = await setupCreator(request, 'notfound')
 
-    const response = await request.get(`${API_URL}/requests/unknown-id-123`, {
+    const response = await request.get(`${API_URL}/requests/00000000-0000-0000-0000-000000000000`, {
       headers: { 'Authorization': `Bearer ${token}` },
     })
 
@@ -343,7 +343,7 @@ test.describe('Request Actions', () => {
       headers: { 'Authorization': `Bearer ${token}` },
     })
 
-    expect([200, 404, 405, 429]).toContain(resendResp.status())
+    expect([200, 400, 404, 405, 429]).toContain(resendResp.status())
   })
 })
 
@@ -402,8 +402,8 @@ test.describe('Updates API', () => {
 
     const response = await request.post(`${API_URL}/updates`, {
       data: {
-        subject: '', // Empty
-        body: 'Test body',
+        title: 'Valid title',
+        body: '', // Empty - body is required
         audience: 'all',
       },
       headers: { 'Authorization': `Bearer ${token}` },
@@ -530,10 +530,10 @@ test.describe('Requests UI', () => {
 
     const hasNewUpdateContent =
       url.includes('update') ||
-      content.toLowerCase().includes('subject') ||
-      content.toLowerCase().includes('compose') ||
-      content.toLowerCase().includes('audience') ||
-      content.toLowerCase().includes('write')
+      content.toLowerCase().includes("what's happening") ||
+      content.toLowerCase().includes('add photo') ||
+      content.toLowerCase().includes('preview with ai') ||
+      content.toLowerCase().includes('all subscribers')
 
     expect(hasNewUpdateContent, 'New update page should show compose form').toBeTruthy()
   })

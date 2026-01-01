@@ -75,9 +75,14 @@ async function setupPublicCreator(
   }
 
   // Connect Stripe for checkout
-  await request.post(`${API_URL}/stripe/connect`, {
+  const connectResp = await request.post(`${API_URL}/stripe/connect`, {
     headers: { 'Authorization': `Bearer ${token}` },
   })
+
+  if (connectResp.status() !== 200) {
+    const error = await connectResp.text()
+    throw new Error(`Stripe connect failed: ${error}`)
+  }
 
   return { token, userId: user.id, email, username }
 }
@@ -149,7 +154,7 @@ test.describe('Public Page Loading', () => {
   })
 
   test('public page 404s for non-existent creator', async ({ page }) => {
-    await page.goto('/nonexistentcreatorxyz999')
+    await page.goto('/nonexistuser1')
     await page.waitForLoadState('networkidle')
 
     const content = await page.content()
@@ -158,7 +163,7 @@ test.describe('Public Page Loading', () => {
       content.toLowerCase().includes('404') ||
       content.toLowerCase().includes("doesn't exist")
 
-    expect(has404 || !page.url().includes('nonexistentcreator')).toBeTruthy()
+    expect(has404 || !page.url().includes('nonexistuser1')).toBeTruthy()
   })
 
   test('private profile is not publicly accessible', async ({ page, request }) => {
@@ -208,7 +213,7 @@ test.describe('Checkout Initiation', () => {
   test('checkout requires valid creator', async ({ request }) => {
     const response = await request.post(`${API_URL}/checkout/session`, {
       data: {
-        creatorUsername: 'nonexistentcreator',
+        creatorUsername: 'nonexistuser1',
         subscriberEmail: 'test@example.com',
         amount: 500,
         interval: 'month',
