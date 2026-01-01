@@ -22,11 +22,19 @@ const stripe = new Stripe(env.STRIPE_SECRET_KEY, {
 let platformProductId: string | null = null
 let platformPriceId: string | null = null
 
+const isStubMode = () => env.PAYMENTS_MODE === 'stub'
+
 /**
  * Get or create the platform subscription product and price
  * This should be called once at startup or on first use
  */
 async function ensurePlatformProduct(): Promise<{ productId: string; priceId: string }> {
+  if (isStubMode()) {
+    if (!platformProductId) platformProductId = 'prod_stub_platform'
+    if (!platformPriceId) platformPriceId = 'price_stub_platform'
+    return { productId: platformProductId, priceId: platformPriceId }
+  }
+
   if (platformProductId && platformPriceId) {
     return { productId: platformProductId, priceId: platformPriceId }
   }
@@ -99,6 +107,15 @@ async function getOrCreateCustomer(
     return profile.platformCustomerId
   }
 
+  if (isStubMode()) {
+    const customerId = `cus_stub_${userId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8)}`
+    await db.profile.update({
+      where: { userId },
+      data: { platformCustomerId: customerId },
+    })
+    return customerId
+  }
+
   // Create new customer
   const customer = await stripe.customers.create({
     email,
@@ -142,6 +159,23 @@ export async function startPlatformTrial(
     if (profile?.platformSubscriptionId && profile.platformSubscriptionStatus !== 'canceled') {
       console.log(`[platform] User ${userId} already subscribed, skipping auto-trial`)
       return null
+    }
+
+    if (isStubMode()) {
+      const subscriptionId = `sub_stub_${userId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8)}`
+      const trialEndsAt = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000)
+
+      await db.profile.update({
+        where: { userId },
+        data: {
+          platformSubscriptionId: subscriptionId,
+          platformSubscriptionStatus: 'trialing',
+          platformTrialEndsAt: trialEndsAt,
+        },
+      })
+
+      console.log(`[platform] Stub trial started for user ${userId}: ${subscriptionId}`)
+      return subscriptionId
     }
 
     const { priceId } = await ensurePlatformProduct()
@@ -203,9 +237,6 @@ export async function createPlatformCheckout(
   const lockKey = `platform-checkout:${userId}`
 
   const result = await withLock(lockKey, 30000, async () => {
-    const { priceId } = await ensurePlatformProduct()
-    const customerId = await getOrCreateCustomer(userId, email)
-
     // Check if already subscribed (any status except canceled)
     const profile = await db.profile.findUnique({
       where: { userId },
@@ -221,6 +252,17 @@ export async function createPlatformCheckout(
       throw new Error('Already subscribed to platform')
     }
 
+    // Return stub checkout URL early in stub mode (before Stripe customer creation)
+    if (isStubMode()) {
+      const sessionId = `cs_stub_${Date.now()}`
+      return {
+        url: `https://checkout.stripe.com/pay/${sessionId}`,
+        sessionId,
+      }
+    }
+
+    const { priceId } = await ensurePlatformProduct()
+    const customerId = await getOrCreateCustomer(userId, email)
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
       customer: customerId,
@@ -309,10 +351,20 @@ export async function getPlatformSubscriptionStatus(userId: string): Promise<{
 
   if (!profile?.platformSubscriptionId) {
     return {
-      status: null,
+      status: 'none',
       subscriptionId: null,
       currentPeriodEnd: null,
       trialEndsAt: null,
+      cancelAtPeriodEnd: false,
+    }
+  }
+
+  if (isStubMode()) {
+    return {
+      status: profile.platformSubscriptionStatus || 'trialing',
+      subscriptionId: profile.platformSubscriptionId,
+      currentPeriodEnd: null,
+      trialEndsAt: profile.platformTrialEndsAt,
       cancelAtPeriodEnd: false,
     }
   }
