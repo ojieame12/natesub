@@ -1068,7 +1068,7 @@ e2e.post('/unlock-salary-mode', async (c) => {
   }
 
   // Set paydayAlignmentUnlocked=true (schema field name)
-  const updated = await db.profile.update({
+  await db.profile.update({
     where: { username },
     data: {
       paydayAlignmentUnlocked: true,
@@ -1113,7 +1113,7 @@ e2e.post('/seed-platform-subscription', async (c) => {
   }
 
   const ts = Date.now()
-  const updated = await db.profile.update({
+  await db.profile.update({
     where: { username },
     data: {
       platformCustomerId: `cus_e2e_${ts}`,
@@ -1177,6 +1177,58 @@ e2e.post('/seed-platform-debit', async (c) => {
     success: true,
     username,
     platformDebitCents: amountCents,
+  })
+})
+
+/**
+ * Cancel a platform subscription for testing checkout flow
+ *
+ * POST /e2e/cancel-platform-subscription
+ * {
+ *   username: string
+ * }
+ *
+ * This sets platformSubscriptionStatus to 'canceled' to allow checkout testing.
+ */
+e2e.post('/cancel-platform-subscription', async (c) => {
+  const body = await c.req.json()
+  const { username } = body
+
+  if (!username) {
+    return c.json({ error: 'username required' }, 400)
+  }
+
+  const profile = await db.profile.findUnique({
+    where: { username },
+    select: {
+      id: true,
+      platformSubscriptionId: true,
+      platformSubscriptionStatus: true,
+    },
+  })
+
+  if (!profile) {
+    return c.json({ error: 'Creator not found' }, 404)
+  }
+
+  if (!profile.platformSubscriptionId) {
+    return c.json({ error: 'No platform subscription to cancel' }, 400)
+  }
+
+  await db.profile.update({
+    where: { username },
+    data: {
+      platformSubscriptionStatus: 'canceled',
+    },
+  })
+
+  console.log(`[e2e] Canceled platform subscription for ${username}`)
+
+  return c.json({
+    success: true,
+    username,
+    platformSubscriptionId: profile.platformSubscriptionId,
+    platformSubscriptionStatus: 'canceled',
   })
 })
 

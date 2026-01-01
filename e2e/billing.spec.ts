@@ -148,15 +148,24 @@ test.describe('Platform Billing', () => {
   })
 
   test.describe('POST /billing/checkout', () => {
-    test('creates checkout session for service provider', async ({ request }) => {
-      const { token } = await setupCreator(request, 'checkout', 'service')
+    test('creates checkout session for service provider after trial canceled', async ({ request }) => {
+      const { token, username } = await setupCreator(request, 'checkout', 'service')
 
+      // Service providers get auto-trial on profile creation
+      // Cancel it first so we can test the checkout flow
+      const cancelResp = await request.post(`${API_URL}/e2e/cancel-platform-subscription`, {
+        headers: e2eHeaders(),
+        data: { username },
+      })
+      expect(cancelResp.status(), 'Cancel subscription must succeed').toBe(200)
+
+      // Now checkout should work
       const response = await request.post(`${API_URL}/billing/checkout`, {
         headers: { 'Authorization': `Bearer ${token}` },
       })
 
       // In stub mode, Stripe always returns a stubbed session - expect 200
-      expect(response.status(), 'Checkout must succeed in stub mode').toBe(200)
+      expect(response.status(), 'Checkout must succeed after trial canceled').toBe(200)
 
       const data = await response.json()
       expect(data).toHaveProperty('url')

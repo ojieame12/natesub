@@ -482,7 +482,7 @@ test.describe('Admin Revenue', () => {
   test('admin can view revenue summary', async ({ request }) => {
     test.skip(SKIP_ADMIN_TESTS, 'ADMIN_API_KEY required')
 
-    const response = await request.get(`${API_URL}/admin/revenue`, {
+    const response = await request.get(`${API_URL}/admin/revenue/overview`, {
       headers: adminHeaders(),
     })
 
@@ -496,7 +496,7 @@ test.describe('Admin Revenue', () => {
   test('admin can view revenue by period', async ({ request }) => {
     test.skip(SKIP_ADMIN_TESTS, 'ADMIN_API_KEY required')
 
-    const response = await request.get(`${API_URL}/admin/revenue?period=month`, {
+    const response = await request.get(`${API_URL}/admin/revenue/monthly?months=12`, {
       headers: adminHeaders(),
     })
 
@@ -516,8 +516,10 @@ test.describe.skip('Admin Jobs & Operations', () => {
   test('admin can view job status', async ({ request }) => {
     test.skip(SKIP_ADMIN_TESTS, 'ADMIN_API_KEY required')
 
-    const response = await request.get(`${API_URL}/admin/jobs`, {
-      headers: adminHeaders(),
+    const response = await request.get(`${API_URL}/jobs/health`, {
+      headers: {
+        'x-jobs-api-key': process.env.JOBS_API_KEY || 'test-jobs-api-key-for-ci-1234',
+      },
     })
 
     // STRICT: Must return 200 with valid admin auth
@@ -529,7 +531,7 @@ test.describe.skip('Admin Jobs & Operations', () => {
   test('admin can view webhook failures', async ({ request }) => {
     test.skip(SKIP_ADMIN_TESTS, 'ADMIN_API_KEY required')
 
-    const response = await request.get(`${API_URL}/admin/webhooks/failures`, {
+    const response = await request.get(`${API_URL}/admin/webhooks/failed`, {
       headers: adminHeaders(),
     })
 
