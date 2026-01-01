@@ -641,7 +641,7 @@ test.describe('Cron Jobs E2E (Strict)', () => {
       const response = await request.post(`${API_URL}/jobs/stats-backfill?days=7`, {
         headers: {
           ...jobsHeaders(),
-          'x-e2e-api-key': getE2eApiKey(),
+          'x-e2e-api-key': getE2EApiKey(),
         },
       })
 

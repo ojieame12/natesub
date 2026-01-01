@@ -227,6 +227,8 @@ jobs:
           PAYMENTS_MODE: stub
           E2E_MODE: 'true'
           E2E_API_KEY: e2e-local-dev-key
+          # Enable parallel execution - CI uses local Postgres with connection pooling
+          PW_WORKERS: 3
           JOBS_API_KEY: test-jobs-api-key-for-ci-1234
           JWT_SECRET: test-jwt-secret-key-for-ci-must-be-32-chars
           MAGIC_LINK_SECRET: test-magic-link-secret-for-ci-32chars
