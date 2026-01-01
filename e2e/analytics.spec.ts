@@ -53,7 +53,7 @@ async function setupCreatorWithProfile(
   })
 
   expect(profileResp.status(), 'Profile must be created').toBe(200)
-  const profile = await profileResp.json()
+  const { profile } = await profileResp.json()
 
   return {
     token,
