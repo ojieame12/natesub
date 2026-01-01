@@ -74,8 +74,16 @@ async function setupCreatorWithProfile(
 test.describe('Dashboard Overview', () => {
   test('dashboard loads for authenticated creator', async ({ page, request }) => {
     const { token } = await setupCreatorWithProfile(request, 'overview')
+
+    // Set auth cookie and navigate - need to go to a page first to set cookies
+    await page.goto('/')
     await setAuthCookie(page, token)
 
+    // Reload to pick up fresh auth state (clears React Query cache)
+    await page.reload()
+    await page.waitForLoadState('networkidle')
+
+    // Now navigate to dashboard
     await page.goto('/dashboard')
     await page.waitForLoadState('networkidle')
 
@@ -88,7 +96,12 @@ test.describe('Dashboard Overview', () => {
 
   test('dashboard shows subscriber count', async ({ page, request }) => {
     const { token, username } = await setupCreatorWithProfile(request, 'subcount')
+
+    // Set auth cookie and reload to clear cache
+    await page.goto('/')
     await setAuthCookie(page, token)
+    await page.reload()
+    await page.waitForLoadState('networkidle')
 
     // Seed a subscription
     await request.post(`${API_URL}/e2e/seed-subscription`, {
@@ -118,7 +131,10 @@ test.describe('Dashboard Overview', () => {
 
   test('dashboard shows revenue metrics', async ({ page, request }) => {
     const { token, username } = await setupCreatorWithProfile(request, 'revenue')
+    await page.goto('/')
     await setAuthCookie(page, token)
+    await page.reload()
+    await page.waitForLoadState('networkidle')
 
     // Seed a payment
     await request.post(`${API_URL}/e2e/seed-payment`, {
@@ -247,7 +263,10 @@ test.describe('Profile API', () => {
 test.describe('Page Editor', () => {
   test('edit page loads for creator', async ({ page, request }) => {
     const { token, username } = await setupCreatorWithProfile(request, 'editor')
+    await page.goto('/')
     await setAuthCookie(page, token)
+    await page.reload()
+    await page.waitForLoadState('networkidle')
 
     // Try to access page editor
     await page.goto('/edit-page')
@@ -267,7 +286,10 @@ test.describe('Page Editor', () => {
 
   test('can update display name via editor', async ({ page, request }) => {
     const { token } = await setupCreatorWithProfile(request, 'editname')
+    await page.goto('/')
     await setAuthCookie(page, token)
+    await page.reload()
+    await page.waitForLoadState('networkidle')
 
     await page.goto('/edit-page')
     await page.waitForLoadState('networkidle')
@@ -294,7 +316,10 @@ test.describe('Page Editor', () => {
 
   test('can update bio via editor', async ({ page, request }) => {
     const { token } = await setupCreatorWithProfile(request, 'editbio')
+    await page.goto('/')
     await setAuthCookie(page, token)
+    await page.reload()
+    await page.waitForLoadState('networkidle')
 
     await page.goto('/edit-page')
     await page.waitForLoadState('networkidle')
@@ -318,7 +343,10 @@ test.describe('Page Editor', () => {
 test.describe('Settings Pages', () => {
   test('settings page loads', async ({ page, request }) => {
     const { token } = await setupCreatorWithProfile(request, 'settingsui')
+    await page.goto('/')
     await setAuthCookie(page, token)
+    await page.reload()
+    await page.waitForLoadState('networkidle')
 
     await page.goto('/settings')
     await page.waitForLoadState('networkidle')
@@ -336,7 +364,10 @@ test.describe('Settings Pages', () => {
 
   test('notification settings accessible', async ({ page, request }) => {
     const { token } = await setupCreatorWithProfile(request, 'notif')
+    await page.goto('/')
     await setAuthCookie(page, token)
+    await page.reload()
+    await page.waitForLoadState('networkidle')
 
     // Try notification settings path
     await page.goto('/settings/notifications')
@@ -355,7 +386,10 @@ test.describe('Settings Pages', () => {
 
   test('payment settings accessible', async ({ page, request }) => {
     const { token } = await setupCreatorWithProfile(request, 'payset')
+    await page.goto('/')
     await setAuthCookie(page, token)
+    await page.reload()
+    await page.waitForLoadState('networkidle')
 
     // Try payment settings path
     await page.goto('/settings/payments')
@@ -416,7 +450,10 @@ test.describe('Subscriber List', () => {
 
   test('subscriber list UI shows subscribers', async ({ page, request }) => {
     const { token, username } = await setupCreatorWithProfile(request, 'sublistui')
+    await page.goto('/')
     await setAuthCookie(page, token)
+    await page.reload()
+    await page.waitForLoadState('networkidle')
 
     // Seed a subscription
     await request.post(`${API_URL}/e2e/seed-subscription`, {
@@ -484,7 +521,10 @@ test.describe('Pricing Management', () => {
 
   test('pricing page shows current config', async ({ page, request }) => {
     const { token } = await setupCreatorWithProfile(request, 'priceui')
+    await page.goto('/')
     await setAuthCookie(page, token)
+    await page.reload()
+    await page.waitForLoadState('networkidle')
 
     await page.goto('/edit-page')
     await page.waitForLoadState('networkidle')
@@ -508,7 +548,10 @@ test.describe('Pricing Management', () => {
 test.describe('Public Page Preview', () => {
   test('creator can preview their public page', async ({ page, request }) => {
     const { token, username } = await setupCreatorWithProfile(request, 'preview')
+    await page.goto('/')
     await setAuthCookie(page, token)
+    await page.reload()
+    await page.waitForLoadState('networkidle')
 
     // Visit own public page
     await page.goto(`/${username}`)
@@ -526,7 +569,10 @@ test.describe('Public Page Preview', () => {
 
   test('public page shows pricing', async ({ page, request }) => {
     const { token, username } = await setupCreatorWithProfile(request, 'pubprice')
+    await page.goto('/')
     await setAuthCookie(page, token)
+    await page.reload()
+    await page.waitForLoadState('networkidle')
 
     await page.goto(`/${username}`)
     await page.waitForLoadState('networkidle')
