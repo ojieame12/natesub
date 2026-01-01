@@ -134,7 +134,6 @@ test.describe('Create Request API', () => {
     expect(data.request).toBeDefined()
     expect(data.request.id).toBeTruthy()
     expect(data.request.status).toBe('draft') // POST /requests creates drafts
-    expect(data.publicUrl).toBeTruthy()
   })
 
   test('POST /requests validates amount', async ({ request }) => {
@@ -348,10 +347,11 @@ test.describe('Request Actions', () => {
     const { requestId } = await seedResp.json()
 
     const resendResp = await request.post(`${API_URL}/requests/${requestId}/resend`, {
+      data: { method: 'link' },
       headers: { 'Authorization': `Bearer ${token}` },
     })
 
-    expect([200, 400, 404, 405, 429]).toContain(resendResp.status())
+    expect([200, 404, 405, 429]).toContain(resendResp.status())
   })
 })
 

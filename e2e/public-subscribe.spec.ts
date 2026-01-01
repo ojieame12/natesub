@@ -90,6 +90,9 @@ async function setupPublicCreator(
     token = connectData.token
   }
 
+  // Ensure subsequent requests are anonymous (avoid self-subscribe 400)
+  await request.post(`${API_URL}/auth/logout`).catch(() => {})
+
   return { token, userId: user.id, email, username }
 }
 
