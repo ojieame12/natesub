@@ -100,8 +100,14 @@ test.describe('Dashboard Overview', () => {
     await page.goto('/dashboard')
     await page.waitForLoadState('networkidle')
 
+    // Wait up to 5 seconds for auth to load and routing to settle
+    await page.waitForTimeout(2000)
+
+    // If still on onboarding after wait, auth didn't work
+    const finalUrl = page.url()
+
     // Should stay on dashboard (not redirected)
-    expect(page.url()).toContain('dashboard')
+    expect(finalUrl).toContain('dashboard')
 
     // Should render without errors
     await expect(page.locator('body')).toBeVisible()
