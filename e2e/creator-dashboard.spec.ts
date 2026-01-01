@@ -95,22 +95,7 @@ test.describe('Dashboard Overview', () => {
     // Must go to a page first to access localStorage
     await page.goto('/')
 
-    await page.context().addCookies([
-      {
-        name: 'session',
-        value: token,
-        domain: 'localhost',
-        path: '/',
-        httpOnly: true,
-        secure: false,
-      },
-    ])
-
-    // Set session flag BEFORE navigating to dashboard
-    await page.evaluate(() => {
-      localStorage.setItem('nate_has_session', 'true')
-      sessionStorage.setItem('nate_has_session', 'true')
-    })
+    await setAuthCookie(page, token)
 
     // NOW navigate to dashboard - auth query will be enabled
     await page.goto('/dashboard')
