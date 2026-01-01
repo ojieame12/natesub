@@ -731,7 +731,11 @@ test.describe('Webhook Event Tracking', () => {
   })
 
   test('webhook processing time is tracked', async ({ request }) => {
-    await setupCreator(request, 'timing')
+    const { userId } = await setupCreator(request, 'timing', {
+      provider: 'paystack',
+      countryCode: 'NG',
+      currency: 'NGN',
+    })
 
     const webhookResp = await request.post(`${API_URL}/e2e/webhook/paystack`, {
       data: {
@@ -742,6 +746,15 @@ test.describe('Webhook Event Tracking', () => {
           amount: 100000,
           currency: 'NGN',
           status: 'success',
+          customer: {
+            id: Date.now(),
+            email: `timing-${Date.now()}@e2e.natepay.co`,
+            customer_code: `CUS_${Date.now()}`,
+          },
+          metadata: {
+            creatorId: userId,
+            interval: 'one_time',
+          },
         },
       },
       headers: e2eHeaders(),
