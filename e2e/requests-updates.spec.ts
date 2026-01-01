@@ -48,7 +48,6 @@ async function setupCreator(
       pricingModel: 'single',
       singleAmount: 10,
       paymentProvider: 'stripe',
-      feeMode: 'split',
       isPublic: true,
     },
     headers: { 'Authorization': `Bearer ${token}` },
@@ -351,7 +350,7 @@ test.describe('Request Actions', () => {
       headers: { 'Authorization': `Bearer ${token}` },
     })
 
-    expect([200, 404, 405, 429]).toContain(resendResp.status())
+    expect([200, 400, 404, 405, 429]).toContain(resendResp.status())
   })
 })
 

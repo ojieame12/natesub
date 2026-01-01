@@ -50,7 +50,6 @@ async function setupCreator(
       pricingModel: 'single',
       singleAmount: 10,
       paymentProvider: 'stripe',
-      feeMode: 'split',
       isPublic: true,
     },
     headers: { 'Authorization': `Bearer ${token}` },
@@ -159,7 +158,6 @@ test.describe('Salary Mode', () => {
           pricingModel: 'single',
           singleAmount: 5000,
           paymentProvider: 'paystack', // Not Stripe
-          feeMode: 'split',
           isPublic: true,
         },
         headers: { 'Authorization': `Bearer ${token}` },

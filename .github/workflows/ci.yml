@@ -230,7 +230,7 @@ jobs:
           # Enable parallel execution - CI uses local Postgres with connection pooling
           # 4 workers = ~22 tests per worker for shard 4 (~88 tests) = ~7min per shard
           PW_WORKERS: 4
-          JOBS_API_KEY: test-jobs-api-key-for-ci-1234
+          JOBS_API_KEY: test-jobs-api-key
           JWT_SECRET: test-jwt-secret-key-for-ci-must-be-32-chars
           MAGIC_LINK_SECRET: test-magic-link-secret-for-ci-32chars
           SESSION_SECRET: test-session-secret-for-ci-32chars!!

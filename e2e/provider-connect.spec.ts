@@ -42,7 +42,6 @@ test.describe('Stripe Connect', () => {
         pricingModel: 'single',
         singleAmount: 5,
         paymentProvider: 'stripe',
-        feeMode: 'split',
       },
       headers: { 'Authorization': `Bearer ${token}` },
     })
@@ -91,7 +90,6 @@ test.describe('Stripe Connect', () => {
         pricingModel: 'single',
         singleAmount: 5000,
         paymentProvider: 'paystack', // Should be Paystack for NG
-        feeMode: 'split',
       },
       headers: { 'Authorization': `Bearer ${token}` },
     })
@@ -124,7 +122,6 @@ test.describe('Stripe Connect', () => {
         pricingModel: 'single',
         singleAmount: 5,
         paymentProvider: 'stripe',
-        feeMode: 'split',
       },
       headers: { 'Authorization': `Bearer ${token}` },
     })
@@ -157,7 +154,6 @@ test.describe('Stripe Connect', () => {
         pricingModel: 'single',
         singleAmount: 5,
         paymentProvider: 'stripe',
-        feeMode: 'split',
       },
       headers: { 'Authorization': `Bearer ${token}` },
     })
@@ -297,7 +293,6 @@ test.describe('Paystack Connect', () => {
         pricingModel: 'single',
         singleAmount: 5000,
         paymentProvider: 'paystack',
-        feeMode: 'split',
       },
       headers: { 'Authorization': `Bearer ${token}` },
     })
@@ -330,7 +325,6 @@ test.describe('Paystack Connect', () => {
         pricingModel: 'single',
         singleAmount: 5000,
         paymentProvider: 'paystack',
-        feeMode: 'split',
       },
       headers: { 'Authorization': `Bearer ${token}` },
     })
@@ -374,7 +368,6 @@ test.describe('Paystack Connect', () => {
         pricingModel: 'single',
         singleAmount: 5000,
         paymentProvider: 'paystack',
-        feeMode: 'split',
       },
       headers: { 'Authorization': `Bearer ${token}` },
     })
@@ -527,7 +520,6 @@ test.describe('Payment Method Step (UI)', () => {
         pricingModel: 'single',
         singleAmount: 5,
         paymentProvider: 'stripe',
-        feeMode: 'split',
         isPublic: true,
       },
       headers: { 'Authorization': `Bearer ${token}` },
@@ -596,7 +588,6 @@ test.describe('Cross-Border Stripe (NG)', () => {
         pricingModel: 'single',
         singleAmount: 5000,
         paymentProvider: 'stripe', // NG can use Stripe in cross-border mode
-        feeMode: 'split',
       },
       headers: { 'Authorization': `Bearer ${token}` },
     })
@@ -640,7 +631,6 @@ test.describe('Connect Rate Limiting', () => {
         pricingModel: 'single',
         singleAmount: 5,
         paymentProvider: 'stripe',
-        feeMode: 'split',
       },
       headers: { 'Authorization': `Bearer ${token}` },
     })

@@ -50,7 +50,6 @@ async function setupCreatorWithSubscription(
       pricingModel: 'single',
       singleAmount: 10,
       paymentProvider: 'stripe',
-      feeMode: 'split',
       isPublic: true,
     },
     headers: { 'Authorization': `Bearer ${token}` },

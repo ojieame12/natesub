@@ -61,7 +61,6 @@ async function setupCreator(
       singleAmount: purpose === 'service' ? 100 : 10, // Service providers charge more
       perks,
       paymentProvider: 'stripe',
-      feeMode: 'split',
       isPublic: true,
       // Service profiles require 3 perks to publish
       ...(purpose === 'service' && {

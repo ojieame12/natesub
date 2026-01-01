@@ -46,7 +46,6 @@ async function setupServiceCreator(
       pricingModel: 'single',
       singleAmount: 100,
       paymentProvider: 'stripe',
-      feeMode: 'split',
       isPublic: true,
       perks: [
         { id: `perk_${ts}_1`, title: 'Monthly payroll summary', enabled: true },
@@ -131,7 +130,6 @@ test.describe('Payroll Periods API', () => {
         pricingModel: 'single',
         singleAmount: 100,
         paymentProvider: 'stripe',
-        feeMode: 'split',
         isPublic: true,
         perks: [
           { id: `perk_noaddr_${ts}_1`, title: 'Monthly payroll summary', enabled: true },

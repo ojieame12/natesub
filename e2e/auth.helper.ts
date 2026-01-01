@@ -257,7 +257,6 @@ export async function seedTestCreator(
       pricingModel: 'single',
       singleAmount,
       paymentProvider,
-      feeMode: 'split',
       isPublic, // Start as private, can be made public later
     },
     headers: {

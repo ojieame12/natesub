@@ -49,7 +49,6 @@ async function setupCreator(
       pricingModel: 'single',
       singleAmount: countryCode === 'NG' ? 5000 : 10,
       paymentProvider: provider,
-      feeMode: 'split',
       isPublic: true,
     },
     headers: { 'Authorization': `Bearer ${token}` },

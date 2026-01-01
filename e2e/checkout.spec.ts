@@ -34,7 +34,7 @@ test.describe('Subscription Checkout - Smoke Tests', () => {
 
   test('handles non-existent creator with 404', async ({ page }) => {
     // Visit a non-existent creator page
-    await page.goto('/nonexistentcreatorxyz12345')
+    await page.goto('/nonexistuser1')
 
     // Wait for the page to settle
     await page.waitForLoadState('networkidle')
@@ -47,7 +47,7 @@ test.describe('Subscription Checkout - Smoke Tests', () => {
                      content.includes('Page not found')
 
     // Either shows error or has navigated away
-    expect(hasError || page.url() !== '/nonexistentcreatorxyz12345').toBeTruthy()
+    expect(hasError || page.url() !== '/nonexistuser1').toBeTruthy()
   })
 
   test('reserved routes redirect properly', async ({ page }) => {
@@ -91,7 +91,7 @@ test.describe('Checkout Integration - API Level', () => {
     // Test that checkout correctly validates creator exists
     const response = await request.post('http://localhost:3001/checkout/session', {
       data: {
-        creatorUsername: 'nonexistentcreatorxyz12345',
+        creatorUsername: 'nonexistuser1',
         amount: 1000,
         interval: 'one_time',
         subscriberEmail: 'test@example.com',
@@ -166,7 +166,6 @@ test.describe('Checkout Integration - API Level', () => {
         pricingModel: 'single',
         singleAmount: 5, // $5.00 display → 500 cents stored
         paymentProvider: 'stripe',
-        feeMode: 'split',
         isPublic: true,
       },
       headers: {
@@ -243,7 +242,6 @@ test.describe('Checkout Integration - API Level', () => {
         pricingModel: 'single',
         singleAmount: 5,
         paymentProvider: 'stripe',
-        feeMode: 'split',
         isPublic: true,
       },
       headers: {
@@ -324,7 +322,6 @@ test.describe('Checkout Integration - API Level', () => {
         pricingModel: 'single',
         singleAmount: 5000,
         paymentProvider: 'paystack',
-        feeMode: 'split',
         isPublic: true,
       },
       headers: {
@@ -410,7 +407,6 @@ test.describe('Checkout Integration - API Level', () => {
         pricingModel: 'single',
         singleAmount: 5000, // ₦5,000 display → 500000 kobo stored
         paymentProvider: 'paystack',
-        feeMode: 'split',
         isPublic: true,
       },
       headers: {
@@ -540,7 +536,6 @@ test.describe('Checkout Validation - API Level', () => {
         pricingModel: 'single',
         singleAmount: 5,
         paymentProvider: 'stripe',
-        feeMode: 'split',
         isPublic: true,
       },
       headers: {
