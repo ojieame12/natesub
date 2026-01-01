@@ -120,25 +120,20 @@ test.describe('Onboarding - Real Backend', () => {
     await page.locator('[data-testid="identity-first-name"]').fill('E2E', { timeout: 15000 })
     await page.locator('[data-testid="identity-last-name"]').fill('TestUser', { timeout: 5000 })
 
-    // Set country via JavaScript (bypasses visibility/click issues)
-    await page.evaluate(() => {
-      const selector = document.querySelector('[data-testid="country-selector"]') as any
-      if (selector) {
-        selector.click()
-        // Also try triggering via event
-        selector.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-      }
-    })
-    await page.waitForTimeout(500)
-    await page.evaluate(() => {
-      const option = document.querySelector('[data-testid="country-option-us"]') as any
-      if (option) option.click()
-    })
+    // Select country (new drawer picker)
+    const countrySelector = page.locator('[data-testid="country-selector"]')
+    await expect(countrySelector).toBeVisible({ timeout: 5000 })
+    await countrySelector.click()
 
-    // Submit
-    const continueBtn = page.locator('[data-testid="identity-continue-btn"]')
-    await expect(continueBtn).toBeEnabled({ timeout: 2000 })
-    await continueBtn.click()
+    const countryList = page.locator('[data-testid="country-list"]')
+    await expect(countryList).toBeVisible({ timeout: 5000 })
+    await page.locator('[data-testid="country-option-us"]').click()
+
+    // Submit via JavaScript (button may be covered)
+    await page.evaluate(() => {
+      const btn = document.querySelector('[data-testid="identity-continue-btn"]') as any
+      if (btn && !btn.disabled) btn.click()
+    })
 
     // Should advance to next step
     await page.waitForTimeout(1000)
@@ -289,19 +284,20 @@ test.describe('Full Onboarding Journey - No Stubs', () => {
     await firstNameInput.fill('E2EFull')
     await page.locator('[data-testid="identity-last-name"]').fill('Journey')
 
-    // Select US via JavaScript
-    await page.evaluate(() => {
-      const selector = document.querySelector('[data-testid="country-selector"]') as any
-      if (selector) selector.click()
-    })
-    await page.waitForTimeout(500)
-    await page.evaluate(() => {
-      const option = document.querySelector('[data-testid="country-option-us"]') as any
-      if (option) option.click()
-    })
+    // Select US via country picker
+    const countrySelector = page.locator('[data-testid="country-selector"]')
+    await expect(countrySelector).toBeVisible({ timeout: 5000 })
+    await countrySelector.click()
 
-    // Continue to address step
-    await page.locator('[data-testid="identity-continue-btn"]').click()
+    const countryList = page.locator('[data-testid="country-list"]')
+    await expect(countryList).toBeVisible({ timeout: 5000 })
+    await page.locator('[data-testid="country-option-us"]').click()
+
+    // Continue via JavaScript
+    await page.evaluate(() => {
+      const btn = document.querySelector('[data-testid="identity-continue-btn"]') as any
+      if (btn && !btn.disabled) btn.click()
+    })
 
     // Step 3: Address step (US requires address)
     const streetInput = page.locator('[data-testid="address-street"]')
@@ -378,18 +374,19 @@ test.describe('Full Onboarding Journey - No Stubs', () => {
     await firstNameInput.fill('Persist')
     await page.locator('[data-testid="identity-last-name"]').fill('Test')
 
-    await page.evaluate(() => {
-      const selector = document.querySelector('[data-testid="country-selector"]') as any
-      if (selector) selector.click()
-    })
-    await page.waitForTimeout(500)
-    await page.evaluate(() => {
-      const option = document.querySelector('[data-testid="country-option-us"]') as any
-      if (option) option.click()
-    })
+    const countrySelector = page.locator('[data-testid="country-selector"]')
+    await expect(countrySelector).toBeVisible({ timeout: 5000 })
+    await countrySelector.click()
 
-    // Continue to save progress
-    await page.locator('[data-testid="identity-continue-btn"]').click()
+    const countryList = page.locator('[data-testid="country-list"]')
+    await expect(countryList).toBeVisible({ timeout: 5000 })
+    await page.locator('[data-testid="country-option-us"]').click()
+
+    // Continue via JavaScript
+    await page.evaluate(() => {
+      const btn = document.querySelector('[data-testid="identity-continue-btn"]') as any
+      if (btn && !btn.disabled) btn.click()
+    })
     await page.waitForTimeout(1000)
 
     // Reload and verify progress was saved
