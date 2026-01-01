@@ -75,7 +75,10 @@ test.describe('Dashboard Overview', () => {
   test('dashboard loads for authenticated creator', async ({ page, request }) => {
     const { token } = await setupCreatorWithProfile(request, 'overview')
 
-    // Set cookie BEFORE navigating to dashboard
+    // CRITICAL: Set cookie AND localStorage BEFORE navigating
+    // Must go to a page first to access localStorage
+    await page.goto('/')
+
     await page.context().addCookies([
       {
         name: 'session',
@@ -87,17 +90,14 @@ test.describe('Dashboard Overview', () => {
       },
     ])
 
-    // Navigate directly to dashboard with auth cookie set
-    await page.goto('/dashboard')
-
-    // Set session flag after page loads
+    // Set session flag BEFORE navigating to dashboard
     await page.evaluate(() => {
       localStorage.setItem('nate_has_session', 'true')
       sessionStorage.setItem('nate_has_session', 'true')
     })
 
-    // Reload to apply auth state
-    await page.reload()
+    // NOW navigate to dashboard - auth query will be enabled
+    await page.goto('/dashboard')
     await page.waitForLoadState('networkidle')
 
     // Should stay on dashboard (not redirected)
