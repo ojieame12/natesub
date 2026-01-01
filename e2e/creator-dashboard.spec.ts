@@ -75,25 +75,32 @@ test.describe('Dashboard Overview', () => {
   test('dashboard loads for authenticated creator', async ({ page, request }) => {
     const { token } = await setupCreatorWithProfile(request, 'overview')
 
-    // Set auth cookie and session flag - page must be loaded first
-    await page.goto('/')
-    await setAuthCookie(page, token)
+    // Set cookie BEFORE navigating to dashboard
+    await page.context().addCookies([
+      {
+        name: 'session',
+        value: token,
+        domain: 'localhost',
+        path: '/',
+        httpOnly: true,
+        secure: false,
+      },
+    ])
 
-    // Explicitly set session flag (frontend needs this to enable auth queries)
+    // Navigate directly to dashboard with auth cookie set
+    await page.goto('/dashboard')
+
+    // Set session flag after page loads
     await page.evaluate(() => {
       localStorage.setItem('nate_has_session', 'true')
       sessionStorage.setItem('nate_has_session', 'true')
     })
 
-    // Reload to pick up fresh auth state
+    // Reload to apply auth state
     await page.reload()
     await page.waitForLoadState('networkidle')
 
-    // Now navigate to dashboard
-    await page.goto('/dashboard')
-    await page.waitForLoadState('networkidle')
-
-    // Should be on dashboard (not redirected)
+    // Should stay on dashboard (not redirected)
     expect(page.url()).toContain('dashboard')
 
     // Should render without errors
