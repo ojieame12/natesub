@@ -404,7 +404,7 @@ test.describe('Admin Audit & Logs', () => {
   test('admin can view recent activities', async ({ request }) => {
     test.skip(SKIP_ADMIN_TESTS, 'ADMIN_API_KEY required')
 
-    const response = await request.get(`${API_URL}/admin/activities`, {
+    const response = await request.get(`${API_URL}/admin/activity`, {
       headers: adminHeaders(),
     })
 
