@@ -352,7 +352,9 @@ export default function SubscriberPortal() {
 
           {/* Error Message */}
           {error && (
-            <div style={{
+            <div
+              data-testid="portal-error"
+              style={{
               background: '#FEF2F2',
               border: '1px solid #FECACA',
               borderRadius: 12,
@@ -361,7 +363,8 @@ export default function SubscriberPortal() {
               display: 'flex',
               alignItems: 'center',
               gap: 10,
-            }}>
+            }}
+            >
               <AlertCircle size={18} color={COLORS.red} />
               <span style={{ fontSize: 14, color: '#991B1B', flex: 1 }}>{error}</span>
               <button

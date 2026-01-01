@@ -40,7 +40,7 @@ async function setupPublicCreator(
   const email = `public-creator-${suffix}-${ts}@e2e.natepay.co`
   const username = buildUsername('pub', suffix, ts)
 
-  const { token, user } = await e2eLogin(request, email)
+  let { token, user } = await e2eLogin(request, email)
 
   const profileData: Record<string, unknown> = {
     username,
@@ -82,6 +82,11 @@ async function setupPublicCreator(
   if (connectResp.status() !== 200) {
     const error = await connectResp.text()
     throw new Error(`Stripe connect failed: ${error}`)
+  }
+
+  const connectData = await connectResp.json().catch(() => null)
+  if (connectData?.token) {
+    token = connectData.token
   }
 
   return { token, userId: user.id, email, username }
@@ -154,16 +159,16 @@ test.describe('Public Page Loading', () => {
   })
 
   test('public page 404s for non-existent creator', async ({ page }) => {
-    await page.goto('/nonexistuser1')
+    const missingUsername = buildUsername('missing', 'creator', Date.now().toString().slice(-8))
+
+    await page.goto(`/${missingUsername}`)
     await page.waitForLoadState('networkidle')
 
-    const content = await page.content()
-    const has404 =
-      content.toLowerCase().includes('not found') ||
-      content.toLowerCase().includes('404') ||
-      content.toLowerCase().includes("doesn't exist")
+    const notFoundContainer = page.locator('.sub-not-found')
+    const hasNotFound = await notFoundContainer.isVisible({ timeout: 5000 }).catch(() => false)
+    const redirected = !page.url().includes(missingUsername)
 
-    expect(has404 || !page.url().includes('nonexistuser1')).toBeTruthy()
+    expect(hasNotFound || redirected).toBeTruthy()
   })
 
   test('private profile is not publicly accessible', async ({ page, request }) => {
@@ -371,7 +376,7 @@ test.describe('Checkout Flow UI', () => {
 
 test.describe('One-Time Payments', () => {
   test('checkout supports one-time payment', async ({ request }) => {
-    const { username } = await setupPublicCreator(request, 'onetime')
+    const { username } = await setupPublicCreator(request, 'onetime', { amount: 10 })
 
     const response = await request.post(`${API_URL}/checkout/session`, {
       data: {
@@ -515,7 +520,7 @@ test.describe('Public Page Accessibility', () => {
 
     // Check for h1
     const h1 = page.locator('h1')
-    const hasH1 = await h1.first().isVisible({ timeout: 3000 }).catch(() => false)
+    const hasH1 = await h1.first().isVisible({ timeout: 5000 }).catch(() => false)
 
     // Should have some heading
     expect(hasH1).toBeTruthy()

@@ -579,13 +579,14 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                 }}>
                     <div>
                         {/* Creator Name */}
-                        <div style={{
+                        <h1 style={{
                             fontSize: 16,
                             color: COLORS.neutral500,
                             fontWeight: 400,
+                            margin: 0,
                         }}>
                             {profile.displayName || profile.username || 'Creator'}
-                        </div>
+                        </h1>
 
                         {/* Price */}
                         <div style={{

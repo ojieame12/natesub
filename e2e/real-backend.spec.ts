@@ -987,8 +987,8 @@ test.describe('Subscriber Portal - Real Backend (Always-On)', () => {
       await page.waitForTimeout(1500)
 
       // Should show error for invalid OTP
-      const hasError = await page.locator('text=Invalid').or(page.locator('text=invalid').or(page.locator('text=incorrect'))).isVisible().catch(() => false)
-      expect(hasError, 'Invalid OTP should show error').toBeTruthy()
+      const errorBanner = page.locator('[data-testid="portal-error"]')
+      await expect(errorBanner, 'Invalid OTP should show error').toBeVisible({ timeout: 5000 })
     }
   })
 })

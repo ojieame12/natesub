@@ -533,19 +533,19 @@ test.describe('Pricing Management', () => {
     const { token } = await setupCreatorWithProfile(request, 'updateprice')
 
     // Update to tiered pricing
-    const response = await request.put(`${API_URL}/profile`, {
+    const response = await request.patch(`${API_URL}/profile`, {
       data: {
         pricingModel: 'tiers',
         tiers: [
-          { name: 'Basic', amount: 500, perks: ['Perk 1'] },
-          { name: 'Pro', amount: 1000, perks: ['Perk 1', 'Perk 2'] },
+          { id: 'tier_basic', name: 'Basic', amount: 500, perks: ['Perk 1'] },
+          { id: 'tier_pro', name: 'Pro', amount: 1000, perks: ['Perk 1', 'Perk 2'] },
         ],
       },
       headers: { 'Authorization': `Bearer ${token}` },
     })
 
-    // May succeed or fail validation depending on schema
-    expect([200, 400]).toContain(response.status())
+    // Should accept partial updates via PATCH
+    expect(response.status()).toBe(200)
   })
 
   test('pricing page shows current config', async ({ page, request }) => {
