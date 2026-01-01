@@ -5,6 +5,7 @@ import { Prisma } from '@prisma/client'
 import { db } from '../db/client.js'
 import { env } from '../config/env.js'
 import { requireAuth } from '../middleware/auth.js'
+import { clearOnboardingState } from '../services/auth.js'
 import { publicStrictRateLimit, publicRateLimit, aiRateLimit } from '../middleware/rateLimit.js'
 import { sendWelcomeEmail } from '../services/email.js'
 import { cancelOnboardingReminders } from '../jobs/reminders.js'
@@ -22,12 +23,10 @@ import {
   profileSchema,
   profilePatchSchema,
   templateSchema,
-  type Profile,
-  type ProfilePatch
 } from '../schemas/profile.js'
 import { invalidatePublicProfileCache } from '../utils/cache.js'
 import { generateBanner } from '../services/ai/bannerGenerator.js'
-import { generatePerks, inferServiceType, validatePerks, type Perk } from '../services/ai/perksGenerator.js'
+import { generatePerks, inferServiceType } from '../services/ai/perksGenerator.js'
 
 const profile = new Hono()
 
@@ -87,7 +86,6 @@ profile.put(
 
     // Check if this is a new profile or a publish transition
     const currentProfile = await db.profile.findUnique({ where: { userId } })
-    const isNewProfile = !currentProfile
     const isPublishTransition = data.isPublic === true && (!currentProfile || !currentProfile.isPublic)
 
     // Normalize currency for consistent handling
@@ -97,7 +95,6 @@ profile.put(
     // Stripe handles currency conversion for cross-border payouts
     // The platform collects payments in the creator's chosen currency
     const paymentProvider = data.paymentProvider || null
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const _isCrossBorder = isStripeCrossBorderSupported(data.countryCode) && paymentProvider !== 'paystack'
     // Currency validation is now just minimum amount checks (below)
 
@@ -179,6 +176,10 @@ profile.put(
     // Invalidate public profile cache so public pages show fresh data
     await invalidatePublicProfileCache(updatedProfile.username)
 
+    // Clear onboarding state now that profile is created
+    // This prevents RequireAuth from redirecting authenticated users back to /onboarding
+    await clearOnboardingState(userId)
+
     // Send welcome email only when profile is first published (not on creation)
     // This ensures users don't get the welcome email until they click "Launch My Page"
     if (isPublishTransition && user) {
@@ -227,9 +228,6 @@ profile.patch(
 
     // Cross-border Stripe creators can use any Stripe-supported currency
     // (See PUT handler for details - Stripe handles currency conversion for payouts)
-    const newCountryCode = data.countryCode?.toUpperCase() || existingProfile.countryCode
-    const newCurrency = data.currency?.toUpperCase() || existingProfile.currency
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const _newPaymentProvider = data.paymentProvider !== undefined ? data.paymentProvider : existingProfile.paymentProvider
 
     const updateData: Prisma.ProfileUpdateInput = {}
