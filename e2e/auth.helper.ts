@@ -128,16 +128,6 @@ export async function e2eLogin(request: APIRequestContext, email: string): Promi
  * Set auth cookie in browser context
  */
 export async function setAuthCookie(page: Page, token: string) {
-  // Clear any stale auth data from localStorage (if page has loaded)
-  try {
-    await page.evaluate(() => {
-      localStorage.removeItem('auth_token')
-      localStorage.removeItem('auth_session')
-    })
-  } catch {
-    // Ignore SecurityError if page hasn't loaded yet
-  }
-
   await page.context().addCookies([
     {
       name: 'session',
@@ -148,6 +138,17 @@ export async function setAuthCookie(page: Page, token: string) {
       secure: false,
     },
   ])
+
+  // Set auth session flag in localStorage so frontend enables auth queries
+  // Frontend checks hasAuthSession() which reads from localStorage
+  try {
+    await page.evaluate(() => {
+      localStorage.setItem('auth_session', 'true')
+      sessionStorage.setItem('auth_session', 'true')
+    })
+  } catch {
+    // Ignore SecurityError if page hasn't loaded yet - will be set on page load
+  }
 }
 
 export interface SeedCreatorOptions {
