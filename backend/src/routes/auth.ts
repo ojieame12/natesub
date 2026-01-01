@@ -212,7 +212,7 @@ auth.get('/me', requireAuth, async (c) => {
 
   // E2E debugging - log onboarding state
   if (process.env.E2E_MODE === 'true') {
-    console.log(`[auth/me] User ${userId}: hasProfile=${onboarding.hasProfile}, step=${user.onboardingStep}, redirectTo=${onboarding.redirectTo}`)
+    console.log(`[auth/me] User ${userId}: hasProfile=${onboarding.hasProfile}, hasActivePayment=${onboarding.hasActivePayment}, step=${user.onboardingStep}, payoutStatus=${user.profile?.payoutStatus}, redirectTo=${onboarding.redirectTo}`)
   }
 
   // Only return necessary profile fields to avoid exposing internal data
