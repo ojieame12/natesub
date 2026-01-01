@@ -195,10 +195,12 @@ test.describe('Public Page Loading', () => {
 // ============================================
 
 test.describe('Checkout Initiation', () => {
-  test('checkout session API creates valid session', async ({ request }) => {
+  test('checkout session API creates valid session', async ({ request, playwright }) => {
     const { username } = await setupPublicCreator(request, 'checkout')
 
-    const response = await request.post(`${API_URL}/checkout/session`, {
+    // Create fresh request context without auth cookies (to avoid self-subscribe error)
+    const freshContext = await playwright.request.newContext()
+    const response = await freshContext.post(`${API_URL}/checkout/session`, {
       data: {
         creatorUsername: username,
         subscriberEmail: `checkout-test-${Date.now()}@e2e.com`,
@@ -209,6 +211,10 @@ test.describe('Checkout Initiation', () => {
       headers: { 'Content-Type': 'application/json' },
     })
 
+    if (response.status() !== 200) {
+      const error = await response.json()
+      console.error('Checkout error:', error)
+    }
     expect(response.status()).toBe(200)
     const data = await response.json()
 
@@ -376,10 +382,11 @@ test.describe('Checkout Flow UI', () => {
 // ============================================
 
 test.describe('One-Time Payments', () => {
-  test('checkout supports one-time payment', async ({ request }) => {
+  test('checkout supports one-time payment', async ({ request, playwright }) => {
     const { username } = await setupPublicCreator(request, 'onetime', { amount: 10 })
 
-    const response = await request.post(`${API_URL}/checkout/session`, {
+    const freshContext = await playwright.request.newContext()
+    const response = await freshContext.post(`${API_URL}/checkout/session`, {
       data: {
         creatorUsername: username,
         subscriberEmail: `onetime-${Date.now()}@test.com`,
@@ -401,11 +408,12 @@ test.describe('One-Time Payments', () => {
 // ============================================
 
 test.describe('Checkout Return Pages', () => {
-  test('success page handles valid session', async ({ page, request }) => {
+  test('success page handles valid session', async ({ page, request, playwright }) => {
     const { username } = await setupPublicCreator(request, 'success')
 
-    // Create a checkout session
-    const checkoutResp = await request.post(`${API_URL}/checkout/session`, {
+    // Create a checkout session (use fresh context to avoid self-subscribe error)
+    const freshContext = await playwright.request.newContext()
+    const checkoutResp = await freshContext.post(`${API_URL}/checkout/session`, {
       data: {
         creatorUsername: username,
         subscriberEmail: `success-${Date.now()}@test.com`,
