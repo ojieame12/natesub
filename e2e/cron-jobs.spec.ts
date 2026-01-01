@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { e2eLogin, deterministicEmail } from './auth.helper'
+import { buildUsername, seedTestCreator } from './auth.helper'
 
 /**
  * Cron/Time-Based Jobs E2E Tests (Strict Mode)
@@ -17,19 +17,19 @@ import { e2eLogin, deterministicEmail } from './auth.helper'
 const API_URL = 'http://localhost:3001'
 
 // JOBS_API_KEY for job endpoints (matches playwright.config.ts)
-const JOBS_API_KEY = process.env.JOBS_API_KEY || 'test-jobs-api-key'
+const getJobsApiKey = () => process.env.JOBS_API_KEY || 'test-jobs-api-key'
 
 // E2E API key for helper endpoints (matches playwright.config.ts)
-const E2E_API_KEY = process.env.E2E_API_KEY || 'e2e-local-dev-key'
+const getE2eApiKey = () => process.env.E2E_API_KEY || 'e2e-local-dev-key'
 
 // Helper headers
 const jobsHeaders = () => ({
-  'x-jobs-api-key': JOBS_API_KEY || '',
+  'x-jobs-api-key': getJobsApiKey() || '',
   'Content-Type': 'application/json',
 })
 
 const e2eHeaders = () => ({
-  'x-e2e-api-key': E2E_API_KEY || '',
+  'x-e2e-api-key': getE2eApiKey() || '',
   'Content-Type': 'application/json',
 })
 
@@ -61,7 +61,7 @@ async function callJobEndpoint(
   const headers = {
     ...jobsHeaders(),
     // Time override requires E2E API key (jobs.ts validates this)
-    'x-e2e-api-key': E2E_API_KEY,
+    'x-e2e-api-key': getE2eApiKey(),
   }
 
   if (method === 'GET') {
@@ -171,7 +171,10 @@ async function getSessionCount(
  * Cleanup E2E test data
  */
 async function cleanupE2EData(request: import('@playwright/test').APIRequestContext) {
-  return request.post(`${API_URL}/e2e/cleanup`, { headers: e2eHeaders() })
+  return request.post(`${API_URL}/e2e/cleanup`, {
+    headers: e2eHeaders(),
+    data: {},
+  })
 }
 
 /**
@@ -182,32 +185,24 @@ async function setupCreator(
   email: string,
   username: string
 ) {
-  const { token, user } = await e2eLogin(request, email)
-
-  const profileResp = await request.put(`${API_URL}/profile`, {
-    data: {
-      username,
-      displayName: 'Cron Test Creator',
-      country: 'United States',
-      countryCode: 'US',
-      currency: 'USD',
-      purpose: 'support',
-      pricingModel: 'single',
-      singleAmount: 5,
-      paymentProvider: 'stripe',
-      feeMode: 'split',
-      isPublic: true,
-    },
-    headers: { 'Authorization': `Bearer ${token}` },
+  const { token, user, profileCreated } = await seedTestCreator(request, {
+    email,
+    username,
+    displayName: 'Cron Test Creator',
+    country: 'US',
+    paymentProvider: 'stripe',
+    singleAmount: 5,
+    purpose: 'support',
+    isPublic: false,
   })
 
-  if (profileResp.ok()) {
+  if (profileCreated) {
     await request.post(`${API_URL}/stripe/connect`, {
       headers: { 'Authorization': `Bearer ${token}` },
     })
   }
 
-  return { token, userId: user.id, profileOk: profileResp.ok() }
+  return { token, userId: user.id, profileOk: profileCreated }
 }
 
 /**
@@ -254,7 +249,7 @@ async function getSubscription(
 test.describe('Cron Jobs E2E (Strict)', () => {
   // STRICT: Verify JOBS_API_KEY is configured before running tests
   test.beforeAll(async ({ request }) => {
-    if (!JOBS_API_KEY) {
+    if (!getJobsApiKey()) {
       throw new Error('JOBS_API_KEY environment variable is required for cron job tests')
     }
 
@@ -276,7 +271,7 @@ test.describe('Cron Jobs E2E (Strict)', () => {
     test('processes scheduled reminder and marks as sent', async ({ request }) => {
       const ts = Date.now().toString().slice(-8)
       const creatorEmail = `cron-rem-${ts}@e2e.natepay.co`
-      const creatorUsername = `cronrem${ts}`
+      const creatorUsername = buildUsername('cronrem', '', ts)
 
       // Step 1: Setup creator
       const { userId, profileOk } = await setupCreator(request, creatorEmail, creatorUsername)
@@ -329,7 +324,7 @@ test.describe('Cron Jobs E2E (Strict)', () => {
     test('uses time override for deterministic processing', async ({ request }) => {
       const ts = Date.now().toString().slice(-8)
       const creatorEmail = `cron-time-${ts}@e2e.natepay.co`
-      const creatorUsername = `crontime${ts}`
+      const creatorUsername = buildUsername('crontime', '', ts)
 
       // Setup creator
       const { userId, profileOk } = await setupCreator(request, creatorEmail, creatorUsername)
@@ -374,7 +369,7 @@ test.describe('Cron Jobs E2E (Strict)', () => {
     test('deduplication prevents double-send', async ({ request }) => {
       const ts = Date.now().toString().slice(-8)
       const creatorEmail = `cron-dedup-${ts}@e2e.natepay.co`
-      const creatorUsername = `crondedup${ts}`
+      const creatorUsername = buildUsername('crondedup', '', ts)
 
       // Setup
       const { userId, profileOk } = await setupCreator(request, creatorEmail, creatorUsername)
@@ -422,7 +417,7 @@ test.describe('Cron Jobs E2E (Strict)', () => {
     test('cleanup-pageviews removes old pageviews', async ({ request }) => {
       const ts = Date.now().toString().slice(-8)
       const creatorEmail = `cron-pv-${ts}@e2e.natepay.co`
-      const creatorUsername = `cronpv${ts}`
+      const creatorUsername = buildUsername('cronpv', '', ts)
 
       // Setup creator
       const { profileOk } = await setupCreator(request, creatorEmail, creatorUsername)
@@ -499,7 +494,7 @@ test.describe('Cron Jobs E2E (Strict)', () => {
     test('cancellations job processes past-period-end subscriptions', async ({ request }) => {
       const ts = Date.now().toString().slice(-8)
       const creatorEmail = `cron-cancel-${ts}@e2e.natepay.co`
-      const creatorUsername = `croncanc${ts}`
+      const creatorUsername = buildUsername('croncanc', '', ts)
 
       // Setup creator
       const { profileOk } = await setupCreator(request, creatorEmail, creatorUsername)

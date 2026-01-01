@@ -42,7 +42,7 @@ import crypto from 'crypto'
 import { env } from '../config/env.js'
 import { db } from '../db/client.js'
 import { redis } from '../db/redis.js'
-import { stripeCircuitBreaker, CircuitBreakerError } from '../utils/circuitBreaker.js'
+import { stripeCircuitBreaker } from '../utils/circuitBreaker.js'
 import { isStripeCrossBorderSupported } from '../utils/constants.js'
 
 // Cache TTL for Stripe account status (5 minutes)
@@ -263,7 +263,7 @@ export async function getAccountStatus(stripeAccountId: string, options: { skipB
       if (cached && typeof cached === 'string') {
         return JSON.parse(cached)
       }
-    } catch (err) {
+    } catch {
       // Cache miss or error - continue to API call
     }
   }
@@ -743,7 +743,7 @@ export async function getChargeFxData(chargeId: string, stripeAccountId: string)
           { expand: ['balance_transaction'] },
           { stripeAccount: stripeAccountId }
         )
-      } catch (err) {
+      } catch {
         console.log(`[getChargeFxData] Fallback fetch failed for destination_payment ${transfer.destination_payment}`)
         return { status: 'error' }
       }
@@ -765,7 +765,7 @@ export async function getChargeFxData(chargeId: string, stripeAccountId: string)
           {},
           { stripeAccount: stripeAccountId }
         )
-      } catch (err) {
+      } catch {
         console.log(`[getChargeFxData] Fallback fetch failed for balance_transaction`)
         return { status: 'error' }
       }

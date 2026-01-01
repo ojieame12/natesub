@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { e2eLogin, setAuthCookie, deterministicEmail, buildUsername } from './auth.helper'
+import { setAuthCookie, buildUsername, seedTestCreator } from './auth.helper'
 
 /**
  * Creator Dashboard E2E Tests
@@ -17,7 +17,7 @@ import { e2eLogin, setAuthCookie, deterministicEmail, buildUsername } from './au
 const API_URL = 'http://localhost:3001'
 
 // E2E API key for helper endpoints
-const E2E_API_KEY = process.env.E2E_API_KEY
+const E2E_API_KEY = process.env.E2E_API_KEY || 'e2e-local-dev-key'
 const e2eHeaders = () => ({
   'x-e2e-api-key': E2E_API_KEY || '',
   'Content-Type': 'application/json',
@@ -35,28 +35,19 @@ async function setupCreatorWithProfile(
   const email = `creator-dash-${suffix}-${ts}@e2e.natepay.co`
   const username = buildUsername('dash', suffix, ts)
 
-  const { token, user } = await e2eLogin(request, email)
-
-  const profileResp = await request.put(`${API_URL}/profile`, {
-    data: {
-      username,
-      displayName: `Dashboard Test ${suffix}`,
-      country: 'United States',
-      countryCode: 'US',
-      currency: 'USD',
-      purpose: 'support',
-      pricingModel: 'single',
-      singleAmount: 5,
-      paymentProvider: 'stripe',
-      feeMode: 'split',
-      isPublic: true,
-      bio: 'Test bio for E2E',
-    },
-    headers: { 'Authorization': `Bearer ${token}` },
+  const { token, user, profileCreated, username: createdUsername } = await seedTestCreator(request, {
+    email,
+    username,
+    displayName: `Dashboard Test ${suffix}`,
+    country: 'US',
+    paymentProvider: 'stripe',
+    singleAmount: 5,
+    purpose: 'support',
+    isPublic: false,
   })
 
-  if (profileResp.status() !== 200) {
-    throw new Error(`Profile creation failed: ${await profileResp.text()}`)
+  if (!profileCreated) {
+    throw new Error('Profile creation failed in seedTestCreator')
   }
 
   // Connect Stripe
@@ -64,7 +55,20 @@ async function setupCreatorWithProfile(
     headers: { 'Authorization': `Bearer ${token}` },
   })
 
-  return { token, userId: user.id, email, username }
+  // Clear onboarding state so /auth/me redirects to dashboard
+  await request.put(`${API_URL}/auth/onboarding`, {
+    data: {
+      step: 12,
+      stepKey: 'review',
+      data: {
+        countryCode: 'US',
+        purpose: 'support',
+      },
+    },
+    headers: { 'Authorization': `Bearer ${token}` },
+  })
+
+  return { token, userId: user.id, email, username: createdUsername }
 }
 
 // ============================================

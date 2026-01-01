@@ -7,16 +7,17 @@ class MockRedis {
 
   async get(key: string) { return this.store.get(key) || null }
   async set(key: string, val: string) { this.store.set(key, val); return 'OK' }
-  async setex(key: string, ttl: number, val: string) { this.store.set(key, val); return 'OK' }
+  async setex(key: string, _ttl: number, val: string) { this.store.set(key, val); return 'OK' }
   async incr(key: string) {
     const val = parseInt(this.store.get(key) || '0') + 1
     this.store.set(key, val.toString())
     return val
   }
-  async expire(key: string, ttl: number) { return 1 }
-  async ttl(key: string) { return -1 }
+  async expire(_key: string, _ttl: number) { return 1 }
+  async ttl(_key: string) { return -1 }
   async ping() { return 'PONG' }
-  on(event: string, cb: any) { if(event==='connect') cb() }
+  async quit() { return 'OK' }
+  on(event: string, cb: (...args: unknown[]) => void) { if (event === 'connect') cb() }
 
   /**
    * Delete one or more keys
@@ -61,7 +62,7 @@ class MockRedis {
   }
 }
 
-let redisClient: Redis | any
+let redisClient: Redis
 
 // Enterprise Requirement: Redis is critical for rate limits, locks, and idempotency.
 // In production, we must fail fast if Redis is missing to prevent unsafe operation.
@@ -79,7 +80,7 @@ if (env.REDIS_URL) {
     },
   })
 
-  redisClient.on('error', (err: any) => {
+  redisClient.on('error', (err: unknown) => {
     console.error('Redis connection error:', err)
   })
 
@@ -88,7 +89,7 @@ if (env.REDIS_URL) {
   })
 } else {
   console.warn('⚠️ REDIS_URL not set. Using in-memory mock (rate limits will not persist).')
-  redisClient = new MockRedis()
+  redisClient = new MockRedis() as unknown as Redis
 }
 
 export const redis = redisClient

@@ -10,10 +10,9 @@
 // - US/Other: Email > SMS > WhatsApp
 
 import { db } from '../db/client.js'
-import { isSmsEnabled, shouldUseSms, sendPaymentReceivedSms, sendPayoutCompletedSms, sendPayoutFailedSms } from './sms.js'
-import { isWhatsAppEnabled, shouldUseWhatsApp, sendNewSubscriberWhatsApp, sendPaymentReceivedWhatsApp, sendPayoutSentWhatsApp, sendPayoutFailedWhatsApp } from './whatsapp.js'
+import { isSmsEnabled, sendPaymentReceivedSms, sendPayoutCompletedSms, sendPayoutFailedSms } from './sms.js'
+import { isWhatsAppEnabled, sendNewSubscriberWhatsApp, sendPaymentReceivedWhatsApp, sendPayoutSentWhatsApp, sendPayoutFailedWhatsApp } from './whatsapp.js'
 import { sendNewSubscriberEmail, sendPayoutCompletedEmail, sendPayoutFailedEmail } from './email.js'
-import { centsToDisplayAmount, isZeroDecimalCurrency } from '../utils/currency.js'
 
 // ============================================
 // TYPES

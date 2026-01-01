@@ -69,17 +69,18 @@ export default function Terms() {
                     <h2>4. Fees and Payments</h2>
                     <p>
                         NatePay charges a service fee on transactions processed through our platform.
-                        Fee rates vary based on your account type and are disclosed before you
-                        complete your profile setup.
+                        Fee rates and any subscription charges are disclosed in the product before you
+                        publish or accept payments.
                     </p>
                     <h3>Fee Structure (Split Model)</h3>
                     <p>
-                        NatePay uses a split fee model where the 9% service fee is shared equally
-                        between subscribers and creators:
+                        NatePay uses a split fee model where the 9% service fee is shared between
+                        subscribers and creators. The total shown at checkout includes the subscriber
+                        portion, and creator payouts are reduced by the creator portion.
                     </p>
                     <ul>
-                        <li>Subscribers pay 4.5% on top of the creator's set price</li>
-                        <li>Creators pay 4.5% deducted from their payout</li>
+                        <li>Each side currently pays 4.5% of the creator's set price</li>
+                        <li>The final total is shown before the subscriber confirms payment</li>
                     </ul>
                     <h3>Service Providers</h3>
                     <p>
@@ -92,8 +93,8 @@ export default function Terms() {
                     </p>
                     <p>
                         For international transactions, an additional 1.5% processing buffer may apply
-                        to cover cross-border payment costs. Payment processing fees are included in the
-                        platform fee and are not charged separately.
+                        to cover cross-border payment costs. The final total shown at checkout reflects
+                        any applicable buffer.
                     </p>
                 </section>
 

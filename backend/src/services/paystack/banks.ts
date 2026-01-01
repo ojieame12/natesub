@@ -1,6 +1,7 @@
 // Paystack Bank Operations
 // - List banks, resolve account, validate account
 
+import { env } from '../../config/env.js'
 import { paystackFetch, type Bank, type ResolvedAccount, type PaystackCountry } from './client.js'
 
 // Bank list cache - banks don't change often, cache for 6 hours
@@ -9,6 +10,27 @@ const bankListCache = new Map<string, { data: Bank[]; expiresAt: number }>()
 
 // List banks for a country (with caching)
 export async function listBanks(country: PaystackCountry): Promise<Bank[]> {
+  if (env.PAYMENTS_MODE === 'stub') {
+    const currencyMap: Record<PaystackCountry, string> = {
+      NG: 'NGN',
+      KE: 'KES',
+      ZA: 'ZAR',
+    }
+    return [
+      {
+        id: 1,
+        name: `Stub Bank ${country}`,
+        slug: `stub-bank-${country.toLowerCase()}`,
+        code: '000',
+        longcode: '000000',
+        country,
+        currency: currencyMap[country],
+        type: 'nuban',
+        active: true,
+      },
+    ]
+  }
+
   // Check cache first
   const cached = bankListCache.get(country)
   if (cached && Date.now() < cached.expiresAt) {

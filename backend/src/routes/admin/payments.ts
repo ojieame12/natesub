@@ -32,7 +32,6 @@ payments.get('/', auditSensitiveRead('payment_list'), async (c) => {
   }).parse(c.req.query())
 
   const { skip, take } = getPaginationOffsets(query)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const where: any = { type: { in: ['recurring', 'one_time'] } }
 
   if (query.status !== 'all') where.status = query.status

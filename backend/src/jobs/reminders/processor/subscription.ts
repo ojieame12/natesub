@@ -23,7 +23,7 @@ import { generateCancelUrl, generateManageUrl } from '../../../utils/cancelToken
 
 export async function processSubscriptionRenewalReminder(
   subscriptionId: string,
-  daysUntilRenewal: number
+  _daysUntilRenewal: number
 ): Promise<boolean> {
   const subscription = await db.subscription.findUnique({
     where: { id: subscriptionId },

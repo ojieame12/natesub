@@ -595,7 +595,7 @@ checkout.get(
       if (email) {
         try {
           maskedEmail = maskEmail(email)
-        } catch (e) {
+        } catch {
           // Fallback if maskEmail fails
           const [local, domain] = email.split('@')
           maskedEmail = `${local.charAt(0)}***@${domain}`

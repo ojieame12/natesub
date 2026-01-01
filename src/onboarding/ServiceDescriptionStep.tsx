@@ -41,13 +41,13 @@ export default function ServiceDescriptionStep() {
     if (!userHasEditedPrice.current && singleAmount && singleAmount !== parseFloat(localPrice)) {
       setLocalPrice(String(singleAmount))
     }
-  }, [singleAmount])
+  }, [singleAmount, localPrice])
 
   useEffect(() => {
     if (!userHasEditedDescription.current && serviceDescription && serviceDescription !== localDescription) {
       setLocalDescription(serviceDescription)
     }
-  }, [serviceDescription])
+  }, [serviceDescription, localDescription])
 
   // Rotate placeholder on mount
   const [placeholderIndex] = useState(() => Math.floor(Math.random() * PLACEHOLDER_EXAMPLES.length))

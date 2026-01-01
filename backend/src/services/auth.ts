@@ -1,5 +1,4 @@
-import { createHash, createHmac, randomBytes } from 'crypto'
-import { nanoid } from 'nanoid'
+import { createHmac, randomBytes } from 'crypto'
 import { Prisma } from '@prisma/client'
 import { db } from '../db/client.js'
 import { redis } from '../db/redis.js'

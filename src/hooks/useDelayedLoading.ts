@@ -26,6 +26,7 @@ export function useDelayedLoading(isLoading: boolean, delay = 200): boolean {
   const [showSkeleton, setShowSkeleton] = useState(false)
   const isRestoring = useIsRestoring()
 
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     // Never show skeleton while cache is restoring (hydration in progress)
     if (isRestoring) {
@@ -45,6 +46,7 @@ export function useDelayedLoading(isLoading: boolean, delay = 200): boolean {
 
     return () => clearTimeout(timer)
   }, [isLoading, isRestoring, delay])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Never show skeleton during restoration
   return showSkeleton && !isRestoring

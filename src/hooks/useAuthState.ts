@@ -15,7 +15,7 @@
 
 import { useMemo } from 'react'
 import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query'
-import { api } from '../api/client'
+import { api, type ApiError, type OnboardingState, type Profile, type User } from '../api/client'
 import { getAuthToken, hasAuthSession, clearAuthSession } from '../api/client'
 import { hasRecentPaymentConfirmation } from '../utils/paymentConfirmed'
 import { queryKeys } from '../api/queryKeys'
@@ -32,22 +32,10 @@ export interface AuthState {
   status: AuthStatus
 
   /** User data (only available when authenticated) */
-  user: {
-    id: string
-    email: string
-    profile: any | null
-    createdAt: string | null
-  } | null
+  user: Pick<User, 'id' | 'email' | 'createdAt'> & { profile: Profile | null } | null
 
   /** Onboarding state for routing decisions */
-  onboarding: {
-    hasProfile: boolean
-    hasActivePayment: boolean
-    step: number | null
-    branch: 'personal' | 'service' | null
-    data: Record<string, any> | null
-    redirectTo: string
-  } | null
+  onboarding: OnboardingState | null
 
   /** Whether auth check is complete (status is not unknown/checking) */
   isReady: boolean
@@ -81,7 +69,7 @@ export function useAuthState(): AuthState {
     error,
     refetch,
     failureCount,
-  } = useQuery({
+  } = useQuery<User, ApiError>({
     queryKey: queryKeys.currentUser,
     queryFn: async () => {
       const result = await api.auth.me()
@@ -92,7 +80,7 @@ export function useAuthState(): AuthState {
     placeholderData: keepPreviousData,
     // Retry transient errors (500, network) once only, but not 401s
     retry: (failureCount, err) => {
-      const status = (err as any)?.status
+      const status = err?.status
       // Don't retry 401s - they're definitive
       if (status === 401) {
         // Clear session flag and cached data on 401 - session is invalid
@@ -133,7 +121,7 @@ export function useAuthState(): AuthState {
 
     // Have token/session, not loading, but got an error
     if (error) {
-      const errStatus = (error as any)?.status
+      const errStatus = error?.status
       // 401 = definitely unauthenticated
       if (errStatus === 401) {
         return 'unauthenticated'
@@ -167,7 +155,7 @@ export function useAuthState(): AuthState {
     email: user.email,
     profile: user.profile,
     createdAt: user.createdAt ?? null,
-  } : null, [user?.id, user?.email, user?.profile, user?.createdAt])
+  } : null, [user])
 
   // Memoize onboarding object to prevent unnecessary re-renders in consumers
   const memoizedOnboarding = useMemo(() => user?.onboarding ? {
@@ -177,14 +165,7 @@ export function useAuthState(): AuthState {
     branch: user.onboarding.branch ?? null,
     data: user.onboarding.data ?? null,
     redirectTo: user.onboarding.redirectTo ?? '/onboarding',
-  } : null, [
-    user?.onboarding?.hasProfile,
-    user?.onboarding?.hasActivePayment,
-    user?.onboarding?.step,
-    user?.onboarding?.branch,
-    user?.onboarding?.data,
-    user?.onboarding?.redirectTo,
-  ])
+  } : null, [user])
 
   // Memoize final return value to provide stable reference
   return useMemo(() => ({
@@ -195,7 +176,9 @@ export function useAuthState(): AuthState {
     isFullySetUp,
     needsPaymentSetup,
     needsOnboarding,
-    error: error as Error | null,
+    error: error
+      ? (error instanceof Error ? error : new Error(error.error || 'Unknown error'))
+      : null,
     refetch,
   }), [status, memoizedUser, memoizedOnboarding, isReady, isFullySetUp, needsPaymentSetup, needsOnboarding, error, refetch])
 }

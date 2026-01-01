@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { e2eLogin, setAuthCookie, deterministicEmail } from './auth.helper'
+import { e2eLogin, setAuthCookie, deterministicEmail, buildUsername } from './auth.helper'
 
 // E2E API key for helper endpoints (matches playwright.config.ts)
 const E2E_API_KEY = process.env.E2E_API_KEY || 'e2e-local-dev-key'
@@ -395,7 +395,7 @@ test.describe('Auth Flow - Full E2E (Real Email/OTP)', () => {
     // In test mode, the OTP might be returned for E2E testing
     if (otpData.testOtp) {
       // Step 2: Verify the OTP
-      const verifyResponse = await request.post('http://localhost:3001/subscriber/verify-otp', {
+      const verifyResponse = await request.post('http://localhost:3001/subscriber/verify', {
         data: {
           email: testEmail,
           otp: otpData.testOtp,
@@ -423,7 +423,7 @@ test.describe('Auth Flow - Full E2E (Real Email/OTP)', () => {
     const testEmail = `otp-invalid-${Date.now()}@e2e.natepay.co`
 
     // Try to verify with invalid OTP
-    const response = await request.post('http://localhost:3001/subscriber/verify-otp', {
+    const response = await request.post('http://localhost:3001/subscriber/verify', {
       data: {
         email: testEmail,
         otp: '000000', // Invalid OTP
@@ -447,7 +447,7 @@ test.describe('Auth Flow - Full E2E (Real Email/OTP)', () => {
     })
 
     // Try to verify with expired OTP format (all zeros typically indicates expired/invalid)
-    const response = await request.post('http://localhost:3001/subscriber/verify-otp', {
+    const response = await request.post('http://localhost:3001/subscriber/verify', {
       data: {
         email: testEmail,
         otp: '999999', // Wrong OTP
@@ -512,7 +512,7 @@ test.describe('Subscription Management - Full Flow (Real Backend)', () => {
       // Create a test creator profile
       const creatorResponse = await request.put('http://localhost:3001/profile', {
         data: {
-          username: `managet${shortId}`,
+          username: buildUsername('managet', '', shortId),
           displayName: 'Manage Test Creator',
           country: 'United States',
           countryCode: 'US',
@@ -870,7 +870,7 @@ test.describe('Subscriber Portal - Real Backend (Always-On)', () => {
     // First, find or create a subscriber with a subscription
     const ts = Date.now().toString().slice(-8)
     const creatorEmail = `e2e-portal-creator-${ts}@test.natepay.co`
-    const creatorUsername = `e2eportc${ts}`
+    const creatorUsername = buildUsername('e2eportc', '', ts)
     const subscriberEmail = `e2e-subscriber-${ts}@test.natepay.co`
 
     // Create creator
@@ -964,7 +964,7 @@ test.describe('Subscription Management - Real Backend (Always-On)', () => {
     // Create a subscription using e2e-seed-subscription (guaranteed to exist)
     const ts = Date.now().toString().slice(-8)
     const creatorEmail = `e2e-manage-creator-${ts}@test.natepay.co`
-    const creatorUsername = `e2emanc${ts}`
+    const creatorUsername = buildUsername('e2emanc', '', ts)
     const subscriberEmail = `e2e-manage-sub-${ts}@test.natepay.co`
 
     // Setup creator
@@ -1024,7 +1024,7 @@ test.describe('Subscription Management - Real Backend (Always-On)', () => {
     // This test uses e2e-seed-subscription to guarantee a subscription exists
     const ts = Date.now().toString().slice(-8)
     const creatorEmail = `e2e-manage-ui-${ts}@test.natepay.co`
-    const creatorUsername = `e2emanu${ts}`
+    const creatorUsername = buildUsername('e2emanu', '', ts)
     const subscriberEmail = `e2e-manage-ui-sub-${ts}@test.natepay.co`
 
     // Setup creator
@@ -1122,7 +1122,7 @@ test.describe('Creator Dashboard - Real Backend (Always-On)', () => {
   test('dashboard page renders for authenticated creator', async ({ page, request }) => {
     const ts = Date.now().toString().slice(-8)
     const email = `e2e-dashboard-${ts}@test.natepay.co`
-    const username = `e2edash${ts}`
+    const username = buildUsername('e2edash', '', ts)
 
     // Create and setup creator
     const { token } = await e2eLogin(request, email)
@@ -1283,7 +1283,7 @@ test.describe('Admin API - Strict Data Validation (Read-Only)', () => {
     // Step 1: Create a creator with subscription
     const ts = Date.now().toString().slice(-8)
     const creatorEmail = `admin-stats-creator-${ts}@e2e.natepay.co`
-    const creatorUsername = `admstat${ts}`
+    const creatorUsername = buildUsername('admstat', '', ts)
     const subscriberEmail = `admin-stats-sub-${ts}@e2e.natepay.co`
 
     // Create and setup creator

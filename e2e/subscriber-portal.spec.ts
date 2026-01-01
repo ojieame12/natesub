@@ -214,6 +214,13 @@ async function setupSubscriberPortalStubs(page: Page, subscriber: TestSubscriber
 
 test.describe('Subscriber Portal - Email Entry', () => {
   test('shows email input on portal page', async ({ page }) => {
+    await page.route('**/subscriber/subscriptions', async (route) => {
+      await route.fulfill({
+        status: 401,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'Unauthorized' }),
+      })
+    })
     await page.goto('/subscriptions')
 
     await expect(page.locator('input[type="email"]')).toBeVisible()
@@ -221,6 +228,13 @@ test.describe('Subscriber Portal - Email Entry', () => {
   })
 
   test('validates email format', async ({ page }) => {
+    await page.route('**/subscriber/subscriptions', async (route) => {
+      await route.fulfill({
+        status: 401,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'Unauthorized' }),
+      })
+    })
     await page.goto('/subscriptions')
 
     // Enter invalid email

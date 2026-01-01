@@ -127,7 +127,7 @@ Base your response on real market data. Only respond with valid JSON.`
   try {
     const jsonStr = text.replace(/```json\n?|\n?```/g, '').trim()
     return JSON.parse(jsonStr) as MarketContext
-  } catch (error) {
+  } catch {
     console.error('Failed to parse Perplexity response:', text)
     // Return sensible defaults if parsing fails
     return {

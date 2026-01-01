@@ -103,8 +103,8 @@ export function rateLimit(options: Partial<RateLimitOptions> = {}) {
   const config = { ...defaultOptions, ...options }
 
   return async (c: Context, next: Next) => {
-    // Skip rate limiting in test environment
-    if (process.env.NODE_ENV === 'test') {
+    // Skip rate limiting in test environment unless explicitly enabled
+    if (process.env.NODE_ENV === 'test' && process.env.RATE_LIMIT_IN_TESTS !== 'true') {
       await next()
       return
     }

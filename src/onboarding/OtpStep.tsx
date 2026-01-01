@@ -27,6 +27,7 @@ export default function OtpStep() {
     const hasAttemptedRef = useRef(false)
 
     // Auto-verify when all digits entered
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     useEffect(() => {
         if (otp.length === OTP_LENGTH && !hasAttemptedRef.current) {
             verifyOtp()
@@ -92,9 +93,14 @@ export default function OtpStep() {
                 // Fresh user - continue to next step (identity)
                 nextStep()
             }
-        } catch (err: any) {
-            const errorMsg = err?.error || 'Invalid code. Please try again.'
-            const status = err?.status
+        } catch (err: unknown) {
+            const errorMsg =
+                err && typeof err === 'object' && 'error' in err
+                    ? String((err as { error?: string }).error) || 'Invalid code. Please try again.'
+                    : err instanceof Error
+                      ? err.message || 'Invalid code. Please try again.'
+                      : 'Invalid code. Please try again.'
+            const status = err && typeof err === 'object' && 'status' in err ? (err as { status?: number }).status : undefined
             const normalizedError = errorMsg.toLowerCase()
 
             // Rate limit: keep the code so the user can retry once the limit resets.

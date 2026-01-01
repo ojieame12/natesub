@@ -99,8 +99,9 @@ export default function OnboardingFlow() {
     })
     // Track if we're ready to render (prevents flash of step 0 on reload)
     const [isReadyToRender, setIsReadyToRender] = useState(false)
+    const [stableStepCount, setStableStepCount] = useState(steps.length)
     // Minimum time to show resuming shell (prevents jarring flash)
-    const shellShowTimeRef = useRef<number>(Date.now())
+    const shellShowTimeRef = useRef<number | null>(null)
     const MIN_SHELL_DURATION = 300 // ms
 
     // Helper to mark ready with minimum shell duration for resume flows
@@ -109,7 +110,11 @@ export default function OnboardingFlow() {
             setIsReadyToRender(true)
             return
         }
-        const elapsed = Date.now() - shellShowTimeRef.current
+        const now = Date.now()
+        if (shellShowTimeRef.current === null) {
+            shellShowTimeRef.current = now
+        }
+        const elapsed = now - shellShowTimeRef.current
         const remaining = MIN_SHELL_DURATION - elapsed
         if (remaining <= 0) {
             setIsReadyToRender(true)
@@ -300,13 +305,16 @@ export default function OnboardingFlow() {
     // Progress bar logic - use stable step count to prevent jumps
     // Track max step count seen to avoid backward progress bar shifts
     // when step config changes (e.g., address/service steps inserted)
-    const stableStepCountRef = useRef(steps.length)
-    if (steps.length > stableStepCountRef.current) {
-        stableStepCountRef.current = steps.length
-    }
+    /* eslint-disable react-hooks/set-state-in-effect */
+    useEffect(() => {
+        if (steps.length > stableStepCount) {
+            setStableStepCount(steps.length)
+        }
+    }, [stableStepCount, steps.length])
+    /* eslint-enable react-hooks/set-state-in-effect */
     // Only lock after identity step (step 3+) when config is likely settled
-    const stableStepCount = effectiveStep >= 3 ? stableStepCountRef.current : steps.length
-    const progress = Math.min(((effectiveStep + 1) / stableStepCount) * 100, 100)
+    const effectiveStepCount = effectiveStep >= 3 ? stableStepCount : steps.length
+    const progress = Math.min(((effectiveStep + 1) / effectiveStepCount) * 100, 100)
     const showProgress = effectiveStep > 0 && effectiveStep < steps.length - 1
 
     // Show resuming shell while waiting for auth/hydration

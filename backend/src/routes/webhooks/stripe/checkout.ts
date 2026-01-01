@@ -8,7 +8,6 @@ import { withLock } from '../../../services/lock.js'
 import {
   validateCheckoutMetadata,
   parseMetadataAmount,
-  sanitizeForLog,
 } from '../../../utils/webhookValidation.js'
 import { normalizeEmailAddress } from '../utils.js'
 import { invalidateAdminRevenueCache } from '../../../utils/cache.js'

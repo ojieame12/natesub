@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { Check } from 'lucide-react'
 
 // Colors matching design system
@@ -58,13 +58,13 @@ export default function SlideToPay({ onComplete, disabled }: SlideToPayProps) {
     const TRACK_HEIGHT = 64
     const TRACK_PADDING = 8
 
-    const handleStart = (clientX: number) => {
+    const handleStart = useCallback((clientX: number) => {
         if (completed || disabled) return
         setIsDragging(true)
         startX.current = clientX - dragX
-    }
+    }, [completed, disabled, dragX])
 
-    const handleMove = (clientX: number) => {
+    const handleMove = useCallback((clientX: number) => {
         // Check ref synchronously to prevent duplicate calls
         if (!isDragging || !containerRef.current || completedRef.current) return
 
@@ -81,15 +81,15 @@ export default function SlideToPay({ onComplete, disabled }: SlideToPayProps) {
             setDragX(maxDrag)
             onComplete()
         }
-    }
+    }, [isDragging, onComplete])
 
-    const handleEnd = () => {
+    const handleEnd = useCallback(() => {
         if (!isDragging) return
         setIsDragging(false)
         if (!completed) {
             setDragX(0)
         }
-    }
+    }, [completed, isDragging])
 
     const onMouseDown = (e: React.MouseEvent) => handleStart(e.clientX)
     const onTouchStart = (e: React.TouchEvent) => handleStart(e.touches[0].clientX)
@@ -114,7 +114,7 @@ export default function SlideToPay({ onComplete, disabled }: SlideToPayProps) {
             window.removeEventListener('touchend', onTouchEnd)
             window.removeEventListener('touchcancel', onTouchCancel)
         }
-    }, [isDragging])
+    }, [handleEnd, handleMove, isDragging])
 
     // Determine handle color based on state
     const isActive = !disabled && !completed

@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { buildUsername } from './auth.helper'
 
 /**
  * Checkout E2E Tests - UI Smoke Tests
@@ -138,7 +139,7 @@ test.describe('Checkout Integration - API Level', () => {
     // Step 1: Create a test creator via e2e-login
     const ts = Date.now().toString().slice(-8) // Last 8 digits for uniqueness
     const creatorEmail = `e2e-checkout-stripe-${ts}@test.natepay.co`
-    const creatorUsername = `e2estrepe${ts}` // Max 20 chars: 8 + 8 = 16
+    const creatorUsername = buildUsername('e2estrepe', '', ts)
 
     const loginResponse = await request.post('http://localhost:3001/auth/e2e-login', {
       data: { email: creatorEmail },
@@ -221,7 +222,7 @@ test.describe('Checkout Integration - API Level', () => {
     // Uses stub mode which returns a direct success URL
     const ts = Date.now().toString().slice(-8)
     const creatorEmail = `e2e-return-stripe-${ts}@test.natepay.co`
-    const creatorUsername = `e2ereturn${ts}`
+    const creatorUsername = buildUsername('e2ereturn', '', ts)
 
     // Setup: Create creator with Stripe
     const loginResponse = await request.post('http://localhost:3001/auth/e2e-login', {
@@ -302,7 +303,7 @@ test.describe('Checkout Integration - API Level', () => {
     // This test validates the Paystack return → success UI flow in stub mode
     const ts = Date.now().toString().slice(-8)
     const creatorEmail = `e2e-return-paystack-${ts}@test.natepay.co`
-    const creatorUsername = `e2epstret${ts}`
+    const creatorUsername = buildUsername('e2epstret', '', ts)
 
     // Setup: Create Nigerian creator with Paystack
     const loginResponse = await request.post('http://localhost:3001/auth/e2e-login', {
@@ -383,7 +384,7 @@ test.describe('Checkout Integration - API Level', () => {
     // Step 1: Create a Nigerian test creator via e2e-login
     const ts = Date.now().toString().slice(-8) // Last 8 digits for uniqueness
     const creatorEmail = `e2e-checkout-paystack-${ts}@test.natepay.co`
-    const creatorUsername = `e2epstck${ts}` // Max 20 chars: 8 + 8 = 16
+    const creatorUsername = buildUsername('e2epstck', '', ts)
 
     const loginResponse = await request.post('http://localhost:3001/auth/e2e-login', {
       data: { email: creatorEmail },
@@ -516,7 +517,7 @@ test.describe('Checkout Validation - API Level', () => {
     // Create a creator first, then attempt duplicate checkout with same email
     const ts = Date.now().toString().slice(-8)
     const creatorEmail = `e2e-dup-creator-${ts}@test.natepay.co`
-    const creatorUsername = `e2edup${ts}`
+    const creatorUsername = buildUsername('e2edup', '', ts)
     const subscriberEmail = `duplicate-sub-${ts}@test.com`
 
     // Step 1: Create creator via e2e-login

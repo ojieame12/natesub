@@ -98,7 +98,7 @@ export async function scheduleSubscriptionRenewalReminders(subscriptionId: strin
  */
 export async function schedulePaymentFailedReminder(
   subscriptionId: string,
-  retryDate: Date | null
+  _retryDate: Date | null
 ): Promise<void> {
   const subscription = await db.subscription.findUnique({
     where: { id: subscriptionId },

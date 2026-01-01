@@ -263,7 +263,6 @@ analytics.get('/ltv', auditSensitiveRead('analytics_ltv'), async (c) => {
  */
 analytics.get('/at-risk', auditSensitiveRead('analytics_at_risk'), async (c) => {
   const now = new Date()
-  const threeDaysAgo = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000)
   const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
   const fourteenDaysAhead = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000)
 
@@ -558,7 +557,7 @@ analytics.get('/cohort/:month', auditSensitiveRead('analytics_cohort'), async (c
   // Get cancellation reasons for this cohort
   const cancelReasons = cohortSubscriptions
     .filter(s => s.canceledAt)
-    .reduce((acc, s) => {
+    .reduce((acc, _subscription) => {
       acc['unknown'] = (acc['unknown'] || 0) + 1
       return acc
     }, {} as Record<string, number>)

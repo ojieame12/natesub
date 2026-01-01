@@ -104,10 +104,12 @@ async function reconcileTransaction(reference: string) {
       console.error('\n❌ Failed to create payment record')
     }
 
-  } catch (error: any) {
-    console.error('\n❌ Error:', error.message)
-    if (error.response?.data) {
-      console.error('   Paystack error:', error.response.data)
+  } catch (error: unknown) {
+    const err = error instanceof Error ? error : new Error('Unknown error')
+    console.error('\n❌ Error:', err.message)
+    const responseData = (error as { response?: { data?: unknown } })?.response?.data
+    if (responseData) {
+      console.error('   Paystack error:', responseData)
     }
     process.exit(1)
   }

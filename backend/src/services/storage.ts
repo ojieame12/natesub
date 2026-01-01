@@ -51,7 +51,7 @@ export async function getSignedUploadUrl(
   type: UploadType,
   mimeType: string,
   fileSize: number,
-  fileName?: string
+  _fileName?: string
 ): Promise<SignedUploadUrl> {
   // Validate mime type
   if (!ALLOWED_MIME_TYPES[type].includes(mimeType)) {

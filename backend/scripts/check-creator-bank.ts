@@ -28,9 +28,10 @@ async function check() {
     try {
       const decrypted = decryptAccountNumber(profile.paystackAccountNumber)
       console.log('Account Number:', decrypted)
-    } catch (e: any) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error('Unknown error')
       console.log('Account Number (encrypted):', profile.paystackAccountNumber.substring(0, 20) + '...')
-      console.log('Decryption issue:', e.message)
+      console.log('Decryption issue:', err.message)
     }
   } else {
     console.log('Account Number: NOT SET')

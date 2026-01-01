@@ -728,7 +728,7 @@ test.describe('Subscriber Portal Navigation (STRICT)', () => {
 
 test.describe('Public Page Navigation (STRICT)', () => {
   async function setupCreatorStubs(page: Page) {
-    await page.route('**/users/testcreator', async (route) => {
+    await page.route('**/users/testcreator*', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',

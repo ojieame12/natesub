@@ -123,7 +123,7 @@ Only respond with valid JSON, no other text.`
     // Handle potential markdown code blocks
     const jsonStr = text.replace(/```json\n?|\n?```/g, '').trim()
     return JSON.parse(jsonStr) as TranscriptionResult
-  } catch (error) {
+  } catch {
     console.error('Failed to parse Gemini response:', text)
     throw new Error('Failed to parse AI response')
   }
@@ -155,7 +155,7 @@ export async function generatePageContent(
   try {
     const jsonStr = text.replace(/```json\n?|\n?```/g, '').trim()
     return JSON.parse(jsonStr) as PageContent
-  } catch (error) {
+  } catch {
     console.error('Failed to parse Gemini response:', text)
     throw new Error('Failed to parse AI response')
   }
@@ -360,7 +360,7 @@ Only respond with valid JSON, no other text.`
   try {
     const jsonStr = text.replace(/```json\n?|\n?```/g, '').trim()
     return JSON.parse(jsonStr) as TranscriptionResult
-  } catch (error) {
+  } catch {
     console.error('Failed to parse Gemini response:', text)
     throw new Error('Failed to parse AI response')
   }

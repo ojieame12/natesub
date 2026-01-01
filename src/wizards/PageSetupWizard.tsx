@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Check,
@@ -57,7 +57,7 @@ export default function PageSetupWizard() {
     performPublish()
   }
 
-  const performPublish = async () => {
+  const performPublish = useCallback(async () => {
     setIsPublishing(true)
     try {
       await updateProfile({
@@ -78,7 +78,7 @@ export default function PageSetupWizard() {
     } finally {
       setIsPublishing(false)
     }
-  }
+  }, [impact, navigate, priceInput, profileData?.profile?.purpose, toast, updateProfile])
 
   const handleConnectPayouts = () => {
     // Store logic is already saving state.
@@ -102,7 +102,7 @@ export default function PageSetupWizard() {
       window.addEventListener('focus', check)
       return () => window.removeEventListener('focus', check)
     }
-  }, [showPayoutWall, refetchProfile])
+  }, [performPublish, refetchProfile, showPayoutWall])
 
   return (
     <div className="onboarding-wrapper" style={{ background: 'var(--bg-root)' }}>

@@ -4,13 +4,6 @@
 import crypto from 'crypto'
 import { db } from '../db/client.js'
 import type { PayrollPeriodType } from '@prisma/client'
-import {
-  getPlatformFeePercent,
-  getProcessingFeePercent,
-  getTotalFeePercent,
-  calculateFees,
-  type UserPurpose,
-} from './pricing.js'
 import { scheduleReminder } from '../jobs/reminders.js'
 import { decryptAccountNumber } from '../utils/encryption.js'
 
@@ -605,7 +598,7 @@ export async function generatePayrollPeriod(
   }
 
   // Aggregate payments filtered by currency
-  const { grossCents, refundsCents, chargebacksCents, totalFeeCents, totalNetCents, paymentCount } = await aggregatePayments(
+  const { grossCents, refundsCents, chargebacksCents, totalFeeCents, paymentCount } = await aggregatePayments(
     userId,
     periodStart,
     periodEnd,

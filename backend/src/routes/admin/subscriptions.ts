@@ -35,7 +35,6 @@ subscriptions.get('/', auditSensitiveRead('subscription_list'), async (c) => {
   }).parse(c.req.query())
 
   const { skip, take } = getPaginationOffsets(query)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const where: any = query.status !== 'all' ? { status: query.status } : {}
 
   // Search by subscriber email, creator email, or creator username

@@ -188,15 +188,15 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
     const [contentVisible, setContentVisible] = useState(false)
     const [actionVisible, setActionVisible] = useState(false)
     const [perksExpanded, setPerksExpanded] = useState(false)
-    const [initialHeight, setInitialHeight] = useState<number | null>(null)
+    const [initialHeight] = useState<number | null>(() => {
+        if (typeof window === 'undefined') return null
+        return window.innerHeight
+    })
     const viewIdRef = useRef<string | null>(null)
     const emailInputRef = useRef<HTMLInputElement>(null)
 
     // Capture initial viewport height before keyboard opens
     // This prevents the card from shrinking when keyboard appears on mobile
-    useEffect(() => {
-        setInitialHeight(window.innerHeight)
-    }, [])
 
     // Multi-stage entrance animation:
     // 0. Background dither fades in
@@ -204,6 +204,7 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
     // 2. Card expands to full height (slow, premium feel)
     // 3. Content fades in
     // 4. Action section (email) reveals with slight delay, then auto-focus
+    /* eslint-disable react-hooks/set-state-in-effect */
     useEffect(() => {
         // Skip animations in test environment for faster tests
         // Check both Vite's import.meta.env and Node's process.env
@@ -237,6 +238,7 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
             clearTimeout(focusTimer)
         }
     }, [])
+    /* eslint-enable react-hooks/set-state-in-effect */
 
     // Hooks for checkout
     const { mutateAsync: createCheckout } = useCreateCheckout()
@@ -782,62 +784,24 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                             </div>
                         </>
                     ) : (
-                        /* Subscriber View: Full breakdown with fees */
-                        <>
-                            {/* Subscription Row */}
-                            <div style={{
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                alignItems: 'center',
-                            }}>
-                                <span style={{ fontSize: 15, color: COLORS.neutral600 }}>
-                                    Subscription
-                                </span>
-                                <span style={{ fontSize: 15, color: COLORS.neutral700, fontWeight: 500 }}>
-                                    {formatCurrency(pricing.currentAmount, pricing.currency)}/month
-                                </span>
-                            </div>
-
-                            {/* Dashed Separator */}
-                            <div style={{
-                                borderBottom: `1px dashed ${COLORS.neutral200}`,
-                                margin: '10px 0',
-                            }} />
-
-                            {/* Fee Row */}
-                            <div style={{
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                alignItems: 'center',
-                            }}>
-                                <span style={{ fontSize: 15, color: COLORS.neutral600 }}>
-                                    Secure payment Fee
-                                </span>
-                                <span style={{ fontSize: 15, color: COLORS.neutral700 }}>
-                                    +{formatCurrency(pricing.feePreview.serviceFee, pricing.currency)}
-                                </span>
-                            </div>
-
-                            {/* Dashed Separator */}
-                            <div style={{
-                                borderBottom: `1px dashed ${COLORS.neutral200}`,
-                                margin: '10px 0',
-                            }} />
-
-                            {/* Total Row */}
-                            <div style={{
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                alignItems: 'center',
-                            }}>
+                        /* Subscriber View: Simple total (no fee breakdown) */
+                        <div style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                        }}>
+                            <div>
                                 <span style={{ fontSize: 15, fontWeight: 600, color: COLORS.neutral900 }}>
-                                    Total
+                                    Monthly subscription
                                 </span>
-                                <span style={{ fontSize: 18, fontWeight: 700, color: COLORS.neutral900 }}>
-                                    {formatCurrency(pricing.total, pricing.currency)}/month
-                                </span>
+                                <div style={{ fontSize: 12, color: COLORS.neutral500, marginTop: 2 }}>
+                                    Includes processing
+                                </div>
                             </div>
-                        </>
+                            <span style={{ fontSize: 18, fontWeight: 700, color: COLORS.neutral900 }}>
+                                {formatCurrency(pricing.total, pricing.currency)}
+                            </span>
+                        </div>
                     )}
                 </div>
 

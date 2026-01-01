@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { e2eLogin } from './auth.helper'
+import { e2eLogin, buildUsername } from './auth.helper'
 
 /**
  * Unsubscribe Flow E2E Tests
@@ -33,7 +33,7 @@ async function setupCreatorWithSubscription(
 ) {
   const ts = Date.now().toString().slice(-8)
   const creatorEmail = `unsub-creator-${suffix}-${ts}@e2e.natepay.co`
-  const creatorUsername = `unsub${suffix}${ts}`
+  const creatorUsername = buildUsername('unsub', suffix, ts)
   const subscriberEmail = `unsub-sub-${suffix}-${ts}@e2e.natepay.co`
 
   // Create creator with profile

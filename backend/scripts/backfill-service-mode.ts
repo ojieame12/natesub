@@ -14,6 +14,7 @@
  *   - DATABASE_URL must be set
  */
 
+import { Prisma } from '@prisma/client'
 import { db } from '../src/db/client.js'
 import { generatePerks } from '../src/services/ai/perksGenerator.js'
 import { generateBanner } from '../src/services/ai/bannerGenerator.js'
@@ -86,13 +87,14 @@ async function main() {
           if (!DRY_RUN) {
             await db.profile.update({
               where: { id: profile.id },
-              data: { perks: perks as any },
+              data: { perks: perks as Prisma.InputJsonValue },
             })
             console.log('  [PERKS] Saved to database')
           }
           perksGenerated++
         }
-      } catch (err: any) {
+      } catch (error: unknown) {
+        const err = error instanceof Error ? error : new Error('Unknown error')
         const msg = `Perks error for @${profile.username}: ${err.message}`
         console.error(`  [PERKS] Error: ${err.message}`)
         errors.push(msg)
@@ -122,7 +124,8 @@ async function main() {
           console.log('  [BANNER] Saved to database')
         }
         bannersGenerated++
-      } catch (err: any) {
+      } catch (error: unknown) {
+        const err = error instanceof Error ? error : new Error('Unknown error')
         const msg = `Banner error for @${profile.username}: ${err.message}`
         console.error(`  [BANNER] Error: ${err.message}`)
         errors.push(msg)
@@ -154,7 +157,7 @@ async function main() {
   await db.$disconnect()
 }
 
-main().catch(err => {
-  console.error('Fatal error:', err)
+main().catch((error: unknown) => {
+  console.error('Fatal error:', error)
   process.exit(1)
 })

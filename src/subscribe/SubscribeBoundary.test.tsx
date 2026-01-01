@@ -123,15 +123,16 @@ describe('SubscribeBoundary', () => {
       })
     })
 
-    it('shows secure payment fee with split model', async () => {
+    it('shows price-inclusive subscription total', async () => {
       renderWithProviders(<SubscribeBoundary profile={mockProfile} />, {
         route: '/testcreator',
         routePath: '/:username',
       })
 
       await waitFor(() => {
-        // Should show secure payment fee (subscriber's portion)
-        expect(screen.getByText('Secure payment Fee')).toBeInTheDocument()
+        // Should show simple total without fee breakdown (compliance-safe)
+        expect(screen.getByText('Monthly subscription')).toBeInTheDocument()
+        expect(screen.getByText('Includes processing')).toBeInTheDocument()
       })
     })
 

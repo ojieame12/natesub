@@ -22,17 +22,12 @@ import {
   amountCard,
   alertBox,
   // New premium components
-  statusBadge,
   receiptCard,
-  dateChip,
   countdownChip,
   identityBlock,
   quoteCard,
   checklist,
   stepsList,
-  infoRow,
-  divider,
-  textLink,
   mutedText,
   otpCode,
   // URL helpers

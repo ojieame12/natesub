@@ -111,7 +111,7 @@ export interface OnboardingState {
   hasActivePayment: boolean
   step: number | null
   branch: 'personal' | 'service' | null
-  data: Record<string, any> | null
+  data: Record<string, unknown> | null
   redirectTo: string
 }
 
@@ -210,7 +210,7 @@ export interface Subscription {
 export interface Activity {
   id: string
   type: string
-  payload: Record<string, any>
+  payload: Record<string, unknown>
   createdAt: string
 }
 

@@ -46,30 +46,6 @@ function shouldLog(level: LogLevel): boolean {
   return LOG_LEVELS[level] >= LOG_LEVELS[MIN_LEVEL]
 }
 
-/**
- * Sanitize a value that might contain PII
- */
-function sanitizeValue(value: unknown): unknown {
-  if (value === null || value === undefined) return value
-  if (typeof value === 'string') {
-    // Check if it looks like an email
-    if (value.includes('@') && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
-      return maskEmail(value)
-    }
-    // Check if it looks like a phone number (starts with + or has 10+ digits)
-    if (/^\+?\d{10,}$/.test(value.replace(/[\s-]/g, ''))) {
-      return maskPhone(value)
-    }
-    return value
-  }
-  if (typeof value === 'object') {
-    if (Array.isArray(value)) {
-      return value.map(sanitizeValue)
-    }
-    return sanitizeForLogging(value as Record<string, unknown>)
-  }
-  return value
-}
 
 function formatLog(level: LogLevel, message: string, context?: LogContext, error?: Error): string {
   const log: StructuredLog = {
@@ -319,7 +295,6 @@ export function safeError(
   source?: string
 ): { error: string; code: ErrorCode } {
   const errorDetail = error instanceof Error ? error.message : String(error)
-  const errorStack = error instanceof Error ? error.stack : undefined
   const prefix = source ? `[${source}]` : ''
 
   // Log full details server-side

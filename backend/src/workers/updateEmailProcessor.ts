@@ -22,7 +22,7 @@ export interface UpdateEmailJobData {
 
 export async function updateEmailProcessor(job: Job<UpdateEmailJobData>) {
   const {
-    updateId,
+    updateId: _updateId,
     deliveryId,
     subscriberEmail,
     creatorName,

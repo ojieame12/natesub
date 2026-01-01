@@ -1,6 +1,4 @@
 import { Hono } from 'hono'
-import { zValidator } from '@hono/zod-validator'
-import { z } from 'zod'
 import { getCookie, setCookie } from 'hono/cookie'
 import { db } from '../db/client.js'
 import { redis } from '../db/redis.js'
@@ -190,6 +188,11 @@ stripeRoutes.post('/connect/refresh', requireAuth, paymentRateLimit, async (c) =
 
   if (!profile?.stripeAccountId) {
     return c.json({ error: 'No payment account found' }, 400)
+  }
+
+  // Stub mode: return fake onboarding URL for E2E tests
+  if (env.PAYMENTS_MODE === 'stub') {
+    return c.json({ onboardingUrl: 'https://connect.stripe.com/setup/stub_refresh' })
   }
 
   try {

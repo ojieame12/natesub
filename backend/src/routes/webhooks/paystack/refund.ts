@@ -171,7 +171,7 @@ export async function handlePaystackRefundProcessed(data: any, eventId: string) 
 }
 
 // Handle Paystack refund.pending - refund is being processed
-export async function handlePaystackRefundPending(data: any, eventId: string) {
+export async function handlePaystackRefundPending(data: any, _eventId: string) {
   const { transaction } = data
   const transactionRef = transaction?.reference || data.transaction_reference
 

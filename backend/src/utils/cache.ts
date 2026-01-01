@@ -53,7 +53,7 @@ export async function cached<T>(
     redis.setex(key, ttlSeconds, JSON.stringify(value)).catch((err: unknown) => {
       console.warn(`[cache] Redis setex failed for ${key}:`, err)
     })
-  } catch (err) {
+  } catch {
     // Ignore cache write errors
   }
 

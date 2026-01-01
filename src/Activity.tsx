@@ -24,6 +24,7 @@ import {
 import { Pressable, Skeleton, SkeletonList, ErrorState, LoadingButton, PullToRefresh } from './components'
 import { useScrolled, useDelayedLoading } from './hooks'
 import { useActivity, useMetrics, useCurrentUser } from './api/hooks'
+import type { Activity as ActivityItem } from './api/client'
 import { centsToDisplayAmount, getCurrencySymbol, formatCompactNumber, formatSmartAmount } from './utils/currency'
 import './Activity.css'
 
@@ -185,15 +186,17 @@ export default function Activity() {
 
     // Track if this is the initial load to prevent re-animating on refetch
     const hasAnimatedRef = useRef(false)
-    if (activityData && !hasAnimatedRef.current) {
-        hasAnimatedRef.current = true
-    }
+    useEffect(() => {
+        if (activityData && !hasAnimatedRef.current) {
+            hasAnimatedRef.current = true
+        }
+    }, [activityData])
 
     const { data: metricsData } = useMetrics()
     const metrics = metricsData?.metrics
 
     // Flatten paginated data
-    const allActivities = useMemo(() => {
+    const allActivities = useMemo<ActivityItem[]>(() => {
         return activityData?.pages.flatMap(page => page.activities) || []
     }, [activityData])
 
@@ -204,7 +207,7 @@ export default function Activity() {
     useEffect(() => {
         if (allActivities.length === 0) return
 
-        const currentIds = allActivities.map((a: any) => a.id)
+        const currentIds = allActivities.map((activity) => activity.id)
 
         // First load - just store IDs, no animations
         if (seenIds.size === 0) {
@@ -235,7 +238,7 @@ export default function Activity() {
             }, 600)
             return () => clearTimeout(timer)
         }
-    }, [allActivities])
+    }, [allActivities, seenIds])
 
     // Pull-to-refresh handler
     const handleRefresh = async () => {
@@ -244,14 +247,14 @@ export default function Activity() {
 
     // Group activities by date
     const groupedActivities = useMemo(() => {
-        return allActivities.reduce((groups, activity: any) => {
+        return allActivities.reduce((groups, activity) => {
             const date = formatDateGroup(activity.createdAt)
             if (!groups[date]) {
                 groups[date] = []
             }
             groups[date].push(activity)
             return groups
-        }, {} as Record<string, any[]>)
+        }, {} as Record<string, ActivityItem[]>)
     }, [allActivities])
 
     const loadData = () => {

@@ -150,7 +150,7 @@ test.describe('Salary Mode', () => {
       // Create profile WITHOUT connecting Stripe
       await request.put(`${API_URL}/profile`, {
         data: {
-          username: `nostripe${ts}`,
+          username: buildUsername('nostripe', '', ts),
           displayName: 'No Stripe Test',
           country: 'Nigeria',
           countryCode: 'NG',

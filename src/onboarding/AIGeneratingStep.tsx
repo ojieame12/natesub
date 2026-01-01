@@ -173,6 +173,7 @@ export default function AIGeneratingStep() {
 
     // Otherwise, run full generation
     runGeneration()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasPerks, avatarUrl, bannerOptions.length, isLoadingAIConfig, isAIAvailable])
 
   const runGeneration = async () => {
@@ -236,7 +237,7 @@ export default function AIGeneratingStep() {
 
       // Persist to backend (with new BannerOption format)
       // Only include banner fields if a banner was actually generated to avoid wiping existing choices
-      const saveData: Record<string, any> = {
+      const saveData: Record<string, unknown> = {
         servicePerks: generatedPerks,
         purpose: purpose || 'service',
         serviceDescription,
@@ -255,9 +256,15 @@ export default function AIGeneratingStep() {
       await delay(150)
       setPhase('preview')
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('AI generation failed:', err)
-      setError(err?.error || err?.message || 'Failed to generate your page content')
+      if (err && typeof err === 'object' && 'error' in err) {
+        setError(String((err as { error?: string }).error) || 'Failed to generate your page content')
+      } else if (err instanceof Error) {
+        setError(err.message || 'Failed to generate your page content')
+      } else {
+        setError('Failed to generate your page content')
+      }
       setPhase('error')
     }
   }
@@ -295,10 +302,10 @@ export default function AIGeneratingStep() {
           },
         })
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Banner regeneration failed:', err)
       // Check if limit was reached - error data is nested under err.data
-      if (err?.data?.limitReached) {
+      if (err && typeof err === 'object' && 'data' in err && (err as { data?: { limitReached?: boolean } }).data?.limitReached) {
         setGenerationsRemaining(0) // Update local state
         setError('You\'ve used all AI generations. Upload your own banner below!')
         // Scroll to upload option by clicking file input

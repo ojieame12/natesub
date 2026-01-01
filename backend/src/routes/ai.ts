@@ -15,7 +15,7 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { requireAuth } from '../middleware/auth.js'
-import { aiRateLimit, aiAudioRateLimit } from '../middleware/rateLimit.js'
+import { aiRateLimit } from '../middleware/rateLimit.js'
 import {
   generateServicePage,
   quickGenerate,

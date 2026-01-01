@@ -8,7 +8,6 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { db } from '../../db/client.js'
-import { stripe } from '../../services/stripe.js'
 import { createSubaccount, type PaystackCountry } from '../../services/paystack.js'
 import { sendCreatorAccountCreatedEmail } from '../../services/email.js'
 import { RESERVED_USERNAMES } from '../../utils/constants.js'

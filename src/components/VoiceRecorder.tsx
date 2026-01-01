@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { Mic, Square, Play, Pause, X, RefreshCw, Loader2 } from 'lucide-react'
 import Pressable from './Pressable'
 import './VoiceRecorder.css'
@@ -32,7 +32,11 @@ export function VoiceRecorder({
     const [playbackTime, setPlaybackTime] = useState(0)
     const [duration, setDuration] = useState(0)
     const [micError, setMicError] = useState<string | null>(null)
-    const [audioUrl, setAudioUrl] = useState<string | null>(null)
+    const audioUrl = useMemo(() => {
+        if (audioBlob) return URL.createObjectURL(audioBlob)
+        if (existingAudioUrl) return existingAudioUrl
+        return null
+    }, [audioBlob, existingAudioUrl])
 
     const mediaRecorderRef = useRef<MediaRecorder | null>(null)
     const audioChunksRef = useRef<Blob[]>([])
@@ -41,30 +45,23 @@ export function VoiceRecorder({
 
     // Create audio URL from blob or use existing URL
     useEffect(() => {
-        if (audioBlob) {
-            const url = URL.createObjectURL(audioBlob)
-            setAudioUrl(url)
-
-            // Get duration
-            const audio = new Audio(url)
-            audio.onloadedmetadata = () => {
-                setDuration(Math.ceil(audio.duration))
-            }
-
-            return () => URL.revokeObjectURL(url)
-        } else if (existingAudioUrl) {
-            setAudioUrl(existingAudioUrl)
-
-            // Get duration from existing URL
-            const audio = new Audio(existingAudioUrl)
-            audio.onloadedmetadata = () => {
-                setDuration(Math.ceil(audio.duration))
-            }
-        } else {
-            setAudioUrl(null)
+        if (!audioUrl) {
             setDuration(0)
+            return
         }
-    }, [audioBlob, existingAudioUrl])
+
+        // Get duration from current URL
+        const audio = new Audio(audioUrl)
+        audio.onloadedmetadata = () => {
+            setDuration(Math.ceil(audio.duration))
+        }
+
+        return () => {
+            if (audioBlob) {
+                URL.revokeObjectURL(audioUrl)
+            }
+        }
+    }, [audioUrl, audioBlob])
 
     const startRecording = async () => {
         setMicError(null)
@@ -152,14 +149,13 @@ export function VoiceRecorder({
     }
 
     const handleRemove = () => {
-        if (audioUrl) {
+        if (audioBlob && audioUrl) {
             URL.revokeObjectURL(audioUrl)
         }
         if (audioRef.current) {
             audioRef.current.pause()
             audioRef.current = null
         }
-        setAudioUrl(null)
         setPlaybackTime(0)
         setIsPlaying(false)
         setDuration(0)

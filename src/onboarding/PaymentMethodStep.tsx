@@ -291,6 +291,7 @@ export default function PaymentMethodStep() {
                         // Store source for redirect handling when user returns from Stripe
                         // Use safe wrapper to handle Safari private mode
                         safeSessionSetItem('stripe_onboarding_source', 'onboarding')
+                        // eslint-disable-next-line react-hooks/purity
                         safeSessionSetItem('stripe_onboarding_started_at', Date.now().toString())
                         // Fallback: return to next step after Payment
                         // Use step key (not numeric index) for safe resume regardless of step array changes
@@ -309,6 +310,7 @@ export default function PaymentMethodStep() {
 
                         // Profile is saved - redirect to Stripe onboarding
                         // Don't reset() here - AuthRedirect will route properly when user returns
+                        // eslint-disable-next-line react-hooks/immutability
                         window.location.href = result.onboardingUrl
                         return
                     }
@@ -325,10 +327,15 @@ export default function PaymentMethodStep() {
                         setSaving(false)
                         return
                     }
-                } catch (stripeErr: any) {
+                } catch (stripeErr: unknown) {
                     // Profile saved but Stripe call failed
                     console.error('Stripe connect error:', stripeErr)
-                    const errorMsg = stripeErr?.error || stripeErr?.message || 'Payment setup failed'
+                    const errorMsg =
+                        stripeErr && typeof stripeErr === 'object' && 'error' in stripeErr
+                            ? String((stripeErr as { error?: string }).error)
+                            : stripeErr instanceof Error
+                              ? stripeErr.message
+                              : 'Payment setup failed'
                     setError(`${errorMsg}. Your profile was saved - you can complete payment setup from Settings.`)
                     setSaving(false)
                     return

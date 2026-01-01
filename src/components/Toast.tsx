@@ -22,6 +22,8 @@ interface ToastContextType {
 
 const ToastContext = createContext<ToastContextType | null>(null)
 
+const createToastId = () => `toast-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+
 export function useToast() {
     const context = useContext(ToastContext)
     if (!context) {
@@ -38,7 +40,7 @@ export function ToastProvider({ children }: ToastProviderProps) {
     const [toasts, setToasts] = useState<Toast[]>([])
 
     const showToast = (message: string, type: ToastType = 'info', duration = 3000) => {
-        const id = `toast-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+        const id = createToastId()
         const newToast: Toast = { id, message, type, duration }
 
         setToasts(prev => [...prev, newToast])

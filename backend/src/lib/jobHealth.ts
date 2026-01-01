@@ -136,7 +136,7 @@ export async function getJobsHealth(): Promise<{
         staleSinceMinutes,
         expectedIntervalMinutes: Math.round(schedule.intervalSeconds / 60),
       })
-    } catch (err) {
+    } catch {
       // Redis error - mark as unknown
       jobs.push({
         name,

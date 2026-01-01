@@ -8,7 +8,6 @@ import { env } from '../config/env.js'
 import {
   getPayrollPeriods,
   getPayrollPeriod,
-  generatePayrollPeriod,
   verifyDocument,
   setPdfUrl,
   getPeriodBoundaries,

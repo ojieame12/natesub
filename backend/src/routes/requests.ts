@@ -262,7 +262,7 @@ requests.post(
                 provider: 'stripe',
               })
             }
-          } catch (sessionErr: any) {
+          } catch {
             console.log(`[requests] Existing session invalid for request ${request.id}, creating new`)
           }
         }

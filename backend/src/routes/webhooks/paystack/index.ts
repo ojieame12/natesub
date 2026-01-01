@@ -83,7 +83,6 @@ export async function paystackWebhookHandler(c: Context) {
   }
 
   // Track webhook event for audit trail
-  const startTime = Date.now()
   logger.webhook.received('paystack', event, eventId)
 
   const webhookEvent = await db.webhookEvent.upsert({

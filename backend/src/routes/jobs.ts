@@ -10,7 +10,7 @@ import { reconcilePaystackTransactions } from '../jobs/reconciliation.js'
 import { processDueReminders, scanAndScheduleMissedReminders } from '../jobs/reminders.js'
 import { cleanupOldPageViews } from '../jobs/cleanup.js'
 import { syncAllActiveBalances } from '../services/balanceSync.js'
-import { logger, safeError, ErrorCodes } from '../utils/logger.js'
+import { safeError, ErrorCodes } from '../utils/logger.js'
 import {
   monitorDisputeRatio,
   monitorFirstPaymentDisputes,
@@ -48,6 +48,14 @@ const requireJobsAuth = async (c: any, next: () => Promise<void>) => {
   if (!expectedKey) {
     console.warn('[jobs] JOBS_API_KEY not configured, jobs endpoint disabled')
     return c.json({ error: 'Jobs endpoint not configured' }, 503)
+  }
+
+  if (env.E2E_MODE === 'true') {
+    const e2eKey = c.req.header('x-e2e-api-key')
+    if (e2eKey && e2eKey === env.E2E_API_KEY) {
+      await next()
+      return
+    }
   }
 
   if (!apiKey || apiKey !== expectedKey) {
@@ -383,7 +391,7 @@ jobs.post('/stats-aggregate', async (c) => {
   console.log('[jobs] Starting stats aggregation job')
 
   try {
-    const { result, durationMs } = await runTrackedJob('stats-aggregate', async () => {
+    const { durationMs } = await runTrackedJob('stats-aggregate', async () => {
       const { aggregateToday, aggregateYesterday } = await import('../jobs/stats-aggregation.js')
 
       // Aggregate both today (partial) and yesterday (final)

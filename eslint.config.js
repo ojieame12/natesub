@@ -35,7 +35,7 @@ export default defineConfig([
       ],
       // Downgraded to warnings for legacy code - Fix these over time
       '@typescript-eslint/no-explicit-any': 'warn',
-      '@typescript-eslint/no-unused-vars': 'warn',
+      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
       'react-hooks/exhaustive-deps': 'warn',
       'react-hooks/rules-of-hooks': 'warn',
       'react-hooks/set-state-in-effect': 'warn',
@@ -51,6 +51,32 @@ export default defineConfig([
     files: ['src/components/**/*.{ts,tsx}'],
     rules: {
       'no-restricted-syntax': 'off',
+    },
+  },
+  {
+    files: ['backend/scripts/**/*.{ts,tsx}'],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-unused-vars': 'off',
+    },
+  },
+  {
+    files: ['backend/src/**/*.{ts,tsx}'],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
+    },
+  },
+  {
+    files: [
+      '**/*.test.{ts,tsx}',
+      'src/test/**/*.{ts,tsx}',
+      'backend/tests/**/*.{ts,tsx}',
+      'e2e/**/*.{ts,tsx}',
+    ],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-unused-vars': 'off',
+      'react-refresh/only-export-components': 'off',
     },
   },
 ])

@@ -233,7 +233,7 @@ export async function handlePaystackDisputeCreated(data: PaystackDisputeData, ev
  * Handle Paystack dispute resolved
  * Called when the dispute is resolved (won by merchant or lost)
  */
-export async function handlePaystackDisputeResolved(data: PaystackDisputeData, eventId: string) {
+export async function handlePaystackDisputeResolved(data: PaystackDisputeData, _eventId: string) {
   const { id: disputeId, amount, currency, reason, resolution } = data
 
   console.log(`[paystack] Dispute resolved: ${disputeId}, resolution: ${resolution}`)

@@ -115,7 +115,7 @@ async function requireSubscriberSession(c: any, next: () => Promise<void>) {
     // Attach email to context
     c.set('subscriberEmail', payload.email)
     await next()
-  } catch (err) {
+  } catch {
     return c.json({ error: 'Session expired. Please verify your email again.', code: 'SESSION_EXPIRED' }, 401)
   }
 }

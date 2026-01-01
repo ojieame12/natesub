@@ -159,6 +159,7 @@ export interface SeedCreatorOptions {
   paymentProvider?: 'stripe' | 'paystack'
   singleAmount?: number
   purpose?: 'support' | 'service'
+  isPublic?: boolean
 }
 
 // Country code to full name mapping
@@ -177,6 +178,20 @@ const COUNTRY_CURRENCIES: Record<string, string> = {
   GB: 'GBP',
   GH: 'GHS',
   KE: 'KES',
+}
+
+const MIN_SAFE_SINGLE_AMOUNT: Record<string, number> = {
+  USD: 5,
+  GBP: 5,
+  EUR: 5,
+  NGN: 1500,
+  KES: 200,
+  GHS: 20,
+  ZAR: 50,
+}
+
+function getSafeSingleAmount(currency: string, fallback: number): number {
+  return MIN_SAFE_SINGLE_AMOUNT[currency] ?? fallback
 }
 
 /**
@@ -206,8 +221,9 @@ export async function seedTestCreator(
   const country = COUNTRY_NAMES[countryCode] || 'United States'
   const currency = COUNTRY_CURRENCIES[countryCode] || 'USD'
   const paymentProvider = options.paymentProvider || (countryCode === 'NG' ? 'paystack' : 'stripe')
-  const singleAmount = options.singleAmount || 500 // $5.00 default
+  const singleAmount = options.singleAmount ?? getSafeSingleAmount(currency, 5)
   const purpose = options.purpose || 'support'
+  const isPublic = options.isPublic ?? false
 
   // Step 1: Create user via e2e-login
   const loginResult = await e2eLogin(request, options.email)
@@ -225,7 +241,7 @@ export async function seedTestCreator(
       singleAmount,
       paymentProvider,
       feeMode: 'split',
-      isPublic: false, // Start as private, can be made public later
+      isPublic, // Start as private, can be made public later
     },
     headers: {
       'Content-Type': 'application/json',

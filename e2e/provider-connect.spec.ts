@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { e2eLogin, deterministicEmail, setAuthCookie } from './auth.helper'
+import { e2eLogin, deterministicEmail, setAuthCookie, buildUsername } from './auth.helper'
 
 /**
  * Provider Connect E2E Tests
@@ -26,7 +26,7 @@ test.describe('Stripe Connect', () => {
   test('connect creates stubbed account for US user', async ({ request }) => {
     const ts = Date.now().toString().slice(-8)
     const email = `stripe-connect-${ts}@e2e.natepay.co`
-    const username = `stripecon${ts}`
+    const username = buildUsername('stripecon', '', ts)
 
     // Step 1: Create user and profile
     const { token } = await e2eLogin(request, email)
@@ -75,7 +75,7 @@ test.describe('Stripe Connect', () => {
   test('connect returns error for unsupported country', async ({ request }) => {
     const ts = Date.now().toString().slice(-8)
     const email = `stripe-unsup-${ts}@e2e.natepay.co`
-    const username = `stripeunsup${ts}`
+    const username = buildUsername('stripeunsup', '', ts)
 
     // Create user with unsupported country (Nigeria - should use Paystack)
     const { token } = await e2eLogin(request, email)
@@ -109,7 +109,7 @@ test.describe('Stripe Connect', () => {
   test('connect status returns not connected for new profile', async ({ request }) => {
     const ts = Date.now().toString().slice(-8)
     const email = `stripe-notcon-${ts}@e2e.natepay.co`
-    const username = `stripenotc${ts}`
+    const username = buildUsername('stripenotc', '', ts)
 
     const { token } = await e2eLogin(request, email)
 
@@ -142,7 +142,7 @@ test.describe('Stripe Connect', () => {
   test('connect refresh returns link for incomplete onboarding', async ({ request }) => {
     const ts = Date.now().toString().slice(-8)
     const email = `stripe-refresh-${ts}@e2e.natepay.co`
-    const username = `striperef${ts}`
+    const username = buildUsername('striperef', '', ts)
 
     const { token } = await e2eLogin(request, email)
 
@@ -282,7 +282,7 @@ test.describe('Paystack Connect', () => {
   test('connect status returns not connected for new NG profile', async ({ request }) => {
     const ts = Date.now().toString().slice(-8)
     const email = `paystack-notcon-${ts}@e2e.natepay.co`
-    const username = `paystacknotc${ts}`
+    const username = buildUsername('paystacknotc', '', ts)
 
     const { token } = await e2eLogin(request, email)
 
@@ -314,7 +314,7 @@ test.describe('Paystack Connect', () => {
   test('resolve account validates bank details', async ({ request }) => {
     const ts = Date.now().toString().slice(-8)
     const email = `paystack-resolve-${ts}@e2e.natepay.co`
-    const username = `paystackres${ts}`
+    const username = buildUsername('paystackres', '', ts)
 
     const { token } = await e2eLogin(request, email)
 
@@ -358,7 +358,7 @@ test.describe('Paystack Connect', () => {
   test('connect requires bank details', async ({ request }) => {
     const ts = Date.now().toString().slice(-8)
     const email = `paystack-con-${ts}@e2e.natepay.co`
-    const username = `paystackcon${ts}`
+    const username = buildUsername('paystackcon', '', ts)
 
     const { token } = await e2eLogin(request, email)
 
@@ -511,7 +511,7 @@ test.describe('Payment Method Step (UI)', () => {
   test('dashboard shows connect status for authenticated user', async ({ page, request }) => {
     const ts = Date.now().toString().slice(-8)
     const email = `dash-connect-${ts}@e2e.natepay.co`
-    const username = `dashconn${ts}`
+    const username = buildUsername('dashconn', '', ts)
 
     // Create user with profile
     const { token } = await e2eLogin(request, email)
@@ -580,7 +580,7 @@ test.describe('Cross-Border Stripe (NG)', () => {
 
     const ts = Date.now().toString().slice(-8)
     const email = `stripe-ng-${ts}@e2e.natepay.co`
-    const username = `stripeng${ts}`
+    const username = buildUsername('stripeng', '', ts)
 
     const { token } = await e2eLogin(request, email)
 
@@ -625,7 +625,7 @@ test.describe('Connect Rate Limiting', () => {
   test('rapid connect requests are rate limited', async ({ request }) => {
     const ts = Date.now().toString().slice(-8)
     const email = `rate-limit-${ts}@e2e.natepay.co`
-    const username = `ratelim${ts}`
+    const username = buildUsername('ratelim', '', ts)
 
     const { token } = await e2eLogin(request, email)
 

@@ -59,8 +59,8 @@ async function setupPublicCreator(
 
   if (options?.pricingModel === 'tiers') {
     profileData.tiers = [
-      { name: 'Supporter', amount: 500, perks: ['Access to updates'] },
-      { name: 'Super Fan', amount: 1000, perks: ['Access to updates', 'Exclusive content'] },
+      { id: `tier_${ts}_1`, name: 'Supporter', amount: 500, perks: ['Access to updates'] },
+      { id: `tier_${ts}_2`, name: 'Super Fan', amount: 1000, perks: ['Access to updates', 'Exclusive content'] },
     ]
   }
 
@@ -451,7 +451,7 @@ test.describe('Cross-Border Checkout', () => {
   test('NG creator page loads', async ({ page, request }) => {
     const ts = Date.now().toString().slice(-8)
     const email = `ng-creator-${ts}@e2e.natepay.co`
-    const username = `ngcreator${ts}`
+    const username = buildUsername('ngcreator', '', ts)
 
     const { token } = await e2eLogin(request, email)
 

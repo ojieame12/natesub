@@ -71,11 +71,6 @@ export default function PaystackConnect() {
         }
     }, [showBankDropdown])
 
-    // Reset highlighted index when search query changes
-    useEffect(() => {
-        setHighlightedIndex(-1)
-    }, [bankSearchQuery])
-
     // Keyboard navigation for dropdown
     const handleDropdownKeyDown = (e: React.KeyboardEvent) => {
         if (!showBankDropdown) return
@@ -147,11 +142,6 @@ export default function PaystackConnect() {
 
     // Auto-verify account when account number meets minimum length
     useEffect(() => {
-        // Show typing indicator during debounce if we have enough characters
-        if (selectedBank && accountNumber.length >= minAccountLength) {
-            setIsTyping(true)
-        }
-
         // Increment request ID - any in-flight request with older ID will be ignored
         verifyRequestId.current += 1
         const currentRequestId = verifyRequestId.current
@@ -191,13 +181,17 @@ export default function PaystackConnect() {
                     setVerifyError(result.error || 'Could not verify account. Please check the details.')
                     setVerificationSkipped(false)
                 }
-            } catch (err: any) {
+            } catch (err: unknown) {
                 // Ignore errors from stale requests
                 if (verifyRequestId.current !== currentRequestId) {
                     return
                 }
                 setVerifiedName(null)
-                setVerifyError(err?.error || 'Could not verify account. Please check the details.')
+                if (err && typeof err === 'object' && 'error' in err) {
+                    setVerifyError(String((err as { error?: string }).error) || 'Could not verify account. Please check the details.')
+                } else {
+                    setVerifyError('Could not verify account. Please check the details.')
+                }
                 setVerificationSkipped(false)
             }
         }
@@ -205,9 +199,8 @@ export default function PaystackConnect() {
         const debounce = setTimeout(verifyAccount, 500)
         return () => {
             clearTimeout(debounce)
-            setIsTyping(false)
         }
-    }, [accountNumber, selectedBank, idNumber, isSouthAfrica, minAccountLength])
+    }, [accountNumber, selectedBank, idNumber, isSouthAfrica, minAccountLength, resolveAccount])
 
     const handleSelectBank = (bank: Bank) => {
         setSelectedBank(bank)
@@ -218,6 +211,7 @@ export default function PaystackConnect() {
         setVerifyError(null)
         setConnectError(null)
         setVerificationSkipped(false)
+        setHighlightedIndex(-1)
         setManualAccountName('')
     }
 
@@ -253,11 +247,16 @@ export default function PaystackConnect() {
 
             // Success - go to success page (don't reset here, success page will do it)
             navigate('/onboarding/paystack/complete')
-        } catch (err: any) {
-            if (err?.message === 'Connection timed out') {
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : null
+            if (message === 'Connection timed out') {
                 setConnectError('Connection is taking too long. Please check your internet connection and try again.')
             } else {
-                setConnectError(err?.error || 'Failed to connect bank account. Please try again.')
+                if (err && typeof err === 'object' && 'error' in err) {
+                    setConnectError(String((err as { error?: string }).error) || 'Failed to connect bank account. Please try again.')
+                } else {
+                    setConnectError('Failed to connect bank account. Please try again.')
+                }
             }
         }
     }
@@ -377,15 +376,18 @@ export default function PaystackConnect() {
 
                         {showBankDropdown && (
                             <div className="paystack-dropdown" onKeyDown={handleDropdownKeyDown}>
-                                <input
-                                    type="text"
-                                    className="paystack-dropdown-search"
-                                    placeholder="Search banks..."
-                                    value={bankSearchQuery}
-                                    onChange={(e) => setBankSearchQuery(e.target.value)}
-                                    onKeyDown={handleDropdownKeyDown}
-                                    autoFocus
-                                />
+                        <input
+                            type="text"
+                            className="paystack-dropdown-search"
+                            placeholder="Search banks..."
+                            value={bankSearchQuery}
+                            onChange={(e) => {
+                                setBankSearchQuery(e.target.value)
+                                setHighlightedIndex(-1)
+                            }}
+                            onKeyDown={handleDropdownKeyDown}
+                            autoFocus
+                        />
                                 <div className="paystack-dropdown-list" ref={listRef}>
                                     {filteredBanks.length > 0 ? (
                                         filteredBanks.map((bank, index) => (
@@ -416,7 +418,15 @@ export default function PaystackConnect() {
                             className="paystack-input"
                             placeholder="Enter account number"
                             value={accountNumber}
-                            onChange={(e) => setAccountNumber(e.target.value.replace(/\D/g, ''))}
+                            onChange={(e) => {
+                                const nextValue = e.target.value.replace(/\D/g, '')
+                                setAccountNumber(nextValue)
+                                if (selectedBank && nextValue.length >= minAccountLength) {
+                                    setIsTyping(true)
+                                } else {
+                                    setIsTyping(false)
+                                }
+                            }}
                             onKeyDown={(e) => {
                                 if (e.key === 'Enter' && canSubmit) {
                                     e.preventDefault()

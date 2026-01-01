@@ -15,6 +15,10 @@ if (existsSync(rootEnvPath)) {
   dotenv.config({ path: rootEnvPath });
 }
 
+if (!process.env.E2E_API_KEY) process.env.E2E_API_KEY = 'e2e-local-dev-key';
+if (!process.env.JOBS_API_KEY) process.env.JOBS_API_KEY = 'test-jobs-api-key';
+if (!process.env.ADMIN_API_KEY) process.env.ADMIN_API_KEY = 'test-admin-key-12345';
+
 /**
  * Playwright E2E Configuration
  * ============================
@@ -90,11 +94,13 @@ export default defineConfig({
       stdout: 'pipe',
       stderr: 'pipe',
       env: {
+        ...process.env,
         PAYMENTS_MODE: 'stub',
         NODE_ENV: 'test',
         E2E_MODE: 'true', // Enable E2E testing endpoints
-        E2E_API_KEY: 'e2e-local-dev-key', // Required for /e2e/* endpoints
-        JOBS_API_KEY: 'test-jobs-api-key', // Required for /jobs/* endpoints
+        E2E_API_KEY: process.env.E2E_API_KEY, // Required for /e2e/* endpoints
+        JOBS_API_KEY: process.env.JOBS_API_KEY, // Required for /jobs/* endpoints
+        ADMIN_API_KEY: process.env.ADMIN_API_KEY,
         HOST: '127.0.0.1',
         APP_URL: 'http://localhost:5173',
         API_URL: 'http://localhost:3001',
