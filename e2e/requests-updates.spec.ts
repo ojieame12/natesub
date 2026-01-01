@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { e2eLogin, setAuthCookie } from './auth.helper'
+import { e2eLogin, setAuthCookie, buildUsername } from './auth.helper'
 
 /**
  * Requests & Updates E2E Tests
@@ -32,7 +32,7 @@ async function setupCreator(
 ) {
   const ts = Date.now().toString().slice(-8)
   const email = `requests-${suffix}-${ts}@e2e.natepay.co`
-  const username = `req${suffix}${ts}`
+  const username = buildUsername('req', suffix, ts)
 
   const { token, user } = await e2eLogin(request, email)
 

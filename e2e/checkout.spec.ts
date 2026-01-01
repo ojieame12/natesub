@@ -33,7 +33,7 @@ test.describe('Subscription Checkout - Smoke Tests', () => {
 
   test('handles non-existent creator with 404', async ({ page }) => {
     // Visit a non-existent creator page
-    await page.goto('/nonexistent-creator-xyz-12345')
+    await page.goto('/nonexistentcreatorxyz12345')
 
     // Wait for the page to settle
     await page.waitForLoadState('networkidle')
@@ -46,7 +46,7 @@ test.describe('Subscription Checkout - Smoke Tests', () => {
                      content.includes('Page not found')
 
     // Either shows error or has navigated away
-    expect(hasError || page.url() !== '/nonexistent-creator-xyz-12345').toBeTruthy()
+    expect(hasError || page.url() !== '/nonexistentcreatorxyz12345').toBeTruthy()
   })
 
   test('reserved routes redirect properly', async ({ page }) => {
@@ -90,7 +90,7 @@ test.describe('Checkout Integration - API Level', () => {
     // Test that checkout correctly validates creator exists
     const response = await request.post('http://localhost:3001/checkout/session', {
       data: {
-        creatorUsername: 'nonexistent-creator-xyz-12345',
+        creatorUsername: 'nonexistentcreatorxyz12345',
         amount: 1000,
         interval: 'one_time',
         subscriberEmail: 'test@example.com',

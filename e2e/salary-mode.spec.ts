@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { e2eLogin } from './auth.helper'
+import { e2eLogin, buildUsername } from './auth.helper'
 
 /**
  * Salary Mode E2E Tests
@@ -34,7 +34,7 @@ async function setupCreator(
 ) {
   const ts = Date.now().toString().slice(-8)
   const email = `salary-${suffix}-${ts}@e2e.natepay.co`
-  const username = `salary${suffix}${ts}`
+  const username = buildUsername('salary', suffix, ts)
 
   const { token, user } = await e2eLogin(request, email)
 

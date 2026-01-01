@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { e2eLogin, deterministicEmail } from './auth.helper'
+import { e2eLogin, deterministicEmail, buildUsername } from './auth.helper'
 
 /**
  * Public Subscribe Flow E2E Tests
@@ -38,7 +38,7 @@ async function setupPublicCreator(
 ) {
   const ts = Date.now().toString().slice(-8)
   const email = `public-creator-${suffix}-${ts}@e2e.natepay.co`
-  const username = `pub${suffix}${ts}`
+  const username = buildUsername('pub', suffix, ts)
 
   const { token, user } = await e2eLogin(request, email)
 
@@ -149,7 +149,7 @@ test.describe('Public Page Loading', () => {
   })
 
   test('public page 404s for non-existent creator', async ({ page }) => {
-    await page.goto('/nonexistent-creator-xyz-999')
+    await page.goto('/nonexistentcreatorxyz999')
     await page.waitForLoadState('networkidle')
 
     const content = await page.content()
@@ -158,7 +158,7 @@ test.describe('Public Page Loading', () => {
       content.toLowerCase().includes('404') ||
       content.toLowerCase().includes("doesn't exist")
 
-    expect(has404 || !page.url().includes('nonexistent-creator')).toBeTruthy()
+    expect(has404 || !page.url().includes('nonexistentcreator')).toBeTruthy()
   })
 
   test('private profile is not publicly accessible', async ({ page, request }) => {
@@ -208,7 +208,7 @@ test.describe('Checkout Initiation', () => {
   test('checkout requires valid creator', async ({ request }) => {
     const response = await request.post(`${API_URL}/checkout/session`, {
       data: {
-        creatorUsername: 'nonexistent-creator',
+        creatorUsername: 'nonexistentcreator',
         subscriberEmail: 'test@example.com',
         amount: 500,
         interval: 'month',

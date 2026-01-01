@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { e2eLogin, deterministicEmail } from './auth.helper'
+import { e2eLogin, deterministicEmail, buildUsername } from './auth.helper'
 
 /**
  * Webhook Processing E2E Tests
@@ -30,7 +30,7 @@ async function setupCreator(
 ) {
   const ts = Date.now().toString().slice(-8)
   const email = `webhook-${suffix}-${ts}@e2e.natepay.co`
-  const username = `wh${suffix}${ts}`
+  const username = buildUsername('wh', suffix, ts)
 
   const provider = options?.provider || 'stripe'
   const countryCode = options?.countryCode || 'US'

@@ -37,24 +37,30 @@ async function setupVisualStubs(page: import('@playwright/test').Page) {
     })
   })
 
-  // Stub creator profile for public page
-  await page.route('**/creators/visualtest', async (route) => {
+  // Stub public profile for creator page
+  await page.route('**/users/visualtest', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
-        id: 'visual-creator',
-        username: 'visualtest',
-        firstName: 'Visual',
-        lastName: 'Test',
-        bio: 'Test creator for visual snapshots',
-        avatarUrl: null,
-        bannerUrl: null,
-        tiers: [
-          { id: 'tier-1', name: 'Basic', price: 500, currency: 'usd', perks: ['Access to content'] },
-          { id: 'tier-2', name: 'Premium', price: 1500, currency: 'usd', perks: ['All basic perks', 'Exclusive content'] },
-        ],
-        country: 'US',
+        profile: {
+          id: 'visual-creator',
+          username: 'visualtest',
+          displayName: 'Visual Test',
+          bio: 'Test creator for visual snapshots',
+          avatarUrl: null,
+          bannerUrl: null,
+          tiers: [
+            { id: 'tier-1', name: 'Basic', amount: 500, perks: ['Access to content'] },
+            { id: 'tier-2', name: 'Premium', amount: 1500, perks: ['All basic perks', 'Exclusive content'] },
+          ],
+          country: 'US',
+          currency: 'USD',
+          purpose: 'support',
+          pricingModel: 'tiers',
+        },
+        viewerSubscription: null,
+        isOwner: false,
       }),
     })
   })

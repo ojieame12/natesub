@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { e2eLogin, setAuthCookie } from './auth.helper'
+import { e2eLogin, setAuthCookie, buildUsername } from './auth.helper'
 
 /**
  * Payroll & Income Statement E2E Tests
@@ -31,7 +31,7 @@ async function setupServiceCreator(
 ) {
   const ts = Date.now().toString().slice(-8)
   const email = `payroll-${suffix}-${ts}@e2e.natepay.co`
-  const username = `pay${suffix}${ts}`
+  const username = buildUsername('pay', suffix, ts)
 
   const { token, user } = await e2eLogin(request, email)
 
@@ -115,7 +115,7 @@ test.describe('Payroll Periods API', () => {
   test('returns warning if address is missing', async ({ request }) => {
     const ts = Date.now().toString().slice(-8)
     const email = `payroll-noaddr-${ts}@e2e.natepay.co`
-    const username = `paynoaddr${ts}`
+    const username = buildUsername('paynoaddr', '', ts)
 
     const { token } = await e2eLogin(request, email)
 

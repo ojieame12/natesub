@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { e2eLogin, setAuthCookie, deterministicEmail } from './auth.helper'
+import { e2eLogin, setAuthCookie, deterministicEmail, buildUsername } from './auth.helper'
 
 /**
  * Creator Dashboard E2E Tests
@@ -33,7 +33,7 @@ async function setupCreatorWithProfile(
 ) {
   const ts = Date.now().toString().slice(-8)
   const email = `creator-dash-${suffix}-${ts}@e2e.natepay.co`
-  const username = `dash${suffix}${ts}`
+  const username = buildUsername('dash', suffix, ts)
 
   const { token, user } = await e2eLogin(request, email)
 

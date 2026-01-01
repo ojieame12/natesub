@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { e2eLogin, setAuthCookie, deterministicEmail } from './auth.helper'
+import { e2eLogin, setAuthCookie, deterministicEmail, buildUsername } from './auth.helper'
 
 /**
  * Activity & Payouts E2E Tests
@@ -33,7 +33,7 @@ async function setupCreator(
 ) {
   const ts = Date.now().toString().slice(-8)
   const email = `activity-${suffix}-${ts}@e2e.natepay.co`
-  const username = `act${suffix}${ts}`
+  const username = buildUsername('act', suffix, ts)
 
   const country = options?.country || 'United States'
   const countryCode = options?.countryCode || 'US'

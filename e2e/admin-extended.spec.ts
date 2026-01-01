@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { e2eLogin } from './auth.helper'
+import { e2eLogin, buildUsername } from './auth.helper'
 
 /**
  * Admin Extended Surfaces E2E Tests
@@ -44,7 +44,7 @@ async function setupCreator(
 ) {
   const ts = Date.now().toString().slice(-8)
   const email = `admin-ext-${suffix}-${ts}@e2e.natepay.co`
-  const username = `admext${suffix}${ts}`
+  const username = buildUsername('admext', suffix, ts)
 
   const { token, user } = await e2eLogin(request, email)
 
@@ -106,18 +106,20 @@ test.describe('Tax Reporting', () => {
     expect(data.earnings || data.creators !== undefined).toBeTruthy()
   })
 
-  test('GET /admin/tax/export-1099 returns 1099 data', async ({ request }) => {
+  test('POST /admin/tax/export-1099 returns 1099 data', async ({ request }) => {
     test.skip(SKIP_ADMIN_TESTS, 'ADMIN_API_KEY required')
     const currentYear = new Date().getFullYear()
 
-    const response = await request.get(`${API_URL}/admin/tax/export-1099?year=${currentYear}`, {
+    const response = await request.post(`${API_URL}/admin/tax/export-1099`, {
       headers: adminHeaders(),
+      data: { year: currentYear },
     })
 
     // STRICT: Must return 200 with valid admin auth
     expect(response.status(), '1099 export must succeed with valid admin key').toBe(200)
     const data = await response.json()
-    expect(data.forms || data.eligible !== undefined).toBeTruthy()
+    expect(data.csv).toBeTruthy()
+    expect(data.filename).toContain(`${currentYear}`)
   })
 
   test('tax endpoints require admin auth', async ({ request }) => {
@@ -383,70 +385,80 @@ test.describe('Refund Management', () => {
 // ============================================
 
 test.describe('Data Export', () => {
-  test('GET /admin/export/payments returns payment export', async ({ request }) => {
+  test('POST /admin/export/payments returns payment export', async ({ request }) => {
     test.skip(SKIP_ADMIN_TESTS, 'ADMIN_API_KEY required')
 
-    const response = await request.get(`${API_URL}/admin/export/payments?format=json`, {
+    const response = await request.post(`${API_URL}/admin/export/payments`, {
       headers: adminHeaders(),
+      data: {},
     })
 
     // STRICT: Must return 200 with valid admin auth
     expect(response.status(), 'Payment export must succeed with valid admin key').toBe(200)
     const data = await response.json()
-    expect(data.payments || Array.isArray(data)).toBeTruthy()
+    expect(data.csv).toBeTruthy()
+    expect(typeof data.filename).toBe('string')
   })
 
-  test('GET /admin/export/subscriptions returns subscription export', async ({ request }) => {
+  test('POST /admin/export/subscriptions returns subscription export', async ({ request }) => {
     test.skip(SKIP_ADMIN_TESTS, 'ADMIN_API_KEY required')
 
-    const response = await request.get(`${API_URL}/admin/export/subscriptions?format=json`, {
+    const response = await request.post(`${API_URL}/admin/export/subscriptions`, {
       headers: adminHeaders(),
+      data: {},
     })
 
     // STRICT: Must return 200 with valid admin auth
     expect(response.status(), 'Subscription export must succeed with valid admin key').toBe(200)
     const data = await response.json()
-    expect(data.subscriptions || Array.isArray(data)).toBeTruthy()
+    expect(data.csv).toBeTruthy()
+    expect(typeof data.filename).toBe('string')
   })
 
-  test('GET /admin/export/creators returns creator export', async ({ request }) => {
+  test('POST /admin/export/creators returns creator export', async ({ request }) => {
     test.skip(SKIP_ADMIN_TESTS, 'ADMIN_API_KEY required')
     await setupCreator(request, 'exportcreator')
 
-    const response = await request.get(`${API_URL}/admin/export/creators?format=json`, {
+    const response = await request.post(`${API_URL}/admin/export/creators`, {
       headers: adminHeaders(),
+      data: {},
     })
 
     // STRICT: Must return 200 with valid admin auth
     expect(response.status(), 'Creator export must succeed with valid admin key').toBe(200)
     const data = await response.json()
-    expect(data.creators || Array.isArray(data)).toBeTruthy()
+    expect(data.csv).toBeTruthy()
+    expect(typeof data.filename).toBe('string')
   })
 
-  test('GET /admin/export/users returns user export', async ({ request }) => {
+  test('POST /admin/export/users returns user export', async ({ request }) => {
     test.skip(SKIP_ADMIN_TESTS, 'ADMIN_API_KEY required')
 
-    const response = await request.get(`${API_URL}/admin/export/users?format=json`, {
+    const response = await request.post(`${API_URL}/admin/export/users`, {
       headers: adminHeaders(),
+      data: {},
     })
 
     // STRICT: Must return 200 with valid admin auth
     expect(response.status(), 'User export must succeed with valid admin key').toBe(200)
     const data = await response.json()
-    expect(data.users || Array.isArray(data)).toBeTruthy()
+    expect(data.csv).toBeTruthy()
+    expect(typeof data.filename).toBe('string')
   })
 
-  test('GET /admin/export/disputes returns dispute export', async ({ request }) => {
+  test('POST /admin/export/disputes returns dispute export', async ({ request }) => {
     test.skip(SKIP_ADMIN_TESTS, 'ADMIN_API_KEY required')
 
-    const response = await request.get(`${API_URL}/admin/export/disputes?format=json`, {
+    const response = await request.post(`${API_URL}/admin/export/disputes`, {
       headers: adminHeaders(),
+      data: {},
     })
 
     // STRICT: Must return 200 with valid admin auth
     expect(response.status(), 'Dispute export must succeed with valid admin key').toBe(200)
     const data = await response.json()
-    expect(data.disputes || Array.isArray(data)).toBeTruthy()
+    expect(data.csv).toBeTruthy()
+    expect(typeof data.filename).toBe('string')
   })
 
   test('export supports date range filter', async ({ request }) => {
@@ -455,10 +467,13 @@ test.describe('Data Export', () => {
     startDate.setMonth(startDate.getMonth() - 1)
     const endDate = new Date()
 
-    const response = await request.get(
-      `${API_URL}/admin/export/payments?format=json&startDate=${startDate.toISOString()}&endDate=${endDate.toISOString()}`,
-      { headers: adminHeaders() }
-    )
+    const response = await request.post(`${API_URL}/admin/export/payments`, {
+      headers: adminHeaders(),
+      data: {
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+      },
+    })
 
     // STRICT: Must return 200 with valid admin auth
     expect(response.status(), 'Date-filtered export must succeed with valid admin key').toBe(200)
@@ -467,7 +482,9 @@ test.describe('Data Export', () => {
   })
 
   test('export requires admin auth', async ({ request }) => {
-    const response = await request.get(`${API_URL}/admin/export/payments`)
+    const response = await request.post(`${API_URL}/admin/export/payments`, {
+      data: {},
+    })
 
     expect(response.status()).toBe(401)
   })

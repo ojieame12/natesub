@@ -124,7 +124,7 @@ test.describe('Onboarding - Real Backend', () => {
 test.describe('Checkout - Real Backend', () => {
   test('public page loads for non-existent creator (404)', async ({ page }) => {
     // Try to load a definitely non-existent creator
-    await page.goto('/nonexistent-creator-xyz-999')
+    await page.goto('/nonexistentcreatorxyz999')
     await page.waitForLoadState('networkidle')
 
     // Should show error or redirect (real backend returns 404)
@@ -134,7 +134,7 @@ test.describe('Checkout - Real Backend', () => {
                      content.includes("doesn't exist")
 
     // Either shows error or redirected away
-    expect(hasError || !page.url().includes('nonexistent-creator')).toBeTruthy()
+    expect(hasError || !page.url().includes('nonexistentcreator')).toBeTruthy()
   })
 
   test('checkout session creation requires valid creator', async ({ request }) => {

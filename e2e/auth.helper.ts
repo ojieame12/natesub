@@ -263,10 +263,12 @@ export function deterministicEmail(testName: string): string {
 
 /**
  * Build a safe username (<=20 chars, lowercase, [a-z0-9_])
- * Keeps the last 8 chars of the timestamp for uniqueness.
+ * Adds a short random suffix to prevent shard collisions.
  */
 export function buildUsername(prefix: string, suffix: string, ts: string): string {
   const base = `${prefix}${suffix}`.toLowerCase().replace(/[^a-z0-9_]/g, '')
-  const safePrefix = base.slice(0, 12) // leave room for 8-char ts
-  return `${safePrefix}${ts.slice(-8)}`
+  const safePrefix = base.slice(0, 10) // leave room for 6-char ts + 4-char rand
+  const tsSuffix = ts.slice(-6)
+  const rand = Math.random().toString(36).slice(2, 6)
+  return `${safePrefix}${tsSuffix}${rand}`
 }

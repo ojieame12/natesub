@@ -728,23 +728,29 @@ test.describe('Subscriber Portal Navigation (STRICT)', () => {
 
 test.describe('Public Page Navigation (STRICT)', () => {
   async function setupCreatorStubs(page: Page) {
-    await page.route('**/creators/testcreator', async (route) => {
+    await page.route('**/users/testcreator', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          id: 'creator-1',
-          username: 'testcreator',
-          firstName: 'Test',
-          lastName: 'Creator',
-          bio: 'Test creator bio',
-          avatarUrl: null,
-          bannerUrl: null,
-          tiers: [
-            { id: 'tier-1', name: 'Basic', price: 500, currency: 'usd', perks: ['Perk 1'] },
-            { id: 'tier-2', name: 'Premium', price: 1500, currency: 'usd', perks: ['Perk 1', 'Perk 2'] },
-          ],
-          country: 'US',
+          profile: {
+            id: 'creator-1',
+            username: 'testcreator',
+            displayName: 'Test Creator',
+            bio: 'Test creator bio',
+            avatarUrl: null,
+            bannerUrl: null,
+            tiers: [
+              { id: 'tier-1', name: 'Basic', amount: 500, perks: ['Perk 1'] },
+              { id: 'tier-2', name: 'Premium', amount: 1500, perks: ['Perk 1', 'Perk 2'] },
+            ],
+            country: 'US',
+            currency: 'USD',
+            purpose: 'support',
+            pricingModel: 'tiers',
+          },
+          viewerSubscription: null,
+          isOwner: false,
         }),
       })
     })

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { e2eLogin, setAuthCookie, deterministicEmail } from './auth.helper'
+import { e2eLogin, setAuthCookie, deterministicEmail, buildUsername } from './auth.helper'
 
 /**
  * Admin & Webhook E2E Tests
@@ -45,7 +45,7 @@ async function setupCreator(
 ) {
   const ts = Date.now().toString().slice(-8)
   const email = `admin-test-${suffix}-${ts}@e2e.natepay.co`
-  const username = `admtest${suffix}${ts}`
+  const username = buildUsername('admtest', suffix, ts)
 
   const { token, user } = await e2eLogin(request, email)
 

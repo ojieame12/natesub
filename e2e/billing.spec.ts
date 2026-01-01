@@ -40,6 +40,13 @@ async function setupCreator(
   const username = buildUsername('billing', suffix, ts)
 
   const { token, user } = await e2eLogin(request, email)
+  const perks = purpose === 'service'
+    ? [
+      { id: `perk_${ts}_1`, title: 'Weekly check-ins', enabled: true },
+      { id: `perk_${ts}_2`, title: 'Priority support', enabled: true },
+      { id: `perk_${ts}_3`, title: 'Resource templates', enabled: true },
+    ]
+    : undefined
 
   // Create profile
   const profileResp = await request.put(`${API_URL}/profile`, {
@@ -52,6 +59,7 @@ async function setupCreator(
       purpose, // 'support' = personal, 'service' = requires $5/mo
       pricingModel: 'single',
       singleAmount: purpose === 'service' ? 100 : 10, // Service providers charge more
+      perks,
       paymentProvider: 'stripe',
       feeMode: 'split',
       isPublic: true,
