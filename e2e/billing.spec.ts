@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { e2eLogin } from './auth.helper'
+import { e2eLogin, buildUsername } from './auth.helper'
 
 /**
  * Platform Billing E2E Tests
@@ -37,7 +37,7 @@ async function setupCreator(
 ) {
   const ts = Date.now().toString().slice(-8)
   const email = `billing-${suffix}-${ts}@e2e.natepay.co`
-  const username = `billing${suffix}${ts}`
+  const username = buildUsername('billing', suffix, ts)
 
   const { token, user } = await e2eLogin(request, email)
 
@@ -55,6 +55,14 @@ async function setupCreator(
       paymentProvider: 'stripe',
       feeMode: 'split',
       isPublic: true,
+      // Service profiles require 3 perks to publish
+      ...(purpose === 'service' && {
+        perks: [
+          { id: `perk_${ts}_1`, title: 'Monthly billing summary', enabled: true },
+          { id: `perk_${ts}_2`, title: 'Invoice generation', enabled: true },
+          { id: `perk_${ts}_3`, title: 'Payment receipts', enabled: true },
+        ],
+      }),
     },
     headers: { 'Authorization': `Bearer ${token}` },
   })
