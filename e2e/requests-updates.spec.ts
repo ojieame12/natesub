@@ -34,7 +34,8 @@ async function setupCreator(
   const email = `requests-${suffix}-${ts}@e2e.natepay.co`
   const username = buildUsername('req', suffix, ts)
 
-  let { token, user } = await e2eLogin(request, email)
+  const { token: initialToken, user } = await e2eLogin(request, email)
+  let token = initialToken
 
   const profileResp = await request.put(`${API_URL}/profile`, {
     data: {
