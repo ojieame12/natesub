@@ -242,6 +242,9 @@ jobs:
           API_URL: http://localhost:3001
           ENCRYPTION_KEY: test-encryption-key-for-ci-32chars!
           ADMIN_API_KEY: test-admin-key-12345
+          PAYSTACK_SECRET_KEY: sk_test_dummy_paystack_key
+          PAYSTACK_PUBLIC_KEY: pk_test_dummy_paystack_key
+          ENABLE_PAYSTACK: 'true'
 
       - name: Upload Test Results
         uses: actions/upload-artifact@v4
