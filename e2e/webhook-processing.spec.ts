@@ -526,10 +526,13 @@ test.describe('Paystack Webhook Processing', () => {
             exp_year: '2025',
           },
           customer: {
+            id: Date.now(),
             email: `sub-pscharge-${Date.now()}@e2e.natepay.co`,
+            customer_code: `CUS_${Date.now()}`,
           },
           metadata: {
             creatorId: userId,
+            interval: 'month',
           },
         },
       },
@@ -856,10 +859,13 @@ test.describe('Webhook DB Side-Effects', () => {
             exp_year: '2026',
           },
           customer: {
+            id: Date.now(),
             email: `db-pay-${Date.now()}@e2e.natepay.co`,
+            customer_code: `CUS_${Date.now()}`,
           },
           metadata: {
             creatorId: userId,
+            interval: 'month',
           },
         },
       },
