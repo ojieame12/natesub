@@ -246,7 +246,7 @@ export default function ActivityDetail() {
     const realPayoutInfo = data?.payoutInfo
     const fxData = data?.fxData
     const fxPending = data?.fxPending ?? false
-    const payload = activityData?.payload || {}
+    const payload = (activityData?.payload || {}) as Record<string, any>
 
     // Auto-refresh when FX data is pending (backfill in progress)
     // Cross-border transfers can take 5-30 minutes for balance transaction to finalize

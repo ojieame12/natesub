@@ -116,11 +116,11 @@ export default function PersonalReviewStep() {
 
     // Use store → backend onboardingData fallback chain (handles localStorage cleared)
     // This ensures service creators aren't misclassified if localStorage is cleared
-    const serverData = userData?.onboarding?.data
+    const serverData = (userData?.onboarding?.data || {}) as Record<string, any>
     const resolvedPurpose = purpose || serverData?.purpose || 'support'
-    const resolvedCountryCode = countryCode || serverData?.countryCode || ''
-    const resolvedCountry = country || serverData?.country || ''
-    const resolvedCurrency = currency || serverData?.currency || 'USD'
+    const resolvedCountryCode = (countryCode || serverData?.countryCode || '') as string
+    const resolvedCountry = (country || serverData?.country || '') as string
+    const resolvedCurrency = (currency || serverData?.currency || 'USD') as string
     const resolvedAvatarUrl = avatarUrl || serverData?.avatarUrl
     const resolvedPaymentProvider = paymentProvider || serverData?.paymentProvider
 
@@ -132,9 +132,9 @@ export default function PersonalReviewStep() {
     const localCurrencyName = getLocalCurrencyName(resolvedCountryCode)
 
     // Construct display name from first/last name
-    const displayName = `${firstName} ${lastName}`.trim()
+    const displayName = `${firstName || ''} ${lastName || ''}`.trim()
 
-    const currencySymbol = getCurrencySymbol(resolvedCurrency)
+    const currencySymbol = getCurrencySymbol(resolvedCurrency as string)
 
     // Price input as string for free editing
     const [priceInput, setPriceInput] = useState(String(singleAmount || 10))

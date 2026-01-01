@@ -99,7 +99,7 @@ export default function OnboardingFlow() {
     })
     // Track if we're ready to render (prevents flash of step 0 on reload)
     const [isReadyToRender, setIsReadyToRender] = useState(false)
-    const [stableStepCount, setStableStepCount] = useState(steps.length)
+    const [stableStepCount, setStableStepCount] = useState(0)
     // Minimum time to show resuming shell (prevents jarring flash)
     const shellShowTimeRef = useRef<number | null>(null)
     const MIN_SHELL_DURATION = 300 // ms
@@ -130,7 +130,7 @@ export default function OnboardingFlow() {
 
     // Determine if we should show the address step based on country
     // Use server data as fallback before store is hydrated
-    const effectiveCountryCode = countryCode || onboardingData?.countryCode
+    const effectiveCountryCode = (countryCode || onboardingData?.countryCode) as string | undefined
     const showAddressStep = effectiveCountryCode && !shouldSkipAddressStep(effectiveCountryCode)
 
     // Check if this is service mode (requires AI generation steps)

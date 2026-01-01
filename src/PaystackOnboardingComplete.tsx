@@ -83,11 +83,11 @@ export default function PaystackOnboardingComplete() {
 
     // 3. Service users: determine based on existing data
     // Use server data fallback chain (most robust for cross-device scenarios)
-    const serverData = userData?.onboarding?.data
+    const serverData = (userData?.onboarding?.data || {}) as Record<string, any>
     const resolvedDescription = serverData?.serviceDescription || profile?.bio || serviceDescription
     const resolvedPerks = serverData?.servicePerks || profile?.perks || servicePerks
 
-    const hasDescription = resolvedDescription?.trim?.() || (typeof resolvedDescription === 'string' && resolvedDescription.trim())
+    const hasDescription = (typeof resolvedDescription === 'string' && resolvedDescription.trim()) || resolvedDescription?.trim?.()
     const hasPerks = Array.isArray(resolvedPerks) && resolvedPerks.length >= 3
 
     if (!hasDescription) return 'service-desc'
