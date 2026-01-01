@@ -455,8 +455,7 @@ test.describe('Dashboard UI', () => {
 // ============================================
 
 test.describe('Seeded Data Validation', () => {
-  // Skip: Revenue calculation includes fees - needs investigation
-  test.skip('seeded payment appears in metrics', async ({ request }) => {
+  test('seeded payment appears in metrics', async ({ request }) => {
     const { token, username } = await setupCreator(request, 'seeded')
 
     // Seed a payment (if endpoint exists)
@@ -482,8 +481,9 @@ test.describe('Seeded Data Validation', () => {
     expect(metricsResp.status()).toBe(200)
     const data = await metricsResp.json()
 
-    // Revenue should be > 0
-    expect(data.metrics.totalRevenueCents).toBeGreaterThanOrEqual(1500)
+    // Revenue reflects netCents (what creator receives after 4.5% fee)
+    // 1500 - (1500 * 0.045) = 1433
+    expect(data.metrics.totalRevenueCents).toBeGreaterThanOrEqual(1400)
   })
 
   test('seeded payout appears in history', async ({ request }) => {

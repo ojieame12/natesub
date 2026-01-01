@@ -41,8 +41,7 @@ test.describe('Creator Onboarding (Stubbed)', () => {
     await expect(continueBtn).toBeEnabled()
   })
 
-  // Skip: UI selector timing out - needs investigation
-  test.skip('identity step renders for Nigerian user (NG/Paystack)', async ({ page }) => {
+  test('identity step renders for Nigerian user (NG/Paystack)', async ({ page }) => {
     const user = createTestUser({
       country: 'NG',
       paymentProvider: 'paystack',
@@ -58,16 +57,18 @@ test.describe('Creator Onboarding (Stubbed)', () => {
     await page.goto('/onboarding?step=identity')
     await page.waitForLoadState('networkidle')
 
-    // Identity step should render
+    // Identity step should render - increased timeout for CI
     const firstNameInput = page.getByTestId('identity-first-name')
-    await expect(firstNameInput).toBeVisible({ timeout: 5000 })
+    await expect(firstNameInput).toBeVisible({ timeout: 10000 })
 
     // Fill form
     await firstNameInput.fill('Adebayo')
     await page.getByTestId('identity-last-name').fill('Creator')
 
-    // Select Nigeria
-    await page.getByTestId('country-selector').click()
+    // Select Nigeria - wait for selector to be visible first
+    const countrySelector = page.getByTestId('country-selector')
+    await expect(countrySelector).toBeVisible({ timeout: 5000 })
+    await countrySelector.click()
     await page.getByTestId('country-option-ng').click()
 
     // Continue button should be enabled

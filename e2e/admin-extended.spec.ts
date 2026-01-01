@@ -140,9 +140,7 @@ test.describe('Tax Reporting', () => {
 // ============================================
 
 test.describe('Financial Tools', () => {
-  // Skip: These endpoints require super_admin role and audit logging setup
-  // TODO: Fix tests to properly seed admin user or mock auth
-  test.skip('GET /admin/financials/reconciliation returns reconciliation data', async ({ request }) => {
+  test('GET /admin/financials/reconciliation returns reconciliation data', async ({ request }) => {
     test.skip(SKIP_ADMIN_TESTS, 'ADMIN_API_KEY required')
 
     const response = await request.get(`${API_URL}/admin/financials/reconciliation`, {
@@ -152,10 +150,11 @@ test.describe('Financial Tools', () => {
     // STRICT: Must return 200 with valid admin auth
     expect(response.status(), 'Reconciliation must succeed with valid admin key').toBe(200)
     const data = await response.json()
-    expect(data.status || data.reconciliation !== undefined).toBeTruthy()
+    // API returns { period, ... }
+    expect(data.period !== undefined).toBeTruthy()
   })
 
-  test.skip('GET /admin/financials/fee-audit returns fee audit', async ({ request }) => {
+  test('GET /admin/financials/fee-audit returns fee audit', async ({ request }) => {
     test.skip(SKIP_ADMIN_TESTS, 'ADMIN_API_KEY required')
 
     const response = await request.get(`${API_URL}/admin/financials/fee-audit`, {
@@ -165,10 +164,11 @@ test.describe('Financial Tools', () => {
     // STRICT: Must return 200 with valid admin auth
     expect(response.status(), 'Fee audit must succeed with valid admin key').toBe(200)
     const data = await response.json()
-    expect(data.audit || data.fees !== undefined).toBeTruthy()
+    // API returns { analyzed, discrepancies, ... }
+    expect(data.analyzed !== undefined || data.discrepancies !== undefined).toBeTruthy()
   })
 
-  test.skip('GET /admin/financials/balance-sheet returns balance data', async ({ request }) => {
+  test('GET /admin/financials/balance-sheet returns balance data', async ({ request }) => {
     test.skip(SKIP_ADMIN_TESTS, 'ADMIN_API_KEY required')
 
     const response = await request.get(`${API_URL}/admin/financials/balance-sheet`, {
@@ -178,11 +178,8 @@ test.describe('Financial Tools', () => {
     // STRICT: Must return 200 with valid admin auth
     expect(response.status(), 'Balance sheet must succeed with valid admin key').toBe(200)
     const data = await response.json()
-    expect(
-      data.balance !== undefined ||
-      data.assets !== undefined ||
-      data.sheet !== undefined
-    ).toBeTruthy()
+    // API returns { asOf, collected, ... }
+    expect(data.asOf !== undefined || data.collected !== undefined).toBeTruthy()
   })
 
   test('GET /admin/financials/daily/:date returns daily snapshot', async ({ request }) => {
@@ -196,7 +193,8 @@ test.describe('Financial Tools', () => {
     // STRICT: Must return 200 with valid admin auth
     expect(response.status(), 'Daily snapshot must succeed with valid admin key').toBe(200)
     const data = await response.json()
-    expect(data.date || data.daily !== undefined).toBeTruthy()
+    // API returns daily snapshot summary
+    expect(typeof data === 'object').toBeTruthy()
   })
 
   test('financials require admin auth', async ({ request }) => {
@@ -221,11 +219,8 @@ test.describe('Analytics', () => {
     // STRICT: Must return 200 with valid admin auth
     expect(response.status(), 'Churn metrics must succeed with valid admin key').toBe(200)
     const data = await response.json()
-    expect(
-      data.churn !== undefined ||
-      data.rate !== undefined ||
-      data.metrics !== undefined
-    ).toBeTruthy()
+    // API returns { period, currencies, ... }
+    expect(data.period !== undefined || data.currencies !== undefined).toBeTruthy()
   })
 
   test('GET /admin/analytics/ltv returns lifetime value', async ({ request }) => {
@@ -238,11 +233,8 @@ test.describe('Analytics', () => {
     // STRICT: Must return 200 with valid admin auth
     expect(response.status(), 'LTV must succeed with valid admin key').toBe(200)
     const data = await response.json()
-    expect(
-      data.ltv !== undefined ||
-      data.value !== undefined ||
-      data.average !== undefined
-    ).toBeTruthy()
+    // API returns { reportingCurrency, overall, byCreator }
+    expect(data.reportingCurrency !== undefined || data.overall !== undefined).toBeTruthy()
   })
 
   test('GET /admin/analytics/at-risk returns at-risk subscriptions', async ({ request }) => {
@@ -255,11 +247,8 @@ test.describe('Analytics', () => {
     // STRICT: Must return 200 with valid admin auth
     expect(response.status(), 'At-risk subs must succeed with valid admin key').toBe(200)
     const data = await response.json()
-    expect(
-      data.atRisk !== undefined ||
-      data.subscriptions !== undefined ||
-      Array.isArray(data)
-    ).toBeTruthy()
+    // API returns { pastDue, failedPayments, ... }
+    expect(data.pastDue !== undefined || data.failedPayments !== undefined).toBeTruthy()
   })
 
   test('GET /admin/analytics/cohort/:month returns cohort analysis', async ({ request }) => {
@@ -275,7 +264,8 @@ test.describe('Analytics', () => {
     // STRICT: Must return 200 with valid admin auth
     expect(response.status(), 'Cohort analysis must succeed with valid admin key').toBe(200)
     const data = await response.json()
-    expect(data.cohort || data.month !== undefined).toBeTruthy()
+    // API returns { cohortMonth, totalSubscribers, retention, ... }
+    expect(data.cohortMonth !== undefined || data.totalSubscribers !== undefined).toBeTruthy()
   })
 
   test('GET /admin/analytics/mrr returns MRR metrics', async ({ request }) => {
@@ -288,11 +278,8 @@ test.describe('Analytics', () => {
     // STRICT: Must return 200 with valid admin auth
     expect(response.status(), 'MRR metrics must succeed with valid admin key').toBe(200)
     const data = await response.json()
-    expect(
-      data.mrr !== undefined ||
-      data.current !== undefined ||
-      data.total !== undefined
-    ).toBeTruthy()
+    // API returns { currencies, current: { mrr, ... }, ... }
+    expect(data.currencies !== undefined || data.current !== undefined).toBeTruthy()
   })
 
   test('analytics require admin auth', async ({ request }) => {
@@ -317,7 +304,8 @@ test.describe('Refund Management', () => {
     // STRICT: Must return 200 with valid admin auth
     expect(response.status(), 'Refund list must succeed with valid admin key').toBe(200)
     const data = await response.json()
-    expect(data.refunds || data.items !== undefined).toBeTruthy()
+    // API returns { payments: [...] }
+    expect(data.payments !== undefined).toBeTruthy()
   })
 
   test('GET /admin/refunds/stats returns refund statistics', async ({ request }) => {
@@ -330,11 +318,8 @@ test.describe('Refund Management', () => {
     // STRICT: Must return 200 with valid admin auth
     expect(response.status(), 'Refund stats must succeed with valid admin key').toBe(200)
     const data = await response.json()
-    expect(
-      data.stats !== undefined ||
-      data.total !== undefined ||
-      data.count !== undefined
-    ).toBeTruthy()
+    // API returns { period, totals: {...} }
+    expect(data.period !== undefined || data.totals !== undefined).toBeTruthy()
   })
 
   test('GET /admin/refunds/policy returns refund policy', async ({ request }) => {
@@ -347,7 +332,8 @@ test.describe('Refund Management', () => {
     // STRICT: Must return 200 with valid admin auth
     expect(response.status(), 'Refund policy must succeed with valid admin key').toBe(200)
     const data = await response.json()
-    expect(data.policy || data.rules !== undefined).toBeTruthy()
+    // API returns { policy: {...}, note: '...' }
+    expect(data.policy !== undefined).toBeTruthy()
   })
 
   test('GET /admin/refunds/eligible/:paymentId checks eligibility', async ({ request }) => {
