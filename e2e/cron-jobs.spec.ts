@@ -20,7 +20,7 @@ const API_URL = 'http://localhost:3001'
 const getJobsApiKey = () => process.env.JOBS_API_KEY || 'test-jobs-api-key'
 
 // E2E API key for helper endpoints (matches playwright.config.ts)
-const getE2eApiKey = () => process.env.E2E_API_KEY || 'e2e-local-dev-key'
+const getE2EApiKey = () => process.env.E2E_API_KEY || 'e2e-local-dev-key'
 
 // Helper headers
 const jobsHeaders = () => ({
@@ -29,7 +29,7 @@ const jobsHeaders = () => ({
 })
 
 const e2eHeaders = () => ({
-  'x-e2e-api-key': getE2eApiKey() || '',
+  'x-e2e-api-key': getE2EApiKey() || '',
   'Content-Type': 'application/json',
 })
 
@@ -61,7 +61,7 @@ async function callJobEndpoint(
   const headers = {
     ...jobsHeaders(),
     // Time override requires E2E API key (jobs.ts validates this)
-    'x-e2e-api-key': getE2eApiKey(),
+    'x-e2e-api-key': getE2EApiKey(),
   }
 
   if (method === 'GET') {
@@ -641,7 +641,7 @@ test.describe('Cron Jobs E2E (Strict)', () => {
       const response = await request.post(`${API_URL}/jobs/stats-backfill?days=7`, {
         headers: {
           ...jobsHeaders(),
-          'x-e2e-api-key': getE2eApiKey(),
+          'x-e2e-api-key': getE2EApiKey(),
         },
       })
 
