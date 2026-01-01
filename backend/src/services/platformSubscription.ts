@@ -266,11 +266,6 @@ export async function createPortalSession(
   userId: string,
   returnUrl: string
 ): Promise<{ url: string }> {
-  // Stub mode: return fake portal URL for E2E tests
-  if (env.PAYMENTS_MODE === 'stub') {
-    return { url: 'https://billing.stripe.com/p/session/stub_test_portal' }
-  }
-
   const profile = await db.profile.findUnique({
     where: { userId },
     select: { platformCustomerId: true },
@@ -278,6 +273,11 @@ export async function createPortalSession(
 
   if (!profile?.platformCustomerId) {
     throw new Error('No platform customer found')
+  }
+
+  // Stub mode: return fake portal URL for E2E tests (after validation)
+  if (env.PAYMENTS_MODE === 'stub') {
+    return { url: 'https://billing.stripe.com/p/session/stub_test_portal' }
   }
 
   const session = await stripe.billingPortal.sessions.create({
