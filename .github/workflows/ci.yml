@@ -241,6 +241,7 @@ jobs:
           APP_URL: http://localhost:5173
           API_URL: http://localhost:3001
           ENCRYPTION_KEY: test-encryption-key-for-ci-32chars!
+          ADMIN_API_KEY: test-admin-key-12345
 
       - name: Upload Test Results
         uses: actions/upload-artifact@v4
