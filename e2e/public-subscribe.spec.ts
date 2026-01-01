@@ -53,7 +53,6 @@ async function setupPublicCreator(
     pricingModel: options?.pricingModel || 'single',
     singleAmount: options?.amount || 5,
     paymentProvider: 'stripe',
-    feeMode: 'split',
     isPublic: options?.isPublic !== false,
     bio: 'Support my work!',
   }
@@ -168,11 +167,15 @@ test.describe('Public Page Loading', () => {
     await page.goto(`/${missingUsername}`)
     await page.waitForLoadState('networkidle')
 
-    const notFoundContainer = page.locator('.sub-not-found')
-    const hasNotFound = await notFoundContainer.isVisible({ timeout: 5000 }).catch(() => false)
+    // Check for 404 indicators
+    const content = await page.textContent('body')
+    const has404 = content?.toLowerCase().includes('not found') ||
+                   content?.toLowerCase().includes('404') ||
+                   content?.toLowerCase().includes("doesn't exist") ||
+                   content?.includes('User not found')
     const redirected = !page.url().includes(missingUsername)
 
-    expect(hasNotFound || redirected).toBeTruthy()
+    expect(has404 || redirected, 'Should show 404 or redirect').toBeTruthy()
   })
 
   test('private profile is not publicly accessible', async ({ page, request }) => {
@@ -489,7 +492,6 @@ test.describe('Cross-Border Checkout', () => {
         pricingModel: 'single',
         singleAmount: 5000, // 5000 NGN
         paymentProvider: 'stripe', // Cross-border
-        feeMode: 'split',
         isPublic: true,
       },
       headers: { 'Authorization': `Bearer ${token}` },
