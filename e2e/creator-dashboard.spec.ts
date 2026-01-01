@@ -50,13 +50,22 @@ async function setupCreatorWithProfile(
     throw new Error('Profile creation failed in seedTestCreator')
   }
 
+  let sessionToken = token
+
   // Connect Stripe
-  await request.post(`${API_URL}/stripe/connect`, {
+  const connectResp = await request.post(`${API_URL}/stripe/connect`, {
     headers: { 'Authorization': `Bearer ${token}` },
   })
 
+  if (connectResp.ok()) {
+    const connectData = await connectResp.json().catch(() => null)
+    if (connectData?.token) {
+      sessionToken = connectData.token
+    }
+  }
+
   // Clear onboarding state so /auth/me redirects to dashboard
-  await request.put(`${API_URL}/auth/onboarding`, {
+  const onboardingResp = await request.put(`${API_URL}/auth/onboarding`, {
     data: {
       step: 12,
       stepKey: 'review',
@@ -65,10 +74,13 @@ async function setupCreatorWithProfile(
         purpose: 'support',
       },
     },
-    headers: { 'Authorization': `Bearer ${token}` },
+    headers: { 'Authorization': `Bearer ${sessionToken}` },
   })
+  if (!onboardingResp.ok()) {
+    throw new Error(`Onboarding reset failed: ${onboardingResp.status()} - ${await onboardingResp.text()}`)
+  }
 
-  return { token, userId: user.id, email, username: createdUsername }
+  return { token: sessionToken, userId: user.id, email, username: createdUsername }
 }
 
 // ============================================
