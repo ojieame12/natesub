@@ -47,7 +47,9 @@ export default defineConfig({
   fullyParallel: false, // Serial execution to avoid Neon connection pool exhaustion
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  workers: 1, // Single worker to prevent Neon transaction timeouts
+  // Single worker by default to prevent Neon transaction timeouts
+  // Use PW_WORKERS env var to override (e.g., for CI with local Postgres)
+  workers: process.env.PW_WORKERS ? parseInt(process.env.PW_WORKERS, 10) : 1,
   reporter: process.env.CI ? 'github' : 'html',
   timeout: 60 * 1000, // 60s per test
   expect: {
