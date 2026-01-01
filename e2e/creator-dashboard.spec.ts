@@ -193,9 +193,9 @@ test.describe('Profile API', () => {
     expect(response.status()).toBe(200)
     const data = await response.json()
 
-    expect(data.username).toBe(username)
-    expect(data.displayName).toBeTruthy()
-    expect(data.currency).toBe('USD')
+    expect(data.profile.username).toBe(username)
+    expect(data.profile.displayName).toBeTruthy()
+    expect(data.profile.currency).toBe('USD')
   })
 
   test('PATCH /profile updates profile fields', async ({ request }) => {
@@ -497,15 +497,16 @@ test.describe('Pricing Management', () => {
   test('can get current pricing', async ({ request }) => {
     const { token } = await setupCreatorWithProfile(request, 'getprice')
 
-    const response = await request.get(`${API_URL}/profile/pricing`, {
+    const response = await request.get(`${API_URL}/profile`, {
       headers: { 'Authorization': `Bearer ${token}` },
     })
 
     expect(response.status()).toBe(200)
     const data = await response.json()
 
-    // Should have pricing info
-    expect(data.pricingModel || data.singleAmount || data.tiers).toBeDefined()
+    // Should have pricing info in profile object
+    expect(data.profile.pricingModel).toBeDefined()
+    expect(data.profile.singleAmount).toBeDefined()
   })
 
   test('can update pricing model', async ({ request }) => {

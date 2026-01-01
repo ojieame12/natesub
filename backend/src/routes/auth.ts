@@ -6,7 +6,6 @@ import {
   requestMagicLink,
   verifyMagicLink,
   logout,
-  getCurrentUser,
   getCurrentUserWithOnboarding,
   saveOnboardingProgress,
   resetOnboardingProgress,
@@ -210,6 +209,11 @@ auth.get('/me', requireAuth, async (c) => {
   }
 
   const { user, onboarding } = result
+
+  // E2E debugging - log onboarding state
+  if (process.env.E2E_MODE === 'true') {
+    console.log(`[auth/me] User ${userId}: hasProfile=${onboarding.hasProfile}, step=${user.onboardingStep}, redirectTo=${onboarding.redirectTo}`)
+  }
 
   // Only return necessary profile fields to avoid exposing internal data
   const safeProfile = user.profile ? {
@@ -433,7 +437,6 @@ auth.delete(
   })),
   async (c) => {
     const userId = c.get('userId')
-    const sessionToken = getCookie(c, 'session')
 
     // Cancel all Stripe subscriptions BEFORE deleting the account
     // This must happen outside the transaction since it's external API calls

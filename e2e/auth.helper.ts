@@ -128,11 +128,15 @@ export async function e2eLogin(request: APIRequestContext, email: string): Promi
  * Set auth cookie in browser context
  */
 export async function setAuthCookie(page: Page, token: string) {
-  // Clear any stale auth data from localStorage first
-  await page.evaluate(() => {
-    localStorage.removeItem('auth_token')
-    localStorage.removeItem('auth_session')
-  })
+  // Clear any stale auth data from localStorage (if page has loaded)
+  try {
+    await page.evaluate(() => {
+      localStorage.removeItem('auth_token')
+      localStorage.removeItem('auth_session')
+    })
+  } catch {
+    // Ignore SecurityError if page hasn't loaded yet
+  }
 
   await page.context().addCookies([
     {
