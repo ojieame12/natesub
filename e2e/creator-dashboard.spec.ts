@@ -75,11 +75,17 @@ test.describe('Dashboard Overview', () => {
   test('dashboard loads for authenticated creator', async ({ page, request }) => {
     const { token } = await setupCreatorWithProfile(request, 'overview')
 
-    // Set auth cookie and navigate - need to go to a page first to set cookies
+    // Set auth cookie and session flag - page must be loaded first
     await page.goto('/')
     await setAuthCookie(page, token)
 
-    // Reload to pick up fresh auth state (clears React Query cache)
+    // Explicitly set session flag (frontend needs this to enable auth queries)
+    await page.evaluate(() => {
+      localStorage.setItem('nate_has_session', 'true')
+      sessionStorage.setItem('nate_has_session', 'true')
+    })
+
+    // Reload to pick up fresh auth state
     await page.reload()
     await page.waitForLoadState('networkidle')
 

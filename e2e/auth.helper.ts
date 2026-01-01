@@ -140,11 +140,11 @@ export async function setAuthCookie(page: Page, token: string) {
   ])
 
   // Set auth session flag in localStorage so frontend enables auth queries
-  // Frontend checks hasAuthSession() which reads from localStorage
+  // Frontend checks hasAuthSession() which reads 'nate_has_session' from localStorage
   try {
     await page.evaluate(() => {
-      localStorage.setItem('auth_session', 'true')
-      sessionStorage.setItem('auth_session', 'true')
+      localStorage.setItem('nate_has_session', 'true')
+      sessionStorage.setItem('nate_has_session', 'true')
     })
   } catch {
     // Ignore SecurityError if page hasn't loaded yet - will be set on page load
