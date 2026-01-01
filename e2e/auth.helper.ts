@@ -79,8 +79,40 @@ export async function expectToast(page: Page, message: string | RegExp) {
  * Select country in onboarding
  */
 export async function selectCountry(page: Page, country: string) {
-  await page.click('[data-testid="country-select"], select[name="country"]')
-  await page.click(`text=${country}`)
+  const normalized = country.trim().toLowerCase()
+  const codeMap: Record<string, string> = {
+    us: 'us',
+    usa: 'us',
+    'united states': 'us',
+    ng: 'ng',
+    nigeria: 'ng',
+    gh: 'gh',
+    ghana: 'gh',
+    ke: 'ke',
+    kenya: 'ke',
+    za: 'za',
+    'south africa': 'za',
+    gb: 'gb',
+    uk: 'gb',
+    'united kingdom': 'gb',
+  }
+
+  const code = codeMap[normalized] || (normalized.length === 2 ? normalized : '')
+
+  const selector = page.locator('[data-testid="country-selector"]')
+  await expect(selector).toBeVisible({ timeout: 5000 })
+  await selector.click()
+
+  const list = page.locator('[data-testid="country-list"]')
+  await expect(list).toBeVisible({ timeout: 5000 })
+
+  if (code) {
+    await page.locator(`[data-testid="country-option-${code}"]`).click()
+    return
+  }
+
+  // Fallback: click by visible text
+  await page.locator(`text=${country}`).first().click()
 }
 
 // ============================================
