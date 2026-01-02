@@ -1,9 +1,12 @@
 import { useState, memo, useCallback, useMemo, type ReactNode, type CSSProperties, type HTMLAttributes } from 'react'
 import { triggerImpact, type ImpactStyle } from '../utils/haptics'
 
-interface PressableProps extends HTMLAttributes<HTMLDivElement> {
+interface PressableProps extends Omit<HTMLAttributes<HTMLDivElement>, 'onClick' | 'onTouchStart' | 'onMouseEnter'> {
     children: ReactNode
     className?: string
+    onClick?: (e?: React.MouseEvent) => void
+    onMouseEnter?: () => void
+    onTouchStart?: () => void
     disabled?: boolean
     style?: CSSProperties
     /** Haptic feedback intensity: 'light' | 'medium' | 'heavy' | 'none' */
