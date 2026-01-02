@@ -137,8 +137,16 @@ auth.get(
   }
 )
 
-// Logout
+// Logout - with CSRF protection
 auth.post('/logout', async (c) => {
+  // CSRF protection: validate origin
+  const origin = c.req.header('origin')
+  const allowedOrigins = [env.APP_URL, 'http://localhost:5173', 'http://localhost:3000']
+
+  if (origin && !allowedOrigins.includes(origin)) {
+    return c.json({ error: 'Invalid origin' }, 403)
+  }
+
   const cookieToken = getCookie(c, 'session')
 
   // Mobile apps may use Bearer auth instead of cookies
