@@ -116,11 +116,13 @@ export async function selectCountry(page: Page, country: string) {
     const option = page.getByTestId(`country-option-${code}`)
     await expect(option).toBeVisible({ timeout: 30000 })
     await option.click()
+    await expect(selector).toContainText(country, { timeout: 10000 })
     return
   }
 
   // Fallback: click by visible text
   await page.getByText(country, { exact: false }).first().click()
+  await expect(selector).toContainText(country, { timeout: 10000 })
 }
 
 // ============================================

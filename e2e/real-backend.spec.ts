@@ -123,11 +123,9 @@ test.describe('Onboarding - Real Backend', () => {
     // Select country via drawer picker
     await selectCountry(page, 'United States')
 
-    // Submit via JavaScript (button may be covered)
-    await page.evaluate(() => {
-      const btn = document.querySelector('[data-testid="identity-continue-btn"]') as any
-      if (btn && !btn.disabled) btn.click()
-    })
+    const continueBtn = page.getByTestId('identity-continue-btn')
+    await expect(continueBtn).toBeEnabled({ timeout: 10000 })
+    await continueBtn.click()
 
     // Should advance to next step
     await page.waitForTimeout(1000)
@@ -283,11 +281,9 @@ test.describe('Full Onboarding Journey - No Stubs', () => {
     // Select US via country picker
     await selectCountry(page, 'United States')
 
-    // Continue via JavaScript
-    await page.evaluate(() => {
-      const btn = document.querySelector('[data-testid="identity-continue-btn"]') as any
-      if (btn && !btn.disabled) btn.click()
-    })
+    const continueBtn = page.getByTestId('identity-continue-btn')
+    await expect(continueBtn).toBeEnabled({ timeout: 10000 })
+    await continueBtn.click()
 
     // Step 3: Address step (US requires address)
     // Wait for page transition and address form to render
@@ -370,11 +366,9 @@ test.describe('Full Onboarding Journey - No Stubs', () => {
 
     await selectCountry(page, 'United States')
 
-    // Continue via JavaScript
-    await page.evaluate(() => {
-      const btn = document.querySelector('[data-testid="identity-continue-btn"]') as any
-      if (btn && !btn.disabled) btn.click()
-    })
+    const continueBtn = page.getByTestId('identity-continue-btn')
+    await expect(continueBtn).toBeEnabled({ timeout: 10000 })
+    await continueBtn.click()
     await page.waitForTimeout(1000)
 
     // Reload and verify progress was saved
