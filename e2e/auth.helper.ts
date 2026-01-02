@@ -105,20 +105,22 @@ export async function selectCountry(page: Page, country: string) {
   // Robust wait for country selector in slow CI
   await page.waitForSelector('[data-testid="country-selector"]', { state: 'visible', timeout: 30000 })
 
-  const selector = page.locator('[data-testid="country-selector"]')
+  const selector = page.getByTestId('country-selector')
   await expect(selector).toBeVisible({ timeout: 30000 })
   await selector.click()
 
-  const list = page.locator('[data-testid="country-list"]')
-  await expect(list).toBeVisible({ timeout: 10000 })
+  const list = page.getByTestId('country-list')
+  await expect(list).toBeVisible({ timeout: 30000 })
 
   if (code) {
-    await page.locator(`[data-testid="country-option-${code}"]`).click()
+    const option = page.getByTestId(`country-option-${code}`)
+    await expect(option).toBeVisible({ timeout: 30000 })
+    await option.click()
     return
   }
 
   // Fallback: click by visible text
-  await page.locator(`text=${country}`).first().click()
+  await page.getByText(country, { exact: false }).first().click()
 }
 
 // ============================================

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { e2eLogin, setAuthCookie, deterministicEmail, buildUsername, waitForAuthReady } from './auth.helper'
+import { e2eLogin, setAuthCookie, deterministicEmail, buildUsername, waitForAuthReady, selectCountry } from './auth.helper'
 
 // E2E API key for helper endpoints (matches playwright.config.ts)
 const E2E_API_KEY = process.env.E2E_API_KEY || 'e2e-local-dev-key'
@@ -120,20 +120,8 @@ test.describe('Onboarding - Real Backend', () => {
     await page.locator('[data-testid="identity-first-name"]').fill('E2E', { timeout: 15000 })
     await page.locator('[data-testid="identity-last-name"]').fill('TestUser', { timeout: 5000 })
 
-    // Select country (new drawer picker)
-    // Wait for animations/loading to complete
-    await page.waitForTimeout(1000)
-
-    // Explicit wait for country selector to exist and be visible
-    await page.waitForSelector('[data-testid="country-selector"]', { state: 'visible', timeout: 30000 })
-
-    const countrySelector = page.locator('[data-testid="country-selector"]')
-    await expect(countrySelector).toBeVisible({ timeout: 30000 })
-    await countrySelector.click()
-
-    const countryList = page.locator('[data-testid="country-list"]')
-    await expect(countryList).toBeVisible({ timeout: 10000 })
-    await page.locator('[data-testid="country-option-us"]').click({ timeout: 5000 })
+    // Select country via drawer picker
+    await selectCountry(page, 'United States')
 
     // Submit via JavaScript (button may be covered)
     await page.evaluate(() => {
@@ -293,19 +281,7 @@ test.describe('Full Onboarding Journey - No Stubs', () => {
     await page.locator('[data-testid="identity-last-name"]').fill('Journey')
 
     // Select US via country picker
-    // Wait for animations/loading to complete
-    await page.waitForTimeout(1000)
-
-    // Explicit wait for country selector to exist and be visible
-    await page.waitForSelector('[data-testid="country-selector"]', { state: 'visible', timeout: 30000 })
-
-    const countrySelector = page.locator('[data-testid="country-selector"]')
-    await expect(countrySelector).toBeVisible({ timeout: 30000 })
-    await countrySelector.click()
-
-    const countryList = page.locator('[data-testid="country-list"]')
-    await expect(countryList).toBeVisible({ timeout: 10000 })
-    await page.locator('[data-testid="country-option-us"]').click({ timeout: 5000 })
+    await selectCountry(page, 'United States')
 
     // Continue via JavaScript
     await page.evaluate(() => {
@@ -388,19 +364,7 @@ test.describe('Full Onboarding Journey - No Stubs', () => {
     await firstNameInput.fill('Persist')
     await page.locator('[data-testid="identity-last-name"]').fill('Test')
 
-    // Wait for animations/loading to complete
-    await page.waitForTimeout(1000)
-
-    // Explicit wait for country selector to exist and be visible
-    await page.waitForSelector('[data-testid="country-selector"]', { state: 'visible', timeout: 30000 })
-
-    const countrySelector = page.locator('[data-testid="country-selector"]')
-    await expect(countrySelector).toBeVisible({ timeout: 30000 })
-    await countrySelector.click()
-
-    const countryList = page.locator('[data-testid="country-list"]')
-    await expect(countryList).toBeVisible({ timeout: 10000 })
-    await page.locator('[data-testid="country-option-us"]').click({ timeout: 5000 })
+    await selectCountry(page, 'United States')
 
     // Continue via JavaScript
     await page.evaluate(() => {
