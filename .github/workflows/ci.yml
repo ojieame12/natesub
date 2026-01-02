@@ -157,7 +157,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2]
     services:
       postgres:
         image: postgres:15
@@ -217,8 +217,8 @@ jobs:
       - name: Install Playwright Browsers
         run: npx playwright install chromium --with-deps
 
-      - name: Run E2E Tests (Shard ${{ matrix.shard }}/4)
-        run: npx playwright test --project=chromium --shard=${{ matrix.shard }}/4
+      - name: Run E2E Tests (Shard ${{ matrix.shard }}/2)
+        run: npx playwright test --project=chromium --shard=${{ matrix.shard }}/2
         env:
           # Add connection_limit to prevent pool exhaustion in parallel test setup
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/nate_test?connection_limit=10
