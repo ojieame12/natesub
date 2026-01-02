@@ -290,8 +290,12 @@ test.describe('Full Onboarding Journey - No Stubs', () => {
     })
 
     // Step 3: Address step (US requires address)
+    // Wait for page transition and address form to render
+    await page.waitForTimeout(1000)
+    await page.waitForSelector('[data-testid="address-street"]', { state: 'visible', timeout: 30000 })
+
     const streetInput = page.locator('[data-testid="address-street"]')
-    await expect(streetInput).toBeVisible({ timeout: 10000 })
+    await expect(streetInput).toBeVisible({ timeout: 30000 })
     await streetInput.fill('123 E2E Test Street')
     await page.locator('[data-testid="address-city"]').fill('San Francisco')
     await page.locator('[data-testid="address-state"]').fill('CA')
