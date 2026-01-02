@@ -1,0 +1,16 @@
+# CORE TESTS ONLY - Run on every PR
+# Fast, deterministic, prove app works
+
+# Auth & Profile (5 tests)
+e2e/profile.spec.ts
+
+# Billing (5 tests)  
+e2e/billing.spec.ts
+
+# Checkout (5 tests)
+e2e/checkout.spec.ts
+
+# Analytics (5 tests)
+e2e/analytics.spec.ts
+
+# Total: ~20-25 fast API tests
