@@ -61,7 +61,7 @@ export default function IdentityStep() {
                 <img src="/logo.svg" alt="NatePay" />
             </div>
             <div className="onboarding-header">
-                <Pressable className="onboarding-back" onClick={prevStep}>
+                <Pressable className="onboarding-back" onClick={prevStep} aria-label="Go back">
                     <ChevronLeft size={24} />
                 </Pressable>
             </div>
@@ -97,6 +97,7 @@ export default function IdentityStep() {
                             placeholder="First name"
                             autoFocus
                             data-testid="identity-first-name"
+                            aria-label="First name"
                         />
                         <input
                             className="input"
@@ -104,6 +105,7 @@ export default function IdentityStep() {
                             onChange={(e) => setLastName(e.target.value)}
                             placeholder="Last name"
                             data-testid="identity-last-name"
+                            aria-label="Last name"
                         />
                     </div>
 
