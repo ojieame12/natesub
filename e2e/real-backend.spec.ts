@@ -121,6 +121,12 @@ test.describe('Onboarding - Real Backend', () => {
     await page.locator('[data-testid="identity-last-name"]').fill('TestUser', { timeout: 5000 })
 
     // Select country (new drawer picker)
+    // Wait for animations/loading to complete
+    await page.waitForTimeout(1000)
+
+    // Explicit wait for country selector to exist and be visible
+    await page.waitForSelector('[data-testid="country-selector"]', { state: 'visible', timeout: 30000 })
+
     const countrySelector = page.locator('[data-testid="country-selector"]')
     await expect(countrySelector).toBeVisible({ timeout: 30000 })
     await countrySelector.click()
@@ -287,6 +293,12 @@ test.describe('Full Onboarding Journey - No Stubs', () => {
     await page.locator('[data-testid="identity-last-name"]').fill('Journey')
 
     // Select US via country picker
+    // Wait for animations/loading to complete
+    await page.waitForTimeout(1000)
+
+    // Explicit wait for country selector to exist and be visible
+    await page.waitForSelector('[data-testid="country-selector"]', { state: 'visible', timeout: 30000 })
+
     const countrySelector = page.locator('[data-testid="country-selector"]')
     await expect(countrySelector).toBeVisible({ timeout: 30000 })
     await countrySelector.click()
@@ -375,6 +387,12 @@ test.describe('Full Onboarding Journey - No Stubs', () => {
 
     await firstNameInput.fill('Persist')
     await page.locator('[data-testid="identity-last-name"]').fill('Test')
+
+    // Wait for animations/loading to complete
+    await page.waitForTimeout(1000)
+
+    // Explicit wait for country selector to exist and be visible
+    await page.waitForSelector('[data-testid="country-selector"]', { state: 'visible', timeout: 30000 })
 
     const countrySelector = page.locator('[data-testid="country-selector"]')
     await expect(countrySelector).toBeVisible({ timeout: 30000 })
