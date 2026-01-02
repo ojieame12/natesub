@@ -62,7 +62,7 @@ stripeRoutes.get('/supported-countries', async (c) => {
 
 // Stub mode handler - extracted for clarity and testability
 async function handleStubMode(userId: string, newToken: string | null) {
-  const stubAccountId = `stub_acct_${Date.now()}`
+  const stubAccountId = `stub_acct_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`
 
   await db.profile.update({
     where: { userId },
