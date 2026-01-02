@@ -61,7 +61,7 @@ const Pressable = memo(function Pressable({
                 triggerImpact(haptic)
             }
             // Call custom handler if provided
-            onTouchStartProp?.(e)
+            onTouchStartProp?.()
         }
     }, [disabled, haptic, onTouchStartProp])
 
@@ -71,7 +71,7 @@ const Pressable = memo(function Pressable({
 
     const handleClick = useCallback((e: React.MouseEvent) => {
         if (!disabled && onClick) {
-            onClick(e)
+            onClick()
         }
     }, [disabled, onClick])
 
