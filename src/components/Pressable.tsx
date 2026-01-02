@@ -1,12 +1,9 @@
-import { useState, memo, useCallback, useMemo, type ReactNode, type CSSProperties } from 'react'
+import { useState, memo, useCallback, useMemo, type ReactNode, type CSSProperties, type HTMLAttributes } from 'react'
 import { triggerImpact, type ImpactStyle } from '../utils/haptics'
 
-interface PressableProps {
+interface PressableProps extends HTMLAttributes<HTMLDivElement> {
     children: ReactNode
     className?: string
-    onClick?: (e?: React.MouseEvent) => void
-    onMouseEnter?: () => void
-    onTouchStart?: () => void
     disabled?: boolean
     style?: CSSProperties
     /** Haptic feedback intensity: 'light' | 'medium' | 'heavy' | 'none' */
@@ -37,6 +34,7 @@ const Pressable = memo(function Pressable({
     disabled = false,
     style,
     haptic = 'light',
+    ...rest
 }: PressableProps) {
     const [isPressed, setIsPressed] = useState(false)
 
@@ -52,7 +50,7 @@ const Pressable = memo(function Pressable({
         setIsPressed(false)
     }, [])
 
-    const handleTouchStart = useCallback(() => {
+    const handleTouchStart = useCallback((e: React.TouchEvent) => {
         if (!disabled) {
             setIsPressed(true)
             // Trigger haptic feedback on touch (debounced via shared utility)
@@ -60,7 +58,7 @@ const Pressable = memo(function Pressable({
                 triggerImpact(haptic)
             }
             // Call custom handler if provided
-            onTouchStartProp?.()
+            onTouchStartProp?.(e)
         }
     }, [disabled, haptic, onTouchStartProp])
 
@@ -112,6 +110,7 @@ const Pressable = memo(function Pressable({
 
     return (
         <div
+            {...rest}
             className={combinedClassName}
             onClick={handleClick}
             onMouseDown={handleMouseDown}
