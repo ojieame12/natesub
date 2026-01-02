@@ -99,12 +99,18 @@ export async function selectCountry(page: Page, country: string) {
 
   const code = codeMap[normalized] || (normalized.length === 2 ? normalized : '')
 
+  // Wait for animations/loading
+  await page.waitForTimeout(1000)
+
+  // Robust wait for country selector in slow CI
+  await page.waitForSelector('[data-testid="country-selector"]', { state: 'visible', timeout: 30000 })
+
   const selector = page.locator('[data-testid="country-selector"]')
-  await expect(selector).toBeVisible({ timeout: 5000 })
+  await expect(selector).toBeVisible({ timeout: 30000 })
   await selector.click()
 
   const list = page.locator('[data-testid="country-list"]')
-  await expect(list).toBeVisible({ timeout: 5000 })
+  await expect(list).toBeVisible({ timeout: 10000 })
 
   if (code) {
     await page.locator(`[data-testid="country-option-${code}"]`).click()
