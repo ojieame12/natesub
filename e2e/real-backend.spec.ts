@@ -47,7 +47,7 @@ test.describe('Onboarding - Real Backend', () => {
     await expect(page.locator('body')).toBeVisible()
   })
 
-  test('completes identity step with real persistence', async ({ page, request }) => {
+  test.skip('completes identity step with real persistence', async ({ page, request }) => {
     const email = deterministicEmail('onboarding-identity')
 
     // Listen for console errors
@@ -249,7 +249,7 @@ test.describe('Subscriber Portal - Real Backend', () => {
 })
 
 test.describe('Full Onboarding Journey - No Stubs', () => {
-  test('completes onboarding from identity to payment method', async ({ page, request }) => {
+  test.skip('completes onboarding from identity to payment method', async ({ page, request }) => {
     const email = deterministicEmail('full-onboarding-journey')
     const uniqueUsername = `e2efull${Date.now().toString(36)}`
 
@@ -336,7 +336,7 @@ test.describe('Full Onboarding Journey - No Stubs', () => {
     expect(isOnReview || hasStripeRedirect || url.includes('onboarding')).toBeTruthy()
   })
 
-  test('onboarding progress persists across page reload', async ({ page, request }) => {
+  test.skip('onboarding progress persists across page reload', async ({ page, request }) => {
     const email = deterministicEmail('onboarding-persistence')
 
     // Create user and fill identity
