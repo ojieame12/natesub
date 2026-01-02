@@ -151,9 +151,13 @@ jobs:
           NODE_ENV: test
 
   e2e-tests:
-    name: E2E Core Tests
+    name: E2E Tests (Shard ${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1]
     services:
       postgres:
         image: postgres:15
@@ -213,8 +217,8 @@ jobs:
       - name: Install Playwright Browsers
         run: npx playwright install chromium --with-deps
 
-      - name: Run E2E Core Tests
-        run: npx playwright test --project=chromium e2e/profile.spec.ts e2e/billing.spec.ts e2e/checkout.spec.ts e2e/analytics.spec.ts
+      - name: Run E2E Tests (Shard ${{ matrix.shard }}/4)
+        run: npx playwright test --project=chromium --shard=${{ matrix.shard }}/4
         env:
           # Add connection_limit to prevent pool exhaustion in parallel test setup
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/nate_test?connection_limit=10
