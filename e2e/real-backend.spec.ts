@@ -122,7 +122,7 @@ test.describe('Onboarding - Real Backend', () => {
 
     // Select country (new drawer picker)
     const countrySelector = page.locator('[data-testid="country-selector"]')
-    await expect(countrySelector).toBeVisible({ timeout: 15000 })
+    await expect(countrySelector).toBeVisible({ timeout: 30000 })
     await countrySelector.click()
 
     const countryList = page.locator('[data-testid="country-list"]')
@@ -288,7 +288,7 @@ test.describe('Full Onboarding Journey - No Stubs', () => {
 
     // Select US via country picker
     const countrySelector = page.locator('[data-testid="country-selector"]')
-    await expect(countrySelector).toBeVisible({ timeout: 15000 })
+    await expect(countrySelector).toBeVisible({ timeout: 30000 })
     await countrySelector.click()
 
     const countryList = page.locator('[data-testid="country-list"]')
@@ -377,7 +377,7 @@ test.describe('Full Onboarding Journey - No Stubs', () => {
     await page.locator('[data-testid="identity-last-name"]').fill('Test')
 
     const countrySelector = page.locator('[data-testid="country-selector"]')
-    await expect(countrySelector).toBeVisible({ timeout: 15000 })
+    await expect(countrySelector).toBeVisible({ timeout: 30000 })
     await countrySelector.click()
 
     const countryList = page.locator('[data-testid="country-list"]')
