@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { e2eLogin, deterministicEmail, buildUsername } from './auth.helper'
+import { e2eLogin, buildUsername } from './auth.helper'
 
 /**
  * Webhook Processing E2E Tests
@@ -71,14 +71,13 @@ async function setupCreator(
 // ============================================
 
 test.describe('Stripe Webhook Processing', () => {
-  test('checkout.session.completed creates subscription and payment', async ({ request }) => {
-    const { userId, username, token } = await setupCreator(request, 'checkout')
+  test('checkout.session.completed (one-time) creates subscription and payment', async ({ request }) => {
+    const { userId } = await setupCreator(request, 'checkout')
 
     // Create a subscriber
     const subscriberEmail = `sub-checkout-${Date.now()}@e2e.natepay.co`
     const { user: subscriber } = await e2eLogin(request, subscriberEmail)
 
-    const stripeSubId = `e2e-test-sub_${Date.now()}`
     const stripeCustomerId = `cus_test_${Date.now()}`
 
     // Simulate checkout.session.completed webhook
@@ -87,9 +86,8 @@ test.describe('Stripe Webhook Processing', () => {
         eventType: 'checkout.session.completed',
         data: {
           id: `cs_test_${Date.now()}`,
-          mode: 'subscription',
+          mode: 'payment',
           customer: stripeCustomerId,
-          subscription: stripeSubId,
           payment_status: 'paid',
           amount_total: 1000, // $10.00
           currency: 'usd',
@@ -457,13 +455,49 @@ test.describe('Stripe Webhook Processing', () => {
   test('charge.dispute.created handles dispute', async ({ request }) => {
     const { username } = await setupCreator(request, 'dispute')
 
+    // Seed a subscription and payment so dispute can be linked without Stripe API calls
+    const subscriberEmail = `sub-dispute-${Date.now()}@e2e.natepay.co`
+    const seedSubResp = await request.post(`${API_URL}/e2e/seed-subscription`, {
+      data: {
+        creatorUsername: username,
+        subscriberEmail,
+        amount: 1000,
+        currency: 'USD',
+        interval: 'month',
+      },
+      headers: e2eHeaders(),
+    })
+
+    expect(seedSubResp.status()).toBe(200)
+    const { subscriptionId } = await seedSubResp.json()
+
+    const stripeChargeId = `ch_test_${Date.now()}`
+    const stripePaymentIntentId = `pi_test_${Date.now()}`
+
+    const seedPaymentResp = await request.post(`${API_URL}/e2e/seed-payment`, {
+      data: {
+        creatorUsername: username,
+        subscriberEmail,
+        amountCents: 1000,
+        currency: 'USD',
+        status: 'succeeded',
+        subscriptionId,
+        stripeChargeId,
+        stripePaymentIntentId,
+      },
+      headers: e2eHeaders(),
+    })
+
+    expect(seedPaymentResp.status()).toBe(200)
+
     // Simulate dispute.created
     const webhookResp = await request.post(`${API_URL}/e2e/webhook/stripe`, {
       data: {
         eventType: 'charge.dispute.created',
         data: {
           id: `dp_test_${Date.now()}`,
-          charge: `ch_test_${Date.now()}`,
+          charge: stripeChargeId,
+          payment_intent: stripePaymentIntentId,
           amount: 1000,
           currency: 'usd',
           reason: 'fraudulent',

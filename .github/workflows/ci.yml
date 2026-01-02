@@ -135,24 +135,49 @@ jobs:
         run: npm ci
         working-directory: backend
       
-      - name: Create root role (fix Postgres errors)
+      - name: Wait for Postgres and create root role (fix Postgres errors)
         run: |
-          PGPASSWORD=postgres psql -h localhost -U postgres -d nate_test -c "CREATE ROLE root WITH LOGIN PASSWORD 'postgres';" || true
+          for i in $(seq 1 30); do
+            if PGPASSWORD=postgres pg_isready -h localhost -U postgres -d postgres >/dev/null 2>&1; then
+              break
+            fi
+            echo "waiting for postgres..."
+            sleep 1
+          done
+          PGPASSWORD=postgres psql -h localhost -U postgres -d postgres -c "CREATE ROLE root WITH LOGIN PASSWORD 'postgres';" || true
 
       - name: Setup Test DB
-        run: npm run db:push
+        run: |
+          for i in $(seq 1 30); do
+            if PGPASSWORD=postgres pg_isready -h localhost -U postgres -d nate_test >/dev/null 2>&1; then
+              break
+            fi
+            echo "waiting for nate_test..."
+            sleep 1
+          done
+          npm run db:push
         working-directory: backend
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/nate_test
           DIRECT_DATABASE_URL: postgres://postgres:postgres@localhost:5432/nate_test
       
       - name: Run Integration Tests
-        run: npm test -- tests/integration
+        run: |
+          export NODE_OPTIONS="--stack-trace-limit=1000"
+          npm test -- tests/integration -- --runInBand --detectOpenHandles --verbose
         working-directory: backend
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/nate_test?connection_limit=10
           REDIS_URL: redis://localhost:6379
           NODE_ENV: test
+      
+      - name: Upload Integration Test Logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-logs
+          path: backend/test-logs/
+          if-no-files-found: ignore
 
   e2e-tests:
     name: E2E Tests (Shard ${{ matrix.shard }}/4)
@@ -207,12 +232,27 @@ jobs:
         run: npm run db:generate
         working-directory: backend
 
-      - name: Create root role (fix Postgres errors)
+      - name: Wait for Postgres and create root role (fix Postgres errors)
         run: |
-          PGPASSWORD=postgres psql -h localhost -U postgres -d nate_test -c "CREATE ROLE root WITH LOGIN PASSWORD 'postgres';" || true
+          for i in $(seq 1 30); do
+            if PGPASSWORD=postgres pg_isready -h localhost -U postgres -d postgres >/dev/null 2>&1; then
+              break
+            fi
+            echo "waiting for postgres..."
+            sleep 1
+          done
+          PGPASSWORD=postgres psql -h localhost -U postgres -d postgres -c "CREATE ROLE root WITH LOGIN PASSWORD 'postgres';" || true
 
       - name: Setup Test DB
-        run: npm run db:push
+        run: |
+          for i in $(seq 1 30); do
+            if PGPASSWORD=postgres pg_isready -h localhost -U postgres -d nate_test >/dev/null 2>&1; then
+              break
+            fi
+            echo "waiting for nate_test..."
+            sleep 1
+          done
+          npm run db:push
         working-directory: backend
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/nate_test
@@ -226,7 +266,9 @@ jobs:
         run: npx playwright install chromium --with-deps
 
       - name: Run E2E Tests (Shard ${{ matrix.shard }}/4)
-        run: npx playwright test --project=chromium --shard=${{ matrix.shard }}/4
+        run: |
+          export NODE_OPTIONS="--stack-trace-limit=1000"
+          npx playwright test --project=chromium --shard=${{ matrix.shard }}/4 --reporter=list --trace=on-first-retry
         env:
           # Add connection_limit to prevent pool exhaustion in parallel test setup
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/nate_test?connection_limit=10

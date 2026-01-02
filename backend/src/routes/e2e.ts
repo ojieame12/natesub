@@ -822,6 +822,9 @@ e2e.get('/session-count', async (c) => {
  *   amountCents: number,        // Creator's base price (e.g., 1000 = $10)
  *   currency: string,
  *   status: 'pending' | 'succeeded' | 'failed' | 'refunded',
+ *   subscriptionId?: string,
+ *   stripePaymentIntentId?: string,
+ *   stripeChargeId?: string,
  *   e2eRunId?: string
  * }
  *
@@ -835,7 +838,17 @@ e2e.get('/session-count', async (c) => {
  */
 e2e.post('/seed-payment', async (c) => {
   const body = await c.req.json()
-  const { creatorUsername, subscriberEmail, amountCents, currency, status, e2eRunId } = body
+  const {
+    creatorUsername,
+    subscriberEmail,
+    amountCents,
+    currency,
+    status,
+    subscriptionId,
+    stripePaymentIntentId,
+    stripeChargeId,
+    e2eRunId,
+  } = body
   const runId = e2eRunId || generateE2ERunId()
   const marker = getMarkerPrefix(runId)
 
@@ -851,6 +864,17 @@ e2e.post('/seed-payment', async (c) => {
 
   if (!profile) {
     return c.json({ error: 'Creator not found' }, 404)
+  }
+
+  // Optional subscription linkage (for webhook/dispute tests)
+  if (subscriptionId) {
+    const subscription = await db.subscription.findUnique({
+      where: { id: subscriptionId },
+      select: { id: true },
+    })
+    if (!subscription) {
+      return c.json({ error: 'Subscription not found' }, 404)
+    }
   }
 
   // Find or create subscriber
@@ -885,6 +909,7 @@ e2e.post('/seed-payment', async (c) => {
     data: {
       creatorId: profile.userId,
       subscriberId: subscriber.id,
+      subscriptionId: subscriptionId || null,
       grossCents, // Total subscriber paid
       amountCents, // Creator's base price
       feeCents: totalFeeCents, // Total platform fee (9%)
@@ -894,7 +919,8 @@ e2e.post('/seed-payment', async (c) => {
       currency: currency || 'USD',
       status: status || 'succeeded',
       type: 'recurring',
-      stripePaymentIntentId: `${marker}pi_${Date.now()}`,
+      stripePaymentIntentId: stripePaymentIntentId || `${marker}pi_${Date.now()}`,
+      stripeChargeId: stripeChargeId || null,
       occurredAt: new Date(),
       feeModel: 'split_v1',
       feeEffectiveRate: SPLIT_RATE,
@@ -912,6 +938,8 @@ e2e.post('/seed-payment', async (c) => {
     creatorFeeCents,
     netCents,
     status: payment.status,
+    stripePaymentIntentId: payment.stripePaymentIntentId,
+    stripeChargeId: payment.stripeChargeId,
     e2eRunId: runId, // Return for scoped cleanup
   })
 })

@@ -10,27 +10,62 @@ import { convertLocalCentsToUSD, getUSDRate } from '../../../services/fx.js'
 export async function handleDisputeCreated(event: Stripe.Event) {
   const dispute = event.data.object as Stripe.Dispute
 
-  const stripeCustomerId = dispute.charge
-    ? (await stripe.charges.retrieve(dispute.charge as string)).customer as string
+  const chargeId = typeof dispute.charge === 'string' ? dispute.charge : null
+  const paymentIntentId = typeof (dispute as any).payment_intent === 'string'
+    ? (dispute as any).payment_intent
     : null
 
-  if (!stripeCustomerId) return
+  // Prefer local DB lookup (avoids Stripe API dependency and is more robust)
+  let subscription = null
+  let originalPayment = null
+  if (chargeId || paymentIntentId) {
+    const orConditions = []
+    if (chargeId) orConditions.push({ stripeChargeId: chargeId })
+    if (paymentIntentId) orConditions.push({ stripePaymentIntentId: paymentIntentId })
 
-  const subscription = await db.subscription.findFirst({
-    where: { stripeCustomerId },
-    orderBy: { createdAt: 'desc' },
-  })
+    originalPayment = await db.payment.findFirst({
+      where: {
+        status: 'succeeded',
+        ...(orConditions.length ? { OR: orConditions } : {}),
+      },
+      orderBy: { occurredAt: 'desc' },
+    })
+
+    if (originalPayment?.subscriptionId) {
+      subscription = await db.subscription.findUnique({
+        where: { id: originalPayment.subscriptionId },
+      })
+    }
+  }
+
+  // Fallback: look up subscription by Stripe customer (requires Stripe API)
+  if (!subscription) {
+    const stripeCustomerId = chargeId
+      ? (await stripe.charges.retrieve(chargeId)).customer as string
+      : null
+
+    if (!stripeCustomerId) return
+
+    subscription = await db.subscription.findFirst({
+      where: { stripeCustomerId },
+      orderBy: { createdAt: 'desc' },
+    })
+  }
 
   if (!subscription) return
 
-  // Find the original payment to copy fee breakdown
-  const originalPayment = await db.payment.findFirst({
-    where: {
-      subscriptionId: subscription.id,
-      stripeChargeId: dispute.charge as string,
-      status: 'succeeded',
-    },
-  })
+  // Find the original payment to copy fee breakdown (if not already found)
+  if (!originalPayment) {
+    originalPayment = await db.payment.findFirst({
+      where: {
+        subscriptionId: subscription.id,
+        status: 'succeeded',
+        ...(chargeId ? { stripeChargeId: chargeId } : {}),
+        ...(paymentIntentId ? { stripePaymentIntentId: paymentIntentId } : {}),
+      },
+      orderBy: { occurredAt: 'desc' },
+    })
+  }
 
   // Calculate proportional fee breakdown if original payment has split fees
   let creatorFeeCents: number | null = null
