@@ -57,10 +57,17 @@ async function setupCreator(
 
   expect(profileResp.status(), 'Profile must be created').toBe(200)
 
-  // Connect Stripe (stub mode)
-  await request.post(`${API_URL}/stripe/connect`, {
+  // Connect Stripe (stub mode) and capture rotated token
+  const connectResp = await request.post(`${API_URL}/stripe/connect`, {
     headers: { 'Authorization': `Bearer ${token}` },
   })
+
+  if (connectResp.ok()) {
+    const connectData = await connectResp.json().catch(() => null)
+    if (connectData?.token) {
+      token = connectData.token
+    }
+  }
 
   // If unlocking salary mode, seed 2+ successful payments
   if (options?.unlockSalaryMode) {

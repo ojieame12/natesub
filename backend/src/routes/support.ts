@@ -104,6 +104,14 @@ support.post('/tickets', supportTicketRateLimit, optionalAuth, async (c) => {
     success: true,
     ticketId: ticket.id,
     message: 'Your support ticket has been submitted. We\'ll respond within 1-2 business days.',
+    ticket: {
+      id: ticket.id,
+      subject: ticket.subject,
+      category: ticket.category,
+      priority: ticket.priority,
+      status: ticket.status,
+      createdAt: ticket.createdAt,
+    },
   })
 })
 
