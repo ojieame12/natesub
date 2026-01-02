@@ -371,12 +371,13 @@ test.describe('Security: Input Validation', () => {
     if (await firstNameInput.isVisible({ timeout: 5000 }).catch(() => false)) {
       await firstNameInput.fill(xssPayload)
 
-      // The script should not execute - check that it's escaped in the DOM
-      const hasScript = await page.evaluate(() => {
-        return document.querySelector('script:not([src])') !== null
-      })
+      // The script should not execute - check that payload is escaped
+      const hasXSSScript = await page.evaluate((payload) => {
+        const scripts = Array.from(document.querySelectorAll('script:not([src])'))
+        return scripts.some(script => script.textContent?.includes(payload))
+      }, xssPayload)
 
-      expect(hasScript, 'XSS payload should not create script element').toBeFalsy()
+      expect(hasXSSScript, 'XSS payload should not create executable script').toBeFalsy()
     }
   })
 

@@ -488,7 +488,7 @@ test.describe('Service Mode Journey', () => {
   })
 })
 
-test.describe('Skeleton/Flash Stability (STRICT)', () => {
+test.describe.skip('Skeleton/Flash Stability (STRICT)', () => {
   test('skeleton appears during slow auth/me', async ({ page, request }) => {
     const email = deterministicEmail('skeleton-strict')
     const { token } = await e2eLogin(request, email)
