@@ -53,7 +53,7 @@ const Pressable = memo(function Pressable({
         setIsPressed(false)
     }, [])
 
-    const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    const handleTouchStart = useCallback((_e: React.TouchEvent) => {
         if (!disabled) {
             setIsPressed(true)
             // Trigger haptic feedback on touch (debounced via shared utility)
@@ -69,7 +69,7 @@ const Pressable = memo(function Pressable({
         setIsPressed(false)
     }, [])
 
-    const handleClick = useCallback((e: React.MouseEvent) => {
+    const handleClick = useCallback((_e: React.MouseEvent) => {
         if (!disabled && onClick) {
             onClick()
         }
