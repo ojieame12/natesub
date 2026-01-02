@@ -873,6 +873,15 @@ export async function cancelSubscription(
   stripeSubscriptionId: string,
   cancelAtPeriodEnd: boolean = true
 ): Promise<{ status: string; canceledAt: Date | null; cancelAtPeriodEnd: boolean }> {
+  // Stub mode: return fake cancellation result
+  if (env.PAYMENTS_MODE === 'stub') {
+    return {
+      status: cancelAtPeriodEnd ? 'active' : 'canceled',
+      canceledAt: cancelAtPeriodEnd ? null : new Date(),
+      cancelAtPeriodEnd: cancelAtPeriodEnd,
+    }
+  }
+
   try {
     let subscription: Stripe.Subscription
 
