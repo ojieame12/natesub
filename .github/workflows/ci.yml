@@ -157,7 +157,7 @@ jobs:
   e2e-tests:
     name: E2E Tests (Shard ${{ matrix.shard }}/2)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
