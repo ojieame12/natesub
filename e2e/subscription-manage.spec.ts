@@ -61,8 +61,15 @@ async function setupManageStubs(page: Page, subscription: MockSubscription, toke
             maskedEmail: 's***@test.com',
           },
           stats: {
-            totalPaid: 5000,
+            totalSupported: 50,
+            totalPaid: 50,
             monthsSubscribed: 5,
+            memberSince: new Date(Date.now() - 150 * 24 * 60 * 60 * 1000).toISOString(),
+          },
+          payments: [],
+          actions: {
+            canCancel: true,
+            canReactivate: false,
           },
         }),
       })
