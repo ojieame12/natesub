@@ -151,7 +151,7 @@ jobs:
           NODE_ENV: test
 
   e2e-tests:
-    name: E2E Tests (Shard ${{ matrix.shard }}/4)
+    name: E2E Tests (Shard ${{ matrix.shard }}/2)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
