@@ -7,24 +7,47 @@ import { test, expect, Page } from '@playwright/test'
  * manage their subscriptions without logging in (OTP-based auth)
  */
 
+interface TestSubscription {
+  id: string
+  creatorUsername: string
+  creatorDisplayName: string
+  tierName: string | null
+  amount: number
+  currency: string
+  interval: 'month' | 'year' | 'week' | 'day' | 'one_time'
+  status: 'active' | 'past_due' | 'canceled' | 'paused'
+  statusLabel: string
+  currentPeriodEnd: string
+  startedAt: string
+  totalPaid: number
+  paymentCount: number
+  provider: 'stripe' | 'paystack'
+  canUpdatePayment: boolean
+  updatePaymentMethod: 'portal' | 'resubscribe' | 'none'
+  billingDescriptor: string
+  isPastDue: boolean
+  cancelAtPeriodEnd: boolean
+}
+
 interface TestSubscriber {
   email: string
   maskedEmail: string
   token: string
-  subscriptions: Array<{
-    id: string
-    creatorUsername: string
-    creatorDisplayName: string
-    tierName: string | null
-    amount: number
-    currency: string
-    status: 'active' | 'past_due' | 'canceled' | 'paused'
-    currentPeriodEnd: string
-  }>
+  subscriptions: TestSubscription[]
+}
+
+function getStatusLabel(status: TestSubscription['status'], cancelAtPeriodEnd: boolean) {
+  if (status === 'active' && cancelAtPeriodEnd) return 'Canceling'
+  if (status === 'active') return 'Active'
+  if (status === 'past_due') return 'Payment failed'
+  if (status === 'canceled') return 'Canceled'
+  if (status === 'paused') return 'Paused'
+  return status
 }
 
 function createTestSubscriber(overrides: Partial<TestSubscriber> = {}): TestSubscriber {
   const uniqueId = Date.now().toString(36)
+  const now = Date.now()
   return {
     email: `subscriber_${uniqueId}@test.com`,
     maskedEmail: `s***r_${uniqueId}@test.com`,
@@ -35,15 +58,21 @@ function createTestSubscriber(overrides: Partial<TestSubscriber> = {}): TestSubs
         creatorUsername: 'testcreator',
         creatorDisplayName: 'Test Creator',
         tierName: 'Monthly Support',
-        amount: 10, // dollars
+        amount: 10,
         currency: 'USD',
+        interval: 'month',
         status: 'active',
         statusLabel: 'Active',
-        currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-        interval: 'month',
+        currentPeriodEnd: new Date(now + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        startedAt: new Date(now - 120 * 24 * 60 * 60 * 1000).toISOString(),
         totalPaid: 50,
-        billingDescriptor: 'NATEPAY*TESTCREATOR',
+        paymentCount: 5,
+        provider: 'stripe',
+        canUpdatePayment: true,
+        updatePaymentMethod: 'portal',
+        billingDescriptor: 'NATEPAY* TESTCREATOR',
         isPastDue: false,
+        cancelAtPeriodEnd: false,
       },
     ],
     ...overrides,
@@ -51,6 +80,8 @@ function createTestSubscriber(overrides: Partial<TestSubscriber> = {}): TestSubs
 }
 
 async function setupSubscriberPortalStubs(page: Page, subscriber: TestSubscriber) {
+  let hasSession = false
+
   // Stub OTP request
   await page.route('**/subscriber/otp', async (route) => {
     await route.fulfill({
@@ -65,6 +96,7 @@ async function setupSubscriberPortalStubs(page: Page, subscriber: TestSubscriber
     const body = await route.request().postDataJSON()
     // Accept any 6-digit OTP in test mode
     if (body.otp?.length === 6) {
+      hasSession = true
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -89,10 +121,19 @@ async function setupSubscriberPortalStubs(page: Page, subscriber: TestSubscriber
       await route.fallback()
       return
     }
+    if (!hasSession) {
+      await route.fulfill({
+        status: 401,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'Unauthorized' }),
+      })
+      return
+    }
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
+        email: subscriber.email,
         maskedEmail: subscriber.maskedEmail,
         subscriptions: subscriber.subscriptions.map((s) => ({
           id: s.id,
@@ -101,13 +142,24 @@ async function setupSubscriberPortalStubs(page: Page, subscriber: TestSubscriber
             displayName: s.creatorDisplayName,
             avatarUrl: null,
           },
-          tierName: s.tierName,
           amount: s.amount,
           currency: s.currency,
+          interval: s.interval,
           status: s.status,
+          statusLabel: getStatusLabel(s.status, s.cancelAtPeriodEnd),
           currentPeriodEnd: s.currentPeriodEnd,
-          cancelAtPeriodEnd: false,
+          startedAt: s.startedAt,
+          totalPaid: s.totalPaid,
+          paymentCount: s.paymentCount,
+          provider: s.provider,
+          canUpdatePayment: s.canUpdatePayment,
+          updatePaymentMethod: s.updatePaymentMethod,
+          billingDescriptor: s.billingDescriptor,
+          isPastDue: s.isPastDue,
+          cancelAtPeriodEnd: s.cancelAtPeriodEnd,
         })),
+        hasMore: false,
+        nextCursor: null,
       }),
     })
   })
@@ -121,7 +173,8 @@ async function setupSubscriberPortalStubs(page: Page, subscriber: TestSubscriber
       const subId = url.match(/subscriptions\/([^/]+)\/cancel/)?.[1]
       const sub = subscriber.subscriptions.find((s) => s.id === subId)
       if (sub) {
-        sub.status = 'canceled'
+        sub.cancelAtPeriodEnd = true
+        sub.statusLabel = getStatusLabel(sub.status, sub.cancelAtPeriodEnd)
         await route.fulfill({
           status: 200,
           contentType: 'application/json',
@@ -142,6 +195,8 @@ async function setupSubscriberPortalStubs(page: Page, subscriber: TestSubscriber
       const sub = subscriber.subscriptions.find((s) => s.id === subId)
       if (sub) {
         sub.status = 'active'
+        sub.cancelAtPeriodEnd = false
+        sub.statusLabel = getStatusLabel(sub.status, sub.cancelAtPeriodEnd)
         await route.fulfill({
           status: 200,
           contentType: 'application/json',
@@ -161,7 +216,7 @@ async function setupSubscriberPortalStubs(page: Page, subscriber: TestSubscriber
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          portalUrl: 'https://billing.stripe.com/test-portal',
+          url: 'https://billing.stripe.com/test-portal',
           instructions: 'Update your payment method',
         }),
       })
@@ -183,14 +238,33 @@ async function setupSubscriberPortalStubs(page: Page, subscriber: TestSubscriber
               displayName: sub.creatorDisplayName,
               avatarUrl: null,
             },
-            tierName: sub.tierName,
             amount: sub.amount,
             currency: sub.currency,
+            interval: sub.interval,
             status: sub.status,
+            statusLabel: getStatusLabel(sub.status, sub.cancelAtPeriodEnd),
             currentPeriodEnd: sub.currentPeriodEnd,
-            cancelAtPeriodEnd: false,
-            startDate: new Date().toISOString(),
+            startedAt: sub.startedAt,
+            createdAt: new Date().toISOString(),
+            totalPaid: sub.totalPaid,
+            paymentCount: sub.paymentCount,
+            provider: sub.provider,
+            canUpdatePayment: sub.canUpdatePayment,
+            updatePaymentMethod: sub.updatePaymentMethod,
+            billingDescriptor: sub.billingDescriptor,
+            isPastDue: sub.isPastDue,
+            pastDueMessage: sub.isPastDue ? 'Payment failed, please update your card.' : null,
+            cancelAtPeriodEnd: sub.cancelAtPeriodEnd,
           },
+          payments: [
+            {
+              id: `pay_${sub.id}`,
+              amount: sub.amount,
+              currency: sub.currency,
+              date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+              status: 'succeeded',
+            },
+          ],
           actions: {
             canCancel: sub.status === 'active',
             canReactivate: sub.status === 'canceled',
@@ -209,6 +283,7 @@ async function setupSubscriberPortalStubs(page: Page, subscriber: TestSubscriber
 
   // Stub signout
   await page.route('**/subscriber/signout', async (route) => {
+    hasSession = false
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -244,7 +319,6 @@ test.describe('Subscriber Portal - Email Entry', () => {
 
     // Enter invalid email
     await page.fill('input[type="email"]', 'not-an-email')
-    await page.click('button:has-text("Continue")')
 
     // Should show validation error or button should be disabled
     const button = page.locator('button:has-text("Continue")')

@@ -1822,7 +1822,7 @@ button.btn .spinning {
 .country-placeholder {
     flex: 1;
     font-size: 16px;
-    color: var(--text-tertiary);
+    color: var(--text-secondary);
 }
 
 .country-chevron {

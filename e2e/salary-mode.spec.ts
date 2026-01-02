@@ -36,7 +36,9 @@ async function setupCreator(
   const email = `salary-${suffix}-${ts}@e2e.natepay.co`
   const username = buildUsername('salary', suffix, ts)
 
-  const { token, user } = await e2eLogin(request, email)
+  const login = await e2eLogin(request, email)
+  let token = login.token
+  const { user } = login
 
   // Create profile with Stripe
   const profileResp = await request.put(`${API_URL}/profile`, {
