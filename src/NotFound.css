@@ -11,65 +11,177 @@
     justify-content: center;
     padding: var(--space-xl);
     background: var(--bg-base);
+    position: relative;
+    overflow: hidden;
 }
 
 .not-found-content {
-    max-width: 360px;
+    max-width: 400px;
     width: 100%;
     text-align: center;
-    animation: notFoundFadeIn 0.4s var(--ease-out) both;
+    position: relative;
+    z-index: 1;
+    animation: notFoundFadeIn 0.5s var(--ease-out) both;
 }
 
 @keyframes notFoundFadeIn {
     from {
         opacity: 0;
-        transform: translateY(12px);
+        transform: translateY(20px);
     }
-
     to {
         opacity: 1;
         transform: translateY(0);
     }
 }
 
-.not-found-code {
-    font-size: 80px;
-    font-weight: 600;
-    color: var(--neutral-200);
-    line-height: 1;
-    margin-bottom: var(--space-lg);
-    animation: notFoundCodePulse 0.6s var(--ease-spring) both;
+/* ============================================
+   FLOATING ILLUSTRATION
+   ============================================ */
+
+.not-found-illustration {
+    position: relative;
+    width: 120px;
+    height: 120px;
+    margin: 0 auto var(--space-2xl);
 }
 
-@keyframes notFoundCodePulse {
-    0% {
-        opacity: 0;
-        transform: scale(0.8);
-    }
+.not-found-compass {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--accent-primary);
+    animation: compassFloat 4s ease-in-out infinite;
+    filter: drop-shadow(0 4px 12px rgba(var(--accent-primary-rgb), 0.2));
+}
 
+@keyframes compassFloat {
+    0%, 100% {
+        transform: translateY(0) rotate(0deg);
+    }
+    25% {
+        transform: translateY(-8px) rotate(5deg);
+    }
     50% {
-        transform: scale(1.05);
+        transform: translateY(-4px) rotate(0deg);
     }
-
-    100% {
-        opacity: 1;
-        transform: scale(1);
+    75% {
+        transform: translateY(-10px) rotate(-5deg);
     }
 }
+
+.not-found-orbit {
+    position: absolute;
+    inset: -20px;
+    animation: orbitSpin 20s linear infinite;
+}
+
+.orbit-dot {
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    background: var(--accent-primary);
+    border-radius: 50%;
+    opacity: 0.4;
+}
+
+.orbit-dot:nth-child(1) {
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    animation: orbitPulse 2s ease-in-out infinite;
+}
+
+.orbit-dot:nth-child(2) {
+    bottom: 10%;
+    left: 10%;
+    animation: orbitPulse 2s ease-in-out infinite 0.5s;
+}
+
+.orbit-dot:nth-child(3) {
+    bottom: 10%;
+    right: 10%;
+    animation: orbitPulse 2s ease-in-out infinite 1s;
+}
+
+@keyframes orbitSpin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+@keyframes orbitPulse {
+    0%, 100% { opacity: 0.3; transform: scale(1); }
+    50% { opacity: 0.7; transform: scale(1.3); }
+}
+
+/* ============================================
+   GLASSY 404 CODE
+   ============================================ */
+
+.not-found-code {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-xs);
+    margin-bottom: var(--space-xl);
+}
+
+.code-digit {
+    font-size: 64px;
+    font-weight: 700;
+    line-height: 1;
+    background: linear-gradient(
+        135deg,
+        var(--text-primary) 0%,
+        var(--neutral-400) 50%,
+        var(--text-primary) 100%
+    );
+    background-size: 200% 200%;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    animation: gradientShift 3s ease infinite;
+}
+
+.code-digit.zero {
+    position: relative;
+    animation: gradientShift 3s ease infinite, zeroPulse 2s ease-in-out infinite;
+}
+
+@keyframes gradientShift {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+}
+
+@keyframes zeroPulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+}
+
+/* ============================================
+   TEXT CONTENT
+   ============================================ */
 
 .not-found-title {
-    font-size: 22px;
+    font-size: 26px;
     font-weight: 600;
     color: var(--text-primary);
     margin: 0 0 var(--space-md) 0;
+    letter-spacing: -0.02em;
 }
 
 .not-found-message {
     font-size: 15px;
     color: var(--text-secondary);
-    line-height: 1.5;
+    line-height: 1.6;
     margin: 0 0 var(--space-2xl) 0;
 }
+
+/* ============================================
+   ACTION BUTTONS
+   ============================================ */
 
 .not-found-actions {
     display: flex;
@@ -87,7 +199,7 @@
     font-size: 16px;
     font-weight: 500;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: all 0.2s var(--ease-out);
     border: none;
     font-family: inherit;
 }
@@ -99,24 +211,64 @@
 .not-found-btn.primary {
     background: var(--accent-primary);
     color: white;
-    box-shadow: var(--shadow-sm);
+    box-shadow:
+        0 2px 8px rgba(var(--accent-primary-rgb), 0.25),
+        0 4px 16px rgba(var(--accent-primary-rgb), 0.15);
 }
 
 .not-found-btn.primary:hover {
     background: var(--accent-primary-hover);
+    box-shadow:
+        0 4px 12px rgba(var(--accent-primary-rgb), 0.3),
+        0 8px 24px rgba(var(--accent-primary-rgb), 0.2);
+    transform: translateY(-1px);
 }
 
 .not-found-btn.primary:active {
-    box-shadow: 0 2px 0 var(--accent-primary-shadow);
-    transform: translateY(2px);
+    transform: translateY(1px) scale(0.98);
+    box-shadow:
+        0 1px 4px rgba(var(--accent-primary-rgb), 0.2);
 }
 
 .not-found-btn.secondary {
-    background: var(--bg-elevated);
+    background: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     color: var(--text-primary);
     border: 1px solid var(--border-default);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
 }
 
 .not-found-btn.secondary:hover {
-    background: var(--neutral-50);
+    background: rgba(255, 255, 255, 0.95);
+    border-color: var(--border-strong);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+/* ============================================
+   RESPONSIVE
+   ============================================ */
+
+@media (max-width: 480px) {
+    .not-found-content {
+        max-width: 320px;
+    }
+
+    .code-digit {
+        font-size: 52px;
+    }
+
+    .not-found-title {
+        font-size: 22px;
+    }
+
+    .not-found-illustration {
+        width: 100px;
+        height: 100px;
+    }
+
+    .not-found-compass svg {
+        width: 40px;
+        height: 40px;
+    }
 }
