@@ -717,10 +717,10 @@ export async function handleAsyncPaymentSucceeded(event: Stripe.Event) {
               exchangeRate: result.data.exchangeRate,
             },
           })
-          logger.info('Stored FX data for payment', { paymentId: checkoutPayment.id, chargeType, originalCurrency: result.data.originalCurrency, payoutCurrency: result.data.payoutCurrency, exchangeRate: result.data.exchangeRate })
+          logger.info('Stored FX data for payment', { paymentId: checkoutPayment.id, originalCurrency: result.data.originalCurrency, payoutCurrency: result.data.payoutCurrency, exchangeRate: result.data.exchangeRate })
         } else {
           // pending/no_fx/error - activity.ts will handle on-demand backfill
-          logger.debug('FX lookup status', { paymentId: checkoutPayment.id, chargeType, status: result.status })
+          logger.debug('FX lookup status', { paymentId: checkoutPayment.id, status: result.status })
         }
       }
     }).catch((err) => {
