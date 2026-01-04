@@ -192,9 +192,9 @@ checkout.post(
     const isStripeCrossBorder = hasStripe && isStripeCrossBorderSupported(profile.countryCode)
     const isCrossBorder = isStripeCrossBorder // Simplified: if Stripe is chosen, hasPaystack is already false
 
-    // Calculate service fee using split model (4.5%/4.5%)
-    // Both subscriber and creator pay 4.5% each
-    const feeCalc = calculateServiceFee(
+    // ALL countries use destination charges (platform absorbs Stripe fees, takes 9%)
+    // Cross-border countries have higher minimums to cover higher Stripe fees
+    const feeCalc: FeeCalculation = calculateServiceFee(
       amount,
       profile.currency,
       profile.purpose,

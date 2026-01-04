@@ -20,6 +20,8 @@ import {
   DEFAULT_PROCESSOR_FEE,
   MIN_MARGIN_CENTS,
   DEFAULT_MIN_MARGIN,
+  CROSS_BORDER_PAYOUT_COUNTRIES,
+  isCrossBorderCountry,
 } from '../constants/fees.js'
 
 export type UserPurpose = 'personal' | 'service' | 'tips' | 'support' | 'allowance' | 'fan_club' | 'exclusive_content' | 'other'
@@ -27,11 +29,13 @@ export type UserPurpose = 'personal' | 'service' | 'tips' | 'support' | 'allowan
 // Legacy fee mode type (kept for backward compatibility with existing subscriptions)
 export type FeeMode = 'absorb' | 'pass_to_subscriber' | 'split'
 
-// Re-export constants for backward compatibility
+// Re-export constants for use elsewhere
 export {
   PLATFORM_FEE_RATE,
   SPLIT_RATE,
   CROSS_BORDER_BUFFER,
+  CROSS_BORDER_PAYOUT_COUNTRIES,
+  isCrossBorderCountry,
 }
 
 export interface FeeCalculation {
@@ -43,7 +47,7 @@ export interface FeeCalculation {
   netCents: number              // What creator receives (base - creator fee)
   baseCents: number             // Original price before split
   currency: string
-  feeModel: 'split_v1'          // Always split now
+  feeModel: 'split_v1'          // All countries use destination charges with 9% split
   feeMode: FeeMode              // 'split' for new, 'absorb'/'pass_to_subscriber' for legacy
   purposeType: 'service' | 'personal'
   feeWasCapped: boolean         // True if processor buffer was applied

@@ -390,11 +390,28 @@ activity.get(
       return c.json({ error: 'Activity not found' }, 404)
     }
 
-    // For payment activities, enrich with payout status and FX data
+    // For payment activities, enrich with payout status, FX data, and fee breakdown
     const paymentActivityTypes = ['payment_received', 'payment', 'renewal', 'subscription_created', 'new_subscriber', 'request_accepted']
     let payoutInfo = null
     let fxData = null
     let fxPending = false
+    let feeBreakdown = null as {
+      chargeType: 'direct' | 'destination' | null
+      grossCents: number
+      netCents: number
+      totalFeeCents: number
+      stripeFees?: {
+        processing?: { percent: number; fixedCents: number; amountCents: number }
+        intlCard?: { percent: number; amountCents: number }
+        fx?: { percent: number; amountCents: number }
+        billing?: { percent: number; amountCents: number }
+        crossBorder?: { percent: number; amountCents: number }
+        accountFee?: { monthlyCents: number; amortizedCents: number; subscriberCount?: number }
+        payout?: { percent: number; fixedCents: number; amountCents: number }
+        subtotalCents: number
+      }
+      platformFee: { percent: number; amountCents: number }
+    } | null
 
     if (paymentActivityTypes.includes(act.type)) {
       const payload = act.payload as any
@@ -434,8 +451,19 @@ activity.get(
             amountCents: true,  // Legacy field for amount paid
             grossCents: true,   // What subscriber paid (for FX display)
             netCents: true,     // What creator receives
+            feeCents: true,     // Total platform fee
             occurredAt: true,
             stripeChargeId: true, // For on-demand FX backfill
+            // Fee breakdown fields (for direct charges - creator pays Stripe fees)
+            chargeType: true,
+            stripeProcessingFeeCents: true,
+            stripeIntlCardFeeCents: true,
+            stripeFxFeeCents: true,
+            stripeBillingFeeCents: true,
+            stripeCrossBorderFeeCents: true,
+            stripeAccountFeeCents: true,
+            stripePayoutFeeCents: true,
+            platformFeeCents: true,
           },
         })
 
@@ -486,6 +514,69 @@ activity.get(
             provider,
             date: payoutDate?.toISOString() || null,
             amount: payment.netCents, // Amount being paid out
+          }
+
+          // Build fee breakdown for transparency
+          // Direct charge: creator pays Stripe fees, platform takes 2%
+          // Destination charge: platform pays Stripe fees, takes 9% (4.5%/4.5% split)
+          const chargeType = payment.chargeType as 'direct' | 'destination' | null
+          const gross = payment.grossCents ?? payment.amountCents ?? 0
+          const net = payment.netCents ?? 0
+          const totalFee = payment.feeCents ?? (gross - net)
+          const platformFee = payment.platformFeeCents ?? totalFee
+
+          // For direct charges, show itemized Stripe fees
+          if (chargeType === 'direct') {
+            const stripeSubtotal =
+              (payment.stripeProcessingFeeCents ?? 0) +
+              (payment.stripeIntlCardFeeCents ?? 0) +
+              (payment.stripeFxFeeCents ?? 0) +
+              (payment.stripeBillingFeeCents ?? 0) +
+              (payment.stripeCrossBorderFeeCents ?? 0) +
+              (payment.stripeAccountFeeCents ?? 0) +
+              (payment.stripePayoutFeeCents ?? 0)
+
+            feeBreakdown = {
+              chargeType,
+              grossCents: gross,
+              netCents: net,
+              totalFeeCents: totalFee,
+              stripeFees: {
+                ...(payment.stripeProcessingFeeCents ? {
+                  processing: { percent: 2.9, fixedCents: 30, amountCents: payment.stripeProcessingFeeCents },
+                } : {}),
+                ...(payment.stripeIntlCardFeeCents ? {
+                  intlCard: { percent: 1.5, amountCents: payment.stripeIntlCardFeeCents },
+                } : {}),
+                ...(payment.stripeFxFeeCents ? {
+                  fx: { percent: 2.0, amountCents: payment.stripeFxFeeCents },
+                } : {}),
+                ...(payment.stripeBillingFeeCents ? {
+                  billing: { percent: 0.7, amountCents: payment.stripeBillingFeeCents },
+                } : {}),
+                ...(payment.stripeCrossBorderFeeCents ? {
+                  crossBorder: { percent: 1.0, amountCents: payment.stripeCrossBorderFeeCents },
+                } : {}),
+                ...(payment.stripeAccountFeeCents ? {
+                  accountFee: { monthlyCents: 200, amortizedCents: payment.stripeAccountFeeCents },
+                } : {}),
+                ...(payment.stripePayoutFeeCents ? {
+                  payout: { percent: 0.25, fixedCents: 67, amountCents: payment.stripePayoutFeeCents },
+                } : {}),
+                subtotalCents: stripeSubtotal,
+              },
+              platformFee: { percent: 2.0, amountCents: platformFee },
+            }
+          } else if (chargeType === 'destination' || !chargeType) {
+            // Destination charge or legacy: simplified breakdown
+            // Platform fee includes Stripe fees (9% total, 4.5%/4.5% split)
+            feeBreakdown = {
+              chargeType: chargeType || null,
+              grossCents: gross,
+              netCents: net,
+              totalFeeCents: totalFee,
+              platformFee: { percent: 9.0, amountCents: platformFee },
+            }
           }
 
           if (payment.exchangeRate) {
@@ -572,6 +663,7 @@ activity.get(
       payoutInfo,
       fxData, // Exchange rate data for cross-border payments
       fxPending, // True if FX data is being fetched in background
+      feeBreakdown, // Itemized fee breakdown (direct charges show Stripe fees)
     })
   }
 )

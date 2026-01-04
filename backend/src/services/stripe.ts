@@ -2,13 +2,29 @@
  * STRIPE INTEGRATION - READ THIS BEFORE MAKING CHANGES
  * =====================================================
  *
+ * ALL COUNTRIES USE DESTINATION CHARGES:
+ * - Charge happens on platform account
+ * - Stripe fees paid by platform (covered by 9% platform fee)
+ * - Uses transfer_data.destination = creator's stripeAccountId
+ * - Platform fee: 9% (4.5%/4.5% split)
+ * - Refunds: Platform issues refund
+ *
+ * WHY NOT DIRECT CHARGES FOR CROSS-BORDER?
+ * Direct charges require 'card_payments' capability, but cross-border
+ * Express accounts (NG, GH, KE, etc.) only get 'transfers' capability.
+ * See: https://docs.stripe.com/connect/service-agreement-types
+ *
+ * CROSS-BORDER COUNTRIES have higher minimums ($85) because:
+ * - 100% international card usage (higher processing fees)
+ * - FX conversion fees
+ * - Higher payout fees
+ * All these are absorbed by the platform's 9% fee.
+ *
  * BUSINESS MODEL:
  * - Subscribers pay creators via Apple Pay/Card (recurring subscriptions)
- * - Payments go through NatePay platform (destination charges)
- * - Stripe AUTOMATICALLY disburses to creator's bank (minus platform fee)
- * - NatePay NEVER holds customer funds
+ * - NatePay NEVER holds customer funds - Stripe routes directly
  *
- * NIGERIAN CREATORS (and Ghana, Kenya):
+ * NIGERIAN CREATORS (and Ghana, Kenya, etc.):
  * - Stripe DOES support Nigerian Express accounts natively
  * - Use country: 'NG' (the user's ACTUAL country, NOT 'US' or 'GB')
  * - Use tos_acceptance.service_agreement: 'recipient' (platform is business of record)
@@ -16,23 +32,13 @@
  * - Creator goes through Express onboarding with Nigerian details + Nigerian bank
  * - Payouts go to their Nigerian bank in NGN with automatic conversion
  *
- * WHY 'transfers' ONLY (not 'card_payments'):
- * - The PLATFORM (NatePay) processes card payments from subscribers
- * - The CREATOR only receives transfers from the automatic split
- * - card_payments would only be needed if creator ran their own checkout
- *
- * FUND FLOW (Destination Charges):
- * 1. Subscriber pays $10 with Apple Pay
- * 2. Stripe checkout has: transfer_data.destination = creator's stripeAccountId
- * 3. Stripe AUTOMATICALLY splits: $1 → NatePay, $9 → Creator
- * 4. Creator receives payout to Nigerian bank (24hr delay for cross-border)
- *
  * DO NOT:
  * - Change country to 'US' or 'GB' for Nigerian users
  * - Add card_payments capability for cross-border recipients
  * - Remove the recipient service agreement for NG/GH/KE
  *
  * References:
+ * - https://docs.stripe.com/connect/destination-charges
  * - https://docs.stripe.com/connect/cross-border-payouts
  * - https://docs.stripe.com/connect/service-agreement-types
  */
@@ -539,6 +545,17 @@ export async function createCheckoutSession(params: {
   // Total application fee = service fee + debit recovery
   const totalApplicationFee = params.serviceFee + platformDebitToRecover
 
+  // All countries use destination charges
+  // Platform absorbs Stripe fees, creator receives transfer to connected account
+  console.log(`[stripe] Checkout for ${creatorProfile.username || params.creatorId}:`, {
+    country: creatorProfile.country,
+    serviceFee: params.serviceFee,
+    totalApplicationFee,
+  })
+
+  // Add charge type to metadata for webhook processing
+  metadata.chargeType = 'destination'
+
   // Create checkout session with circuit breaker protection
   // For both one-time and subscriptions, use application_fee_amount (fixed fee)
   //
@@ -552,59 +569,53 @@ export async function createCheckoutSession(params: {
     .trim()
     .toUpperCase() || 'PAYMENT'
 
-  const session = await stripeCircuitBreaker(() =>
-    stripe.checkout.sessions.create(
+  // Build session params based on charge model
+  const sessionParams: Stripe.Checkout.SessionCreateParams = {
+    mode: params.interval === 'month' ? 'subscription' : 'payment',
+    line_items: [
       {
-        mode: params.interval === 'month' ? 'subscription' : 'payment',
-        line_items: [
-          {
-            price_data: priceData,
-            quantity: 1,
-          },
-        ],
-        // One-time payments: set fee on payment intent (includes debit recovery)
-        payment_intent_data: params.interval === 'one_time' ? {
-          application_fee_amount: totalApplicationFee,
-          transfer_data: {
-            destination: stripeAccountId,
-          },
-          // Billing descriptor for card statements - helps prevent chargebacks
-          statement_descriptor_suffix: descriptorSuffix,
-          // Include metadata so payment_intent.payment_failed can attribute failures
-          metadata,
-        } : undefined,
-        // Subscriptions: set application_fee_percent for platform fee
-        // IMPORTANT: application_fee_percent applies to the TOTAL charge amount,
-        // not the creator's price. So we need to calculate: fee / chargeAmount * 100
-        // Example: $10 creator price + $1 fee = $11 charge → fee_percent = 1/11 = 9.09%
-        // For absorb mode: $10 charge, $1 fee → fee_percent = 1/10 = 10%
-        subscription_data: params.interval === 'month' ? {
-          application_fee_percent: chargeAmount > 0
-            ? Math.round((params.serviceFee / chargeAmount) * 10000) / 100
-            : 0,
-          transfer_data: {
-            destination: stripeAccountId,
-          },
-          metadata, // Store fee info for tracking/auditing
-          // Billing descriptor for subscription invoices - reduces chargebacks
-          // Shows "NATEPAY* CREATOR" on bank statements for renewals
-          description: `Subscription to ${descriptorSuffix}`,
-          // Salary Mode: Align billing to creator's preferred schedule
-          // First charge happens immediately at signup (prorated to anchor).
-          // Subsequent charges align to billing_cycle_anchor (7 days before payday).
-          // NOTE: We do NOT set proration_behavior: 'none' because that creates a $0 trial
-          // until the anchor date, which is NOT what we want for subscriber payments.
-          ...(billingCycleAnchor && {
-            billing_cycle_anchor: billingCycleAnchor,
-          }),
-        } : undefined,
-        success_url: params.successUrl,
-        cancel_url: params.cancelUrl,
-        customer_email: params.subscriberEmail,
-        metadata,
+        price_data: priceData,
+        quantity: 1,
       },
-      { idempotencyKey }
-    )
+    ],
+    success_url: params.successUrl,
+    cancel_url: params.cancelUrl,
+    customer_email: params.subscriberEmail,
+    metadata,
+  }
+
+  // Configure payment/subscription data - all countries use destination charges
+  // Platform pays Stripe fees (covered by 9% platform fee)
+  // Uses transfer_data.destination to route funds to connected account
+  if (params.interval === 'one_time') {
+    sessionParams.payment_intent_data = {
+      application_fee_amount: totalApplicationFee,
+      transfer_data: {
+        destination: stripeAccountId,
+      },
+      statement_descriptor_suffix: descriptorSuffix,
+      metadata,
+    }
+  } else {
+    // Subscription with destination charges
+    sessionParams.subscription_data = {
+      application_fee_percent: chargeAmount > 0
+        ? Math.round((params.serviceFee / chargeAmount) * 10000) / 100
+        : 0,
+      transfer_data: {
+        destination: stripeAccountId,
+      },
+      metadata,
+      description: `Subscription to ${descriptorSuffix}`,
+      ...(billingCycleAnchor && {
+        billing_cycle_anchor: billingCycleAnchor,
+      }),
+    }
+  }
+
+  // Create session on platform account (destination charges)
+  const session = await stripeCircuitBreaker(() =>
+    stripe.checkout.sessions.create(sessionParams, { idempotencyKey })
   )
 
   return session
@@ -803,6 +814,77 @@ export async function getChargeFxData(chargeId: string, stripeAccountId: string)
     }
   } catch (err) {
     console.error(`[getChargeFxData] Failed to get FX data for charge ${chargeId}:`, err)
+    return { status: 'error' }
+  }
+}
+
+/**
+ * Get FX conversion data for a DIRECT charge.
+ *
+ * With direct charges, the charge lives on the CONNECTED account directly.
+ * There is no transfer - the FX conversion happens on the charge's balance_transaction.
+ *
+ * Flow:
+ * 1. Charge created on connected account (USD)
+ * 2. Balance transaction created with exchange_rate (USD → NGN)
+ * 3. Funds settle in creator's local currency
+ *
+ * @param chargeId - The Stripe charge ID (ch_xxx) on the connected account
+ * @param stripeAccountId - The connected account ID where the charge lives
+ * @returns FxLookupResult with status indicating outcome
+ */
+export async function getDirectChargeFxData(chargeId: string, stripeAccountId: string): Promise<FxLookupResult> {
+  try {
+    // For direct charges, the charge lives on the connected account
+    // We need to use stripeAccount option to retrieve it
+    const charge = await stripe.charges.retrieve(
+      chargeId,
+      { expand: ['balance_transaction'] },
+      { stripeAccount: stripeAccountId }
+    )
+
+    let balanceTransaction = charge.balance_transaction as Stripe.BalanceTransaction | null
+
+    // Fallback: If expansion didn't work (returned string ID), fetch directly
+    if (typeof charge.balance_transaction === 'string') {
+      try {
+        balanceTransaction = await stripe.balanceTransactions.retrieve(
+          charge.balance_transaction,
+          {},
+          { stripeAccount: stripeAccountId }
+        )
+      } catch {
+        console.log(`[getDirectChargeFxData] Fallback fetch failed for balance_transaction`)
+        return { status: 'error' }
+      }
+    }
+
+    if (!balanceTransaction) {
+      // Balance transaction not yet created - still processing
+      console.log(`[getDirectChargeFxData] No balance_transaction for charge ${chargeId} - pending`)
+      return { status: 'pending' }
+    }
+
+    // Check if there was currency conversion
+    if (!balanceTransaction.exchange_rate) {
+      // No FX conversion (same currency) - this is a confirmed final state
+      console.log(`[getDirectChargeFxData] Same currency, no FX conversion for charge ${chargeId}`)
+      return { status: 'no_fx' }
+    }
+
+    // Return FX data
+    return {
+      status: 'fx_found',
+      data: {
+        payoutCurrency: balanceTransaction.currency.toUpperCase(),
+        payoutAmountCents: balanceTransaction.net, // Net after Stripe fees
+        exchangeRate: balanceTransaction.exchange_rate,
+        originalCurrency: charge.currency.toUpperCase(),
+        originalAmountCents: charge.amount, // Gross amount subscriber paid
+      },
+    }
+  } catch (err) {
+    console.error(`[getDirectChargeFxData] Failed to get FX data for direct charge ${chargeId}:`, err)
     return { status: 'error' }
   }
 }

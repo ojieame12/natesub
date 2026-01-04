@@ -236,7 +236,8 @@ describe('checkout flow', () => {
         stripeAccountId: 'acct_123',
         singleAmount: 10000, // $100.00 in cents (larger to avoid processor buffer)
         currency: 'USD',
-        countryCode: 'US', // Non-cross-border
+        country: 'United States', // Destination charge country
+        countryCode: 'US',
       })
 
       mockCreateCheckoutSession.mockResolvedValue({
@@ -281,12 +282,13 @@ describe('checkout flow', () => {
       })
     })
 
-    it('applies cross-border buffer for Nigerian creator with US payer', async () => {
+    it('uses destination charges with cross-border buffer for Nigerian creator', async () => {
       const profile = await createCreator({
         stripeAccountId: 'acct_123',
         singleAmount: 10000, // $100.00 in cents
         currency: 'USD',
-        countryCode: 'NG', // Cross-border country
+        countryCode: 'NG', // Cross-border country (higher fees)
+        country: 'Nigeria',
       })
 
       mockCreateCheckoutSession.mockResolvedValue({
@@ -317,11 +319,15 @@ describe('checkout flow', () => {
 
       expect(res.status).toBe(200)
 
-      // Verify cross-border buffer: 5.25% each (4.5% + 0.75%)
-      // $100.00 base + 5.25% = $105.25
+      // All countries use destination charges now
+      // Cross-border adds 1.5% buffer split between subscriber and creator
+      // Total fee: 4.5% + 0.75% = 5.25% each side, 10.5% total
+      // $100.00 base + 5.25% = $105.25 gross
       const callArgs = mockCreateCheckoutSession.mock.calls[0][0]
-      expect(callArgs.grossAmount).toBe(10525) // $105.25
-      expect(callArgs.serviceFee).toBe(1050)   // 10.5% total (5.25% × 2)
+      expect(callArgs.grossAmount).toBe(10525)       // $105.25
+      expect(callArgs.netAmount).toBe(9475)          // $100.00 - $5.25 = $94.75
+      expect(callArgs.serviceFee).toBe(1050)         // 10.5% of $100 = $10.50
+      expect(callArgs.feeMetadata.feeModel).toBe('split_v1')
       expect(callArgs.feeMetadata.subscriberFeeCents).toBe(525) // 5.25%
       expect(callArgs.feeMetadata.creatorFeeCents).toBe(525)    // 5.25%
     })

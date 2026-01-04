@@ -23,10 +23,12 @@ export const stripeCheckoutMetadataSchema = z.object({
   grossAmount: z.string().regex(/^\d+$/, 'grossAmount must be numeric string').optional(),
   netAmount: z.string().regex(/^\d+$/, 'netAmount must be numeric string').optional(),
   serviceFee: z.string().regex(/^\d+$/, 'serviceFee must be numeric string').optional(),
-  feeModel: z.enum(['flat', 'progressive', 'percentage', 'split_v1']).optional(),
+  feeModel: z.enum(['flat', 'progressive', 'percentage', 'split_v1', 'direct_v1']).optional(),
   feeMode: z.enum(['absorb', 'pass_to_subscriber', 'split']).optional(),
   feeEffectiveRate: z.string().optional(),
   feeWasCapped: z.enum(['true', 'false']).optional(),
+  // Charge type: 'direct' for cross-border countries, 'destination' for domestic
+  chargeType: z.enum(['direct', 'destination']).optional(),
   // Split fee fields (v2 model: 4.5%/4.5%)
   subscriberFeeCents: z.string().regex(/^\d+$/, 'subscriberFeeCents must be numeric string').optional(),
   creatorFeeCents: z.string().regex(/^\d+$/, 'creatorFeeCents must be numeric string').optional(),

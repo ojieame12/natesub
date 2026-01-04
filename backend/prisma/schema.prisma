@@ -423,6 +423,20 @@ model Payment {
   reportingRateTimestamp DateTime? // When rate was captured
   reportingIsEstimated   Boolean   @default(false) // true for backfilled payments
 
+  // Charge type for direct vs destination charges
+  chargeType String? // 'direct' | 'destination' - null for legacy payments
+
+  // Stripe fee breakdown (for direct charges - creator pays these)
+  // These fields enable fee transparency in Activity Detail
+  stripeProcessingFeeCents   Int? // 2.9% + $0.30 card processing
+  stripeIntlCardFeeCents     Int? // 1.5% international cards
+  stripeFxFeeCents           Int? // 2% currency conversion
+  stripeBillingFeeCents      Int? // 0.7% Stripe Billing
+  stripeCrossBorderFeeCents  Int? // 1% cross-border payout
+  stripeAccountFeeCents      Int? // $2/month amortized per subscriber
+  stripePayoutFeeCents       Int? // 0.25% + fixed payout fee
+  platformFeeCents           Int? // 2% platform fee (direct) or 9% (destination)
+
   // Timestamps
   occurredAt DateTime @default(now())
   createdAt  DateTime @default(now())

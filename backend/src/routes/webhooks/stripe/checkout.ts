@@ -1,5 +1,5 @@
 import Stripe from 'stripe'
-import { stripe, setSubscriptionDefaultFee, getChargeFxData } from '../../../services/stripe.js'
+import { stripe, setSubscriptionDefaultFee, getChargeFxData, getDirectChargeFxData } from '../../../services/stripe.js'
 import { db } from '../../../db/client.js'
 import { sendNewSubscriberEmail, sendSubscriptionConfirmationEmail, sendPlatformDebitRecoveredNotification } from '../../../services/email.js'
 import { cancelAllRemindersForEntity } from '../../../jobs/reminders.js'
@@ -186,11 +186,12 @@ export async function handleCheckoutCompleted(event: Stripe.Event) {
   // Check if new fee model is in use (netAmount and serviceFee are set via validated metadata)
   const hasNewFeeModel = feeModel && netAmount > 0
 
-  if (feeModel === 'split_v1' && hasNewFeeModel) {
-    // New split fee model (4.5%/4.5%)
+  if ((feeModel === 'split_v1' || feeModel === 'direct_v1') && hasNewFeeModel) {
+    // split_v1: Destination charges (4.5%/4.5% split, platform absorbs Stripe fees)
+    // direct_v1: Direct charges (subscriber pays 4.5%, platform takes 2%, creator pays Stripe)
     grossCents = session.amount_total || 0  // Total subscriber paid
-    feeCents = serviceFee                    // Total platform fee (8%)
-    netCents = netAmount                     // What creator receives
+    feeCents = serviceFee                    // Platform fee (9% for split, 2% for direct)
+    netCents = netAmount                     // What creator receives (before Stripe fees for direct)
     subFeeCents = subscriberFeeCents || null
     creatorFee = creatorFeeCents || null
     basePrice = baseAmountCents || netCents  // Creator's set price
@@ -591,8 +592,9 @@ export async function handleAsyncPaymentSucceeded(event: Stripe.Event) {
 
   const amountTotal = session.amount_total || 0
   const hasNewFeeModel = feeModel && netAmount > 0
-  if (feeModel === 'split_v1' && hasNewFeeModel) {
-    // New split fee model (4.5%/4.5%)
+  if ((feeModel === 'split_v1' || feeModel === 'direct_v1') && hasNewFeeModel) {
+    // split_v1: Destination charges (4.5%/4.5% split)
+    // direct_v1: Direct charges (2% platform fee)
     grossCents = amountTotal
     feeCents = serviceFee
     netCents = netAmount
@@ -703,7 +705,14 @@ export async function handleAsyncPaymentSucceeded(event: Stripe.Event) {
       select: { stripeAccountId: true },
     }).then(async (profile) => {
       if (profile?.stripeAccountId) {
-        const result = await getChargeFxData(stripeChargeId, profile.stripeAccountId)
+        // Use appropriate FX lookup based on charge type
+        // Direct charges: charge lives on connected account
+        // Destination charges: charge lives on platform, transfer to connected account
+        const chargeType = validatedMeta.chargeType || 'destination'
+        const result = chargeType === 'direct'
+          ? await getDirectChargeFxData(stripeChargeId, profile.stripeAccountId)
+          : await getChargeFxData(stripeChargeId, profile.stripeAccountId)
+
         if (result.status === 'fx_found') {
           await db.payment.update({
             where: { id: checkoutPayment.id },
@@ -713,10 +722,10 @@ export async function handleAsyncPaymentSucceeded(event: Stripe.Event) {
               exchangeRate: result.data.exchangeRate,
             },
           })
-          logger.info('Stored FX data for payment', { paymentId: checkoutPayment.id, originalCurrency: result.data.originalCurrency, payoutCurrency: result.data.payoutCurrency, exchangeRate: result.data.exchangeRate })
+          logger.info('Stored FX data for payment', { paymentId: checkoutPayment.id, chargeType, originalCurrency: result.data.originalCurrency, payoutCurrency: result.data.payoutCurrency, exchangeRate: result.data.exchangeRate })
         } else {
           // pending/no_fx/error - activity.ts will handle on-demand backfill
-          logger.debug('FX lookup status', { paymentId: checkoutPayment.id, status: result.status })
+          logger.debug('FX lookup status', { paymentId: checkoutPayment.id, chargeType, status: result.status })
         }
       }
     }).catch((err) => {

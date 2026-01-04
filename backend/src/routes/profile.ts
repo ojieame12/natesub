@@ -10,7 +10,13 @@ import { publicStrictRateLimit, publicRateLimit, aiRateLimit } from '../middlewa
 import { sendWelcomeEmail } from '../services/email.js'
 import { cancelOnboardingReminders } from '../jobs/reminders.js'
 import { RESERVED_USERNAMES, isStripeCrossBorderSupported } from '../utils/constants.js'
-import { displayAmountToCents, validateMinimumAmount } from '../utils/currency.js'
+import { displayAmountToCents, formatCurrency } from '../utils/currency.js'
+import {
+  getCreatorMinimum,
+  isCountrySupported,
+  getDynamicMinimum,
+  CREATOR_MINIMUMS,
+} from '../constants/creatorMinimums.js'
 import {
   getPlatformFeePercent,
   getProcessingFeePercent,
@@ -96,27 +102,59 @@ profile.put(
     // The platform collects payments in the creator's chosen currency
     const paymentProvider = data.paymentProvider || null
     const _isCrossBorder = isStripeCrossBorderSupported(data.countryCode) && paymentProvider !== 'paystack'
-    // Currency validation is now just minimum amount checks (below)
 
-    // Validate minimum amounts for the currency
-    if (data.singleAmount) {
-      const amountCents = displayAmountToCents(data.singleAmount, currency)
-      const validation = validateMinimumAmount(amountCents, currency)
-      if (!validation.valid) {
-        return c.json({
-          error: `Amount is below the minimum for ${currency}. Minimum is ${validation.minimumDisplay}.`,
-        }, 400)
-      }
+    // Validate country is supported (has minimum defined)
+    const creatorMinimum = getCreatorMinimum(data.country)
+    if (!creatorMinimum && paymentProvider === 'stripe') {
+      // Only enforce for Stripe - Paystack countries have different economics
+      return c.json({
+        error: `${data.country} is not currently supported for Stripe payments. Please contact support.`,
+      }, 400)
     }
 
-    if (data.tiers && data.tiers.length > 0) {
-      for (const tier of data.tiers) {
-        const amountCents = displayAmountToCents(tier.amount, currency)
-        const validation = validateMinimumAmount(amountCents, currency)
-        if (!validation.valid) {
+    // Validate minimum amounts based on creator's country and subscriber count
+    // This ensures platform profitability after all Stripe fees
+    // Uses DYNAMIC minimum that decreases as subscriber count increases
+    if (creatorMinimum && paymentProvider === 'stripe') {
+      // Get current MONTHLY subscriber count for dynamic minimum calculation
+      // Excludes one_time payments since they don't generate recurring revenue
+      // to amortize the $2/month Stripe account fee
+      const subscriberCount = await db.subscription.count({
+        where: { creatorId: userId, status: 'active', interval: 'month' },
+      })
+
+      // Calculate dynamic minimum with consistent rounding rules
+      const dynamicMin = getDynamicMinimum({
+        country: data.country,
+        subscriberCount,
+      })
+
+      // Use appropriate minimum based on currency
+      const isLocalCurrency = currency === dynamicMin.currency
+      const minimumAmount = isLocalCurrency ? dynamicMin.minimumLocal : dynamicMin.minimumUSD
+      const minimumDisplay = isLocalCurrency
+        ? formatCurrency(minimumAmount, dynamicMin.currency)
+        : `$${dynamicMin.minimumUSD} USD`
+
+      if (data.singleAmount) {
+        if (data.singleAmount < minimumAmount) {
           return c.json({
-            error: `Tier "${tier.name}" amount is below the minimum for ${currency}. Minimum is ${validation.minimumDisplay}.`,
+            error: `Minimum subscription for ${data.country} is ${minimumDisplay}`,
+            minimumRequired: minimumAmount,
+            subscriberCount,
           }, 400)
+        }
+      }
+
+      if (data.tiers && data.tiers.length > 0) {
+        for (const tier of data.tiers) {
+          if (tier.amount < minimumAmount) {
+            return c.json({
+              error: `Tier "${tier.name}" is below the minimum for ${data.country}. Minimum is ${minimumDisplay}`,
+              minimumRequired: minimumAmount,
+              subscriberCount,
+            }, 400)
+          }
         }
       }
     }
@@ -226,10 +264,6 @@ profile.patch(
       return c.json({ error: 'No updates provided' }, 400)
     }
 
-    // Cross-border Stripe creators can use any Stripe-supported currency
-    // (See PUT handler for details - Stripe handles currency conversion for payouts)
-    const _newPaymentProvider = data.paymentProvider !== undefined ? data.paymentProvider : existingProfile.paymentProvider
-
     const updateData: Prisma.ProfileUpdateInput = {}
 
     // Username changes require reserved + uniqueness checks
@@ -279,26 +313,52 @@ profile.patch(
 
     // Amount conversion depends on currency (use updated currency if provided)
     const currency = (data.currency || existingProfile.currency || 'USD').toUpperCase()
+    const country = data.country || existingProfile.country
+    const paymentProvider = data.paymentProvider !== undefined ? data.paymentProvider : existingProfile.paymentProvider
 
-    // Validate minimum amounts for the currency
-    if (data.singleAmount !== undefined && data.singleAmount !== null) {
-      const amountCents = displayAmountToCents(data.singleAmount, currency)
-      const validation = validateMinimumAmount(amountCents, currency)
-      if (!validation.valid) {
-        return c.json({
-          error: `Amount is below the minimum for ${currency}. Minimum is ${validation.minimumDisplay}.`,
-        }, 400)
-      }
-    }
+    // Validate minimum amounts based on creator's country and subscriber count (Stripe only)
+    // Uses DYNAMIC minimum that decreases as subscriber count increases
+    const creatorMinimum = country ? getCreatorMinimum(country) : null
+    if (creatorMinimum && paymentProvider === 'stripe') {
+      // Get current MONTHLY subscriber count for dynamic minimum calculation
+      // Excludes one_time payments since they don't generate recurring revenue
+      // to amortize the $2/month Stripe account fee
+      const subscriberCount = await db.subscription.count({
+        where: { creatorId: userId, status: 'active', interval: 'month' },
+      })
 
-    if (data.tiers !== undefined && data.tiers !== null && data.tiers.length > 0) {
-      for (const tier of data.tiers) {
-        const amountCents = displayAmountToCents(tier.amount, currency)
-        const validation = validateMinimumAmount(amountCents, currency)
-        if (!validation.valid) {
+      // Calculate dynamic minimum with consistent rounding rules
+      const dynamicMin = getDynamicMinimum({
+        country,
+        subscriberCount,
+      })
+
+      // Use appropriate minimum based on currency
+      const isLocalCurrency = currency === dynamicMin.currency
+      const minimumAmount = isLocalCurrency ? dynamicMin.minimumLocal : dynamicMin.minimumUSD
+      const minimumDisplay = isLocalCurrency
+        ? formatCurrency(minimumAmount, dynamicMin.currency)
+        : `$${dynamicMin.minimumUSD} USD`
+
+      if (data.singleAmount !== undefined && data.singleAmount !== null) {
+        if (data.singleAmount < minimumAmount) {
           return c.json({
-            error: `Tier "${tier.name}" amount is below the minimum for ${currency}. Minimum is ${validation.minimumDisplay}.`,
+            error: `Minimum subscription for ${country} is ${minimumDisplay}`,
+            minimumRequired: minimumAmount,
+            subscriberCount,
           }, 400)
+        }
+      }
+
+      if (data.tiers !== undefined && data.tiers !== null && data.tiers.length > 0) {
+        for (const tier of data.tiers) {
+          if (tier.amount < minimumAmount) {
+            return c.json({
+              error: `Tier "${tier.name}" is below the minimum for ${country}. Minimum is ${minimumDisplay}`,
+              minimumRequired: minimumAmount,
+              subscriberCount,
+            }, 400)
+          }
         }
       }
     }

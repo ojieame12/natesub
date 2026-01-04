@@ -1,10 +1,11 @@
 import { z } from 'zod'
 
 // Tier schema
+// Note: max 10M to accommodate high local currencies (e.g., 800,000 NGN = ~$500 USD)
 export const tierSchema = z.object({
   id: z.string().max(50),
   name: z.string().min(1).max(50),
-  amount: z.number().positive().max(100000), // Max $100k per tier
+  amount: z.number().positive().max(10_000_000), // Max 10M for local currencies
   perks: z.array(z.string().max(200)).max(20),
   isPopular: z.boolean().optional(),
 })
@@ -62,7 +63,7 @@ export const profileSchema = z.object({
   currency: z.string().length(3).default('USD'),
   purpose: z.enum(['tips', 'support', 'allowance', 'fan_club', 'exclusive_content', 'service', 'other']),
   pricingModel: z.enum(['single', 'tiers']),
-  singleAmount: z.number().positive().max(100000).optional().nullable(), // Max $100k
+  singleAmount: z.number().positive().max(10_000_000).optional().nullable(), // Max 10M for local currencies
   tiers: z.array(tierSchema).optional().nullable(),
   perks: z.array(perkSchema).optional().nullable(),
   impactItems: z.array(impactItemSchema).optional().nullable(),

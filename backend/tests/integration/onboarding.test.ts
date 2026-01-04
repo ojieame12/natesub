@@ -269,6 +269,7 @@ describe('onboarding endpoints', () => {
     it('stores paymentProvider selection', async () => {
       await createTestUserWithSession()
 
+      // Germany minimum for Stripe is €175 EUR (country-based minimum)
       const res = await authRequest('/profile', {
         method: 'PUT',
         body: JSON.stringify({
@@ -279,7 +280,7 @@ describe('onboarding endpoints', () => {
           currency: 'EUR',
           purpose: 'exclusive_content',
           pricingModel: 'single',
-          singleAmount: 10.00,
+          singleAmount: 180.00, // Above €175 EUR minimum
           paymentProvider: 'stripe',
         }),
       })
@@ -1008,6 +1009,7 @@ describe('onboarding endpoints', () => {
     it('Nigerian user with Stripe and USD currency - SHOULD SUCCEED', async () => {
       await createTestUserWithSession('ng-stripe-usd@test.com')
 
+      // NG minimum for Stripe is $500 USD (country-based minimum)
       const res = await authRequest('/profile', {
         method: 'PUT',
         body: JSON.stringify({
@@ -1018,7 +1020,7 @@ describe('onboarding endpoints', () => {
           currency: 'USD',
           purpose: 'tips',
           pricingModel: 'single',
-          singleAmount: 10, // $10 USD
+          singleAmount: 500, // $500 USD - meets NG minimum
           paymentProvider: 'stripe',
         }),
       })
@@ -1027,12 +1029,13 @@ describe('onboarding endpoints', () => {
       const body = await res.json()
       expect(body.profile.currency).toBe('USD')
       expect(body.profile.paymentProvider).toBe('stripe')
-      expect(body.profile.singleAmount).toBe(1000) // $10 = 1000 cents
+      expect(body.profile.singleAmount).toBe(50000) // $500 = 50000 cents
     })
 
     it('Nigerian user with Stripe and NGN currency - SHOULD SUCCEED', async () => {
       await createTestUserWithSession('ng-stripe-ngn@test.com')
 
+      // NG minimum for Stripe is 800,000 NGN (country-based minimum)
       const res = await authRequest('/profile', {
         method: 'PUT',
         body: JSON.stringify({
@@ -1043,7 +1046,7 @@ describe('onboarding endpoints', () => {
           currency: 'NGN', // Any Stripe-supported currency is allowed
           purpose: 'tips',
           pricingModel: 'single',
-          singleAmount: 5000,
+          singleAmount: 850000, // 850,000 NGN - above 800,000 minimum
           paymentProvider: 'stripe',
         }),
       })
@@ -1057,6 +1060,7 @@ describe('onboarding endpoints', () => {
     it('Kenyan user with Stripe and KES currency - SHOULD SUCCEED', async () => {
       await createTestUserWithSession('ke-stripe-kes@test.com')
 
+      // KE minimum for Stripe is 73,000 KES (country-based minimum)
       const res = await authRequest('/profile', {
         method: 'PUT',
         body: JSON.stringify({
@@ -1067,7 +1071,7 @@ describe('onboarding endpoints', () => {
           currency: 'KES', // Any Stripe-supported currency is allowed
           purpose: 'tips',
           pricingModel: 'single',
-          singleAmount: 500,
+          singleAmount: 75000, // 75,000 KES - above 73,000 minimum
           paymentProvider: 'stripe',
         }),
       })
@@ -1081,6 +1085,7 @@ describe('onboarding endpoints', () => {
     it('Ghanaian user with Stripe and GHS currency - SHOULD SUCCEED', async () => {
       await createTestUserWithSession('gh-stripe-ghs@test.com')
 
+      // GH minimum for Stripe is 8,100 GHS (country-based minimum)
       const res = await authRequest('/profile', {
         method: 'PUT',
         body: JSON.stringify({
@@ -1091,7 +1096,7 @@ describe('onboarding endpoints', () => {
           currency: 'GHS', // Any Stripe-supported currency is allowed
           purpose: 'tips',
           pricingModel: 'single',
-          singleAmount: 50,
+          singleAmount: 8500, // 8,500 GHS - above 8,100 minimum
           paymentProvider: 'stripe',
         }),
       })
@@ -1108,6 +1113,7 @@ describe('onboarding endpoints', () => {
     it('US user with Stripe and USD - SHOULD SUCCEED', async () => {
       await createTestUserWithSession('us-stripe@test.com')
 
+      // US minimum for Stripe is $160 USD (country-based minimum)
       const res = await authRequest('/profile', {
         method: 'PUT',
         body: JSON.stringify({
@@ -1118,7 +1124,7 @@ describe('onboarding endpoints', () => {
           currency: 'USD',
           purpose: 'tips',
           pricingModel: 'single',
-          singleAmount: 5,
+          singleAmount: 165, // Above $160 USD minimum
           paymentProvider: 'stripe',
         }),
       })
@@ -1132,6 +1138,7 @@ describe('onboarding endpoints', () => {
     it('UK user with Stripe and GBP - SHOULD SUCCEED', async () => {
       await createTestUserWithSession('uk-stripe@test.com')
 
+      // UK minimum for Stripe is £155 GBP (country-based minimum)
       const res = await authRequest('/profile', {
         method: 'PUT',
         body: JSON.stringify({
@@ -1142,7 +1149,7 @@ describe('onboarding endpoints', () => {
           currency: 'GBP',
           purpose: 'tips',
           pricingModel: 'single',
-          singleAmount: 5,
+          singleAmount: 160, // Above £155 GBP minimum
           paymentProvider: 'stripe',
         }),
       })
@@ -1155,6 +1162,7 @@ describe('onboarding endpoints', () => {
     it('South African user with Stripe and ZAR - SHOULD SUCCEED (ZA has native Stripe)', async () => {
       await createTestUserWithSession('za-stripe@test.com')
 
+      // ZA minimum for Stripe is 9,300 ZAR (country-based minimum for platform profitability)
       const res = await authRequest('/profile', {
         method: 'PUT',
         body: JSON.stringify({
@@ -1165,7 +1173,7 @@ describe('onboarding endpoints', () => {
           currency: 'ZAR',
           purpose: 'tips',
           pricingModel: 'single',
-          singleAmount: 100,
+          singleAmount: 9500, // Above 9,300 ZAR minimum
           paymentProvider: 'stripe',
         }),
       })
@@ -1290,12 +1298,13 @@ describe('onboarding endpoints', () => {
       })
 
       // PATCH to switch to Stripe AND USD should succeed
+      // NG Stripe minimum is $500 USD (country-based minimum for platform profitability)
       const res = await authRequest('/profile', {
         method: 'PATCH',
         body: JSON.stringify({
           paymentProvider: 'stripe',
           currency: 'USD',
-          singleAmount: 10, // $10 USD
+          singleAmount: 500, // $500 USD - meets NG minimum
         }),
       })
 
@@ -1310,8 +1319,15 @@ describe('onboarding endpoints', () => {
   // CURRENCY MINIMUM VALIDATION TESTS
   // Ensure minimum amounts are enforced correctly for each currency
   // =============================================================================
+  // =============================================================================
+  // MINIMUM VALIDATION TESTS
+  // Stripe creators: Country-based minimums (ensures platform profitability)
+  // Paystack creators: No minimums on backend (different economics - subaccount splits)
+  // =============================================================================
   describe('PUT /profile - Currency minimum validation', () => {
-    it('rejects NGN amount below minimum (₦1,000)', async () => {
+    // Paystack creators no longer have minimum validation on backend
+    // This is correct - Paystack has different economics (subaccount splits, no $2/month fee)
+    it('allows Paystack creators to set any amount (no backend minimum)', async () => {
       await createTestUserWithSession('ngn-min@test.com')
 
       const res = await authRequest('/profile', {
@@ -1324,17 +1340,16 @@ describe('onboarding endpoints', () => {
           currency: 'NGN',
           purpose: 'tips',
           pricingModel: 'single',
-          singleAmount: 500, // 500 NGN - below ₦1,000 minimum
+          singleAmount: 500, // 500 NGN - Paystack has no backend minimum
           paymentProvider: 'paystack',
         }),
       })
 
-      expect(res.status).toBe(400)
-      const body = await res.json()
-      expect(body.error).toContain('minimum')
+      // Paystack creators don't have minimum validation on backend
+      expect(res.status).toBe(200)
     })
 
-    it('accepts NGN amount at minimum (₦1,000)', async () => {
+    it('accepts NGN Paystack creator with standard amount', async () => {
       await createTestUserWithSession('ngn-exact-min@test.com')
 
       const res = await authRequest('/profile', {
@@ -1347,7 +1362,7 @@ describe('onboarding endpoints', () => {
           currency: 'NGN',
           purpose: 'tips',
           pricingModel: 'single',
-          singleAmount: 1000, // Exactly at ₦1,000 minimum
+          singleAmount: 5000, // Standard Paystack amount
           paymentProvider: 'paystack',
         }),
       })
@@ -1355,7 +1370,11 @@ describe('onboarding endpoints', () => {
       expect(res.status).toBe(200)
     })
 
-    it('rejects USD amount below minimum ($1)', async () => {
+    // Stripe creators have country-based minimums (US = $30)
+    // This ensures platform profitability after per-transaction Stripe fees
+    // Dynamic minimum for new US Stripe creators (0 subscribers) is ~$95
+    // The $2/month account fee is amortized across subscribers
+    it('rejects USD amount below dynamic minimum (~$95 for new US Stripe creators)', async () => {
       await createTestUserWithSession('usd-min@test.com')
 
       const res = await authRequest('/profile', {
@@ -1368,17 +1387,17 @@ describe('onboarding endpoints', () => {
           currency: 'USD',
           purpose: 'tips',
           pricingModel: 'single',
-          singleAmount: 0.50, // $0.50 - below $1 minimum
+          singleAmount: 50, // $50 - below dynamic minimum (~$95) for new Stripe creators
           paymentProvider: 'stripe',
         }),
       })
 
       expect(res.status).toBe(400)
       const body = await res.json()
-      expect(body.error).toContain('minimum')
+      expect(body.error).toContain('Minimum')
     })
 
-    it('accepts USD amount at minimum ($1)', async () => {
+    it('accepts USD amount at or above dynamic minimum (~$95 for new US Stripe creators)', async () => {
       await createTestUserWithSession('usd-exact-min@test.com')
 
       const res = await authRequest('/profile', {
@@ -1391,7 +1410,7 @@ describe('onboarding endpoints', () => {
           currency: 'USD',
           purpose: 'tips',
           pricingModel: 'single',
-          singleAmount: 1, // Exactly $1
+          singleAmount: 100, // $100 - meets dynamic minimum (~$95) for new Stripe creators
           paymentProvider: 'stripe',
         }),
       })
@@ -1402,6 +1421,8 @@ describe('onboarding endpoints', () => {
 
   describe('PATCH /profile', () => {
     // Helper to create a profile first (PATCH requires existing profile)
+    // Note: singleAmount must meet dynamic minimum for US Stripe creators
+    // Dynamic minimum is ~$95 for new creators (0 subscribers) due to $2/month account fee
     async function createProfileForPatch(email: string, purpose = 'tips') {
       const { user, rawToken } = await createTestUserWithSession(email)
 
@@ -1412,7 +1433,7 @@ describe('onboarding endpoints', () => {
         { id: 'perk-3', title: 'Perk 3', enabled: true },
       ] : undefined
 
-      await authRequest('/profile', {
+      const res = await authRequest('/profile', {
         method: 'PUT',
         body: JSON.stringify({
           username: email.replace('@test.com', '').replace(/[^a-z0-9]/g, ''),
@@ -1422,11 +1443,17 @@ describe('onboarding endpoints', () => {
           currency: 'USD',
           purpose,
           pricingModel: 'single',
-          singleAmount: 10,
+          singleAmount: 100, // Meets dynamic US minimum (~$95) for new Stripe creators
           paymentProvider: 'stripe',
           perks,
         }),
       }, rawToken)
+
+      // Ensure profile was created (fail fast if not)
+      if (res.status !== 200) {
+        const body = await res.json()
+        throw new Error(`createProfileForPatch failed: ${res.status} ${body?.error || 'Unknown error'}`)
+      }
 
       return { user, rawToken }
     }

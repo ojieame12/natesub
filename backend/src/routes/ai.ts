@@ -82,7 +82,7 @@ ai.post(
       ),
     }).optional(),
     textDescription: z.string().min(10, 'Description too short').max(2000).optional(),
-    price: z.number().positive().max(100000),
+    price: z.number().positive().max(10_000_000), // Max 10M for local currencies
     userName: z.string().min(1).max(100),
     includeMarketResearch: z.boolean().default(false),
     // Structured inputs for professional services
@@ -160,7 +160,7 @@ ai.post(
   aiRateLimit,
   zValidator('json', z.object({
     description: z.string().min(10).max(2000),
-    price: z.number().positive().max(100000),
+    price: z.number().positive().max(10_000_000), // Max 10M for local currencies
     userName: z.string().min(1).max(100),
     serviceType: z.enum(['personal', 'professional']),
   })),

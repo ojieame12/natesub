@@ -634,6 +634,7 @@ describe('E2E Flows', () => {
 
       // 2. User creates profile with tiers (amounts in dollars, API converts to cents)
       // isPublic: true simulates the "Launch My Page" step where profile becomes visible
+      // Note: US Stripe minimum is $160 (country-based minimum for platform profitability)
       const createRes = await authRequest('/profile', cookie, {
         method: 'PUT',
         body: JSON.stringify({
@@ -646,7 +647,7 @@ describe('E2E Flows', () => {
           purpose: 'tips',
           pricingModel: 'tiers',
           tiers: [
-            { id: 'tier-basic', name: 'Basic', amount: 5.00, perks: ['Thanks'], isPopular: true },
+            { id: 'tier-basic', name: 'Basic', amount: 165.00, perks: ['Thanks'], isPopular: true },
           ],
           paymentProvider: 'stripe',
           isPublic: true, // Profile published (simulates "Launch My Page")
@@ -658,7 +659,7 @@ describe('E2E Flows', () => {
       expect(createBody.profile.username).toBe('mynewpage')
       expect(createBody.profile.isPublic).toBe(true)
       // Verify tier amount stored in cents
-      expect((createBody.profile.tiers as any[])[0].amount).toBe(500)
+      expect((createBody.profile.tiers as any[])[0].amount).toBe(16500)
 
       // 3. Simulate Stripe onboarding complete (update profile directly)
       await db.profile.update({
@@ -682,7 +683,7 @@ describe('E2E Flows', () => {
       const publicBody = await publicRes.json()
       expect(publicBody.profile.displayName).toBe('My New Page')
       // Public API returns display amount (dollars) for tiers
-      expect((publicBody.profile.tiers as any[])[0].amount).toBe(5)
+      expect((publicBody.profile.tiers as any[])[0].amount).toBe(165)
 
       // 6. Checkout works for subscribers (amount in cents, must match a tier)
       mockCreateCheckoutSession.mockResolvedValue({
@@ -695,7 +696,7 @@ describe('E2E Flows', () => {
         body: JSON.stringify({
           creatorUsername: 'mynewpage',
           tierId: 'tier-basic',
-          amount: 500, // Cents - must match tier amount
+          amount: 16500, // Cents - must match tier amount
           interval: 'month',
         }),
       })
