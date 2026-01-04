@@ -77,13 +77,14 @@ financials.get('/reconciliation', auditSensitiveRead('financial_reconciliation')
   const stripeByCurrency = groupByCurrency(stripePayments)
   const paystackByCurrency = groupByCurrency(paystackPayments)
 
-  // Get refunds grouped by currency
+  // Get refunds grouped by currency - use grossCents for subscriber-paid amount
   const refunds = await db.payment.findMany({
     where: {
       createdAt: { gte: periodStart, lte: periodEnd },
       status: 'refunded',
     },
     select: {
+      grossCents: true,
       amountCents: true,
       currency: true,
       stripePaymentIntentId: true,
@@ -95,7 +96,8 @@ financials.get('/reconciliation', auditSensitiveRead('financial_reconciliation')
   const groupRefundsByCurrency = (refundList: typeof refunds): RefundTotals => {
     return refundList.reduce((acc, r) => {
       const currency = (r.currency || 'USD').toUpperCase()
-      acc[currency] = (acc[currency] || 0) + r.amountCents
+      // Use grossCents (subscriber-paid) for reconciliation with Stripe/Paystack
+      acc[currency] = (acc[currency] || 0) + (r.grossCents || r.amountCents)
       return acc
     }, {} as RefundTotals)
   }
@@ -103,7 +105,7 @@ financials.get('/reconciliation', auditSensitiveRead('financial_reconciliation')
   const stripeRefundsByCurrency = groupRefundsByCurrency(refunds.filter(r => r.stripePaymentIntentId))
   const paystackRefundsByCurrency = groupRefundsByCurrency(refunds.filter(r => r.paystackTransactionRef))
 
-  // Get disputes
+  // Get disputes - use grossCents for subscriber-paid amount in reconciliation
   const disputes = await db.payment.groupBy({
     by: ['status'],
     where: {
@@ -111,15 +113,18 @@ financials.get('/reconciliation', auditSensitiveRead('financial_reconciliation')
       status: { in: ['disputed', 'dispute_won', 'dispute_lost'] },
     },
     _count: true,
-    _sum: { amountCents: true },
+    _sum: { grossCents: true, amountCents: true },
   })
 
   const disputeStats = {
     open: disputes.find(d => d.status === 'disputed')?._count || 0,
     won: disputes.find(d => d.status === 'dispute_won')?._count || 0,
     lost: disputes.find(d => d.status === 'dispute_lost')?._count || 0,
-    openAmount: disputes.find(d => d.status === 'disputed')?._sum?.amountCents || 0,
-    lostAmount: disputes.find(d => d.status === 'dispute_lost')?._sum?.amountCents || 0,
+    // Use grossCents (subscriber-paid) for reconciliation with Stripe/Paystack
+    openAmount: disputes.find(d => d.status === 'disputed')?._sum?.grossCents ||
+                disputes.find(d => d.status === 'disputed')?._sum?.amountCents || 0,
+    lostAmount: disputes.find(d => d.status === 'dispute_lost')?._sum?.grossCents ||
+                disputes.find(d => d.status === 'dispute_lost')?._sum?.amountCents || 0,
   }
 
   // Try to get actual balances from payment providers (grouped by currency)

@@ -41,13 +41,19 @@ disputes.get('/stats', auditSensitiveRead('dispute_stats'), async (c) => {
       by: ['status'],
       where: { status: { in: ['disputed', 'dispute_won', 'dispute_lost'] } },
       _count: true,
-      _sum: { amountCents: true }
+      // Use grossCents for dispute volume - subscriber paid amount (includes their fee portion)
+      _sum: { grossCents: true, amountCents: true }
     }),
     db.user.count({ where: { blockedReason: { not: null } } })
   ])
 
   const statsMap = Object.fromEntries(
-    allTimeStats.map(s => [s.status, { count: s._count, amountCents: Math.abs(s._sum.amountCents || 0) }])
+    // Use grossCents (subscriber-paid amount) with fallback to amountCents for legacy data
+    allTimeStats.map(s => [s.status, {
+      count: s._count,
+      grossCents: Math.abs(s._sum.grossCents || s._sum.amountCents || 0),
+      amountCents: Math.abs(s._sum.amountCents || 0)
+    }])
   )
 
   const totalDisputes = (statsMap['disputed']?.count || 0) + (statsMap['dispute_won']?.count || 0) + (statsMap['dispute_lost']?.count || 0)
@@ -69,6 +75,8 @@ disputes.get('/stats', auditSensitiveRead('dispute_stats'), async (c) => {
       won: statsMap['dispute_won']?.count || 0,
       lost: statsMap['dispute_lost']?.count || 0,
       winRate: `${winRate}%`,
+      // Report gross (subscriber-paid) for true dispute volume, base for creator impact
+      totalGrossCents: (statsMap['disputed']?.grossCents || 0) + (statsMap['dispute_won']?.grossCents || 0) + (statsMap['dispute_lost']?.grossCents || 0),
       totalAmountCents: (statsMap['disputed']?.amountCents || 0) + (statsMap['dispute_won']?.amountCents || 0) + (statsMap['dispute_lost']?.amountCents || 0)
     }
   })
