@@ -457,6 +457,15 @@ test.describe('Portal UI', () => {
   })
 
   test('shows loading state during OTP request', async ({ page }) => {
+    // Stub subscriptions to prevent 401 from blocking UI
+    await page.route('**/subscriber/subscriptions', async (route) => {
+      await route.fulfill({
+        status: 401,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'Not authenticated' }),
+      })
+    })
+
     // Add a delay to the OTP stub to see loading state
     await page.route('**/subscriber/otp', async (route) => {
       await new Promise((r) => setTimeout(r, 500))
