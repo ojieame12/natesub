@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Camera, Loader2, ExternalLink, ChevronDown, Check, Heart, Gift, Briefcase, Star, Sparkles, Wallet, MoreHorizontal, Edit3, Wand2, ImageIcon, Plus, X } from 'lucide-react'
 import { Pressable, useToast, Skeleton, LoadingButton, BottomDrawer } from './components'
-import { useProfile, useUpdateProfile, uploadFile, useGeneratePerks, useGenerateBanner, useAIConfig } from './api/hooks'
+import { useProfile, useUpdateProfile, uploadFile, useGeneratePerks, useGenerateBanner, useAIConfig, useCreatorMinimum, useMyMinimum } from './api/hooks'
 import { getCurrencySymbol, centsToDisplayAmount } from './utils/currency'
 import type { Perk } from './api/client'
 import './EditPage.css'
@@ -33,6 +33,11 @@ export default function EditPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const profile = profileData?.profile
+
+  // Fetch minimum for Stripe creators - try dynamic (based on subscriber count), fallback to static
+  const countryMinimum = useCreatorMinimum(profile?.country)
+  const { data: myMinimum } = useMyMinimum()
+  const isStripeCreator = profile?.paymentProvider === 'stripe'
 
   // Local state for editing
   const [displayName, setDisplayName] = useState('')
@@ -263,6 +268,40 @@ export default function EditPage() {
     if (!profile) return
     const { showSuccessToast = true, publishIfReady } = options
 
+    // Validate minimum for Stripe creators (ensures platform profitability)
+    // Try dynamic minimum first (based on subscriber count), fallback to static
+    if (isStripeCreator && (myMinimum || countryMinimum)) {
+      const currency = profile.currency || 'USD'
+      let minAmount: number
+      let minDisplay: string
+
+      if (myMinimum) {
+        // Use dynamic minimum
+        minAmount = currency === myMinimum.minimum.currency
+          ? myMinimum.minimum.local
+          : myMinimum.minimum.usd
+        minDisplay = currency === myMinimum.minimum.currency
+          ? `${getCurrencySymbol(currency)}${minAmount.toLocaleString()}`
+          : `$${minAmount}`
+      } else if (countryMinimum) {
+        // Fallback to static country minimum
+        minAmount = currency === countryMinimum.currency
+          ? countryMinimum.local
+          : countryMinimum.usd
+        minDisplay = currency === countryMinimum.currency
+          ? `${getCurrencySymbol(currency)}${minAmount.toLocaleString()}`
+          : `$${minAmount}`
+      } else {
+        minAmount = 0
+        minDisplay = ''
+      }
+
+      if (minAmount > 0 && singleAmount < minAmount) {
+        toast.error(`Minimum subscription for ${profile.country} is ${minDisplay}`)
+        return false
+      }
+    }
+
     // Warn if service mode user has fewer than 3 perks (non-blocking)
     if (isServiceMode && perks.length > 0 && perks.length < 3) {
       toast.warning(`Only ${perks.length} perk${perks.length === 1 ? '' : 's'} - at least 3 required`)
@@ -316,6 +355,41 @@ export default function EditPage() {
         toast.error('Price must be greater than 0')
         setIsContinuing(false)
         return
+      }
+
+      // Validate minimum for Stripe creators (ensures platform profitability)
+      // Try dynamic minimum first (based on subscriber count), fallback to static
+      if (isStripeCreator && (myMinimum || countryMinimum)) {
+        const currency = profile?.currency || 'USD'
+        let minAmount: number
+        let minDisplay: string
+
+        if (myMinimum) {
+          // Use dynamic minimum
+          minAmount = currency === myMinimum.minimum.currency
+            ? myMinimum.minimum.local
+            : myMinimum.minimum.usd
+          minDisplay = currency === myMinimum.minimum.currency
+            ? `${getCurrencySymbol(currency)}${minAmount.toLocaleString()}`
+            : `$${minAmount}`
+        } else if (countryMinimum) {
+          // Fallback to static country minimum
+          minAmount = currency === countryMinimum.currency
+            ? countryMinimum.local
+            : countryMinimum.usd
+          minDisplay = currency === countryMinimum.currency
+            ? `${getCurrencySymbol(currency)}${minAmount.toLocaleString()}`
+            : `$${minAmount}`
+        } else {
+          minAmount = 0
+          minDisplay = ''
+        }
+
+        if (minAmount > 0 && singleAmount < minAmount) {
+          toast.error(`Minimum subscription for ${profile?.country} is ${minDisplay}`)
+          setIsContinuing(false)
+          return
+        }
       }
 
       // Service mode: require at least 3 perks before publishing

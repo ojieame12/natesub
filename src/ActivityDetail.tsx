@@ -246,6 +246,23 @@ export default function ActivityDetail() {
     const realPayoutInfo = data?.payoutInfo
     const fxData = data?.fxData
     const fxPending = data?.fxPending ?? false
+    const feeBreakdown = data?.feeBreakdown as {
+        chargeType: 'direct' | 'destination' | null
+        grossCents: number
+        netCents: number
+        totalFeeCents: number
+        stripeFees?: {
+            processing?: { percent: number; fixedCents: number; amountCents: number }
+            intlCard?: { percent: number; amountCents: number }
+            fx?: { percent: number; amountCents: number }
+            billing?: { percent: number; amountCents: number }
+            crossBorder?: { percent: number; amountCents: number }
+            accountFee?: { monthlyCents: number; amortizedCents: number; subscriberCount?: number }
+            payout?: { percent: number; fixedCents: number; amountCents: number }
+            subtotalCents: number
+        }
+        platformFee: { percent: number; amountCents: number }
+    } | null | undefined
     const payload = (activityData?.payload || {}) as Record<string, any>
 
     // Auto-refresh when FX data is pending (backfill in progress)
@@ -504,15 +521,85 @@ export default function ActivityDetail() {
                         <div className="receipt-card-label">BREAKDOWN</div>
 
                         <div className="breakdown-rows">
-                            {/* Show gross first if we have fees */}
-                            {activity.feeCents > 0 ? (
+                            {/* Direct charge: Show itemized Stripe fees */}
+                            {feeBreakdown?.chargeType === 'direct' && feeBreakdown.stripeFees ? (
+                                <>
+                                    <div className="breakdown-row">
+                                        <span className="breakdown-label">Subscriber paid</span>
+                                        <span className="breakdown-value">{currencySymbol}{centsToDisplayAmount(feeBreakdown.grossCents, currencyCode)}</span>
+                                    </div>
+
+                                    {/* Stripe Fees Section */}
+                                    <div className="breakdown-section-label">Stripe Fees</div>
+                                    {feeBreakdown.stripeFees.processing && (
+                                        <div className="breakdown-row sub">
+                                            <span className="breakdown-label">Card processing ({feeBreakdown.stripeFees.processing.percent}% + ${(feeBreakdown.stripeFees.processing.fixedCents / 100).toFixed(2)})</span>
+                                            <span className="breakdown-value muted">-{currencySymbol}{centsToDisplayAmount(feeBreakdown.stripeFees.processing.amountCents, currencyCode)}</span>
+                                        </div>
+                                    )}
+                                    {feeBreakdown.stripeFees.intlCard && (
+                                        <div className="breakdown-row sub">
+                                            <span className="breakdown-label">International card ({feeBreakdown.stripeFees.intlCard.percent}%)</span>
+                                            <span className="breakdown-value muted">-{currencySymbol}{centsToDisplayAmount(feeBreakdown.stripeFees.intlCard.amountCents, currencyCode)}</span>
+                                        </div>
+                                    )}
+                                    {feeBreakdown.stripeFees.fx && (
+                                        <div className="breakdown-row sub">
+                                            <span className="breakdown-label">Currency conversion ({feeBreakdown.stripeFees.fx.percent}%)</span>
+                                            <span className="breakdown-value muted">-{currencySymbol}{centsToDisplayAmount(feeBreakdown.stripeFees.fx.amountCents, currencyCode)}</span>
+                                        </div>
+                                    )}
+                                    {feeBreakdown.stripeFees.billing && (
+                                        <div className="breakdown-row sub">
+                                            <span className="breakdown-label">Billing ({feeBreakdown.stripeFees.billing.percent}%)</span>
+                                            <span className="breakdown-value muted">-{currencySymbol}{centsToDisplayAmount(feeBreakdown.stripeFees.billing.amountCents, currencyCode)}</span>
+                                        </div>
+                                    )}
+                                    {feeBreakdown.stripeFees.crossBorder && (
+                                        <div className="breakdown-row sub">
+                                            <span className="breakdown-label">Cross-border payout ({feeBreakdown.stripeFees.crossBorder.percent}%)</span>
+                                            <span className="breakdown-value muted">-{currencySymbol}{centsToDisplayAmount(feeBreakdown.stripeFees.crossBorder.amountCents, currencyCode)}</span>
+                                        </div>
+                                    )}
+                                    {feeBreakdown.stripeFees.accountFee && (
+                                        <div className="breakdown-row sub">
+                                            <span className="breakdown-label">Account fee ($2/mo split)</span>
+                                            <span className="breakdown-value muted">-{currencySymbol}{centsToDisplayAmount(feeBreakdown.stripeFees.accountFee.amortizedCents, currencyCode)}</span>
+                                        </div>
+                                    )}
+                                    {feeBreakdown.stripeFees.payout && (
+                                        <div className="breakdown-row sub">
+                                            <span className="breakdown-label">Payout ({feeBreakdown.stripeFees.payout.percent}%)</span>
+                                            <span className="breakdown-value muted">-{currencySymbol}{centsToDisplayAmount(feeBreakdown.stripeFees.payout.amountCents, currencyCode)}</span>
+                                        </div>
+                                    )}
+                                    <div className="breakdown-row subtotal">
+                                        <span className="breakdown-label">Stripe total</span>
+                                        <span className="breakdown-value muted">-{currencySymbol}{centsToDisplayAmount(feeBreakdown.stripeFees.subtotalCents, currencyCode)}</span>
+                                    </div>
+
+                                    {/* Platform Fee */}
+                                    <div className="breakdown-section-label">Platform</div>
+                                    <div className="breakdown-row sub">
+                                        <span className="breakdown-label">NatePay ({feeBreakdown.platformFee.percent}%)</span>
+                                        <span className="breakdown-value muted">-{currencySymbol}{centsToDisplayAmount(feeBreakdown.platformFee.amountCents, currencyCode)}</span>
+                                    </div>
+
+                                    <div className="breakdown-divider" />
+                                    <div className="breakdown-row total">
+                                        <span className="breakdown-label">You receive</span>
+                                        <span className="breakdown-value highlight">{currencySymbol}{centsToDisplayAmount(feeBreakdown.netCents, currencyCode)}</span>
+                                    </div>
+                                </>
+                            ) : activity.feeCents > 0 ? (
+                                /* Destination charge or legacy: Simple breakdown */
                                 <>
                                     <div className="breakdown-row">
                                         <span className="breakdown-label">Gross amount</span>
                                         <span className="breakdown-value">{currencySymbol}{centsToDisplayAmount(activity.grossCents, currencyCode)}</span>
                                     </div>
                                     <div className="breakdown-row">
-                                        <span className="breakdown-label">Fees</span>
+                                        <span className="breakdown-label">Fees ({feeBreakdown?.platformFee.percent ?? 9}%)</span>
                                         <span className="breakdown-value muted">-{currencySymbol}{centsToDisplayAmount(activity.feeCents, currencyCode)}</span>
                                     </div>
                                     <div className="breakdown-divider" />

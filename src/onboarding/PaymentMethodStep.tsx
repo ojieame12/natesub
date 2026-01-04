@@ -9,6 +9,7 @@ import { api, safeSessionSetItem } from '../api'
 import { queryKeys } from '../api/queryKeys'
 import { saveRetryQueue } from './saveRetryQueue'
 import { getMinimumAmount, getCurrencySymbol, getSuggestedAmounts } from '../utils/currency'
+import { useCreatorMinimum, useMyMinimum } from '../api/hooks'
 import { needsSwiftCodeHelp } from '../utils/swiftCodes'
 import {
     hasPaystack,
@@ -126,6 +127,11 @@ export default function PaymentMethodStep() {
     const [showSwiftLookup, setShowSwiftLookup] = useState(false)
     const [pendingStripeUrl, setPendingStripeUrl] = useState<string | null>(null)
 
+    // Get country-based minimum for Stripe creators (ensures platform profitability)
+    // Try dynamic minimum first (if authenticated + has profile), fallback to static
+    const countryMinimum = useCreatorMinimum(country)
+    const { data: myMinimum } = useMyMinimum()
+
     // SWIFT lookup handlers
     const handleSwiftLookupContinue = useCallback(() => {
         if (pendingStripeUrl) {
@@ -179,24 +185,44 @@ export default function PaymentMethodStep() {
         // Get suggested amounts for the FINAL currency (use purpose-aware suggestions)
         const pricingType = store.purpose === 'service' ? 'service' : 'personal'
         const suggestedAmounts = getSuggestedAmounts(finalCurrency, pricingType)
-        const minAmount = getMinimumAmount(finalCurrency)
         const currencySymbol = getCurrencySymbol(finalCurrency)
 
-        // Auto-set singleAmount if it's invalid for the final currency
-        // This handles the case where currency changes (e.g., NGN 10 → USD 10)
+        // Use dynamic minimum for Stripe creators (based on subscriber count)
+        // Fallback to static country minimum, then to currency default
+        // Paystack has different economics - no platform minimum enforcement
+        const isStripe = selectedMethod === 'stripe'
+        let minAmount = getMinimumAmount(finalCurrency) // Default fallback
+
+        if (isStripe && myMinimum) {
+            // Use dynamic minimum (based on subscriber count)
+            minAmount = finalCurrency === myMinimum.minimum.currency
+                ? myMinimum.minimum.local
+                : myMinimum.minimum.usd
+        } else if (isStripe && countryMinimum) {
+            // Fallback to static country minimum
+            minAmount = finalCurrency === countryMinimum.currency
+                ? countryMinimum.local
+                : countryMinimum.usd
+        }
+
+        // Auto-set singleAmount if missing or invalid for Stripe
+        // For Stripe: auto-fix if below minimum
+        // For Paystack: only auto-fix if missing/zero (no minimum enforcement)
         let finalSingleAmount = store.singleAmount
         if (store.pricingModel === 'single') {
-            if (!finalSingleAmount || finalSingleAmount < minAmount) {
+            const needsAutoFix = !finalSingleAmount || (isStripe && finalSingleAmount < minAmount)
+            if (needsAutoFix) {
                 // Use the first suggested amount as a sensible default
                 finalSingleAmount = suggestedAmounts[0]
                 store.setPricing('single', store.tiers, finalSingleAmount)
             }
         }
 
-        // Auto-normalize tier amounts if invalid for the final currency
-        // This handles currency switches (e.g., NGN tiers → USD tiers)
+        // Auto-normalize tier amounts if missing or invalid for Stripe
+        // For Stripe: auto-fix if below minimum
+        // For Paystack: only auto-fix if missing/zero (no minimum enforcement)
         if (store.pricingModel === 'tiers' && store.tiers && store.tiers.length > 0) {
-            const hasInvalidTiers = store.tiers.some(t => !t.amount || t.amount < minAmount)
+            const hasInvalidTiers = store.tiers.some(t => !t.amount || (isStripe && t.amount < minAmount))
             if (hasInvalidTiers) {
                 // Reset tiers to suggested amounts for this currency
                 const normalizedTiers = store.tiers.map((tier, i) => ({
@@ -215,10 +241,13 @@ export default function PaymentMethodStep() {
         if (!store.countryCode?.trim()) validationErrors.push('Country code is required')
 
         // Validate pricing based on model type (should pass now with auto-fixed amount)
+        // Only enforce minimum for Stripe (Paystack has different economics)
         if (store.pricingModel === 'tiers') {
             if (!store.tiers || store.tiers.length === 0) {
                 validationErrors.push('At least one pricing tier is required')
-            } else if (store.tiers.some(t => !t.amount || t.amount < minAmount)) {
+            } else if (store.tiers.some(t => !t.amount)) {
+                validationErrors.push('All tier amounts must have a price')
+            } else if (isStripe && store.tiers.some(t => t.amount < minAmount)) {
                 validationErrors.push(`All tier amounts must be at least ${currencySymbol}${minAmount.toLocaleString()}`)
             }
         }

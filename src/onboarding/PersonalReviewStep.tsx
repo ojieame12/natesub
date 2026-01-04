@@ -12,7 +12,7 @@ import {
     getCrossBorderCurrencyOptions,
 } from '../utils/regionConfig'
 import { api } from '../api'
-import { uploadFile, useGeneratePerks, useAIConfig, useCurrentUser } from '../api/hooks'
+import { uploadFile, useGeneratePerks, useAIConfig, useCurrentUser, useCreatorMinimum, useMyMinimum } from '../api/hooks'
 import { saveRetryQueue } from './saveRetryQueue'
 import './onboarding.css'
 
@@ -312,8 +312,32 @@ export default function PersonalReviewStep() {
         }
     }
 
-    // Get minimum amount for current currency (use resolved for accuracy)
-    const minAmount = getMinimumAmount(resolvedCurrency)
+    // Get minimum amount - try dynamic minimum first (if authenticated + has profile)
+    // Fallback to static country minimum, then to currency default
+    const countryMinimum = useCreatorMinimum(resolvedCountry)
+    const { data: myMinimum } = useMyMinimum()
+
+    // Calculate minimum amount based on available data:
+    // 1. Dynamic minimum (based on subscriber count) - best for established creators
+    // 2. Static country minimum - for new creators
+    // 3. Currency-based default - fallback
+    // Paystack uses currency-based minimums (different economics, no hard block)
+    let minAmount = getMinimumAmount(resolvedCurrency) // Default fallback
+
+    if (resolvedPaymentProvider === 'stripe' && myMinimum) {
+        // Use dynamic minimum (based on subscriber count)
+        minAmount = resolvedCurrency === myMinimum.minimum.currency
+            ? myMinimum.minimum.local
+            : myMinimum.minimum.usd
+    } else if (resolvedPaymentProvider === 'stripe' && countryMinimum) {
+        // Fallback to static country minimum
+        minAmount = resolvedCurrency === countryMinimum.currency
+            ? countryMinimum.local
+            : countryMinimum.usd
+    }
+
+    // USD minimum for display (helpful context for cross-border creators)
+    const minAmountUsd = myMinimum?.minimum.usd ?? countryMinimum?.usd ?? null
 
     // Service mode: Generate perks when description changes and we have enough context
     const handleGeneratePerks = async () => {
@@ -415,11 +439,18 @@ export default function PersonalReviewStep() {
         const finalAmount = parseFloat(priceInput) || 0
 
         // Validate pricing based on model
+        // Minimum enforcement only for Stripe (Paystack has different economics - no platform minimum)
+        const enforceMinimum = resolvedPaymentProvider === 'stripe'
+
         if (pricingModel === 'tiers' && tiers.length > 0) {
             // Validate tiered pricing - check each tier has valid amount
-            const invalidTier = tiers.find(t => !t.amount || t.amount < minAmount)
+            const invalidTier = tiers.find(t => !t.amount || (enforceMinimum && t.amount < minAmount))
             if (invalidTier) {
-                setError(`Tier "${invalidTier.name}" must be at least ${currencySymbol}${minAmount.toLocaleString()}.`)
+                if (!invalidTier.amount) {
+                    setError(`Tier "${invalidTier.name}" must have a price.`)
+                } else {
+                    setError(`Tier "${invalidTier.name}" must be at least ${currencySymbol}${minAmount.toLocaleString()}.`)
+                }
                 return
             }
         } else {
@@ -428,7 +459,7 @@ export default function PersonalReviewStep() {
                 setError('Please set a price.')
                 return
             }
-            if (finalAmount < minAmount) {
+            if (enforceMinimum && finalAmount < minAmount) {
                 setError(`Minimum price is ${currencySymbol}${minAmount.toLocaleString()} for ${resolvedCurrency}.`)
                 return
             }
@@ -749,6 +780,19 @@ export default function PersonalReviewStep() {
                                 style={{ fontSize: getPriceFontSize(priceInput) }}
                             />
                             <span className="setup-price-period">/month</span>
+                        </div>
+                    )}
+
+                    {/* Minimum subscription note for Stripe creators */}
+                    {resolvedPaymentProvider === 'stripe' && (myMinimum || countryMinimum) && (
+                        <div className="setup-minimum-note">
+                            <span>
+                                Minimum: {currencySymbol}{minAmount.toLocaleString()}/mo
+                                {minAmountUsd && resolvedCurrency !== 'USD' && ` (~$${minAmountUsd} USD)`}
+                                {myMinimum && myMinimum.subscriberCount > 1 && (
+                                    <span className="minimum-subscriber-context"> (based on {myMinimum.subscriberCount} subscribers)</span>
+                                )}
+                            </span>
                         </div>
                     )}
 

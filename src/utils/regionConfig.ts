@@ -815,6 +815,16 @@ export function getCrossBorderCurrencyOptions(): CrossBorderCurrency[] {
 // ============================================
 
 /**
+ * Check if a country uses Stripe cross-border payouts.
+ * These countries have higher fees (10.5% vs 9%) and $85 minimum.
+ * All countries use destination charges - platform absorbs Stripe fees.
+ */
+export function isStripeCrossBorderCountry(code: string | null | undefined): boolean {
+  const country = getCountry(code)
+  return Boolean(country?.crossBorder)
+}
+
+/**
  * Get Stripe description for UI
  * Returns appropriate message based on country
  */

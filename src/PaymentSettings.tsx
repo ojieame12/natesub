@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Building2, Check, ChevronDown, CreditCard, ExternalLink, History, Loader2, Lock, RefreshCw, TriangleAlert, Zap, Clock, TrendingUp, Calendar } from 'lucide-react'
+import { ArrowLeft, Building2, Check, ChevronDown, CreditCard, ExternalLink, History, Info, Loader2, Lock, RefreshCw, TriangleAlert, Zap, Clock, TrendingUp, Calendar } from 'lucide-react'
 import { InlineError, Pressable, Skeleton, SwiftCodeLookup, BottomDrawer } from './components'
 import { api } from './api'
 // PaystackConnectionStatus type - now handled by React Query
@@ -8,7 +8,7 @@ import { useProfile, useSalaryMode, useUpdateSalaryMode, useStripeStatus, usePay
 import { useDelayedLoading } from './hooks'
 import { formatCurrencyFromCents } from './utils/currency'
 import { needsSwiftCodeHelp } from './utils/swiftCodes'
-import { formatStripeCurrencies, formatPaystackCurrencies } from './utils/regionConfig'
+import { formatStripeCurrencies, formatPaystackCurrencies, isStripeCrossBorderCountry } from './utils/regionConfig'
 import './PaymentSettings.css'
 
 const STRIPE_ONBOARDING_RETURN_MAX_AGE_MS = 30 * 60 * 1000
@@ -794,6 +794,120 @@ export default function PaymentSettings() {
             {paystackError && <InlineError message={paystackError} className="provider-inline-error" />}
           </div>
         </section>
+
+        {/* Fee Explainer - Only show for active Stripe users */}
+        {stripeIsActive && (
+          <section className="settings-section">
+            <h3 className="section-title">Fee Structure</h3>
+            <div className="fee-explainer-card">
+              <div className="fee-explainer-header">
+                <Info size={18} className="fee-explainer-icon" />
+                <span className="fee-explainer-title">How fees work</span>
+              </div>
+
+              {isStripeCrossBorderCountry(userCountryCode) ? (
+                // Cross-border country (NG, KE, GH) - Destination charges with higher buffer
+                <div className="fee-explainer-content">
+                  <p className="fee-explainer-intro">
+                    NatePay charges a <strong>10.5% total fee</strong> for cross-border creators, split between you and your subscribers (5.25% each). This covers all Stripe processing and international transfer costs.
+                  </p>
+
+                  <div className="fee-explainer-breakdown">
+                    <div className="fee-explainer-section">
+                      <span className="fee-explainer-section-title">Fee Split</span>
+                      <div className="fee-explainer-row">
+                        <span>Subscriber pays extra</span>
+                        <span className="fee-explainer-value">+5.25%</span>
+                      </div>
+                      <div className="fee-explainer-row">
+                        <span>Deducted from you</span>
+                        <span className="fee-explainer-value">-5.25%</span>
+                      </div>
+                    </div>
+
+                    <div className="fee-explainer-section platform">
+                      <span className="fee-explainer-section-title">What&apos;s Covered</span>
+                      <div className="fee-explainer-row">
+                        <span>Card processing</span>
+                        <span className="fee-explainer-value muted">Included</span>
+                      </div>
+                      <div className="fee-explainer-row">
+                        <span>Currency conversion</span>
+                        <span className="fee-explainer-value muted">Included</span>
+                      </div>
+                      <div className="fee-explainer-row">
+                        <span>International transfers</span>
+                        <span className="fee-explainer-value muted">Included</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="fee-explainer-example">
+                    <span className="fee-explainer-example-title">Example: $100 subscription</span>
+                    <div className="fee-explainer-example-calc">
+                      <div className="fee-explainer-row">
+                        <span>Subscriber pays</span>
+                        <span>$105.25</span>
+                      </div>
+                      <div className="fee-explainer-row">
+                        <span>Total fees (10.5%)</span>
+                        <span className="muted">-$10.50</span>
+                      </div>
+                      <div className="fee-explainer-row total">
+                        <span>You receive</span>
+                        <span className="highlight">$94.75</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <p className="fee-explainer-note">
+                    <TrendingUp size={14} />
+                    <span>All Stripe fees are absorbed by NatePay. You always receive your set price minus 5.25%.</span>
+                  </p>
+                </div>
+              ) : (
+                // Domestic country (US, UK, EU) - Destination charges
+                <div className="fee-explainer-content">
+                  <p className="fee-explainer-intro">
+                    NatePay charges a <strong>9% total fee</strong>, split between you and your subscribers (4.5% each). This covers all Stripe processing.
+                  </p>
+
+                  <div className="fee-explainer-breakdown">
+                    <div className="fee-explainer-section">
+                      <span className="fee-explainer-section-title">Fee Split</span>
+                      <div className="fee-explainer-row">
+                        <span>Subscriber pays extra</span>
+                        <span className="fee-explainer-value">+4.5%</span>
+                      </div>
+                      <div className="fee-explainer-row">
+                        <span>Deducted from you</span>
+                        <span className="fee-explainer-value">-4.5%</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="fee-explainer-example">
+                    <span className="fee-explainer-example-title">Example: $100 subscription</span>
+                    <div className="fee-explainer-example-calc">
+                      <div className="fee-explainer-row">
+                        <span>Subscriber pays</span>
+                        <span>$104.50</span>
+                      </div>
+                      <div className="fee-explainer-row">
+                        <span>Total fees (9%)</span>
+                        <span className="muted">-$9.00</span>
+                      </div>
+                      <div className="fee-explainer-row total">
+                        <span>You receive</span>
+                        <span className="highlight">$95.50</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
       </div>
 
       {/* SWIFT Code Lookup Modal for cross-border countries */}

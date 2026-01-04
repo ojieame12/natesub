@@ -829,3 +829,152 @@
     outline: none;
     border-color: var(--neutral-400);
 }
+
+/* === FEE EXPLAINER === */
+.fee-explainer-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-xl);
+    padding: var(--space-lg);
+}
+
+.fee-explainer-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-md);
+}
+
+.fee-explainer-icon {
+    color: var(--text-tertiary);
+}
+
+.fee-explainer-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.fee-explainer-content {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.fee-explainer-intro {
+    font-size: 14px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    margin: 0;
+}
+
+.fee-explainer-intro strong {
+    color: var(--text-primary);
+}
+
+.fee-explainer-breakdown {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.fee-explainer-section {
+    background: var(--neutral-50);
+    border-radius: var(--radius-lg);
+    padding: var(--space-md);
+}
+
+.fee-explainer-section.platform {
+    background: var(--accent-green-soft);
+}
+
+.fee-explainer-section-title {
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: var(--space-sm);
+}
+
+.fee-explainer-section.platform .fee-explainer-section-title {
+    color: var(--accent-green);
+}
+
+.fee-explainer-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--space-xs) 0;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.fee-explainer-value {
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.fee-explainer-value.highlight {
+    color: var(--accent-green);
+    font-weight: 600;
+}
+
+.fee-explainer-example {
+    background: var(--neutral-100);
+    border-radius: var(--radius-lg);
+    padding: var(--space-md);
+}
+
+.fee-explainer-example-title {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-tertiary);
+    margin-bottom: var(--space-sm);
+}
+
+.fee-explainer-example-calc {
+    display: flex;
+    flex-direction: column;
+}
+
+.fee-explainer-example-calc .fee-explainer-row {
+    font-size: 14px;
+}
+
+.fee-explainer-example-calc .fee-explainer-row.total {
+    margin-top: var(--space-xs);
+    padding-top: var(--space-sm);
+    border-top: 1px dashed var(--border-subtle);
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.fee-explainer-example-calc .muted {
+    color: var(--text-tertiary);
+}
+
+.fee-explainer-example-calc .highlight {
+    color: var(--accent-green);
+    font-weight: 600;
+}
+
+.fee-explainer-note {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-sm);
+    font-size: 13px;
+    color: var(--text-tertiary);
+    margin: 0;
+    padding: var(--space-sm);
+    background: var(--neutral-50);
+    border-radius: var(--radius-md);
+}
+
+.fee-explainer-note svg {
+    flex-shrink: 0;
+    margin-top: 2px;
+    color: var(--accent-green);
+}

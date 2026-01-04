@@ -1251,5 +1251,58 @@ export function useAIConfig() {
   })
 }
 
+/**
+ * Fetch minimum subscription amounts by creator country.
+ * These minimums ensure platform profitability after Stripe fees.
+ * Only applies to Stripe creators - Paystack has different economics.
+ */
+export function useCreatorMinimums() {
+  return useQuery({
+    queryKey: queryKeys.config.minimums,
+    queryFn: api.config.getMinimums,
+    staleTime: 60 * 60 * 1000, // 1 hour - minimums rarely change
+    gcTime: 24 * 60 * 60 * 1000, // 24 hours cache
+    retry: 1,
+  })
+}
+
+/**
+ * Get minimum subscription for a specific country.
+ * Returns null if country is not supported.
+ */
+export function useCreatorMinimum(country: string | null | undefined) {
+  const { data: config } = useCreatorMinimums()
+
+  if (!country || !config?.minimums) {
+    return null
+  }
+
+  return config.minimums[country] ?? null
+}
+
+/**
+ * Get creator's dynamic minimum subscription based on their subscriber count.
+ * The $2/month Stripe account fee is amortized across active subscribers:
+ * - New creator (0-1 subs): Higher minimum to cover full account fee
+ * - Growing creator (5+ subs): Lower minimum as fee spreads across subscribers
+ * - Established creator (20+ subs): Converges to floor minimum
+ *
+ * Requires authentication - this is creator-specific data.
+ * Only relevant for Stripe creators - Paystack has different economics.
+ */
+export function useMyMinimum() {
+  const { status } = useAuthState()
+
+  return useQuery({
+    queryKey: queryKeys.config.myMinimum,
+    queryFn: api.config.getMyMinimum,
+    staleTime: 5 * 60 * 1000, // 5 minutes - can change with new subscribers
+    gcTime: 15 * 60 * 1000, // 15 minutes cache
+    retry: 1,
+    // Only fetch when authenticated (auth check handled by endpoint)
+    enabled: status === 'authenticated',
+  })
+}
+
 // Re-export for convenience
 export { api } from './client'

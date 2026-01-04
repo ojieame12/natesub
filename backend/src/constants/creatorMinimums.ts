@@ -347,7 +347,7 @@ export function getDynamicMinimum(params: DynamicMinimumParams): DynamicMinimumR
   const effectiveSubs = Math.max(1, subscriberCount)
   const countryInfo = CURRENCY_INFO[country]
 
-  // Cross-border countries use flat $75 minimum
+  // Cross-border countries use flat $85 minimum
   if (isCrossBorderCountry(country)) {
     const minimumUSD = CROSS_BORDER_MINIMUM_USD
 

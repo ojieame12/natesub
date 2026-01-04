@@ -231,6 +231,25 @@ export interface FxDataResponse {
   exchangeRate: number          // e.g., 1600.50
 }
 
+// Fee breakdown for payment transparency
+export interface FeeBreakdownResponse {
+  chargeType: 'direct' | 'destination' | null
+  grossCents: number
+  netCents: number
+  totalFeeCents: number
+  stripeFees?: {
+    processing?: { percent: number; fixedCents: number; amountCents: number }
+    intlCard?: { percent: number; amountCents: number }
+    fx?: { percent: number; amountCents: number }
+    billing?: { percent: number; amountCents: number }
+    crossBorder?: { percent: number; amountCents: number }
+    accountFee?: { monthlyCents: number; amortizedCents: number; subscriberCount?: number }
+    payout?: { percent: number; fixedCents: number; amountCents: number }
+    subtotalCents: number
+  }
+  platformFee: { percent: number; amountCents: number }
+}
+
 // Payout history item
 export interface PayoutHistoryItem {
   id: string
@@ -872,7 +891,13 @@ export const activity = {
       `/activity?limit=${limit}${cursor ? `&cursor=${cursor}` : ''}`
     ),
 
-  get: (id: string) => apiFetch<{ activity: Activity; payoutInfo: PayoutInfoResponse | null; fxData: FxDataResponse | null; fxPending: boolean }>(`/activity/${id}`),
+  get: (id: string) => apiFetch<{
+    activity: Activity
+    payoutInfo: PayoutInfoResponse | null
+    fxData: FxDataResponse | null
+    fxPending: boolean
+    feeBreakdown: FeeBreakdownResponse | null
+  }>(`/activity/${id}`),
 
   getMetrics: () => apiFetch<{ metrics: Metrics }>('/activity/metrics'),
 
@@ -1447,6 +1472,47 @@ export interface AIConfig {
   available: boolean
 }
 
+// Creator minimum subscription amounts by country
+export interface CreatorMinimum {
+  usd: number
+  local: number
+  currency: string
+}
+
+export interface MinimumsConfig {
+  minimums: Record<string, CreatorMinimum>
+  supportedCountries: string[]
+  meta: {
+    platformFee: string
+    model: string
+    payoutCadence: string
+    accountType: string
+    floorSubscriberCount?: number
+    assumptions?: {
+      intlMix: string
+      payoutPercent: string
+      crossBorderCountries: string
+    }
+    note?: string
+  }
+}
+
+// Creator's dynamic minimum (based on subscriber count)
+export interface MyMinimumConfig {
+  minimum: {
+    usd: number
+    local: number
+    currency: string
+  }
+  subscriberCount: number
+  floorMinimum: number // Minimum at 20+ subscribers
+  _debug?: {
+    percentFees: string
+    fixedCents: number
+    netMarginRate: string
+  }
+}
+
 const config = {
   // Get fee configuration from backend (source of truth)
   getFees: () =>
@@ -1459,6 +1525,23 @@ const config = {
     fetch(`${API_URL}/config/ai`)
       .then(res => res.ok ? res.json() as Promise<AIConfig> : { available: false })
       .catch(() => ({ available: false })),
+
+  // Get minimum subscription amounts by creator country
+  getMinimums: () =>
+    fetch(`${API_URL}/config/minimums`)
+      .then(res => res.ok ? res.json() as Promise<MinimumsConfig> : null)
+      .catch(() => null),
+
+  // Get minimum for a specific country
+  getMinimumForCountry: (country: string) =>
+    fetch(`${API_URL}/config/minimums/${encodeURIComponent(country)}`)
+      .then(res => res.ok ? res.json() as Promise<CreatorMinimum & { country: string }> : null)
+      .catch(() => null),
+
+  // Get creator's dynamic minimum (based on subscriber count)
+  // Requires authentication - this is creator-specific data
+  getMyMinimum: () =>
+    apiFetch<MyMinimumConfig>('/config/my-minimum'),
 }
 
 // ============================================

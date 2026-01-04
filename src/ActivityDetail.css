@@ -454,6 +454,51 @@
     margin: var(--space-xs) 0;
 }
 
+/* Fee breakdown section labels */
+.breakdown-section-label {
+    font-family: var(--font-primary);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: var(--space-md) 0 var(--space-xs);
+    margin-top: var(--space-xs);
+}
+
+/* Indented sub-items for itemized fees */
+.breakdown-row.sub {
+    padding-left: var(--space-md);
+}
+
+.breakdown-row.sub .breakdown-label {
+    font-size: 13px;
+    color: var(--text-tertiary);
+}
+
+.breakdown-row.sub .breakdown-value {
+    font-size: 13px;
+}
+
+/* Subtotal row */
+.breakdown-row.subtotal {
+    padding-left: var(--space-md);
+    padding-top: var(--space-sm);
+    border-top: 1px dashed var(--border-subtle);
+    margin-top: var(--space-xs);
+}
+
+.breakdown-row.subtotal .breakdown-label {
+    font-weight: 500;
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+.breakdown-row.subtotal .breakdown-value {
+    font-weight: 500;
+    font-size: 13px;
+}
+
 .breakdown-value.fx-rate {
     font-family: 'SF Mono', 'Menlo', monospace;
     font-size: 13px;

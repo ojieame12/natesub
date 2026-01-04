@@ -33,6 +33,10 @@ vi.mock('./api/hooks', () => ({
   useGeneratePerks: () => generatePerksReturn,
   useGenerateBanner: () => generateBannerReturn,
   useAIConfig: () => aiConfigReturn,
+  // Mock useCreatorMinimum - returns null (no minimum enforced in tests)
+  useCreatorMinimum: () => null,
+  // Mock useMyMinimum - returns undefined (no dynamic minimum in tests)
+  useMyMinimum: () => ({ data: undefined }),
   uploadFile: vi.fn(),
 }))
 

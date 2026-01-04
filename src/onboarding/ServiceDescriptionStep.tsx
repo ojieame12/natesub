@@ -3,7 +3,7 @@ import { ChevronLeft, AlertCircle, Loader2 } from 'lucide-react'
 import { useOnboardingStore } from './store'
 import { Button, Pressable } from './components'
 import { getCurrencySymbol, getMinimumAmount } from '../utils/currency'
-import { useSaveOnboardingProgress } from '../api/hooks'
+import { useSaveOnboardingProgress, useCreatorMinimum, useMyMinimum } from '../api/hooks'
 import './onboarding.css'
 
 const PLACEHOLDER_EXAMPLES = [
@@ -20,6 +20,8 @@ export default function ServiceDescriptionStep() {
     singleAmount,
     setPricing,
     currency,
+    country,
+    paymentProvider,
     nextStep,
     prevStep,
     firstName,
@@ -27,6 +29,9 @@ export default function ServiceDescriptionStep() {
   } = useOnboardingStore()
 
   const { mutateAsync: saveProgress } = useSaveOnboardingProgress()
+  // Fetch minimum for Stripe creators - try dynamic (based on subscriber count), fallback to static
+  const countryMinimum = useCreatorMinimum(country)
+  const { data: myMinimum } = useMyMinimum()
   const [localDescription, setLocalDescription] = useState(serviceDescription)
   const [localPrice, setLocalPrice] = useState(String(singleAmount || ''))
   const [isSaving, setIsSaving] = useState(false)
@@ -54,7 +59,23 @@ export default function ServiceDescriptionStep() {
   const placeholder = PLACEHOLDER_EXAMPLES[placeholderIndex]
 
   const currencySymbol = getCurrencySymbol(currency)
-  const minAmount = getMinimumAmount(currency)
+  // Use dynamic minimum for Stripe creators (based on subscriber count)
+  // Fallback to static country minimum, then to currency default
+  // Paystack has different economics - no platform minimum enforcement (soft hint only)
+  const isStripe = paymentProvider === 'stripe'
+  let minAmount = getMinimumAmount(currency) // Default fallback
+
+  if (isStripe && myMinimum) {
+    // Use dynamic minimum (based on subscriber count)
+    minAmount = currency === myMinimum.minimum.currency
+      ? myMinimum.minimum.local
+      : myMinimum.minimum.usd
+  } else if (isStripe && countryMinimum) {
+    // Fallback to static country minimum
+    minAmount = currency === countryMinimum.currency
+      ? countryMinimum.local
+      : countryMinimum.usd
+  }
   const priceNum = parseFloat(localPrice) || 0
 
   const handlePriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -68,7 +89,9 @@ export default function ServiceDescriptionStep() {
 
   const handleContinue = async () => {
     if (!localDescription.trim()) return
-    if (priceNum < minAmount) return
+    // Only enforce minimum for Stripe (Paystack has different economics)
+    if (isStripe && priceNum < minAmount) return
+    if (priceNum <= 0) return // Always require a positive price
 
     // Block navigation until save succeeds
     setIsSaving(true)
@@ -102,7 +125,8 @@ export default function ServiceDescriptionStep() {
   const MAX_DESCRIPTION_LENGTH = 500 // Backend caps bio at 500
   const descLength = localDescription.trim().length
   const isDescriptionValid = descLength >= 20 && descLength <= MAX_DESCRIPTION_LENGTH
-  const isPriceValid = priceNum >= minAmount
+  // For Stripe: enforce minimum. For Paystack: just need positive price
+  const isPriceValid = isStripe ? (priceNum >= minAmount) : (priceNum > 0)
   const isValid = isDescriptionValid && isPriceValid
 
   return (
@@ -183,11 +207,16 @@ export default function ServiceDescriptionStep() {
               />
               <span className="service-price-period">/month</span>
             </div>
-            {localPrice && !isPriceValid && (
+            {localPrice && !isPriceValid && isStripe && (
               <div className="service-description-step-hint">
                 <span className="hint-warning">
                   Minimum {currencySymbol}{minAmount.toLocaleString()}
                 </span>
+              </div>
+            )}
+            {localPrice && priceNum <= 0 && (
+              <div className="service-description-step-hint">
+                <span className="hint-warning">Enter a valid price</span>
               </div>
             )}
           </div>

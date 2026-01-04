@@ -187,11 +187,11 @@ export async function handleCheckoutCompleted(event: Stripe.Event) {
   const hasNewFeeModel = feeModel && netAmount > 0
 
   if ((feeModel === 'split_v1' || feeModel === 'direct_v1') && hasNewFeeModel) {
-    // split_v1: Destination charges (4.5%/4.5% split, platform absorbs Stripe fees)
-    // direct_v1: Direct charges (subscriber pays 4.5%, platform takes 2%, creator pays Stripe)
+    // split_v1: Destination charges with split fee (4.5%/4.5% domestic, 5.25%/5.25% cross-border)
+    // direct_v1: Unused legacy - kept for backward compatibility only
     grossCents = session.amount_total || 0  // Total subscriber paid
-    feeCents = serviceFee                    // Platform fee (9% for split, 2% for direct)
-    netCents = netAmount                     // What creator receives (before Stripe fees for direct)
+    feeCents = serviceFee                    // Platform fee (9% domestic, 10.5% cross-border)
+    netCents = netAmount                     // What creator receives
     subFeeCents = subscriberFeeCents || null
     creatorFee = creatorFeeCents || null
     basePrice = baseAmountCents || netCents  // Creator's set price
@@ -593,8 +593,8 @@ export async function handleAsyncPaymentSucceeded(event: Stripe.Event) {
   const amountTotal = session.amount_total || 0
   const hasNewFeeModel = feeModel && netAmount > 0
   if ((feeModel === 'split_v1' || feeModel === 'direct_v1') && hasNewFeeModel) {
-    // split_v1: Destination charges (4.5%/4.5% split)
-    // direct_v1: Direct charges (2% platform fee)
+    // split_v1: Destination charges with split fee (4.5%/4.5% domestic, 5.25%/5.25% cross-border)
+    // direct_v1: Unused legacy - kept for backward compatibility only
     grossCents = amountTotal
     feeCents = serviceFee
     netCents = netAmount

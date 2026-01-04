@@ -95,6 +95,8 @@ export const queryKeys = {
     all: ['config'] as const,
     fees: ['config', 'fees'] as const,
     ai: ['config', 'ai'] as const,
+    minimums: ['config', 'minimums'] as const,
+    myMinimum: ['config', 'my-minimum'] as const, // Auth required - dynamic minimum based on subscriber count
   },
 } as const
 

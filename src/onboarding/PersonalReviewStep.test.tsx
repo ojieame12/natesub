@@ -33,6 +33,10 @@ vi.mock('../api/hooks', () => ({
   useGeneratePerks: () => generatePerksMutationReturn,
   useAIConfig: () => aiConfigReturn,
   useCurrentUser: () => ({ data: { onboarding: { step: 0, data: {} } } }),
+  // Mock useCreatorMinimum - returns null (no minimum enforced in tests)
+  useCreatorMinimum: () => null,
+  // Mock useMyMinimum - returns undefined (no dynamic minimum in tests)
+  useMyMinimum: () => ({ data: undefined }),
 }))
 
 // Mock navigation
