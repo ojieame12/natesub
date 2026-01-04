@@ -1441,7 +1441,7 @@ system.post('/migration/cross-border-profiles/batch', adminSensitiveRateLimit, r
   }).parse(await c.req.json())
   // Note: All migrated profiles get pricingModel='single' and tiers cleared.
 
-  const crossBorderCountries = ['NG', 'GH', 'KE']
+  const crossBorderCountries = ['NG', 'GH', 'KE', 'ZA']
 
   // Find profiles needing migration
   const profiles = await db.profile.findMany({

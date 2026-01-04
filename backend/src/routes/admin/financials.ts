@@ -253,7 +253,10 @@ financials.get('/fee-audit', auditSensitiveRead('fee_audit'), async (c) => {
   for (const payment of payments) {
     const purpose = payment.subscription?.creator?.profile?.purpose
     const creatorCountry = payment.subscription?.creator?.profile?.country
-    const paymentAmount = payment.grossCents || payment.amountCents
+    // Use amountCents (base price) for fee calculation, NOT grossCents
+    // Fees are calculated as percentage of BASE, not what subscriber paid
+    const baseAmount = payment.amountCents
+    const grossAmount = payment.grossCents || payment.amountCents
 
     // Expected fee rate depends on creator country:
     // - Domestic: 9% (split model: 4.5% + 4.5%)
@@ -269,27 +272,29 @@ financials.get('/fee-audit', auditSensitiveRead('fee_audit'), async (c) => {
     // Otherwise fall back to the base rate calculation
     const perSideRate = payment.feeEffectiveRate || (baseRate / 2)
     const totalRate = perSideRate * 2  // Both sides pay same rate
-    const expectedFee = Math.round(paymentAmount * totalRate)
+    // Expected fee is percentage of BASE, not gross
+    const expectedFee = Math.round(baseAmount * totalRate)
 
     const actualFee = payment.feeCents || 0
     const variance = actualFee - expectedFee
 
-    // Flag if variance is > 1% of the payment or > $1
+    // Flag if variance is > 1% of the base amount or > $1
     // BUT: if feeWasCapped (processor buffer applied), allow higher fees
     const wasCapped = payment.feeWasCapped || false
     const threshold = wasCapped
-      ? Math.max(paymentAmount * 0.05, 200)  // Higher tolerance for capped fees
-      : Math.max(paymentAmount * 0.01, 100)
+      ? Math.max(baseAmount * 0.05, 200)  // Higher tolerance for capped fees
+      : Math.max(baseAmount * 0.01, 100)
 
     if (Math.abs(variance) > threshold) {
       discrepancies.push({
         paymentId: payment.id,
-        amount: paymentAmount,
+        baseAmount,   // Creator's set price
+        grossAmount,  // What subscriber paid
         currency: payment.currency,
         expectedFee,
         actualFee,
         variance,
-        variancePercent: ((variance / paymentAmount) * 100).toFixed(2),
+        variancePercent: ((variance / baseAmount) * 100).toFixed(2),
         purpose,
         feeModel: payment.feeModel || 'unknown',
         isCrossBorder,

@@ -111,7 +111,7 @@ config.get('/minimums', (c) => {
       assumptions: {
         intlMix: '70% for domestic countries, 100% for cross-border countries',
         payoutPercent: '0.25%',
-        crossBorderCountries: 'NG, GH, KE, TZ, RW, BD, PK, LK, PH, VN, ID, TH, EG, MA, JO, SA, AE, KW, QA, BH, OM',
+        crossBorderCountries: 'NG, GH, KE, ZA',
       },
       note: 'Use GET /config/my-minimum for creator-specific dynamic minimum',
     },

@@ -360,7 +360,7 @@ describe('admin migration', () => {
       expect(res.status).toBe(200)
       const data = await res.json()
       expect(data.dryRun).toBe(true)
-      expect(data.wouldMigrate).toBe(2)
+      expect(data.wouldMigrate).toBe(3) // NG, GH, ZA all need migration
 
       // Verify data was NOT modified
       const ng = await db.profile.findUnique({ where: { id: ngProfile.id } })
@@ -389,7 +389,7 @@ describe('admin migration', () => {
       expect(res.status).toBe(200)
       const data = await res.json()
       expect(data.success).toBe(true)
-      expect(data.migrated).toBe(2)
+      expect(data.migrated).toBe(3) // NG, GH, ZA all migrated
 
       // Verify data WAS modified
       const ng = await db.profile.findUnique({ where: { id: ngProfile.id } })
