@@ -392,14 +392,14 @@ test.describe('Checkout Flow UI', () => {
 
 test.describe('One-Time Payments', () => {
   test('checkout supports one-time payment', async ({ request, playwright }) => {
-    const { username } = await setupPublicCreator(request, 'onetime', { amount: 10 })
+    const { username } = await setupPublicCreator(request, 'onetime', { amount: 100 })
 
     const freshContext = await playwright.request.newContext()
     const response = await freshContext.post(`${API_URL}/checkout/session`, {
       data: {
         creatorUsername: username,
         subscriberEmail: `onetime-${Date.now()}@test.com`,
-        amount: 1000, // $10 one-time
+        amount: 10000, // $100 one-time (must match profile.singleAmount)
         interval: 'one_time',
         payerCountry: 'US',
       },

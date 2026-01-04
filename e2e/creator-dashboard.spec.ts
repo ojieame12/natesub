@@ -41,7 +41,7 @@ async function setupCreatorWithProfile(
     displayName: `Dashboard Test ${suffix}`,
     country: 'US',
     paymentProvider: null, // Skip Stripe validation - dashboard tests don't need it
-    singleAmount: 50,
+    singleAmount: 100,
     purpose: 'support',
     isPublic: false,
   })

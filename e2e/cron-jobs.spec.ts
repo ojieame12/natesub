@@ -191,7 +191,7 @@ async function setupCreator(
     displayName: 'Cron Test Creator',
     country: 'US',
     paymentProvider: 'stripe',
-    singleAmount: 50,
+    singleAmount: 100,
     purpose: 'support',
     isPublic: false,
   })

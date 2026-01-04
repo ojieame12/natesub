@@ -165,7 +165,7 @@ test.describe('Checkout Integration - API Level', () => {
         currency: 'USD',
         purpose: 'support',
         pricingModel: 'single',
-        singleAmount: 50,
+        singleAmount: 100,
         paymentProvider: 'stripe',
         isPublic: true,
       },
@@ -193,11 +193,12 @@ test.describe('Checkout Integration - API Level', () => {
 
     // Step 4: Create checkout session as an UNAUTHENTICATED subscriber
     // Use fetch directly to avoid cookie context from e2e-login
+    // amount is in cents - must match profile's singleAmount (100 display = 10000 cents)
     const checkoutFetch = await fetch('http://localhost:3001/checkout/session', {
       method: 'POST',
       body: JSON.stringify({
         creatorUsername,
-        amount: 500,
+        amount: 10000,
         interval: 'one_time',
         subscriberEmail: 'subscriber@test.com',
         payerCountry: 'US',
@@ -241,7 +242,7 @@ test.describe('Checkout Integration - API Level', () => {
         currency: 'USD',
         purpose: 'support',
         pricingModel: 'single',
-        singleAmount: 50,
+        singleAmount: 100,
         paymentProvider: 'stripe',
         isPublic: true,
       },
@@ -255,12 +256,12 @@ test.describe('Checkout Integration - API Level', () => {
       headers: { 'Authorization': `Bearer ${token}` },
     })
 
-    // Create checkout session
+    // Create checkout session (amount in cents = 100 display = 10000 cents)
     const checkoutFetch = await fetch('http://localhost:3001/checkout/session', {
       method: 'POST',
       body: JSON.stringify({
         creatorUsername,
-        amount: 500,
+        amount: 10000,
         interval: 'one_time',
         subscriberEmail: 'return-test@example.com',
         payerCountry: 'US',
@@ -480,7 +481,7 @@ test.describe('Checkout Validation - API Level', () => {
     const response = await request.post('http://localhost:3001/checkout/session', {
       data: {
         creatorUsername: 'anyuser',
-        amount: 500,
+        amount: 10000,
         interval: 'one_time',
         subscriberEmail: 'invalid-email-format', // Invalid email
         payerCountry: 'US',
@@ -497,7 +498,7 @@ test.describe('Checkout Validation - API Level', () => {
     const response = await request.post('http://localhost:3001/checkout/session', {
       data: {
         creatorUsername: 'anyuser',
-        amount: 500,
+        amount: 10000,
         interval: 'one_time',
         // Missing subscriberEmail
         payerCountry: 'US',
@@ -535,7 +536,7 @@ test.describe('Checkout Validation - API Level', () => {
         currency: 'USD',
         purpose: 'support',
         pricingModel: 'single',
-        singleAmount: 50,
+        singleAmount: 100,
         paymentProvider: 'stripe',
         isPublic: true,
       },
@@ -552,12 +553,12 @@ test.describe('Checkout Validation - API Level', () => {
     })
     expect(connectResponse.status()).toBe(200)
 
-    // Step 4: First checkout (should succeed)
+    // Step 4: First checkout (should succeed) - amount in cents (100 display = 10000 cents)
     const firstCheckout = await fetch('http://localhost:3001/checkout/session', {
       method: 'POST',
       body: JSON.stringify({
         creatorUsername,
-        amount: 500,
+        amount: 10000,
         interval: 'month', // Recurring
         subscriberEmail,
         payerCountry: 'US',
@@ -571,7 +572,7 @@ test.describe('Checkout Validation - API Level', () => {
       method: 'POST',
       body: JSON.stringify({
         creatorUsername,
-        amount: 500,
+        amount: 10000,
         interval: 'month',
         subscriberEmail, // Same email
         payerCountry: 'US',

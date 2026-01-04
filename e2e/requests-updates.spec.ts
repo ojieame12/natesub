@@ -46,7 +46,7 @@ async function setupCreator(
       currency: 'USD',
       purpose: 'support',
       pricingModel: 'single',
-      singleAmount: 50,
+      singleAmount: 100,
       paymentProvider: 'stripe',
       isPublic: true,
     },

@@ -58,7 +58,7 @@ async function setupCreator(
       currency: 'USD',
       purpose, // 'support' = personal, 'service' = requires $5/mo
       pricingModel: 'single',
-      singleAmount: 50,
+      singleAmount: 100,
       perks,
       paymentProvider: 'stripe',
       isPublic: true,
