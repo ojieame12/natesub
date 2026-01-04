@@ -51,7 +51,7 @@ async function setupPublicCreator(
     currency: 'USD',
     purpose: 'support',
     pricingModel: options?.pricingModel || 'single',
-    singleAmount: options?.amount || 50,
+    singleAmount: options?.amount || 100,
     paymentProvider: 'stripe',
     isPublic: options?.isPublic !== false,
     bio: 'Support my work!',
@@ -147,15 +147,15 @@ test.describe('Public Page Loading', () => {
   })
 
   test('public page shows pricing', async ({ page, request }) => {
-    const { username } = await setupPublicCreator(request, 'price', { amount: 10 })
+    const { username } = await setupPublicCreator(request, 'price', { amount: 100 })
 
     await page.goto(`/${username}`)
     await page.waitForLoadState('networkidle')
 
     const content = await page.content()
     const hasPrice =
-      content.includes('$10') ||
-      content.includes('10.00') ||
+      content.includes('$100') ||
+      content.includes('100.00') ||
       content.toLowerCase().includes('month')
 
     expect(hasPrice).toBeTruthy()
@@ -208,11 +208,12 @@ test.describe('Checkout Initiation', () => {
 
     // Create fresh request context without auth cookies (to avoid self-subscribe error)
     const freshContext = await playwright.request.newContext()
+    // Amount must match creator's singleAmount (100 * 100 = 10000 cents)
     const response = await freshContext.post(`${API_URL}/checkout/session`, {
       data: {
         creatorUsername: username,
         subscriberEmail: `checkout-test-${Date.now()}@e2e.com`,
-        amount: 500,
+        amount: 10000,
         interval: 'month',
         payerCountry: 'US',
       },
@@ -421,11 +422,12 @@ test.describe('Checkout Return Pages', () => {
 
     // Create a checkout session (use fresh context to avoid self-subscribe error)
     const freshContext = await playwright.request.newContext()
+    // Amount must match creator's singleAmount (100 * 100 = 10000 cents)
     const checkoutResp = await freshContext.post(`${API_URL}/checkout/session`, {
       data: {
         creatorUsername: username,
         subscriberEmail: `success-${Date.now()}@test.com`,
-        amount: 500,
+        amount: 10000,
         interval: 'month',
         payerCountry: 'US',
       },
