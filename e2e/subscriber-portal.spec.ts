@@ -474,11 +474,12 @@ test.describe('Portal UI', () => {
     const continueButton = page.locator('button:has-text("Continue")')
     await continueButton.click()
 
-    // Button should be disabled or show spinner
+    // Button text changes to "Sending..." when loading (no spinner class used)
+    // Check for either disabled state or text change
+    const hasSendingText = await page.locator('button:has-text("Sending")').isVisible({ timeout: 2000 }).catch(() => false)
     const isDisabled = await continueButton.isDisabled().catch(() => false)
-    const hasSpinner = await page.locator('.spin, .spinner, .loading, [class*="spin"]').isVisible().catch(() => false)
 
-    expect(isDisabled || hasSpinner).toBeTruthy()
+    expect(hasSendingText || isDisabled).toBeTruthy()
   })
 })
 
@@ -508,21 +509,22 @@ test.describe('Portal Security', () => {
     // Wait for OTP input
     await expect(page.locator('input[inputmode="numeric"]').first()).toBeVisible({ timeout: 5000 })
 
-    // Enter wrong OTP
+    // Enter wrong OTP - use pressSequentially to trigger onChange events properly
     const otpInputs = page.locator('input[inputmode="numeric"]')
     const inputCount = await otpInputs.count()
 
     if (inputCount === 6) {
+      // Type into first input, auto-advance should handle the rest
       for (let i = 0; i < 6; i++) {
-        await otpInputs.nth(i).fill('0')
+        await otpInputs.nth(i).pressSequentially('9')
       }
     } else {
-      await otpInputs.first().fill('000000')
+      await otpInputs.first().pressSequentially('999999')
     }
 
-    // Should show error message
+    // Should show error message in portal-error div
     await expect(
-      page.locator('text=Invalid').or(page.locator('text=invalid').or(page.locator('text=error')))
+      page.locator('[data-testid="portal-error"]').or(page.locator('text=Invalid code'))
     ).toBeVisible({ timeout: 5000 })
   })
 })

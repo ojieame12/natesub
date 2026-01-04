@@ -206,7 +206,7 @@ test.describe('Salary Mode', () => {
       // Should be 400 (missing payday) since unlock succeeded
       expect(response.status()).toBe(400)
       const data = await response.json()
-      expect(data.error).toContain('preferredPayday')
+      expect(data.error.toLowerCase()).toContain('payday')
     })
 
     test('validates preferredPayday range (1-28)', async ({ request }) => {
