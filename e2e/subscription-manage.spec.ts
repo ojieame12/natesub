@@ -24,7 +24,7 @@ function createMockSubscription(overrides: Partial<MockSubscription> = {}): Mock
     id: 'sub_test_123',
     status: 'active',
     cancelAtPeriodEnd: false,
-    amount: 1000,
+    amount: 10, // Display amount in dollars (formatCurrency expects main unit, not cents)
     currency: 'USD',
     interval: 'month',
     currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
@@ -35,8 +35,8 @@ function createMockSubscription(overrides: Partial<MockSubscription> = {}): Mock
 }
 
 async function setupManageStubs(page: Page, subscription: MockSubscription, token: string) {
-  // Stub GET subscription data
-  await page.route(`**/subscription/manage/${token}`, async (route) => {
+  // Stub GET subscription data - only intercept API calls to backend, not frontend page navigation
+  await page.route(`**/localhost:3001/subscription/manage/${token}`, async (route) => {
     if (route.request().method() === 'GET') {
       await route.fulfill({
         status: 200,
@@ -79,7 +79,7 @@ async function setupManageStubs(page: Page, subscription: MockSubscription, toke
   })
 
   // Stub cancel endpoint
-  await page.route(`**/subscription/manage/${token}/cancel`, async (route) => {
+  await page.route(`**/localhost:3001/subscription/manage/${token}/cancel`, async (route) => {
     subscription.cancelAtPeriodEnd = true
     await route.fulfill({
       status: 200,
@@ -94,7 +94,7 @@ async function setupManageStubs(page: Page, subscription: MockSubscription, toke
   })
 
   // Stub reactivate endpoint
-  await page.route(`**/subscription/manage/${token}/reactivate`, async (route) => {
+  await page.route(`**/localhost:3001/subscription/manage/${token}/reactivate`, async (route) => {
     subscription.cancelAtPeriodEnd = false
     await route.fulfill({
       status: 200,
@@ -108,7 +108,7 @@ async function setupManageStubs(page: Page, subscription: MockSubscription, toke
   })
 
   // Stub portal endpoint
-  await page.route(`**/subscription/manage/${token}/portal`, async (route) => {
+  await page.route(`**/localhost:3001/subscription/manage/${token}/portal`, async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -162,14 +162,14 @@ test.describe('Subscription Management - Token-based', () => {
 
     await page.goto(`/subscription/manage/${testToken}`)
 
-    // Should show canceled status
+    // Should show ended/canceled status - UI says "Subscription Ended"
     await expect(
-      page.locator('text=Canceled').or(page.locator('text=canceled'))
+      page.getByRole('heading', { name: 'Subscription Ended' })
     ).toBeVisible({ timeout: 5000 })
 
-    // Should show resubscribe option
+    // Should show creator info
     await expect(
-      page.locator('text=Resubscribe').or(page.locator('text=resubscribe').or(page.locator(`text=${subscription.creatorUsername}`)))
+      page.getByRole('heading', { name: 'Test Creator' })
     ).toBeVisible()
   })
 
@@ -182,9 +182,9 @@ test.describe('Subscription Management - Token-based', () => {
 
     await page.goto(`/subscription/manage/${testToken}`)
 
-    // Should indicate cancellation is pending
+    // Should indicate cancellation is pending - UI shows "Cancellation Scheduled"
     await expect(
-      page.locator('text=cancel').or(page.locator('text=end of').or(page.locator('text=Reactivate')))
+      page.getByRole('heading', { name: 'Cancellation Scheduled' })
     ).toBeVisible({ timeout: 5000 })
   })
 
