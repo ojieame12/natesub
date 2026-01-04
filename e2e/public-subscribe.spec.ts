@@ -236,7 +236,7 @@ test.describe('Checkout Initiation', () => {
       data: {
         creatorUsername: 'nonexistuser1',
         subscriberEmail: 'test@example.com',
-        amount: 500,
+        amount: 10000,
         interval: 'month',
         payerCountry: 'US',
       },
@@ -253,7 +253,7 @@ test.describe('Checkout Initiation', () => {
       data: {
         creatorUsername: username,
         subscriberEmail: 'invalid-email',
-        amount: 500,
+        amount: 10000,
         interval: 'month',
         payerCountry: 'US',
       },

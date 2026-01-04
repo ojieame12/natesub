@@ -207,7 +207,7 @@ test.describe('Checkout - Real Backend', () => {
       data: {
         creatorUsername: 'nonexistuser1',
         subscriberEmail: 'test@example.com',
-        amount: 500,
+        amount: 10000,
         interval: 'month',
         payerCountry: 'US',
       },
@@ -691,7 +691,7 @@ test.describe('Checkout - Real Provider (Nightly)', () => {
       data: {
         creatorUsername,
         subscriberEmail: 'checkout-test@e2e.com',
-        amount: 500, // Must match seeded creator's singleAmount in cents
+        amount: 10000, // Must match seeded creator's singleAmount in cents
         interval: 'one_time',
         payerCountry: 'US',
       },
@@ -785,7 +785,7 @@ test.describe('Checkout Return Verification (Nightly)', () => {
       data: {
         creatorUsername,
         subscriberEmail: 'return-test@e2e.com',
-        amount: 500, // $5.00 in cents
+        amount: 10000, // $100.00 in cents
         interval: 'one_time',
         payerCountry: 'US',
       },
@@ -999,7 +999,7 @@ test.describe('Subscriber Portal - Real Backend (Always-On)', () => {
       method: 'POST',
       body: JSON.stringify({
         creatorUsername,
-        amount: 500,
+        amount: 10000,
         interval: 'month',
         subscriberEmail,
         payerCountry: 'US',
@@ -1094,7 +1094,7 @@ test.describe('Subscription Management - Real Backend (Always-On)', () => {
       data: {
         creatorUsername,
         subscriberEmail,
-        amount: 500,
+        amount: 10000,
         currency: 'USD',
         interval: 'month',
       },
@@ -1153,7 +1153,7 @@ test.describe('Subscription Management - Real Backend (Always-On)', () => {
       data: {
         creatorUsername,
         subscriberEmail,
-        amount: 500,
+        amount: 10000,
         currency: 'USD',
         interval: 'month',
       },
@@ -1414,7 +1414,7 @@ test.describe('Admin API - Strict Data Validation (Read-Only)', () => {
       data: {
         creatorUsername,
         subscriberEmail,
-        amount: 500,
+        amount: 10000,
         currency: 'USD',
         interval: 'month',
       },
