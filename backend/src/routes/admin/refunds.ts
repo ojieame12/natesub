@@ -421,17 +421,17 @@ refunds.get('/stats', auditSensitiveRead('refund_stats'), async (c) => {
       status: 'refunded',
       createdAt: { gte: periodStart },
     },
-    _sum: { amountCents: true },
+    _sum: { grossCents: true, amountCents: true },
     _count: true,
   })
 
-  // Payment totals for comparison
+  // Payment totals for comparison - use grossCents (what subscriber paid)
   const paymentTotals = await db.payment.aggregate({
     where: {
       status: { in: ['succeeded', 'refunded'] },
       createdAt: { gte: periodStart },
     },
-    _sum: { amountCents: true },
+    _sum: { grossCents: true, amountCents: true },
     _count: true,
   })
 
@@ -448,7 +448,7 @@ refunds.get('/stats', auditSensitiveRead('refund_stats'), async (c) => {
       createdAt: { gte: periodStart },
     },
     _count: true,
-    _sum: { amountCents: true },
+    _sum: { grossCents: true, amountCents: true },
     orderBy: { _count: { creatorId: 'desc' } },
     take: 10,
   })
@@ -476,7 +476,7 @@ refunds.get('/stats', auditSensitiveRead('refund_stats'), async (c) => {
     SELECT
       DATE("createdAt") as date,
       COUNT(*)::bigint as count,
-      SUM("amountCents")::bigint as amount
+      COALESCE(SUM("grossCents"), SUM("amountCents"))::bigint as amount
     FROM "payments"
     WHERE status = 'refunded'
       AND "createdAt" >= ${periodStart}
@@ -491,9 +491,10 @@ refunds.get('/stats', auditSensitiveRead('refund_stats'), async (c) => {
     },
     totals: {
       refundCount: refundTotals._count || 0,
-      refundAmount: refundTotals._sum?.amountCents || 0,
+      // Use grossCents (what subscriber paid), fallback to amountCents for old records
+      refundAmount: refundTotals._sum?.grossCents || refundTotals._sum?.amountCents || 0,
       paymentCount: paymentTotals._count || 0,
-      paymentAmount: paymentTotals._sum?.amountCents || 0,
+      paymentAmount: paymentTotals._sum?.grossCents || paymentTotals._sum?.amountCents || 0,
       refundRate: parseFloat(refundRate.toFixed(2)),
     },
     byCreator: refundsByCreator.map(r => {
@@ -503,7 +504,7 @@ refunds.get('/stats', auditSensitiveRead('refund_stats'), async (c) => {
         email: creator?.email,
         name: creator?.profile?.displayName || creator?.profile?.username,
         refundCount: r._count,
-        refundAmount: r._sum?.amountCents || 0,
+        refundAmount: r._sum?.grossCents || r._sum?.amountCents || 0,
       }
     }),
     trend: dailyTrend.map(d => ({

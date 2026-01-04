@@ -18,8 +18,8 @@ describe('countryConfig', () => {
       expect(shouldSkipAddress('KE')).toBe(true)
     })
 
-    it('returns false for ZA (native Stripe)', () => {
-      expect(shouldSkipAddress('ZA')).toBe(false)
+    it('returns true for ZA (cross-border like NG/GH/KE)', () => {
+      expect(shouldSkipAddress('ZA')).toBe(true)
     })
 
     it('returns false for US, GB', () => {
@@ -84,8 +84,8 @@ describe('countryConfig', () => {
       expect(isStripeCrossBorder('KE')).toBe(true)
     })
 
-    it('returns false for ZA (native Stripe)', () => {
-      expect(isStripeCrossBorder('ZA')).toBe(false)
+    it('returns true for ZA (cross-border like NG/GH/KE)', () => {
+      expect(isStripeCrossBorder('ZA')).toBe(true)
     })
 
     it('returns false for US, GB (native Stripe)', () => {
@@ -131,10 +131,10 @@ describe('countryConfig', () => {
   })
 
   describe('constant arrays', () => {
-    it('SKIP_ADDRESS_COUNTRIES contains exactly NG, GH, KE', () => {
+    it('SKIP_ADDRESS_COUNTRIES contains exactly NG, GH, KE, ZA', () => {
       // Use Set comparison - order doesn't matter for this logic
-      expect(new Set(SKIP_ADDRESS_COUNTRIES)).toEqual(new Set(['NG', 'GH', 'KE']))
-      expect(SKIP_ADDRESS_COUNTRIES).toHaveLength(3)
+      expect(new Set(SKIP_ADDRESS_COUNTRIES)).toEqual(new Set(['NG', 'GH', 'KE', 'ZA']))
+      expect(SKIP_ADDRESS_COUNTRIES).toHaveLength(4)
     })
 
     it('PAYSTACK_COUNTRIES contains exactly NG, KE, ZA (no GH)', () => {
@@ -143,9 +143,9 @@ describe('countryConfig', () => {
       expect(PAYSTACK_COUNTRIES).not.toContain('CI')
     })
 
-    it('STRIPE_CROSS_BORDER_COUNTRIES contains exactly NG, GH, KE', () => {
-      expect(new Set(STRIPE_CROSS_BORDER_COUNTRIES)).toEqual(new Set(['NG', 'GH', 'KE']))
-      expect(STRIPE_CROSS_BORDER_COUNTRIES).not.toContain('ZA')
+    it('STRIPE_CROSS_BORDER_COUNTRIES contains exactly NG, GH, KE, ZA', () => {
+      expect(new Set(STRIPE_CROSS_BORDER_COUNTRIES)).toEqual(new Set(['NG', 'GH', 'KE', 'ZA']))
+      expect(STRIPE_CROSS_BORDER_COUNTRIES).toHaveLength(4)
     })
 
     it('PAYSTACK_PAYER_COUNTRIES includes GH (for checkout routing)', () => {

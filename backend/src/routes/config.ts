@@ -202,13 +202,16 @@ config.get('/my-minimum', requireAuth, async (c) => {
     floorMinimum: floorMin, // What minimum will be when fully ramped
     isCrossBorder, // True for cross-border countries (NG, KE, GH, etc.)
     // Fee model explanation - all countries use destination charges
+    // Split fee model: domestic 4.5%/4.5% = 9%, cross-border 5.25%/5.25% = 10.5%
     feeModel: {
       type: 'destination',
-      platformFee: `${(PLATFORM_FEE_RATE * 100).toFixed(0)}%`,
+      platformFee: isCrossBorder ? '10.5%' : '9%',
+      creatorFee: isCrossBorder ? '5.25%' : '4.5%',
+      creatorKeeps: isCrossBorder ? '94.75%' : '95.5%',
       stripeFeesPaidBy: 'platform',
       note: isCrossBorder
-        ? 'Cross-border: Higher minimum due to international card fees. You get 91% of subscription price.'
-        : 'Platform absorbs all Stripe fees. You get 91% of subscription price.',
+        ? 'Cross-border: Higher minimum due to international card fees. You keep 94.75% of subscription price.'
+        : 'Platform absorbs all Stripe fees. You keep 95.5% of subscription price.',
     },
     // Debugging/transparency info
     _debug: {

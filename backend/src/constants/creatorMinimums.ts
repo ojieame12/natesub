@@ -104,7 +104,7 @@ const PAYOUT_FEES: Record<string, number> = {
   'Sri Lanka': 125,
   'Saudi Arabia': 150,
   'Qatar': 150,
-  'UAE': 163, // $1.63
+  'United Arab Emirates': 163, // $1.63
   'Oman': 163,
   'Bahrain': 163,
   'Kuwait': 163,
@@ -177,7 +177,7 @@ const CURRENCY_INFO: Record<string, { currency: string; multiplier: number }> = 
   'Sri Lanka': { currency: 'LKR', multiplier: 323 },
   'Saudi Arabia': { currency: 'SAR', multiplier: 3.75 },
   'Qatar': { currency: 'QAR', multiplier: 3.64 },
-  'UAE': { currency: 'AED', multiplier: 3.67 },
+  'United Arab Emirates': { currency: 'AED', multiplier: 3.67 },
   'Oman': { currency: 'OMR', multiplier: 0.385 },
   'Bahrain': { currency: 'BHD', multiplier: 0.377 },
   'Kuwait': { currency: 'KWD', multiplier: 0.308 },

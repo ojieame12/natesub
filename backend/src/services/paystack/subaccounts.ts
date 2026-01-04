@@ -26,7 +26,12 @@ export async function createSubaccount(params: {
   }
 
   // Calculate platform fee based on creator's purpose (9% for all users)
-  const platformFeePercent = getPlatformFeePercent(params.purpose || profile?.purpose as UserPurpose)
+  // NOTE: Paystack percentage_charge is applied to GROSS (base + subscriber fee), not base
+  // To get 9% of base from gross, we need: 9 / 1.045 ≈ 8.61
+  // This ensures creator receives exactly base - 4.5% (not base - 4.71%)
+  const baseRatePercent = getPlatformFeePercent(params.purpose || profile?.purpose as UserPurpose)
+  const subscriberFeeMultiplier = 1.045 // 1 + 4.5% subscriber fee
+  const platformFeePercent = Math.round((baseRatePercent / subscriberFeeMultiplier) * 100) / 100 // ~8.61
 
   // Log creation attempt with masked PII
   console.log(`[paystack] Creating subaccount for user ${params.userId}, account ${maskAccountNumber(params.accountNumber)}, fee: ${platformFeePercent}%`)
@@ -105,7 +110,10 @@ export async function updateSubaccountFee(
     return
   }
 
-  const newFeePercent = getPlatformFeePercent(purpose)
+  // Same adjustment as in createSubaccount - percentage is of gross, not base
+  const baseRatePercent = getPlatformFeePercent(purpose)
+  const subscriberFeeMultiplier = 1.045 // 1 + 4.5% subscriber fee
+  const newFeePercent = Math.round((baseRatePercent / subscriberFeeMultiplier) * 100) / 100
 
   console.log(`[paystack] Updating subaccount ${profile.paystackSubaccountCode} fee to ${newFeePercent}%`)
 

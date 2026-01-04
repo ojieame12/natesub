@@ -263,10 +263,13 @@ financials.get('/fee-audit', auditSensitiveRead('fee_audit'), async (c) => {
       ? PLATFORM_FEE_RATE + CROSS_BORDER_BUFFER  // 10.5%
       : PLATFORM_FEE_RATE                         // 9%
 
+    // feeEffectiveRate is the PER-SIDE rate (4.5% or 5.25%), not total
+    // Total fee = 2x per-side rate (subscriber pays + creator pays)
     // If feeEffectiveRate is stored, use that (handles processor buffer on small txns)
     // Otherwise fall back to the base rate calculation
-    const expectedRate = payment.feeEffectiveRate || baseRate
-    const expectedFee = Math.round(paymentAmount * expectedRate)
+    const perSideRate = payment.feeEffectiveRate || (baseRate / 2)
+    const totalRate = perSideRate * 2  // Both sides pay same rate
+    const expectedFee = Math.round(paymentAmount * totalRate)
 
     const actualFee = payment.feeCents || 0
     const variance = actualFee - expectedFee

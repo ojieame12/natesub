@@ -34,7 +34,8 @@ async function setupCreatorWithProfile(
 
   const { token, user } = await e2eLogin(request, email)
 
-  // Create profile
+  // Create profile - use null provider since analytics tests don't need Stripe
+  // This avoids the dynamic minimum validation ($95 for new US creators)
   const profileResp = await request.put(`${API_URL}/profile`, {
     data: {
       username,
@@ -44,8 +45,8 @@ async function setupCreatorWithProfile(
       currency: 'USD',
       purpose: 'support',
       pricingModel: 'single',
-      singleAmount: 10,
-      paymentProvider: 'stripe',
+      singleAmount: 1000, // $10 - reasonable test amount
+      paymentProvider: null, // Skip Stripe minimum validation
       isPublic: true,
     },
     headers: { 'Authorization': `Bearer ${token}` },

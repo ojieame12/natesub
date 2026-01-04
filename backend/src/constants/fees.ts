@@ -24,14 +24,12 @@
 export const PLATFORM_FEE_RATE = 0.09
 
 // Cross-border payout countries with higher fee burden
-// These use destination charges but need higher minimums
+// These use Stripe Recipient Service Agreement (destination charges)
+// Higher fees: 10.5% (vs 9% domestic), $85 flat minimum
+// IMPORTANT: Must match STRIPE_CROSS_BORDER_COUNTRIES in utils/constants.ts
+// South Africa has 0.5% cross-border fee (lower than NG/GH/KE at 1%)
 export const CROSS_BORDER_PAYOUT_COUNTRIES = [
-  'Nigeria', 'Ghana', 'Kenya', 'Tanzania', 'Rwanda',
-  'Bangladesh', 'Pakistan', 'Sri Lanka',
-  'Philippines', 'Vietnam', 'Indonesia', 'Thailand',
-  'Egypt', 'Morocco', 'Jordan',
-  'Saudi Arabia', 'UAE', 'Kuwait', 'Qatar', 'Bahrain', 'Oman',
-  'India', 'Malaysia', 'South Africa',
+  'Nigeria', 'Ghana', 'Kenya', 'South Africa',
 ] as const
 
 export type CrossBorderCountry = typeof CROSS_BORDER_PAYOUT_COUNTRIES[number]

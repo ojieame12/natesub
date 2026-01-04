@@ -89,8 +89,8 @@ describe('regionConfig', () => {
       expect(shouldSkipAddress('KE')).toBe(true)
     })
 
-    it('returns false for ZA (native Stripe)', () => {
-      expect(shouldSkipAddress('ZA')).toBe(false)
+    it('returns true for ZA (cross-border like NG/GH/KE)', () => {
+      expect(shouldSkipAddress('ZA')).toBe(true)
     })
 
     it('returns false for US, GB', () => {
@@ -106,8 +106,8 @@ describe('regionConfig', () => {
       expect(isCrossBorderCountry('KE')).toBe(true)
     })
 
-    it('returns false for ZA (native Stripe support)', () => {
-      expect(isCrossBorderCountry('ZA')).toBe(false)
+    it('returns true for ZA (cross-border like NG/GH/KE)', () => {
+      expect(isCrossBorderCountry('ZA')).toBe(true)
     })
 
     it('returns false for US, GB (native Stripe)', () => {

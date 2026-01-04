@@ -554,10 +554,10 @@ creators.get('/stats/overview', async (c) => {
     _count: true,
   })
 
-  // Revenue totals
+  // Revenue totals - grossCents is what subscriber paid (amountCents + subscriberFeeCents)
   const revenueStats = await db.payment.aggregate({
     where: { status: 'succeeded' },
-    _sum: { amountCents: true, feeCents: true },
+    _sum: { grossCents: true, amountCents: true, feeCents: true },
     _count: true,
   })
 
@@ -578,7 +578,8 @@ creators.get('/stats/overview', async (c) => {
       count: c._count,
     })),
     revenue: {
-      totalGross: revenueStats._sum?.amountCents || 0,
+      // Use grossCents (what subscriber paid), fallback to amountCents for old records
+      totalGross: revenueStats._sum?.grossCents || revenueStats._sum?.amountCents || 0,
       totalFees: revenueStats._sum?.feeCents || 0,
       paymentCount: revenueStats._count || 0,
     },

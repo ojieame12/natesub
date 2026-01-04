@@ -5,6 +5,7 @@ import { Pressable, useToast, Toggle } from './components'
 import { useCurrentUser, useLogout, useDeleteAccount, useSettings, useUpdateSettings, useBillingStatus, useUpdateProfile } from './api/hooks'
 import { useOnboardingStore } from './onboarding/store'
 import { getPricing } from './utils/pricing'
+import { isCrossBorderCountry } from './utils/regionConfig'
 
 import './Settings.css'
 
@@ -235,6 +236,9 @@ export default function Settings() {
 
   // Billing status
   const isService = user?.profile?.purpose === 'service'
+  // Cross-border creators (NG, GH, KE, ZA) have 10.5% fee instead of 9%
+  const userCountryCode = user?.profile?.countryCode
+  const feeLabel = isCrossBorderCountry(userCountryCode) ? '10.5%' : '9%'
   const subscriptionStatus = billingData?.subscription?.status
   const trialDaysLeft = getTrialDaysRemaining(billingData?.subscription?.trialEndsAt || null)
 
@@ -375,7 +379,7 @@ export default function Settings() {
                   ) : isService && !subscriptionStatus ? (
                     'Start Free Trial'
                   ) : (
-                    `${getPricing(user?.profile?.purpose).planName} · ${getPricing(user?.profile?.purpose).transactionFeeLabel} fees`
+                    `${getPricing(user?.profile?.purpose).planName} · ${feeLabel} fees`
                   )}
                 </span>
               </div>

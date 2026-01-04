@@ -1350,12 +1350,13 @@ system.get('/emails', async (c) => {
  * GET /admin/migration/cross-border-profiles
  * Find legacy cross-border profiles with incorrect currency (not USD)
  *
- * Cross-border countries (NG, GH, KE) MUST use USD for pricing.
+ * Cross-border countries (NG, GH, KE, ZA) MUST use USD for pricing.
  * This endpoint identifies profiles that were created before this
  * enforcement was added and may need data migration.
  */
 system.get('/migration/cross-border-profiles', async (c) => {
-  const crossBorderCountries = ['NG', 'GH', 'KE']
+  // All countries with * on Stripe pricing = cross-border only
+  const crossBorderCountries = ['NG', 'GH', 'KE', 'ZA']
 
   const profiles = await db.profile.findMany({
     where: {

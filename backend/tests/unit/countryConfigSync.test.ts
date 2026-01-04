@@ -24,11 +24,12 @@ import {
 
 // Expected values from frontend regionConfig.ts COUNTRIES array
 // These are the source of truth - update here when frontend changes
-const FRONTEND_SKIP_ADDRESS_COUNTRIES = ['NG', 'GH', 'KE']  // skipAddress: true
-const FRONTEND_CROSS_BORDER_COUNTRIES = ['NG', 'GH', 'KE']  // crossBorder: true
+// Note: ZA (South Africa) is cross-border (not native Stripe) - has * on Stripe pricing
+const FRONTEND_SKIP_ADDRESS_COUNTRIES = ['NG', 'GH', 'KE', 'ZA']  // skipAddress: true
+const FRONTEND_CROSS_BORDER_COUNTRIES = ['NG', 'GH', 'KE', 'ZA']  // crossBorder: true
 const FRONTEND_PAYSTACK_CREATOR_COUNTRIES = ['NG', 'KE', 'ZA']  // providers includes 'paystack'
 const FRONTEND_PAYSTACK_PAYER_COUNTRIES = ['NG', 'GH', 'KE', 'ZA']  // can pay via Paystack checkout
-const FRONTEND_NON_SKIP_ADDRESS_COUNTRIES = ['US', 'GB', 'CA', 'ZA', 'DE', 'FR', 'AU']
+const FRONTEND_NON_SKIP_ADDRESS_COUNTRIES = ['US', 'GB', 'CA', 'DE', 'FR', 'AU']  // Native Stripe countries
 
 describe('Country config backend/frontend sync', () => {
   describe('skipAddress countries', () => {
@@ -86,24 +87,22 @@ describe('Country config backend/frontend sync', () => {
       })
     })
 
-    it('ZA is NOT cross-border (native Stripe)', () => {
-      expect(isStripeCrossBorder('ZA')).toBe(false)
+    it('ZA IS cross-border (has * on Stripe pricing)', () => {
+      expect(isStripeCrossBorder('ZA')).toBe(true)
     })
   })
 
   describe('consistency rules', () => {
     it('all cross-border countries skip address (simplified KYC)', () => {
-      // NG, GH, KE are cross-border (USD→local payout)
+      // NG, GH, KE, ZA are cross-border (USD→local payout)
       // All of them should skip address step
-      const crossBorderCountries = ['NG', 'GH', 'KE']
+      const crossBorderCountries = ['NG', 'GH', 'KE', 'ZA']
       crossBorderCountries.forEach((country) => {
         expect(shouldSkipAddress(country)).toBe(true)
       })
     })
 
     it('non-cross-border countries require address', () => {
-      // ZA has native Stripe, not cross-border
-      expect(shouldSkipAddress('ZA')).toBe(false)
       // US, GB have native Stripe
       expect(shouldSkipAddress('US')).toBe(false)
       expect(shouldSkipAddress('GB')).toBe(false)

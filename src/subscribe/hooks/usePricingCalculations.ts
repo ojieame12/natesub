@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { calculateFeePreview as calculateFee, type FeePreview } from '../../utils/currency'
 import { useFeeConfig } from '../../api/hooks'
+import { isCrossBorderCountry } from '../../utils/regionConfig'
 import type { Profile } from '../../api/client'
 
 interface PricingCalculations {
@@ -15,7 +16,10 @@ interface PricingCalculations {
 /**
  * usePricingCalculations - Centralized pricing/fee calculations for subscribe page
  *
- * Uses split fee model: 4.5% subscriber + 4.5% creator = 9% total
+ * Uses split fee model:
+ * - Domestic: 4.5% subscriber + 4.5% creator = 9% total
+ * - Cross-border (NG, GH, KE, ZA): 5.25% subscriber + 5.25% creator = 10.5% total
+ *
  * Fee rates are sourced from backend API via useFeeConfig()
  */
 export function usePricingCalculations(profile: Profile): PricingCalculations {
@@ -25,17 +29,20 @@ export function usePricingCalculations(profile: Profile): PricingCalculations {
     // Get fee config from backend (falls back to static defaults if unavailable)
     const { data: feeConfig } = useFeeConfig()
 
+    // Check if creator is in a cross-border country (higher fees)
+    const isCrossBorder = isCrossBorderCountry(profile.countryCode)
+
     // Check if payments are ready
     const paymentsReady = profile.payoutStatus === 'active' || profile.paymentsReady || false
     const isReadyToPay = paymentsReady && currentAmount > 0
 
     // Calculate fees using split model with backend-sourced config
     const feePreview = useMemo(
-        () => calculateFee(currentAmount, currency, null, null, false, feeConfig || undefined),
-        [currentAmount, currency, feeConfig]
+        () => calculateFee(currentAmount, currency, null, null, isCrossBorder, feeConfig || undefined),
+        [currentAmount, currency, isCrossBorder, feeConfig]
     )
 
-    // Total subscriber pays (base + their 4% fee)
+    // Total subscriber pays (base + their fee: 4.5% domestic, 5.25% cross-border)
     const total = feePreview.subscriberPays
 
     return {

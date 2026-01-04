@@ -29,8 +29,9 @@ const COUNTRIES: CountryConfig[] = [
   { code: 'NG', currency: 'NGN', skipAddress: true, paystackCreator: true, paystackPayer: true, stripeCrossBorder: true },
   { code: 'GH', currency: 'GHS', skipAddress: true, paystackCreator: false, paystackPayer: true, stripeCrossBorder: true },
   { code: 'KE', currency: 'KES', skipAddress: true, paystackCreator: true, paystackPayer: true, stripeCrossBorder: true },
-  // South Africa: Native Stripe, Paystack supported, full address required
-  { code: 'ZA', currency: 'ZAR', skipAddress: false, paystackCreator: true, paystackPayer: true, stripeCrossBorder: false },
+  // South Africa: Cross-border Stripe (0.5% fee), Paystack supported
+  // Has asterisk on Stripe pricing = cross-border only, not native
+  { code: 'ZA', currency: 'ZAR', skipAddress: true, paystackCreator: true, paystackPayer: true, stripeCrossBorder: true },
   // All other Stripe-native countries (no special handling needed)
   // They use default: skipAddress=false, no paystack, no cross-border
 ]

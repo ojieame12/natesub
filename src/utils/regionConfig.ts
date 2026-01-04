@@ -71,7 +71,8 @@ export const COUNTRIES: CountryConfig[] = [
     skipAddress: true,
     region: 'africa',
   },
-  // South Africa has NATIVE Stripe support - NOT cross-border
+  // South Africa: Cross-border Stripe (0.5% fee), Paystack supported
+  // Has asterisk (*) on Stripe pricing = cross-border only, not native
   {
     code: 'ZA',
     name: 'South Africa',
@@ -80,8 +81,8 @@ export const COUNTRIES: CountryConfig[] = [
     currencyName: 'Rand',
     currencySymbol: 'R',
     providers: ['stripe', 'paystack'],
-    crossBorder: false, // Native Stripe support
-    skipAddress: false, // Full address required
+    crossBorder: true, // Cross-border payouts only
+    skipAddress: true, // Simplified KYC like other cross-border
     region: 'africa',
   },
   // NOTE: Côte d'Ivoire (CI) removed - Paystack doesn't support subaccount creation for CI creators

@@ -167,17 +167,17 @@ export const STRIPE_SUPPORTED_COUNTRIES: Record<string, string> = {
   // Other
   AE: 'United Arab Emirates',
   BR: 'Brazil',
-  // Africa - South Africa has native Stripe support
-  ZA: 'South Africa',
-}
+  }
 
 // Countries supported via Stripe Cross-Border Payouts (Recipient Service Agreement)
 // These countries can receive payouts but payments are processed through the platform
 // https://docs.stripe.com/connect/cross-border-payouts
+// Note: Countries with * on Stripe pricing = cross-border only
 export const STRIPE_CROSS_BORDER_COUNTRIES: Record<string, string> = {
   NG: 'Nigeria',
   GH: 'Ghana',
   KE: 'Kenya',
+  ZA: 'South Africa', // Has 0.5% cross-border fee (lower than NG/GH/KE)
 }
 
 // Countries where Stripe is NOT available at all

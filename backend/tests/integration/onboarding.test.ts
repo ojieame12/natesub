@@ -1159,10 +1159,11 @@ describe('onboarding endpoints', () => {
       expect(body.profile.currency).toBe('GBP')
     })
 
-    it('South African user with Stripe and ZAR - SHOULD SUCCEED (ZA has native Stripe)', async () => {
+    it('South African user with Stripe and USD - SHOULD SUCCEED (ZA is cross-border)', async () => {
       await createTestUserWithSession('za-stripe@test.com')
 
-      // ZA minimum for Stripe is 9,300 ZAR (country-based minimum for platform profitability)
+      // ZA is cross-border, so must use USD/GBP/EUR for Stripe
+      // $85 minimum for cross-border countries
       const res = await authRequest('/profile', {
         method: 'PUT',
         body: JSON.stringify({
@@ -1170,18 +1171,18 @@ describe('onboarding endpoints', () => {
           displayName: 'ZA Stripe User',
           country: 'South Africa',
           countryCode: 'ZA',
-          currency: 'ZAR',
+          currency: 'USD', // Cross-border countries use USD/GBP/EUR
           purpose: 'tips',
           pricingModel: 'single',
-          singleAmount: 9500, // Above 9,300 ZAR minimum
+          singleAmount: 8500, // $85 cross-border minimum
           paymentProvider: 'stripe',
         }),
       })
 
       expect(res.status).toBe(200)
       const body = await res.json()
-      expect(body.profile.currency).toBe('ZAR')
-      // ZA is NOT cross-border, it has native Stripe support
+      expect(body.profile.currency).toBe('USD')
+      // ZA is cross-border - same as NG/GH/KE
     })
 
     // -------------------------------------------------------------------------

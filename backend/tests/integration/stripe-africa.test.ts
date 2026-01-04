@@ -117,23 +117,23 @@ describe('Stripe Africa - Country Configuration', () => {
   /**
    * SOUTH AFRICA (ZA)
    *
-   * South Africa has NATIVE Stripe support.
-   * ZA creators use full service agreement like US/UK creators.
-   * They get card_payments capability and accept full Stripe TOS.
+   * South Africa is CROSS-BORDER (not native).
+   * ZA has asterisk (*) on Stripe pricing = cross-border payouts only.
+   * Like NG/GH/KE: recipient service agreement, transfers only.
    */
   describe('South Africa (ZA)', () => {
-    it('is classified as native (NOT cross-border)', () => {
+    it('is classified as cross-border (like NG/GH/KE)', () => {
       /**
-       * ZA has native Stripe support - different from NG/GH/KE
-       * This means: full service agreement + card_payments capability
+       * ZA has * on Stripe pricing = cross-border only
+       * Same as NG/GH/KE: recipient service agreement + transfers only
        */
-      expect(isStripeCrossBorderSupported('ZA')).toBe(false)
-      expect(isStripeNativeSupported('ZA')).toBe(true)
+      expect(isStripeCrossBorderSupported('ZA')).toBe(true)
+      expect(isStripeNativeSupported('ZA')).toBe(false)
     })
 
-    it('is in the native supported countries list', () => {
-      expect(STRIPE_SUPPORTED_COUNTRIES).toHaveProperty('ZA')
-      expect(STRIPE_SUPPORTED_COUNTRIES.ZA).toBe('South Africa')
+    it('is in the cross-border countries list', () => {
+      expect(STRIPE_CROSS_BORDER_COUNTRIES).toHaveProperty('ZA')
+      expect(STRIPE_CROSS_BORDER_COUNTRIES.ZA).toBe('South Africa')
     })
   })
 
@@ -275,14 +275,16 @@ describe('Stripe Africa - Account Parameters', () => {
   })
 
   describe('South Africa (ZA) account parameters', () => {
-    it('uses full service agreement (native support)', () => {
+    it('uses recipient service agreement (cross-border)', () => {
       /**
-       * ZA has native Stripe support - same as US/UK
+       * ZA has * on Stripe pricing = cross-border only
+       * Same as NG/GH/KE: recipient agreement, transfers only
        */
       const params = getExpectedAccountParams('ZA')
       expect(params.country).toBe('ZA')
-      expect(params.tos_acceptance).toBeUndefined()
-      expect(params.capabilities).toHaveProperty('card_payments')
+      expect(params.tos_acceptance).toEqual({ service_agreement: 'recipient' })
+      expect(params.capabilities).not.toHaveProperty('card_payments')
+      expect(params.capabilities).toHaveProperty('transfers')
     })
   })
 })

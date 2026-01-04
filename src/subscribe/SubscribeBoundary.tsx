@@ -750,17 +750,17 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                                 margin: '10px 0',
                             }} />
 
-                            {/* Platform Fee Row */}
+                            {/* Platform Fee Row - dynamic based on creator's country */}
                             <div style={{
                                 display: 'flex',
                                 justifyContent: 'space-between',
                                 alignItems: 'center',
                             }}>
                                 <span style={{ fontSize: 15, color: COLORS.neutral600 }}>
-                                    Platform fee (4.5%)
+                                    Platform fee ({pricing.feePreview.effectiveRatePercent})
                                 </span>
                                 <span style={{ fontSize: 15, color: COLORS.neutral700 }}>
-                                    -{formatCurrency(pricing.currentAmount * 0.045, pricing.currency)}
+                                    -{formatCurrency(pricing.feePreview.creatorFee, pricing.currency)}
                                 </span>
                             </div>
 
@@ -780,7 +780,7 @@ export default function SubscribeBoundary({ profile, isOwner }: SubscribeBoundar
                                     You receive
                                 </span>
                                 <span style={{ fontSize: 18, fontWeight: 700, color: COLORS.neutral900 }}>
-                                    {formatCurrency(pricing.currentAmount * 0.955, pricing.currency)}/month
+                                    {formatCurrency(pricing.feePreview.creatorReceives, pricing.currency)}/month
                                 </span>
                             </div>
                         </>

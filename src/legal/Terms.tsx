@@ -74,27 +74,27 @@ export default function Terms() {
                     </p>
                     <h3>Fee Structure (Split Model)</h3>
                     <p>
-                        NatePay uses a split fee model where the 9% service fee is shared between
+                        NatePay uses a split fee model where the service fee is shared between
                         subscribers and creators. The total shown at checkout includes the subscriber
                         portion, and creator payouts are reduced by the creator portion.
                     </p>
                     <ul>
-                        <li>Each side currently pays 4.5% of the creator's set price</li>
+                        <li><strong>Domestic creators (US, UK, EU, etc.):</strong> 9% total (4.5% subscriber + 4.5% creator)</li>
+                        <li><strong>Cross-border creators (Nigeria, Ghana, Kenya, South Africa):</strong> 10.5% total (5.25% subscriber + 5.25% creator)</li>
                         <li>The final total is shown before the subscriber confirms payment</li>
                     </ul>
                     <h3>Service Providers</h3>
                     <p>
-                        9% split service fee, plus a $5/month platform subscription after the
+                        Split service fee as above, plus a $5/month platform subscription after the
                         first month free trial.
                     </p>
                     <h3>Personal Users</h3>
                     <p>
-                        9% split service fee, no monthly subscription required.
+                        Split service fee as above, no monthly subscription required.
                     </p>
                     <p>
-                        For international transactions, an additional 1.5% processing buffer may apply
-                        to cover cross-border payment costs. The final total shown at checkout reflects
-                        any applicable buffer.
+                        The cross-border rate (10.5%) includes a 1.5% buffer to cover international payment
+                        processing costs. This buffer is split evenly between subscriber and creator.
                     </p>
                 </section>
 

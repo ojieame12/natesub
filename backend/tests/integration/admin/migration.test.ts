@@ -77,7 +77,7 @@ describe('admin migration', () => {
       },
     })
 
-    // South African creator with ZAR (correct - ZA is native)
+    // South African creator with ZAR (needs migration - ZA is cross-border)
     const zaUser = await db.user.create({
       data: { email: 'za-creator@test.com' },
     })
@@ -88,9 +88,26 @@ describe('admin migration', () => {
         displayName: 'South African Creator',
         country: 'South Africa',
         countryCode: 'ZA',
-        currency: 'ZAR', // Correct! ZA is native Stripe
+        currency: 'ZAR', // Wrong! ZA is cross-border, should be USD
         pricingModel: 'single',
         singleAmount: 10000,
+      },
+    })
+
+    // US creator with USD (native Stripe, no migration needed)
+    const usUser = await db.user.create({
+      data: { email: 'us-creator@test.com' },
+    })
+    const usProfile = await db.profile.create({
+      data: {
+        userId: usUser.id,
+        username: 'uscreator',
+        displayName: 'US Creator',
+        country: 'United States',
+        countryCode: 'US',
+        currency: 'USD', // Correct! US is native Stripe
+        pricingModel: 'single',
+        singleAmount: 500,
       },
     })
 
@@ -111,12 +128,12 @@ describe('admin migration', () => {
       },
     })
 
-    return { ngProfile, ghProfile, zaProfile, ngUsdProfile }
+    return { ngProfile, ghProfile, zaProfile, usProfile, ngUsdProfile }
   }
 
   describe('GET /admin/migration/cross-border-profiles', () => {
-    it('lists only profiles needing migration (NG/GH/KE with non-USD currency)', async () => {
-      const { ngProfile, ghProfile } = await createCrossBorderProfiles()
+    it('lists only profiles needing migration (cross-border with non-USD currency)', async () => {
+      const { ngProfile, ghProfile, zaProfile } = await createCrossBorderProfiles()
 
       const res = await app.request('/admin/migration/cross-border-profiles', {
         method: 'GET',
@@ -126,16 +143,16 @@ describe('admin migration', () => {
       expect(res.status).toBe(200)
       const data = await res.json()
 
-      // Should find NG and GH profiles (both have wrong currency)
-      expect(data.count).toBe(2)
+      // Should find NG, GH, and ZA profiles (all have wrong currency)
+      expect(data.count).toBe(3)
       expect(data.migrationRequired).toBe(true)
       expect(data.profiles.map((p: any) => p.id).sort()).toEqual(
-        [ngProfile.id, ghProfile.id].sort()
+        [ngProfile.id, ghProfile.id, zaProfile.id].sort()
       )
 
-      // Should NOT include ZA (native) or NG with USD (already correct)
+      // Should NOT include US (native) or NG with USD (already correct)
       const ids = data.profiles.map((p: any) => p.id)
-      expect(ids).not.toContain('zacreator')
+      expect(ids).not.toContain('uscreator')
       expect(ids).not.toContain('ngusdcreator')
     })
 
@@ -231,10 +248,10 @@ describe('admin migration', () => {
     })
 
     it('rejects non-cross-border profiles', async () => {
-      const { zaProfile } = await createCrossBorderProfiles()
+      const { usProfile } = await createCrossBorderProfiles()
 
       const res = await app.request(
-        `/admin/migration/cross-border-profiles/${zaProfile.id}`,
+        `/admin/migration/cross-border-profiles/${usProfile.id}`,
         {
           method: 'POST',
           headers: { ...adminHeaders, 'Content-Type': 'application/json' },
