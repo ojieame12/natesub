@@ -348,11 +348,13 @@ describe('Stripe Africa - Business Model Documentation', () => {
      * - Only transfers capability available
      *
      * Full Service Agreement:
-     * - Used for native countries (US, UK, EU, ZA)
+     * - Used for native countries (US, UK, EU)
      * - Creator is business of record
      * - Creator has direct relationship with Stripe
      * - Full KYC requirements
      * - card_payments + transfers capabilities
+     *
+     * Note: ZA uses recipient service agreement (cross-border), not full
      */
     expect(true).toBe(true) // Documentation test
   })

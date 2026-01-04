@@ -395,12 +395,17 @@ activity.get(
     let payoutInfo = null
     let fxData = null
     let fxPending = false
+    // Fee breakdown response type
+    // NOTE: 'direct' charge type and stripeFees are DEPRECATED - all payments use destination charges.
+    // The 'direct' branch in UI is dead code (never executed) and can be removed.
+    // Keeping the type for backward compatibility with any legacy payments.
     let feeBreakdown = null as {
       chargeType: 'direct' | 'destination' | null
       grossCents: number
       netCents: number
       totalFeeCents: number
       stripeFees?: {
+        // DEPRECATED: These fields are never populated (direct charges abandoned)
         processing?: { percent: number; fixedCents: number; amountCents: number }
         intlCard?: { percent: number; amountCents: number }
         fx?: { percent: number; amountCents: number }

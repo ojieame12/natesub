@@ -246,12 +246,15 @@ export default function ActivityDetail() {
     const realPayoutInfo = data?.payoutInfo
     const fxData = data?.fxData
     const fxPending = data?.fxPending ?? false
+    // NOTE: 'direct' chargeType and stripeFees are DEPRECATED - all payments use destination charges.
+    // The JSX branch for chargeType === 'direct' below is dead code and can be removed.
     const feeBreakdown = data?.feeBreakdown as {
         chargeType: 'direct' | 'destination' | null
         grossCents: number
         netCents: number
         totalFeeCents: number
         stripeFees?: {
+            // DEPRECATED: These fields are never populated
             processing?: { percent: number; fixedCents: number; amountCents: number }
             intlCard?: { percent: number; amountCents: number }
             fx?: { percent: number; amountCents: number }

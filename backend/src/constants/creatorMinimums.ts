@@ -111,6 +111,9 @@ const PAYOUT_FEES: Record<string, number> = {
 }
 
 // Currency multipliers (USD to local, approximate)
+// NOTE: This includes all countries in CREATOR_MINIMUMS for local currency display.
+// This is NOT the list of supported countries - see regionConfig.ts for that.
+// Countries like BD/PK/EG are here for currency conversion but not enabled for signups.
 const CURRENCY_INFO: Record<string, { currency: string; multiplier: number }> = {
   'United States': { currency: 'USD', multiplier: 1 },
   'Brazil': { currency: 'BRL', multiplier: 5.9 },

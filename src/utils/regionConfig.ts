@@ -71,7 +71,7 @@ export const COUNTRIES: CountryConfig[] = [
     skipAddress: true,
     region: 'africa',
   },
-  // South Africa: Cross-border Stripe (0.5% fee), Paystack supported
+  // South Africa: Cross-border Stripe, Paystack supported
   // Has asterisk (*) on Stripe pricing = cross-border only, not native
   {
     code: 'ZA',

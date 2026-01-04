@@ -47,7 +47,7 @@ async function setupCreator(
       currency,
       purpose: 'support',
       pricingModel: 'single',
-      singleAmount: countryCode === 'NG' ? 5000 : 10,
+      singleAmount: countryCode === 'NG' ? 140000 : 100,
       paymentProvider: provider,
       isPublic: true,
     },

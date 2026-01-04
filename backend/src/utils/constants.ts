@@ -177,7 +177,7 @@ export const STRIPE_CROSS_BORDER_COUNTRIES: Record<string, string> = {
   NG: 'Nigeria',
   GH: 'Ghana',
   KE: 'Kenya',
-  ZA: 'South Africa', // Has 0.5% cross-border fee (lower than NG/GH/KE)
+  ZA: 'South Africa', // Cross-border: uses recipient service agreement
 }
 
 // Countries where Stripe is NOT available at all

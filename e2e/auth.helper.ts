@@ -239,14 +239,17 @@ const COUNTRY_CURRENCIES: Record<string, string> = {
   KE: 'KES',
 }
 
+// Dynamic minimums for new creators (0 subscribers) are ~$95 USD
+// Cross-border countries (NG, GH, KE) have $85 USD minimum
+// Using safe values above the calculated minimums
 const MIN_SAFE_SINGLE_AMOUNT: Record<string, number> = {
-  USD: 5,
-  GBP: 5,
-  EUR: 5,
-  NGN: 1500,
-  KES: 200,
-  GHS: 20,
-  ZAR: 50,
+  USD: 100,
+  GBP: 80,
+  EUR: 95,
+  NGN: 140000,  // $85 * 1600 = 136,000 + buffer
+  KES: 11500,   // $85 * 130 = 11,050 + buffer
+  GHS: 1400,    // $85 * 16.1 = 1,369 + buffer
+  ZAR: 1600,    // $85 * 18.2 = 1,547 + buffer
 }
 
 function getSafeSingleAmount(currency: string, fallback: number): number {
@@ -280,7 +283,7 @@ export async function seedTestCreator(
   const country = COUNTRY_NAMES[countryCode] || 'United States'
   const currency = COUNTRY_CURRENCIES[countryCode] || 'USD'
   const paymentProvider = options.paymentProvider || (countryCode === 'NG' ? 'paystack' : 'stripe')
-  const singleAmount = options.singleAmount ?? getSafeSingleAmount(currency, 5)
+  const singleAmount = options.singleAmount ?? getSafeSingleAmount(currency, 100)
   const purpose = options.purpose || 'support'
   const isPublic = options.isPublic ?? false
 

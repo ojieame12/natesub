@@ -27,7 +27,8 @@ export const PLATFORM_FEE_RATE = 0.09
 // These use Stripe Recipient Service Agreement (destination charges)
 // Higher fees: 10.5% (vs 9% domestic), $85 flat minimum
 // IMPORTANT: Must match STRIPE_CROSS_BORDER_COUNTRIES in utils/constants.ts
-// South Africa has 0.5% cross-border fee (lower than NG/GH/KE at 1%)
+// Note: Stripe charges different cross-border rates per country (0.5% ZA, 1% NG/GH/KE)
+// but we use a flat 1.5% buffer for all to cover worst-case + margin
 export const CROSS_BORDER_PAYOUT_COUNTRIES = [
   'Nigeria', 'Ghana', 'Kenya', 'South Africa',
 ] as const
