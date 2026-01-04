@@ -44,7 +44,7 @@ async function setupServiceCreator(
       currency: 'USD',
       purpose: 'service', // Service purpose required for payroll
       pricingModel: 'single',
-      singleAmount: 100,
+      singleAmount: 50,
       paymentProvider: 'stripe',
       isPublic: true,
       perks: [
@@ -128,7 +128,7 @@ test.describe('Payroll Periods API', () => {
         currency: 'USD',
         purpose: 'service',
         pricingModel: 'single',
-        singleAmount: 100,
+        singleAmount: 50,
         paymentProvider: 'stripe',
         isPublic: true,
         perks: [

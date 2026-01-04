@@ -191,7 +191,7 @@ async function setupCreator(
     displayName: 'Cron Test Creator',
     country: 'US',
     paymentProvider: 'stripe',
-    singleAmount: 100, // Must be >= $95 minimum for new US Stripe creators
+    singleAmount: 50,
     purpose: 'support',
     isPublic: false,
   })

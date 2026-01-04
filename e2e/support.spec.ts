@@ -38,7 +38,7 @@ async function setupCreator(
       currency: 'USD',
       purpose: 'support',
       pricingModel: 'single',
-      singleAmount: 100, // Must meet $95 minimum for new US Stripe creators
+      singleAmount: 50,
       paymentProvider: 'stripe',
       isPublic: true,
     },

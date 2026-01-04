@@ -239,13 +239,13 @@ const COUNTRY_CURRENCIES: Record<string, string> = {
   KE: 'KES',
 }
 
-// Dynamic minimums for new creators (0 subscribers) are ~$95 USD
-// Cross-border countries (NG, GH, KE) have $85 USD minimum
-// Using safe values above the calculated minimums
+// E2E tests run in stub mode which skips minimum validation
+// Using reasonable test amounts (domestic math works at $50)
+// Cross-border countries (NG, GH, KE, ZA) have $85 USD minimum
 const MIN_SAFE_SINGLE_AMOUNT: Record<string, number> = {
-  USD: 100,
-  GBP: 80,
-  EUR: 95,
+  USD: 50,
+  GBP: 40,
+  EUR: 50,
   NGN: 140000,  // $85 * 1600 = 136,000 + buffer
   KES: 11500,   // $85 * 130 = 11,050 + buffer
   GHS: 1400,    // $85 * 16.1 = 1,369 + buffer

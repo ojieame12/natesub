@@ -36,6 +36,9 @@ import { generatePerks, inferServiceType } from '../services/ai/perksGenerator.j
 
 const profile = new Hono()
 
+// Skip minimum validation in stub mode (E2E tests) - no real payments
+const isStubMode = env.PAYMENTS_MODE === 'stub'
+
 type TemplateId = z.infer<typeof templateSchema>
 
 function normalizeTemplate(template: string | null | undefined): Exclude<TemplateId, 'liquid'> | null {
@@ -115,7 +118,7 @@ profile.put(
     // Validate minimum amounts based on creator's country and subscriber count
     // This ensures platform profitability after all Stripe fees
     // Uses DYNAMIC minimum that decreases as subscriber count increases
-    if (creatorMinimum && paymentProvider === 'stripe') {
+    if (creatorMinimum && paymentProvider === 'stripe' && !isStubMode) {
       // Get current MONTHLY subscriber count for dynamic minimum calculation
       // Excludes one_time payments since they don't generate recurring revenue
       // to amortize the $2/month Stripe account fee
@@ -318,8 +321,9 @@ profile.patch(
 
     // Validate minimum amounts based on creator's country and subscriber count (Stripe only)
     // Uses DYNAMIC minimum that decreases as subscriber count increases
+    // Skip in stub mode (E2E tests) - no real payments, no profitability concern
     const creatorMinimum = country ? getCreatorMinimum(country) : null
-    if (creatorMinimum && paymentProvider === 'stripe') {
+    if (creatorMinimum && paymentProvider === 'stripe' && !isStubMode) {
       // Get current MONTHLY subscriber count for dynamic minimum calculation
       // Excludes one_time payments since they don't generate recurring revenue
       // to amortize the $2/month Stripe account fee

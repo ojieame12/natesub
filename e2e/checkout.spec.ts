@@ -165,7 +165,7 @@ test.describe('Checkout Integration - API Level', () => {
         currency: 'USD',
         purpose: 'support',
         pricingModel: 'single',
-        singleAmount: 100, // $100.00 display → 10000 cents (must meet $95 minimum)
+        singleAmount: 50,
         paymentProvider: 'stripe',
         isPublic: true,
       },
@@ -241,7 +241,7 @@ test.describe('Checkout Integration - API Level', () => {
         currency: 'USD',
         purpose: 'support',
         pricingModel: 'single',
-        singleAmount: 100, // Must meet $95 minimum for new US Stripe creators
+        singleAmount: 50,
         paymentProvider: 'stripe',
         isPublic: true,
       },
@@ -535,7 +535,7 @@ test.describe('Checkout Validation - API Level', () => {
         currency: 'USD',
         purpose: 'support',
         pricingModel: 'single',
-        singleAmount: 100, // Must meet $95 minimum for new US Stripe creators
+        singleAmount: 50,
         paymentProvider: 'stripe',
         isPublic: true,
       },
