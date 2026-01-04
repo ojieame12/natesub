@@ -3,27 +3,39 @@
  *
  * FORMULA-BASED MINIMUMS - Single Source of Truth
  *
- * This file calculates minimum subscription amounts from actual Stripe fee inputs.
+ * This file calculates minimum subscription amounts based on PLATFORM costs only.
  *
- * ALL COUNTRIES use destination charges (platform absorbs Stripe fees).
+ * VERIFIED FROM STRIPE CONNECT ACTIVITY (Dec 2025):
+ * Platform pays these (shown in Connect transactions):
+ * - Billing: 0.7% (Stripe Billing for subscriptions)
+ * - Cross-border transfer: 0.25%-1% (varies by country)
+ * - Payout: 0.25% + $0.10 fixed
+ * - Monthly account: $0.67 ($0.60 Active + $0.07 Volume)
  *
- * CROSS-BORDER COUNTRIES (NG, GH, KE, etc.):
- * - Flat $85 USD minimum (guarantees profit from subscriber #1)
- * - Based on real Stripe data showing ~6.3% processing
- * - Covers $2/month Express fee + processing overhead
+ * Creator pays these (on connected account, NOT platform costs):
+ * - Processing: 2.9% + $0.30
+ * - International card: 1.5%
+ * - FX conversion: 1%
  *
- * DOMESTIC COUNTRIES (US, UK, EU, etc.):
- * - Dynamic minimum based on subscriber count
- * - Lower fees = lower minimums
+ * PLATFORM FEE STRUCTURE:
+ * - Domestic (US, UK, EU): 9% total (4.5% subscriber + 4.5% creator)
+ * - Cross-border (NG, GH, KE, ZA): 10.5% total (5.25% + 5.25%)
  *
- * Source: https://stripe.com/connect/pricing (2026-01-03)
+ * MINIMUMS:
+ * - Cross-border: $85 flat floor (high margin covers Connect fees)
+ * - Domestic: Dynamic based on subscriber count ($5-$20)
  */
 
 import { isCrossBorderCountry } from './fees.js'
 
-// Flat minimum for cross-border countries (based on real Stripe fee data)
-// $85 guarantees profit from subscriber #1 after $2/month Express fee
-const CROSS_BORDER_MINIMUM_USD = 85
+// Minimum floor for cross-border countries (safety buffer)
+// Cross-border payments have higher risk: FX volatility, transfer fees, account fees
+// Even if math works at lower amounts, we need buffer for:
+// - Currency fluctuation between pricing and payout
+// - Monthly account fee ($0.67) must be covered even with 1 subscriber
+// - Cross-border transfer fees (~1%)
+// - Operational margin for edge cases
+const CROSS_BORDER_MINIMUM_FLOOR_USD = 85
 
 // ============================================
 // PLATFORM CONFIGURATION
@@ -256,40 +268,42 @@ function generateMinimums(): Record<string, CreatorMinimum> {
 // ============================================
 
 /**
- * Updated fee constants for dynamic calculation
- * Uses hybrid approach: different international subscriber assumptions by country type
+ * PLATFORM FEE CONSTANTS - Verified from Stripe Connect dashboard Dec 2025
+ *
+ * These are ONLY the fees the PLATFORM pays (shown in Connect activity).
+ * Creator pays processing/intl/FX on their connected account - NOT included here.
+ *
+ * PLATFORM PAYS (Connect fees):
+ * - Billing: 0.7% (Stripe Billing for subscriptions)
+ * - Cross-border transfer: 0.25%-1% (depends on destination country)
+ * - Payout: 0.25% + fixed per payout
+ * - Monthly account: $0.67 ($0.60 Active + $0.07 Volume)
+ *
+ * CREATOR PAYS (on connected account, NOT platform costs):
+ * - Processing: 2.9% + $0.30
+ * - International card: 1.5%
+ * - FX conversion: 1%
  */
 const DYNAMIC_FEES = {
-  processing: 0.029,        // 2.9% (Stripe base)
-  billing: 0.007,           // 0.7% (Stripe Billing - subscriptions)
+  // ONLY platform costs - verified from Stripe Connect activity screenshot
+  billing: 0.007,           // 0.7% (Stripe Billing for subscriptions)
   payoutPercent: 0.0025,    // 0.25% (payout fee percentage)
-  intlCard: 0.015,          // 1.5% international card surcharge
-  fx: 0.02,                 // 2% currency conversion (non-US platform)
-  fixedCents: 30,           // $0.30 per transaction
-  monthlyAccountCents: 200, // $2.00/month per connected account
-}
-
-function getInternationalMix(country: string): number {
-  // Cross-border countries have 100% international cards (all subscribers are international)
-  // Domestic countries (US, UK, EU) have ~70% international mix
-  return isCrossBorderCountry(country) ? 1.0 : 0.7
+  fixedCents: 10,           // $0.10 payout fee per cycle
+  monthlyAccountCents: 67,  // $0.67/month ($0.60 Active + $0.07 Volume)
 }
 
 function getPercentFeeInputs(country: string) {
-  const crossBorderRate = getCrossBorderRate(country)
-  const intlMix = getInternationalMix(country)
+  const crossBorderTransferRate = getCrossBorderRate(country)
+
+  // Platform only pays: billing + payout % + cross-border transfer %
   const percentFees =
-    DYNAMIC_FEES.processing +
     DYNAMIC_FEES.billing +
     DYNAMIC_FEES.payoutPercent +
-    crossBorderRate +
-    (DYNAMIC_FEES.intlCard * intlMix) +
-    (DYNAMIC_FEES.fx * intlMix)
+    crossBorderTransferRate
 
   return {
     percentFees,
-    intlMix,
-    crossBorderRate,
+    crossBorderTransferRate,
   }
 }
 
@@ -311,18 +325,11 @@ export interface DynamicMinimumResult {
 /**
  * Calculate minimum subscription based on country
  *
- * CROSS-BORDER COUNTRIES: Flat $85 minimum (based on real Stripe data)
- * DOMESTIC COUNTRIES: Dynamic minimum based on subscriber count
+ * ALL COUNTRIES now use dynamic calculation based on actual Stripe fees.
+ * Cross-border countries have a floor minimum of $25 for safety.
  */
 export function calculateDynamicMinimumUSD(params: DynamicMinimumParams): number {
   const { country, subscriberCount } = params
-
-  // Cross-border countries use flat $85 minimum
-  if (isCrossBorderCountry(country)) {
-    return CROSS_BORDER_MINIMUM_USD
-  }
-
-  // Domestic countries use dynamic calculation
   const effectiveSubs = Math.max(1, subscriberCount)
 
   const payoutFixedCents = PAYOUT_FEES[country] ?? 100
@@ -332,63 +339,53 @@ export function calculateDynamicMinimumUSD(params: DynamicMinimumParams): number
   const accountFeePerSub = DYNAMIC_FEES.monthlyAccountCents / effectiveSubs
   const fixedCents = DYNAMIC_FEES.fixedCents + payoutFixedCents + accountFeePerSub
 
-  const netMarginRate = PLATFORM_FEE_RATE - percentFees
+  // Cross-border countries use 10.5% platform fee (includes 1.5% buffer)
+  const platformFeeRate = isCrossBorderCountry(country) ? 0.105 : PLATFORM_FEE_RATE
+  const netMarginRate = platformFeeRate - percentFees
+
   if (netMarginRate <= 0) {
     console.warn(`[creatorMinimums] Non-viable margin for ${country}: ${(netMarginRate * 100).toFixed(2)}%`)
     return 99999
   }
 
   const minimumCents = fixedCents / netMarginRate
-  return Math.ceil(minimumCents / 100 / 5) * 5 // Round up to nearest $5
+  let minimumUSD = Math.ceil(minimumCents / 100 / 5) * 5 // Round up to nearest $5
+
+  // Cross-border countries have a floor minimum for safety
+  if (isCrossBorderCountry(country)) {
+    minimumUSD = Math.max(minimumUSD, CROSS_BORDER_MINIMUM_FLOOR_USD)
+  }
+
+  return minimumUSD
 }
 
 /**
  * Get detailed dynamic minimum with all calculation components
+ * ALL countries now use dynamic calculation based on actual Stripe fees.
  */
 export function getDynamicMinimum(params: DynamicMinimumParams): DynamicMinimumResult {
   const { country, subscriberCount } = params
   const effectiveSubs = Math.max(1, subscriberCount)
   const countryInfo = CURRENCY_INFO[country]
 
-  // Cross-border countries use flat $85 minimum
-  if (isCrossBorderCountry(country)) {
-    const minimumUSD = CROSS_BORDER_MINIMUM_USD
-
-    // Calculate local currency amount
-    let minimumLocal = minimumUSD
-    if (countryInfo) {
-      const { multiplier } = countryInfo
-      if (multiplier >= 100) {
-        minimumLocal = Math.ceil((minimumUSD * multiplier) / 1000) * 1000
-      } else if (multiplier >= 10) {
-        minimumLocal = Math.ceil((minimumUSD * multiplier) / 100) * 100
-      } else {
-        minimumLocal = Math.ceil((minimumUSD * multiplier) / 5) * 5
-      }
-    }
-
-    return {
-      minimumUSD,
-      minimumLocal,
-      currency: countryInfo?.currency || 'USD',
-      subscriberCount: effectiveSubs,
-      percentFees: 0.063, // Based on real Stripe data
-      fixedCents: 97, // $0.30 + $0.67 payout
-      netMarginRate: 0.027, // 9% - 6.3%
-    }
-  }
-
-  // Domestic countries use dynamic calculation
   const payoutFixedCents = PAYOUT_FEES[country] ?? 100
   const { percentFees } = getPercentFeeInputs(country)
 
   const accountFeePerSub = DYNAMIC_FEES.monthlyAccountCents / effectiveSubs
   const fixedCents = DYNAMIC_FEES.fixedCents + payoutFixedCents + accountFeePerSub
-  const netMarginRate = PLATFORM_FEE_RATE - percentFees
 
-  const minimumUSD = netMarginRate <= 0
+  // Cross-border countries use 10.5% platform fee (includes 1.5% buffer)
+  const platformFeeRate = isCrossBorderCountry(country) ? 0.105 : PLATFORM_FEE_RATE
+  const netMarginRate = platformFeeRate - percentFees
+
+  let minimumUSD = netMarginRate <= 0
     ? 99999
     : Math.ceil((fixedCents / netMarginRate) / 100 / 5) * 5
+
+  // Cross-border countries have a floor minimum for safety
+  if (isCrossBorderCountry(country)) {
+    minimumUSD = Math.max(minimumUSD, CROSS_BORDER_MINIMUM_FLOOR_USD)
+  }
 
   // Calculate local currency amount
   let minimumLocal = minimumUSD
@@ -459,49 +456,36 @@ export function isCountrySupported(country: string): boolean {
 
 /**
  * Get the fee breakdown for a country (for transparency/debugging)
- * Matches the dynamic minimum calculation assumptions
+ * Shows ONLY platform costs (what appears in Connect activity)
  */
 export function getFeeBreakdown(country: string) {
   const payoutFixedCents = PAYOUT_FEES[country] ?? 100
-  const crossBorderRate = getCrossBorderRate(country)
-  const intlMix = getInternationalMix(country)
+  const crossBorderTransferRate = getCrossBorderRate(country)
 
-  // Match the dynamic formula's percent fee calculation
-  const percentFees = {
-    processing: DYNAMIC_FEES.processing,           // 2.9%
-    billing: DYNAMIC_FEES.billing,                 // 0.7%
-    payoutPercent: DYNAMIC_FEES.payoutPercent,     // 0.25%
-    crossBorder: crossBorderRate,                  // 0-1%
-    intlCard: DYNAMIC_FEES.intlCard * intlMix,     // 1.5% * intlMix
-    fx: DYNAMIC_FEES.fx * intlMix,                 // 2% * intlMix
-  }
+  // Platform costs only - creator pays processing/intl/FX separately
+  const totalPercentFees =
+    DYNAMIC_FEES.billing +
+    DYNAMIC_FEES.payoutPercent +
+    crossBorderTransferRate
 
-  const totalPercentFees = (
-    percentFees.processing +
-    percentFees.billing +
-    percentFees.payoutPercent +
-    percentFees.crossBorder +
-    percentFees.intlCard +
-    percentFees.fx
-  )
+  // Cross-border countries get 10.5% platform fee (vs 9% domestic)
+  const platformFeeRate = isCrossBorderCountry(country)
+    ? PLATFORM_FEE_RATE + 0.015  // 10.5%
+    : PLATFORM_FEE_RATE          // 9%
 
   return {
-    // Percent fees (applied to transaction amount)
-    processingPercent: percentFees.processing,
-    billingPercent: percentFees.billing,
-    payoutPercent: percentFees.payoutPercent,
-    crossBorderPercent: percentFees.crossBorder,
-    intlCardPercent: percentFees.intlCard,
-    fxPercent: percentFees.fx,
+    // Percent fees (PLATFORM pays these)
+    billingPercent: DYNAMIC_FEES.billing,
+    payoutPercent: DYNAMIC_FEES.payoutPercent,
+    crossBorderTransferPercent: crossBorderTransferRate,
     totalPercentFees,
     // Fixed fees (per transaction or per creator)
     fixedFeeCents: DYNAMIC_FEES.fixedCents,
     payoutFixedCents,
     monthlyAccountFeeCents: DYNAMIC_FEES.monthlyAccountCents,
-    // Assumptions
-    intlMix, // 1.0 for cross-border countries, 0.7 for domestic
-    platformFeeRate: PLATFORM_FEE_RATE,
-    netMarginRate: PLATFORM_FEE_RATE - totalPercentFees,
+    // Margin calculation
+    platformFeeRate,
+    netMarginRate: platformFeeRate - totalPercentFees,
   }
 }
 

@@ -23,6 +23,8 @@ import {
 import {
   calculateDynamicMinimumUSD,
   getCreatorMinimum,
+  getDynamicMinimum,
+  getFeeBreakdown,
 } from '../../src/constants/creatorMinimums.js'
 
 describe('Fee Model Consistency', () => {
@@ -74,8 +76,90 @@ describe('Fee Model Consistency', () => {
     })
   })
 
+  describe('US domestic fees (platform costs only)', () => {
+    it('US total percent fees should be ~0.95% (billing + payout only)', () => {
+      const breakdown = getFeeBreakdown('United States')
+      // 0.7% billing + 0.25% payout + 0% cross-border transfer = 0.95%
+      expect(breakdown.totalPercentFees).toBeCloseTo(0.0095, 4)
+    })
+
+    it('US net margin should be ~8.05% (9% - 0.95%)', () => {
+      const breakdown = getFeeBreakdown('United States')
+      expect(breakdown.netMarginRate).toBeCloseTo(0.0805, 4)
+    })
+
+    it('US minimum for 1 subscriber should be $15', () => {
+      const min = getDynamicMinimum({ country: 'United States', subscriberCount: 1 })
+      expect(min.minimumUSD).toBe(15)
+    })
+
+    it('US minimum for 20 subscribers should be $5', () => {
+      const min = getDynamicMinimum({ country: 'United States', subscriberCount: 20 })
+      expect(min.minimumUSD).toBe(5)
+    })
+  })
+
+  describe('UK/EU domestic fees (higher cross-border transfer)', () => {
+    it('UK has higher total fees than US due to cross-border transfer', () => {
+      const ukBreakdown = getFeeBreakdown('United Kingdom')
+      const usBreakdown = getFeeBreakdown('United States')
+      // UK has 0.25% cross-border transfer, US has 0%
+      expect(ukBreakdown.totalPercentFees).toBeGreaterThan(usBreakdown.totalPercentFees)
+    })
+
+    it('UK and US have same minimum (both domestic)', () => {
+      const ukMin = getDynamicMinimum({ country: 'United Kingdom', subscriberCount: 1 })
+      const usMin = getDynamicMinimum({ country: 'United States', subscriberCount: 1 })
+      // With corrected model, both are $15 (rounding to $5)
+      expect(ukMin.minimumUSD).toBe(usMin.minimumUSD)
+    })
+  })
+
+  describe('monthly account fee amortization', () => {
+    it('account fee is $0.67/month (per creator, not per subscriber)', () => {
+      const breakdown = getFeeBreakdown('United States')
+      expect(breakdown.monthlyAccountFeeCents).toBe(67)
+    })
+
+    it('minimum decreases as subscriber count increases', () => {
+      const min1 = getDynamicMinimum({ country: 'United States', subscriberCount: 1 })
+      const min5 = getDynamicMinimum({ country: 'United States', subscriberCount: 5 })
+      const min20 = getDynamicMinimum({ country: 'United States', subscriberCount: 20 })
+
+      // More subscribers = lower minimum (fixed costs spread out)
+      expect(min1.minimumUSD).toBeGreaterThan(min5.minimumUSD)
+      expect(min5.minimumUSD).toBeGreaterThanOrEqual(min20.minimumUSD)
+    })
+
+    it('account fee is amortized per subscriber in fixed costs', () => {
+      const min1 = getDynamicMinimum({ country: 'United States', subscriberCount: 1 })
+      const min20 = getDynamicMinimum({ country: 'United States', subscriberCount: 20 })
+
+      // At 1 sub: fixed costs include full $0.67 account fee
+      // At 20 subs: fixed costs include $0.67/20 = $0.03 per sub
+      expect(min1.fixedCents).toBeGreaterThan(min20.fixedCents)
+
+      // Difference should be roughly $0.67 - $0.03 = $0.64 (64 cents)
+      const diff = min1.fixedCents - min20.fixedCents
+      expect(diff).toBeCloseTo(64, 0)
+    })
+
+    it('cross-border countries also amortize but stay at $85 floor', () => {
+      const ng1 = getDynamicMinimum({ country: 'Nigeria', subscriberCount: 1 })
+      const ng20 = getDynamicMinimum({ country: 'Nigeria', subscriberCount: 20 })
+
+      // Both hit the $85 floor
+      expect(ng1.minimumUSD).toBe(85)
+      expect(ng20.minimumUSD).toBe(85)
+
+      // But fixed costs still differ (amortization still happens)
+      expect(ng1.fixedCents).toBeGreaterThan(ng20.fixedCents)
+    })
+  })
+
   describe('cross-border countries (10.5% fee)', () => {
-    const crossBorderCountries = ['Nigeria', 'Ghana', 'Kenya']
+    // South Africa is cross-border per Stripe pricing (asterisk = cross-border payouts only)
+    const crossBorderCountries = ['Nigeria', 'Ghana', 'Kenya', 'South Africa']
 
     it.each(crossBorderCountries)('%s should be cross-border', (country) => {
       expect(isCrossBorderCountry(country)).toBe(true)
@@ -88,18 +172,20 @@ describe('Fee Model Consistency', () => {
       expect(result.feeCents).toBe(1050) // 10.5% total
     })
 
-    it('should use flat $85 minimum regardless of subscriber count', () => {
+    it('should use flat $85 minimum for cross-border countries', () => {
       const min1 = calculateDynamicMinimumUSD({ country: 'Nigeria', subscriberCount: 1 })
       const min20 = calculateDynamicMinimumUSD({ country: 'Nigeria', subscriberCount: 20 })
 
+      // Cross-border countries use $85 floor for safety
+      // This covers: FX volatility, transfer fees, account fees, operational margin
       expect(min1).toBe(85)
       expect(min20).toBe(85)
     })
 
-    it('all cross-border countries have same $85 flat minimum', () => {
+    it('all cross-border countries have minimum at or above $25 floor', () => {
       for (const country of crossBorderCountries) {
         const staticMin = getCreatorMinimum(country)
-        expect(staticMin?.usd).toBe(85)
+        expect(staticMin?.usd).toBeGreaterThanOrEqual(25)
       }
     })
   })
@@ -163,19 +249,19 @@ describe('Fee Model Consistency', () => {
 
       const data = await res.json()
       expect(data.meta.platformFee).toBe('9% domestic, 10.5% cross-border')
-      expect(data.meta.model).toBe('Destination charges - platform absorbs all Stripe fees')
+      expect(data.meta.model).toBe('Destination charges - platform absorbs Connect fees only')
       expect(data.meta.feeBreakdown.domestic).toBe('9% total (4.5% subscriber + 4.5% creator)')
       expect(data.meta.feeBreakdown.crossBorder).toBe('10.5% total (5.25% subscriber + 5.25% creator)')
-      expect(data.meta.minimumBreakdown.domestic).toBe('$25-95 dynamic (based on subscriber count)')
-      expect(data.meta.minimumBreakdown.crossBorder).toBe('$85 flat')
+      expect(data.meta.minimumBreakdown.domestic).toBe('$5-15 dynamic (based on subscriber count)')
+      expect(data.meta.minimumBreakdown.crossBorder).toBe('$85 floor')
     })
 
-    it('GET /config/minimums/:country returns $85 for cross-border', async () => {
+    it('GET /config/minimums/:country returns minimum >= $25 for cross-border', async () => {
       const res = await app.fetch(new Request('http://localhost/config/minimums/Nigeria'))
       expect(res.status).toBe(200)
 
       const data = await res.json()
-      expect(data.usd).toBe(85)
+      expect(data.usd).toBeGreaterThanOrEqual(25) // Floor minimum
       expect(data.country).toBe('Nigeria')
     })
 

@@ -1371,11 +1371,11 @@ describe('onboarding endpoints', () => {
       expect(res.status).toBe(200)
     })
 
-    // Stripe creators have country-based minimums (US = $30)
-    // This ensures platform profitability after per-transaction Stripe fees
-    // Dynamic minimum for new US Stripe creators (0 subscribers) is ~$95
-    // The $2/month account fee is amortized across subscribers
-    it('rejects USD amount below dynamic minimum (~$95 for new US Stripe creators)', async () => {
+    // Stripe creators have dynamic minimums based on country and subscriber count
+    // This ensures platform profitability after Connect fees
+    // US minimum is $15 for new creators (platform only pays ~1% Connect fees)
+    // The $0.67/month account fee is amortized across subscribers
+    it('rejects USD amount below dynamic minimum ($15 for new US Stripe creators)', async () => {
       await createTestUserWithSession('usd-min@test.com')
 
       const res = await authRequest('/profile', {
@@ -1388,7 +1388,7 @@ describe('onboarding endpoints', () => {
           currency: 'USD',
           purpose: 'tips',
           pricingModel: 'single',
-          singleAmount: 50, // $50 - below dynamic minimum (~$95) for new Stripe creators
+          singleAmount: 10, // $10 - below dynamic minimum ($15) for new US Stripe creators
           paymentProvider: 'stripe',
         }),
       })
@@ -1398,7 +1398,7 @@ describe('onboarding endpoints', () => {
       expect(body.error).toContain('Minimum')
     })
 
-    it('accepts USD amount at or above dynamic minimum (~$95 for new US Stripe creators)', async () => {
+    it('accepts USD amount at or above dynamic minimum ($15 for new US Stripe creators)', async () => {
       await createTestUserWithSession('usd-exact-min@test.com')
 
       const res = await authRequest('/profile', {
@@ -1411,7 +1411,7 @@ describe('onboarding endpoints', () => {
           currency: 'USD',
           purpose: 'tips',
           pricingModel: 'single',
-          singleAmount: 100, // $100 - meets dynamic minimum (~$95) for new Stripe creators
+          singleAmount: 15, // $15 - meets dynamic minimum for new US Stripe creators
           paymentProvider: 'stripe',
         }),
       })

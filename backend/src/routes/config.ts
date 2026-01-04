@@ -93,25 +93,31 @@ config.get('/minimums', (c) => {
     supportedCountries: getSupportedCountries(),
     meta: {
       platformFee: '9% domestic, 10.5% cross-border',
-      model: 'Destination charges - platform absorbs all Stripe fees',
+      model: 'Destination charges - platform absorbs Connect fees only',
       feeBreakdown: {
         domestic: '9% total (4.5% subscriber + 4.5% creator)',
         crossBorder: '10.5% total (5.25% subscriber + 5.25% creator)',
       },
       minimumBreakdown: {
-        domestic: '$25-95 dynamic (based on subscriber count)',
-        crossBorder: '$85 flat',
+        domestic: '$5-15 dynamic (based on subscriber count)',
+        crossBorder: '$85 floor',
       },
       payoutCadence: 'monthly',
       accountType: 'Express',
-      formula: 'min = (fixedFees + accountFee/subs + payoutFee) / (platformRate - totalPercentFees)',
+      formula: 'min = (fixedFees + accountFee/subs + payoutFee) / (platformRate - connectFees)',
       // Static minimums use floor subscriber count (established creators)
       // New creators see higher dynamic minimums via /config/my-minimum
       floorSubscriberCount: 20,
-      assumptions: {
-        intlMix: '70% for domestic countries, 100% for cross-border countries',
-        payoutPercent: '0.25%',
-        crossBorderCountries: 'NG, GH, KE, ZA',
+      platformCosts: {
+        billing: '0.7%',
+        payout: '0.25%',
+        crossBorderTransfer: '0.25%-1%',
+        monthlyAccount: '$0.67',
+      },
+      creatorCosts: {
+        processing: '2.9% + $0.30',
+        intlCard: '1.5%',
+        fx: '1%',
       },
       note: 'Use GET /config/my-minimum for creator-specific dynamic minimum',
     },
