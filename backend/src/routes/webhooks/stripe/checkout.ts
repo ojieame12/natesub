@@ -1,5 +1,5 @@
 import Stripe from 'stripe'
-import { stripe, setSubscriptionDefaultFee, getChargeFxData, getDirectChargeFxData } from '../../../services/stripe.js'
+import { stripe, setSubscriptionDefaultFee, getChargeFxData } from '../../../services/stripe.js'
 import { db } from '../../../db/client.js'
 import { sendNewSubscriberEmail, sendSubscriptionConfirmationEmail, sendPlatformDebitRecoveredNotification } from '../../../services/email.js'
 import { cancelAllRemindersForEntity } from '../../../jobs/reminders.js'
@@ -705,13 +705,8 @@ export async function handleAsyncPaymentSucceeded(event: Stripe.Event) {
       select: { stripeAccountId: true },
     }).then(async (profile) => {
       if (profile?.stripeAccountId) {
-        // Use appropriate FX lookup based on charge type
-        // Direct charges: charge lives on connected account
-        // Destination charges: charge lives on platform, transfer to connected account
-        const chargeType = validatedMeta.chargeType || 'destination'
-        const result = chargeType === 'direct'
-          ? await getDirectChargeFxData(stripeChargeId, profile.stripeAccountId)
-          : await getChargeFxData(stripeChargeId, profile.stripeAccountId)
+        // All countries use destination charges - charge lives on platform, transfer to connected account
+        const result = await getChargeFxData(stripeChargeId, profile.stripeAccountId)
 
         if (result.status === 'fx_found') {
           await db.payment.update({

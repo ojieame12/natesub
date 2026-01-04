@@ -105,9 +105,10 @@ refunds.get('/', auditSensitiveRead('refund_list'), async (c) => {
   const total = await db.payment.count({ where })
 
   // Calculate refund stats
+  // Use grossCents for consistency (what subscriber paid), fall back to amountCents for legacy
   const refundStats = await db.payment.aggregate({
     where: { status: 'refunded' },
-    _sum: { amountCents: true },
+    _sum: { grossCents: true, amountCents: true },
     _count: true,
   })
 
@@ -135,7 +136,8 @@ refunds.get('/', auditSensitiveRead('refund_list'), async (c) => {
       returned: payments.length,
     },
     stats: {
-      totalRefunded: refundStats._sum?.amountCents || 0,
+      // Use grossCents if available, fall back to amountCents for legacy payments
+      totalRefunded: refundStats._sum?.grossCents || refundStats._sum?.amountCents || 0,
       refundCount: refundStats._count || 0,
     },
   })

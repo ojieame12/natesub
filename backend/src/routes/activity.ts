@@ -517,66 +517,22 @@ activity.get(
           }
 
           // Build fee breakdown for transparency
-          // Direct charge: creator pays Stripe fees, platform takes 2%
-          // Destination charge: platform pays Stripe fees, takes 9% (4.5%/4.5% split)
-          const chargeType = payment.chargeType as 'direct' | 'destination' | null
+          // All countries use destination charges: platform pays Stripe fees, takes 9% (4.5%/4.5% split)
+          // Cross-border countries: 10.5% (5.25%/5.25% split) due to extra 1.5% buffer
           const gross = payment.grossCents ?? payment.amountCents ?? 0
           const net = payment.netCents ?? 0
           const totalFee = payment.feeCents ?? (gross - net)
           const platformFee = payment.platformFeeCents ?? totalFee
 
-          // For direct charges, show itemized Stripe fees
-          if (chargeType === 'direct') {
-            const stripeSubtotal =
-              (payment.stripeProcessingFeeCents ?? 0) +
-              (payment.stripeIntlCardFeeCents ?? 0) +
-              (payment.stripeFxFeeCents ?? 0) +
-              (payment.stripeBillingFeeCents ?? 0) +
-              (payment.stripeCrossBorderFeeCents ?? 0) +
-              (payment.stripeAccountFeeCents ?? 0) +
-              (payment.stripePayoutFeeCents ?? 0)
+          // Calculate effective fee percent from amounts (handles both domestic and cross-border)
+          const effectiveFeePercent = gross > 0 ? (totalFee / gross) * 100 : 9.0
 
-            feeBreakdown = {
-              chargeType,
-              grossCents: gross,
-              netCents: net,
-              totalFeeCents: totalFee,
-              stripeFees: {
-                ...(payment.stripeProcessingFeeCents ? {
-                  processing: { percent: 2.9, fixedCents: 30, amountCents: payment.stripeProcessingFeeCents },
-                } : {}),
-                ...(payment.stripeIntlCardFeeCents ? {
-                  intlCard: { percent: 1.5, amountCents: payment.stripeIntlCardFeeCents },
-                } : {}),
-                ...(payment.stripeFxFeeCents ? {
-                  fx: { percent: 2.0, amountCents: payment.stripeFxFeeCents },
-                } : {}),
-                ...(payment.stripeBillingFeeCents ? {
-                  billing: { percent: 0.7, amountCents: payment.stripeBillingFeeCents },
-                } : {}),
-                ...(payment.stripeCrossBorderFeeCents ? {
-                  crossBorder: { percent: 1.0, amountCents: payment.stripeCrossBorderFeeCents },
-                } : {}),
-                ...(payment.stripeAccountFeeCents ? {
-                  accountFee: { monthlyCents: 200, amortizedCents: payment.stripeAccountFeeCents },
-                } : {}),
-                ...(payment.stripePayoutFeeCents ? {
-                  payout: { percent: 0.25, fixedCents: 67, amountCents: payment.stripePayoutFeeCents },
-                } : {}),
-                subtotalCents: stripeSubtotal,
-              },
-              platformFee: { percent: 2.0, amountCents: platformFee },
-            }
-          } else if (chargeType === 'destination' || !chargeType) {
-            // Destination charge or legacy: simplified breakdown
-            // Platform fee includes Stripe fees (9% total, 4.5%/4.5% split)
-            feeBreakdown = {
-              chargeType: chargeType || null,
-              grossCents: gross,
-              netCents: net,
-              totalFeeCents: totalFee,
-              platformFee: { percent: 9.0, amountCents: platformFee },
-            }
+          feeBreakdown = {
+            chargeType: 'destination',
+            grossCents: gross,
+            netCents: net,
+            totalFeeCents: totalFee,
+            platformFee: { percent: Math.round(effectiveFeePercent * 10) / 10, amountCents: platformFee },
           }
 
           if (payment.exchangeRate) {

@@ -14,7 +14,7 @@ import { requireRole } from '../../middleware/adminAuth.js'
 import { auditSensitiveRead } from '../../middleware/auditLog.js'
 import { todayStart, thisMonthStart, lastNDays } from '../../utils/timezone.js'
 import { env } from '../../config/env.js'
-import { PLATFORM_FEE_RATE } from '../../constants/fees.js'
+import { PLATFORM_FEE_RATE, CROSS_BORDER_BUFFER, isCrossBorderCountry } from '../../constants/fees.js'
 
 const financials = new Hono()
 
@@ -225,6 +225,7 @@ financials.get('/fee-audit', auditSensitiveRead('fee_audit'), async (c) => {
       netCents: true,
       feeModel: true,
       feeEffectiveRate: true,
+      feeWasCapped: true,
       currency: true,
       createdAt: true,
       subscription: {
@@ -234,6 +235,7 @@ financials.get('/fee-audit', auditSensitiveRead('fee_audit'), async (c) => {
               profile: {
                 select: {
                   purpose: true,
+                  country: true,
                 }
               }
             }
@@ -250,17 +252,33 @@ financials.get('/fee-audit', auditSensitiveRead('fee_audit'), async (c) => {
 
   for (const payment of payments) {
     const purpose = payment.subscription?.creator?.profile?.purpose
+    const creatorCountry = payment.subscription?.creator?.profile?.country
     const paymentAmount = payment.grossCents || payment.amountCents
 
-    // Expected fee rate: 9% for all users (split model: 4.5% + 4.5%)
-    const expectedRate = PLATFORM_FEE_RATE
+    // Expected fee rate depends on creator country:
+    // - Domestic: 9% (split model: 4.5% + 4.5%)
+    // - Cross-border: 10.5% (9% + 1.5% buffer, split 5.25%/5.25%)
+    const isCrossBorder = creatorCountry && isCrossBorderCountry(creatorCountry)
+    const baseRate = isCrossBorder
+      ? PLATFORM_FEE_RATE + CROSS_BORDER_BUFFER  // 10.5%
+      : PLATFORM_FEE_RATE                         // 9%
+
+    // If feeEffectiveRate is stored, use that (handles processor buffer on small txns)
+    // Otherwise fall back to the base rate calculation
+    const expectedRate = payment.feeEffectiveRate || baseRate
     const expectedFee = Math.round(paymentAmount * expectedRate)
 
     const actualFee = payment.feeCents || 0
     const variance = actualFee - expectedFee
 
     // Flag if variance is > 1% of the payment or > $1
-    if (Math.abs(variance) > Math.max(paymentAmount * 0.01, 100)) {
+    // BUT: if feeWasCapped (processor buffer applied), allow higher fees
+    const wasCapped = payment.feeWasCapped || false
+    const threshold = wasCapped
+      ? Math.max(paymentAmount * 0.05, 200)  // Higher tolerance for capped fees
+      : Math.max(paymentAmount * 0.01, 100)
+
+    if (Math.abs(variance) > threshold) {
       discrepancies.push({
         paymentId: payment.id,
         amount: paymentAmount,
@@ -271,6 +289,8 @@ financials.get('/fee-audit', auditSensitiveRead('fee_audit'), async (c) => {
         variancePercent: ((variance / paymentAmount) * 100).toFixed(2),
         purpose,
         feeModel: payment.feeModel || 'unknown',
+        isCrossBorder,
+        feeWasCapped: wasCapped,
         createdAt: payment.createdAt,
       })
     }
@@ -281,10 +301,11 @@ financials.get('/fee-audit', auditSensitiveRead('fee_audit'), async (c) => {
     discrepancies: discrepancies.length,
     discrepancyList: discrepancies,
     feeRates: {
-      personal: '9%',
-      service: '9%',
+      domestic: '9%',
+      crossBorder: '10.5%',
+      note: 'Cross-border includes 1.5% buffer split between subscriber and creator',
     },
-    note: 'Discrepancies flagged if variance > 1% of payment or > $1',
+    note: 'Discrepancies flagged if variance > 1% (or 5% for capped fees) of payment or > $1',
   })
 })
 

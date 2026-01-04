@@ -104,17 +104,19 @@ creators.get('/', auditSensitiveRead('creator_list'), async (c) => {
   const creatorIds = creatorsData.map(c => c.id)
 
   // Revenue per creator
+  // Note: grossCents = what subscriber paid, amountCents = base price (legacy)
   const revenueByCreator = await db.payment.groupBy({
     by: ['creatorId'],
     where: {
       creatorId: { in: creatorIds },
       status: 'succeeded',
     },
-    _sum: { amountCents: true, feeCents: true },
+    _sum: { grossCents: true, amountCents: true, feeCents: true },
     _count: true,
   })
   const revenueMap = new Map(revenueByCreator.map(r => [r.creatorId, {
-    gross: r._sum?.amountCents || 0,
+    // Use grossCents if available, fall back to amountCents for legacy payments
+    gross: r._sum?.grossCents || r._sum?.amountCents || 0,
     fees: r._sum?.feeCents || 0,
     count: r._count,
   }]))

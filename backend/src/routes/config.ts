@@ -37,12 +37,18 @@ config.get('/fees', (c) => {
   c.header('Cache-Control', 'public, max-age=3600') // 1 hour
 
   return c.json({
+    // Core rates
     platformFeeRate: PLATFORM_FEE_RATE,     // 0.09 (9%)
     splitRate: SPLIT_RATE,                   // 0.045 (4.5% each party)
-    crossBorderBuffer: CROSS_BORDER_BUFFER,  // 0.015 (1.5%)
+    crossBorderBuffer: CROSS_BORDER_BUFFER,  // 0.015 (1.5% extra for cross-border)
     // Derived values for convenience
     platformFeePercent: PLATFORM_FEE_RATE * 100,  // 9
     splitPercent: SPLIT_RATE * 100,               // 4.5
+    // Cross-border: base rate + buffer (9% + 1.5% = 10.5%)
+    domesticFeePercent: 9,
+    crossBorderFeePercent: 10.5,
+    domesticSplitPercent: 4.5,
+    crossBorderSplitPercent: 5.25,
   })
 })
 
@@ -86,8 +92,16 @@ config.get('/minimums', (c) => {
     minimums: publicMinimums,
     supportedCountries: getSupportedCountries(),
     meta: {
-      platformFee: '9%',
-      model: 'Platform absorbs all Stripe fees',
+      platformFee: '9% domestic, 10.5% cross-border',
+      model: 'Destination charges - platform absorbs all Stripe fees',
+      feeBreakdown: {
+        domestic: '9% total (4.5% subscriber + 4.5% creator)',
+        crossBorder: '10.5% total (5.25% subscriber + 5.25% creator)',
+      },
+      minimumBreakdown: {
+        domestic: '$25-95 dynamic (based on subscriber count)',
+        crossBorder: '$85 flat',
+      },
       payoutCadence: 'monthly',
       accountType: 'Express',
       formula: 'min = (fixedFees + accountFee/subs + payoutFee) / (platformRate - totalPercentFees)',
