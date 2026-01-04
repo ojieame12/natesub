@@ -58,7 +58,7 @@ async function setupCreator(
       currency: 'USD',
       purpose, // 'support' = personal, 'service' = requires $5/mo
       pricingModel: 'single',
-      singleAmount: purpose === 'service' ? 100 : 10, // Service providers charge more
+      singleAmount: 100, // Must meet $95 minimum for new US Stripe creators
       perks,
       paymentProvider: 'stripe',
       isPublic: true,

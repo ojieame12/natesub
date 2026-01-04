@@ -154,7 +154,8 @@ test.describe('Checkout Integration - API Level', () => {
     expect(token, 'Login must return a token').toBeTruthy()
 
     // Step 2: Create a profile for the creator (US-based for Stripe)
-    // Note: singleAmount is in display units (5 = $5.00), stored as 500 cents
+    // Note: singleAmount is in display units (100 = $100.00), stored as 10000 cents
+    // Must be >= $95 minimum for new US Stripe creators
     const profileResponse = await request.put('http://localhost:3001/profile', {
       data: {
         username: creatorUsername,
@@ -164,7 +165,7 @@ test.describe('Checkout Integration - API Level', () => {
         currency: 'USD',
         purpose: 'support',
         pricingModel: 'single',
-        singleAmount: 5, // $5.00 display → 500 cents stored
+        singleAmount: 100, // $100.00 display → 10000 cents (must meet $95 minimum)
         paymentProvider: 'stripe',
         isPublic: true,
       },
@@ -240,7 +241,7 @@ test.describe('Checkout Integration - API Level', () => {
         currency: 'USD',
         purpose: 'support',
         pricingModel: 'single',
-        singleAmount: 5,
+        singleAmount: 100, // Must meet $95 minimum for new US Stripe creators
         paymentProvider: 'stripe',
         isPublic: true,
       },
@@ -534,7 +535,7 @@ test.describe('Checkout Validation - API Level', () => {
         currency: 'USD',
         purpose: 'support',
         pricingModel: 'single',
-        singleAmount: 5,
+        singleAmount: 100, // Must meet $95 minimum for new US Stripe creators
         paymentProvider: 'stripe',
         isPublic: true,
       },

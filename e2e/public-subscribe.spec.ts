@@ -51,7 +51,7 @@ async function setupPublicCreator(
     currency: 'USD',
     purpose: 'support',
     pricingModel: options?.pricingModel || 'single',
-    singleAmount: options?.amount || 5,
+    singleAmount: options?.amount || 100, // Must meet $95 minimum for new US Stripe creators
     paymentProvider: 'stripe',
     isPublic: options?.isPublic !== false,
     bio: 'Support my work!',
@@ -59,8 +59,8 @@ async function setupPublicCreator(
 
   if (options?.pricingModel === 'tiers') {
     profileData.tiers = [
-      { id: `tier_${ts}_1`, name: 'Supporter', amount: 500, perks: ['Access to updates'] },
-      { id: `tier_${ts}_2`, name: 'Super Fan', amount: 1000, perks: ['Access to updates', 'Exclusive content'] },
+      { id: `tier_${ts}_1`, name: 'Supporter', amount: 10000, perks: ['Access to updates'] }, // $100
+      { id: `tier_${ts}_2`, name: 'Super Fan', amount: 15000, perks: ['Access to updates', 'Exclusive content'] }, // $150
     ]
   }
 
