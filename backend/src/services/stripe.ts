@@ -199,7 +199,7 @@ export async function createExpressAccount(
     settings: {
       payouts: {
         schedule: {
-          interval: 'daily',
+          interval: 'daily', // Payout when funds available (not 30x/month - batches same-day transfers)
         },
       },
     },

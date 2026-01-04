@@ -10,6 +10,7 @@ import {
   PLATFORM_FEE_RATE,
   SPLIT_RATE,
   CROSS_BORDER_BUFFER,
+  CROSS_BORDER_PAYOUT_COUNTRIES,
   isCrossBorderCountry,
 } from '../constants/fees.js'
 import {
@@ -118,6 +119,9 @@ config.get('/minimums', (c) => {
         processing: '2.9% + $0.30',
         intlCard: '1.5%',
         fx: '1%',
+      },
+      assumptions: {
+        crossBorderCountries: [...CROSS_BORDER_PAYOUT_COUNTRIES],
       },
       note: 'Use GET /config/my-minimum for creator-specific dynamic minimum',
     },

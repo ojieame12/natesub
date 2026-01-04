@@ -148,9 +148,9 @@ describe('Fee Transparency E2E', () => {
       const res = await app.fetch(new Request('http://localhost/config/minimums'))
       const data = await res.json()
 
-      expect(data.meta.assumptions.crossBorderCountries).toContain('NG')
-      expect(data.meta.assumptions.crossBorderCountries).toContain('GH')
-      expect(data.meta.assumptions.crossBorderCountries).toContain('KE')
+      expect(data.meta.assumptions.crossBorderCountries).toContain('Nigeria')
+      expect(data.meta.assumptions.crossBorderCountries).toContain('Ghana')
+      expect(data.meta.assumptions.crossBorderCountries).toContain('Kenya')
     })
   })
 
