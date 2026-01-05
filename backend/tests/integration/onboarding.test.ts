@@ -1398,7 +1398,7 @@ describe('onboarding endpoints', () => {
       expect(body.error).toContain('Minimum')
     })
 
-    it('accepts USD amount at or above dynamic minimum ($15 for new US Stripe creators)', async () => {
+    it('accepts USD amount at or above dynamic minimum ($60 for new US Stripe creators)', async () => {
       await createTestUserWithSession('usd-exact-min@test.com')
 
       const res = await authRequest('/profile', {
@@ -1411,7 +1411,7 @@ describe('onboarding endpoints', () => {
           currency: 'USD',
           purpose: 'tips',
           pricingModel: 'single',
-          singleAmount: 15, // $15 - meets dynamic minimum for new US Stripe creators
+          singleAmount: 60, // $60 - meets dynamic minimum for new US Stripe creators (includes processing)
           paymentProvider: 'stripe',
         }),
       })
@@ -1423,7 +1423,7 @@ describe('onboarding endpoints', () => {
   describe('PATCH /profile', () => {
     // Helper to create a profile first (PATCH requires existing profile)
     // Note: singleAmount must meet dynamic minimum for US Stripe creators
-    // Dynamic minimum is ~$95 for new creators (0 subscribers) due to $2/month account fee
+    // Dynamic minimum is $60 for new creators (0 subscribers) due to processing + $2/month account fee
     async function createProfileForPatch(email: string, purpose = 'tips') {
       const { user, rawToken } = await createTestUserWithSession(email)
 

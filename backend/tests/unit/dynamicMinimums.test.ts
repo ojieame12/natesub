@@ -90,8 +90,10 @@ describe('Dynamic Minimum Calculations', () => {
       const ukMin = calculateDynamicMinimumUSD({ country: 'United Kingdom', subscriberCount: 1 })
 
       // Domestic countries use dynamic calculation (lower than cross-border)
-      expect(usMin).toBe(15)
-      expect(ukMin).toBe(15)
+      // US: $60 for 1 sub (includes processing + $2 account fee)
+      // UK: $75 for 1 sub (includes processing + $2.50 account fee + 0.25% cross-border)
+      expect(usMin).toBe(60)
+      expect(ukMin).toBe(75)
     })
   })
 
@@ -156,14 +158,20 @@ describe('Dynamic Minimum Calculations', () => {
       for (const country of countries) {
         const breakdown = getFeeBreakdown(country)
 
-        // Platform only pays: billing + payout + cross-border transfer
+        // Platform pays ALL: processing + billing + payout + cross-border transfer
         const sum =
+          breakdown.processingPercent +
           breakdown.billingPercent +
           breakdown.payoutPercent +
           breakdown.crossBorderTransferPercent
 
         expect(breakdown.totalPercentFees).toBeCloseTo(sum, 6)
       }
+    })
+
+    it('should include processing percent', () => {
+      const breakdown = getFeeBreakdown('United States')
+      expect(breakdown.processingPercent).toBe(0.035) // 3.5%
     })
 
     it('should include payout percent', () => {
@@ -187,10 +195,10 @@ describe('Dynamic Minimum Calculations', () => {
     it('should show correct platform costs for cross-border countries', () => {
       const dynamicResult = getDynamicMinimum({ country: 'Nigeria', subscriberCount: 10 })
 
-      // Platform pays: 0.7% billing + 0.25% payout + 1% cross-border = 1.95%
-      expect(dynamicResult.percentFees).toBeCloseTo(0.0195, 4)
-      // Net margin: 10.5% - 1.95% = 8.55%
-      expect(dynamicResult.netMarginRate).toBeCloseTo(0.0855, 4)
+      // Platform pays: 3.5% processing + 0.7% billing + 0.25% payout + 1% cross-border = 5.45%
+      expect(dynamicResult.percentFees).toBeCloseTo(0.0545, 4)
+      // Net margin: 10.5% - 5.45% = 5.05%
+      expect(dynamicResult.netMarginRate).toBeCloseTo(0.0505, 4)
       expect(dynamicResult.minimumUSD).toBe(85)
     })
 

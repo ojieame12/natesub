@@ -76,26 +76,26 @@ describe('Fee Model Consistency', () => {
     })
   })
 
-  describe('US domestic fees (platform costs only)', () => {
-    it('US total percent fees should be ~0.95% (billing + payout only)', () => {
+  describe('US domestic fees (destination charges = platform pays all)', () => {
+    it('US total percent fees should be ~4.45% (processing + billing + payout)', () => {
       const breakdown = getFeeBreakdown('United States')
-      // 0.7% billing + 0.25% payout + 0% cross-border transfer = 0.95%
-      expect(breakdown.totalPercentFees).toBeCloseTo(0.0095, 4)
+      // 3.5% processing + 0.7% billing + 0.25% payout + 0% cross-border = 4.45%
+      expect(breakdown.totalPercentFees).toBeCloseTo(0.0445, 4)
     })
 
-    it('US net margin should be ~8.05% (9% - 0.95%)', () => {
+    it('US net margin should be ~4.55% (9% - 4.45%)', () => {
       const breakdown = getFeeBreakdown('United States')
-      expect(breakdown.netMarginRate).toBeCloseTo(0.0805, 4)
+      expect(breakdown.netMarginRate).toBeCloseTo(0.0455, 4)
     })
 
-    it('US minimum for 1 subscriber should be $15', () => {
+    it('US minimum for 1 subscriber should be $60', () => {
       const min = getDynamicMinimum({ country: 'United States', subscriberCount: 1 })
-      expect(min.minimumUSD).toBe(15)
+      expect(min.minimumUSD).toBe(60)
     })
 
-    it('US minimum for 20 subscribers should be $5', () => {
+    it('US minimum for 20 subscribers should be $15', () => {
       const min = getDynamicMinimum({ country: 'United States', subscriberCount: 20 })
-      expect(min.minimumUSD).toBe(5)
+      expect(min.minimumUSD).toBe(15)
     })
   })
 
@@ -107,18 +107,18 @@ describe('Fee Model Consistency', () => {
       expect(ukBreakdown.totalPercentFees).toBeGreaterThan(usBreakdown.totalPercentFees)
     })
 
-    it('UK and US have same minimum (both domestic)', () => {
+    it('UK has higher minimum than US due to higher account fees and cross-border', () => {
       const ukMin = getDynamicMinimum({ country: 'United Kingdom', subscriberCount: 1 })
       const usMin = getDynamicMinimum({ country: 'United States', subscriberCount: 1 })
-      // With corrected model, both are $15 (rounding to $5)
-      expect(ukMin.minimumUSD).toBe(usMin.minimumUSD)
+      // UK: $2.50/month account + 0.25% cross-border > US: $2.00/month + 0%
+      expect(ukMin.minimumUSD).toBeGreaterThan(usMin.minimumUSD)
     })
   })
 
   describe('monthly account fee amortization', () => {
-    it('account fee is $0.67/month (per creator, not per subscriber)', () => {
+    it('account fee is $2.00/month for US creators', () => {
       const breakdown = getFeeBreakdown('United States')
-      expect(breakdown.monthlyAccountFeeCents).toBe(67)
+      expect(breakdown.monthlyAccountFeeCents).toBe(200)
     })
 
     it('minimum decreases as subscriber count increases', () => {
@@ -135,13 +135,13 @@ describe('Fee Model Consistency', () => {
       const min1 = getDynamicMinimum({ country: 'United States', subscriberCount: 1 })
       const min20 = getDynamicMinimum({ country: 'United States', subscriberCount: 20 })
 
-      // At 1 sub: fixed costs include full $0.67 account fee
-      // At 20 subs: fixed costs include $0.67/20 = $0.03 per sub
+      // At 1 sub: fixed costs include full $2.00 account fee
+      // At 20 subs: fixed costs include $2.00/20 = $0.10 per sub
       expect(min1.fixedCents).toBeGreaterThan(min20.fixedCents)
 
-      // Difference should be roughly $0.67 - $0.03 = $0.64 (64 cents)
+      // Difference should be roughly $2.00 - $0.10 = $1.90 (190 cents)
       const diff = min1.fixedCents - min20.fixedCents
-      expect(diff).toBeCloseTo(64, 0)
+      expect(diff).toBeCloseTo(190, 0)
     })
 
     it('cross-border countries also amortize but stay at $85 floor', () => {
