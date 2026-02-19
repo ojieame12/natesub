@@ -64,7 +64,6 @@ export default function PayoutHistory() {
     const navigate = useNavigate()
     const { data: userData } = useCurrentUser()
     const currencyCode = userData?.profile?.currency || 'USD'
-    const currencySymbol = getCurrencySymbol(currencyCode)
 
     const {
         data,
