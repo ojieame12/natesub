@@ -4,7 +4,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { getErrorInfo } from './utils'
 
-const API_URL = process.env.API_URL || 'https://natesub-production-b530.up.railway.app'
+const API_URL = process.env.API_URL || 'https://natesub-production.up.railway.app'
 const JOBS_API_KEY = process.env.JOBS_API_KEY
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {

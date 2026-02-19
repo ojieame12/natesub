@@ -163,8 +163,8 @@ describe('Job Health Tracking', () => {
       // Billing should run daily (24h)
       expect(JOB_SCHEDULES.billing.intervalSeconds).toBe(24 * 60 * 60)
 
-      // Retries should run hourly
-      expect(JOB_SCHEDULES.retries.intervalSeconds).toBe(60 * 60)
+      // Retries should run every 6 hours (matches vercel.json cron)
+      expect(JOB_SCHEDULES.retries.intervalSeconds).toBe(6 * 60 * 60)
 
       // Balance sync should run every 30 minutes
       expect(JOB_SCHEDULES['sync-balances'].intervalSeconds).toBe(30 * 60)

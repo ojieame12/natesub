@@ -14,11 +14,11 @@ const JOB_HEALTH_PREFIX = 'job_health:'
 // If a job hasn't run in 2x this interval, it's considered stale
 export const JOB_SCHEDULES: Record<string, { intervalSeconds: number; description: string }> = {
   'billing': { intervalSeconds: 24 * 60 * 60, description: 'Process recurring billing (daily)' },
-  'retries': { intervalSeconds: 60 * 60, description: 'Process payment retries (hourly)' },
+  'retries': { intervalSeconds: 6 * 60 * 60, description: 'Process payment retries (every 6 hours)' },
   'payroll': { intervalSeconds: 15 * 24 * 60 * 60, description: 'Generate payroll periods (1st/16th)' },
   'dunning': { intervalSeconds: 24 * 60 * 60, description: 'Send dunning emails (daily)' },
   'cancellations': { intervalSeconds: 24 * 60 * 60, description: 'Send cancellation notices (daily)' },
-  'transfers': { intervalSeconds: 60 * 60, description: 'Monitor stuck transfers (hourly)' },
+  'transfers': { intervalSeconds: 60 * 60, description: 'Monitor stuck transfers (every 30 min)' },
   'reconciliation': { intervalSeconds: 24 * 60 * 60, description: 'Reconcile Paystack transactions (nightly)' },
   'scheduled-reminders': { intervalSeconds: 60 * 60, description: 'Process scheduled reminders (hourly)' },
   'cleanup-auth': { intervalSeconds: 24 * 60 * 60, description: 'Clean expired sessions/OTPs (daily)' },

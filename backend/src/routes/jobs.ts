@@ -165,15 +165,24 @@ jobs.post('/notifications', async (c) => {
   console.log('[jobs] Starting all notification jobs')
 
   try {
+    const startTime = Date.now()
     const [dunning, cancellations] = await Promise.all([
       sendDunningEmails(),
       sendCancellationEmails(),
     ])
+    const durationMs = Date.now() - startTime
+
+    // Record sub-job health so JOB_SCHEDULES staleness tracking works
+    await Promise.all([
+      recordJobRun('dunning', durationMs, true),
+      recordJobRun('cancellations', durationMs, true),
+    ]).catch(() => {}) // Non-critical — don't fail the endpoint
 
     return c.json({
       success: true,
       dunning,
       cancellations,
+      durationMs,
     })
   } catch (error: any) {
     return c.json(safeError(ErrorCodes.JOB_FAILED, error, 'jobs/notifications'), 500)
