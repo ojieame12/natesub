@@ -358,7 +358,7 @@ const suggestedAmountsMap: Record<string, SuggestedAmountsConfig> = {
     // MXN (~17 per USD)
     MXN: { personal: [200, 500, 1000, 2000], service: [2000, 5000, 10000, 20000] },
     // ZAR (~18 per USD)
-    ZAR: { personal: [200, 500, 1000, 2000], service: [2000, 5000, 10000, 20000] },
+    ZAR: { personal: [850, 1000, 1500, 2000], service: [2000, 5000, 10000, 20000] },
     // THB (~35 per USD)
     THB: { personal: [350, 1000, 2000, 5000], service: [3500, 10000, 20000, 50000] },
     // PHP (~56 per USD)
@@ -525,6 +525,6 @@ export function calculateFeePreview(
         creatorFee: creatorFee,        // What creator pays
         totalFee: totalFee,            // Total platform fee
         effectiveRate: splitRate,
-        effectiveRatePercent: `${(splitRate * 100).toFixed(0)}%`,
+        effectiveRatePercent: `${(splitRate * 100).toFixed(2)}%`,
     }
 }

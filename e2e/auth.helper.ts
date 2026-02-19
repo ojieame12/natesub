@@ -262,15 +262,15 @@ const COUNTRY_CURRENCIES: Record<string, string> = {
 
 // E2E tests run in stub mode which skips minimum validation
 // Using reasonable test amounts (domestic math works at $50)
-// Cross-border countries (NG, GH, KE, ZA) have $85 USD minimum
+// Cross-border countries (NG, GH, KE, ZA) have $45 USD minimum
 const MIN_SAFE_SINGLE_AMOUNT: Record<string, number> = {
   USD: 50,
   GBP: 40,
   EUR: 50,
-  NGN: 140000,  // $85 * 1600 = 136,000 + buffer
-  KES: 11500,   // $85 * 130 = 11,050 + buffer
-  GHS: 1400,    // $85 * 16.1 = 1,369 + buffer
-  ZAR: 1600,    // $85 * 18.2 = 1,547 + buffer
+  NGN: 76000,   // $45 * 1600 = 72,000 + buffer
+  KES: 6200,    // $45 * 130 = 5,850 + buffer
+  GHS: 750,     // $45 * 16.1 = 725 + buffer
+  ZAR: 850,     // $45 * 18.2 = 819 + buffer
 }
 
 function getSafeSingleAmount(currency: string, fallback: number): number {

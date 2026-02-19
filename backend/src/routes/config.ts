@@ -101,7 +101,7 @@ config.get('/minimums', (c) => {
       },
       minimumBreakdown: {
         domestic: '$5-15 dynamic (based on subscriber count)',
-        crossBorder: '$85 floor',
+        crossBorder: '$45 floor',
       },
       payoutCadence: 'monthly',
       accountType: 'Express',

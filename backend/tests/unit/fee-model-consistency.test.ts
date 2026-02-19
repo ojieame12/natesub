@@ -71,7 +71,7 @@ describe('Fee Model Consistency', () => {
       // Higher minimum for new creators (amortizing $2 account fee)
       expect(min1).toBeGreaterThan(min20)
 
-      // Dynamic minimum varies with subscriber count (unlike cross-border flat $85)
+      // Dynamic minimum varies with subscriber count (unlike cross-border flat $45)
       expect(min1).not.toBe(min20)
     })
   })
@@ -144,13 +144,13 @@ describe('Fee Model Consistency', () => {
       expect(diff).toBeCloseTo(190, 0)
     })
 
-    it('cross-border countries also amortize but stay at $85 floor', () => {
+    it('cross-border countries also amortize but stay at $45 floor', () => {
       const ng1 = getDynamicMinimum({ country: 'Nigeria', subscriberCount: 1 })
       const ng20 = getDynamicMinimum({ country: 'Nigeria', subscriberCount: 20 })
 
-      // Both hit the $85 floor
-      expect(ng1.minimumUSD).toBe(85)
-      expect(ng20.minimumUSD).toBe(85)
+      // Both hit the $45 floor
+      expect(ng1.minimumUSD).toBe(45)
+      expect(ng20.minimumUSD).toBe(45)
 
       // But fixed costs still differ (amortization still happens)
       expect(ng1.fixedCents).toBeGreaterThan(ng20.fixedCents)
@@ -172,14 +172,13 @@ describe('Fee Model Consistency', () => {
       expect(result.feeCents).toBe(1050) // 10.5% total
     })
 
-    it('should use flat $85 minimum for cross-border countries', () => {
+    it('should use flat $45 minimum for cross-border countries', () => {
       const min1 = calculateDynamicMinimumUSD({ country: 'Nigeria', subscriberCount: 1 })
       const min20 = calculateDynamicMinimumUSD({ country: 'Nigeria', subscriberCount: 20 })
 
-      // Cross-border countries use $85 floor for safety
-      // This covers: FX volatility, transfer fees, account fees, operational margin
-      expect(min1).toBe(85)
-      expect(min20).toBe(85)
+      // Cross-border countries use $45 floor (margin-positive at 3+ subs)
+      expect(min1).toBe(45)
+      expect(min20).toBe(45)
     })
 
     it('all cross-border countries have minimum at or above $25 floor', () => {
@@ -253,7 +252,7 @@ describe('Fee Model Consistency', () => {
       expect(data.meta.feeBreakdown.domestic).toBe('9% total (4.5% subscriber + 4.5% creator)')
       expect(data.meta.feeBreakdown.crossBorder).toBe('10.5% total (5.25% subscriber + 5.25% creator)')
       expect(data.meta.minimumBreakdown.domestic).toBe('$5-15 dynamic (based on subscriber count)')
-      expect(data.meta.minimumBreakdown.crossBorder).toBe('$85 floor')
+      expect(data.meta.minimumBreakdown.crossBorder).toBe('$45 floor')
     })
 
     it('GET /config/minimums/:country returns minimum >= $25 for cross-border', async () => {
@@ -297,7 +296,7 @@ describe('Test Matrix Scenarios', () => {
   // |----------|-----------------|------------------|----------------|
   // | US $100 | $104.50 | $95.50 | $9.00 (9%) |
   // | NG $100 | $105.25 | $94.75 | $10.50 (10.5%) |
-  // | NG $85 (minimum) | $89.46 | $80.54 | $8.92 (10.5%) |
+  // | NG $45 (minimum) | $47.36 | $42.64 | $4.73 (10.5%) |
 
   it('US $100: subscriber pays $104.50, creator gets $95.50', () => {
     const result = calculateServiceFee(10000, 'USD', 'personal', undefined, false)
@@ -313,12 +312,12 @@ describe('Test Matrix Scenarios', () => {
     expect(result.feeCents).toBe(1050) // $10.50 (10.5%)
   })
 
-  it('NG $85 minimum cross-border: subscriber pays ~$89.46, creator gets ~$80.54', () => {
-    const result = calculateServiceFee(8500, 'USD', 'personal', undefined, true)
-    // 8500 * 1.0525 = 8946.25 (rounds to 8947 with ceiling)
-    expect(result.grossCents).toBeCloseTo(8947, 0) // ~$89.47
-    // 8500 - (8500 * 0.0525) = 8053.75 (rounds to 8054)
-    expect(result.netCents).toBeCloseTo(8054, 0) // ~$80.54
+  it('NG $45 minimum cross-border: subscriber pays ~$47.36, creator gets ~$42.64', () => {
+    const result = calculateServiceFee(4500, 'USD', 'personal', undefined, true)
+    // 4500 * 1.0525 = 4736.25 (rounds to 4737 with ceiling)
+    expect(result.grossCents).toBeCloseTo(4737, 0) // ~$47.37
+    // 4500 - (4500 * 0.0525) = 4263.75 (rounds to 4264)
+    expect(result.netCents).toBeCloseTo(4264, 0) // ~$42.64
     // Fee = gross - net
     expect(result.feeCents).toBe(result.grossCents - result.netCents)
   })

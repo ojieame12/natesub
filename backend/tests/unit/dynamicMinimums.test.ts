@@ -71,18 +71,20 @@ describe('Dynamic Minimum Calculations', () => {
       }
     })
 
-    it('should use $85 floor minimum for cross-border countries', () => {
-      // Cross-border countries use $85 floor (high margin covers Connect fees)
+    it('should use $45 floor minimum for cross-border countries', () => {
+      // Cross-border countries use $45 floor (margin-positive at 3+ subs)
       const ngMin1 = calculateDynamicMinimumUSD({ country: 'Nigeria', subscriberCount: 1 })
       const ngMin20 = calculateDynamicMinimumUSD({ country: 'Nigeria', subscriberCount: 20 })
       const keMin1 = calculateDynamicMinimumUSD({ country: 'Kenya', subscriberCount: 1 })
       const ghMin1 = calculateDynamicMinimumUSD({ country: 'Ghana', subscriberCount: 1 })
 
-      // All cross-border countries use $85 floor
-      expect(ngMin1).toBe(85)
-      expect(ngMin20).toBe(85)
-      expect(keMin1).toBe(85)
-      expect(ghMin1).toBe(85)
+      // All cross-border countries are at or above $45 floor
+      // NG and GH natural minimum is below $45, so floor kicks in
+      expect(ngMin1).toBe(45)
+      expect(ngMin20).toBe(45)
+      expect(ghMin1).toBe(45)
+      // KE has higher fixed costs (payout: $1.00, account: $1.85) so natural min > $45
+      expect(keMin1).toBeGreaterThanOrEqual(45)
     })
 
     it('should have dynamic minimum for domestic countries', () => {
@@ -199,7 +201,7 @@ describe('Dynamic Minimum Calculations', () => {
       expect(dynamicResult.percentFees).toBeCloseTo(0.0545, 4)
       // Net margin: 10.5% - 5.45% = 5.05%
       expect(dynamicResult.netMarginRate).toBeCloseTo(0.0505, 4)
-      expect(dynamicResult.minimumUSD).toBe(85)
+      expect(dynamicResult.minimumUSD).toBe(45)
     })
 
     it('should have positive net margin rate', () => {

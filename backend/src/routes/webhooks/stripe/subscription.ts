@@ -44,6 +44,9 @@ export async function handleSubscriptionDeleted(event: Stripe.Event) {
 
   const subscription = await db.subscription.findUnique({
     where: { stripeSubscriptionId: stripeSubscription.id },
+    include: {
+      subscriber: { select: { email: true } },
+    },
   })
 
   if (!subscription) return
@@ -56,13 +59,17 @@ export async function handleSubscriptionDeleted(event: Stripe.Event) {
     },
   })
 
-  // Create activity event
+  // Create activity event with subscriber context for meaningful notifications
   await db.activity.create({
     data: {
       userId: subscription.creatorId,
       type: 'subscription_canceled',
       payload: {
         subscriptionId: subscription.id,
+        subscriberName: subscription.subscriber?.email || null,
+        amount: subscription.amount,
+        currency: (subscription.currency || 'USD').toUpperCase(),
+        tierName: subscription.tierName || null,
       },
     },
   })

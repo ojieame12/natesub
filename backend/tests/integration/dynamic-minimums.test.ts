@@ -92,8 +92,8 @@ async function createStripeCreator(options: {
       username: `creator_${user.id.slice(0, 8)}`,
       displayName: 'Test Creator',
       country,
-      countryCode: country === 'Nigeria' ? 'NG' : country === 'United States' ? 'US' : 'GB',
-      currency: country === 'Nigeria' ? 'NGN' : 'USD',
+      countryCode: { Nigeria: 'NG', 'United States': 'US', 'South Africa': 'ZA', Kenya: 'KE', Ghana: 'GH' }[country] || 'GB',
+      currency: { Nigeria: 'NGN', 'South Africa': 'ZAR', Kenya: 'KES', Ghana: 'GHS' }[country] || 'USD',
       purpose: 'support',
       paymentProvider: 'stripe',
       stripeAccountId: 'acct_test_123',
@@ -323,20 +323,20 @@ describe('dynamic minimums', () => {
       expect(res.status).toBe(200)
     })
 
-    it('cross-border countries use flat $85 minimum', async () => {
-      // Nigeria is a cross-border country - uses flat $85 minimum
+    it('cross-border countries use flat $45 minimum', async () => {
+      // Nigeria is a cross-border country - uses flat $45 minimum
       const { rawToken } = await createStripeCreator({
         country: 'Nigeria',
         subscriberCount: 20,
       })
 
-      // Cross-border countries have flat $85 minimum (guarantees profit from sub #1)
+      // Cross-border countries have flat $45 minimum (margin-positive at 3+ subs)
       const floorMin = getDynamicMinimum({ country: 'Nigeria', subscriberCount: 20 })
       const newCreatorMin = getDynamicMinimum({ country: 'Nigeria', subscriberCount: 1 })
 
-      // Both should be $85 (flat minimum)
-      expect(floorMin.minimumUSD).toBe(85)
-      expect(newCreatorMin.minimumUSD).toBe(85)
+      // Both should be $45 (flat minimum)
+      expect(floorMin.minimumUSD).toBe(45)
+      expect(newCreatorMin.minimumUSD).toBe(45)
 
       // Should be able to set at minimum (in NGN)
       const res = await authRequest(
@@ -349,6 +349,80 @@ describe('dynamic minimums', () => {
       )
 
       expect(res.status).toBe(200)
+    })
+
+    it('ZA new creator minimum is above $45 floor (account fee amortization)', async () => {
+      // South Africa new creator has higher minimum than the $45 floor
+      // because $2/month account fee amortized across 1 subscriber is expensive
+      const zaMin = getDynamicMinimum({ country: 'South Africa', subscriberCount: 0 })
+      expect(zaMin.minimumUSD).toBeGreaterThan(45) // Should be $60
+
+      const { rawToken } = await createStripeCreator({
+        country: 'South Africa',
+        subscriberCount: 0,
+      })
+
+      // Setting $45 (the floor) should be REJECTED for new ZA creator
+      const zaLocal45 = zaMin.minimumLocal - 100 // Just below actual minimum
+      const res = await authRequest(
+        '/profile',
+        {
+          method: 'PATCH',
+          body: JSON.stringify({ singleAmount: zaLocal45 }),
+        },
+        rawToken
+      )
+
+      expect(res.status).toBe(400)
+      const body = await res.json()
+      expect(body.minimumRequired).toBe(zaMin.minimumLocal)
+    })
+
+    it('ZA creator with 3+ subscribers can use $45 floor', async () => {
+      const zaMin3 = getDynamicMinimum({ country: 'South Africa', subscriberCount: 3 })
+      expect(zaMin3.minimumUSD).toBe(45) // At 3 subs, floor kicks in
+
+      const { rawToken } = await createStripeCreator({
+        country: 'South Africa',
+        subscriberCount: 3,
+      })
+
+      const res = await authRequest(
+        '/profile',
+        {
+          method: 'PATCH',
+          body: JSON.stringify({ singleAmount: zaMin3.minimumLocal }),
+        },
+        rawToken
+      )
+
+      expect(res.status).toBe(200)
+    })
+
+    it('KE new creator minimum is above $45 floor (higher fixed costs)', async () => {
+      // Kenya has higher fixed costs ($1.00 payout + $1.85 account fee)
+      const keMin = getDynamicMinimum({ country: 'Kenya', subscriberCount: 0 })
+      expect(keMin.minimumUSD).toBeGreaterThan(45) // Should be $65
+
+      const { rawToken } = await createStripeCreator({
+        country: 'Kenya',
+        subscriberCount: 0,
+      })
+
+      // Setting at the floor minimum (in KES) should be REJECTED
+      const kesTooLow = keMin.minimumLocal - 500 // Just below actual minimum
+      const res = await authRequest(
+        '/profile',
+        {
+          method: 'PATCH',
+          body: JSON.stringify({ singleAmount: kesTooLow }),
+        },
+        rawToken
+      )
+
+      expect(res.status).toBe(400)
+      const body = await res.json()
+      expect(body.minimumRequired).toBe(keMin.minimumLocal)
     })
 
     it('validates tier amounts against dynamic minimum', async () => {

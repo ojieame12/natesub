@@ -224,7 +224,7 @@ export async function handleChargeRefunded(event: Stripe.Event) {
       payload: {
         subscriptionId: subscription.id,
         amount: refundAmount,
-        currency: charge.currency,
+        currency: charge.currency.toUpperCase(),
         reason: charge.refunds?.data[0]?.reason || 'requested_by_customer',
       },
     },
@@ -253,7 +253,7 @@ export async function handlePaymentIntentFailed(event: Stripe.Event) {
       payload: {
         paymentIntentId: paymentIntent.id,
         amount: paymentIntent.amount,
-        currency: paymentIntent.currency,
+        currency: paymentIntent.currency.toUpperCase(),
         failureCode: lastError?.code,
         failureMessage: failureReason,
         customerEmail: paymentIntent.receipt_email,

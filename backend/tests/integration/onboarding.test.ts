@@ -1166,7 +1166,7 @@ describe('onboarding endpoints', () => {
       await createTestUserWithSession('za-stripe@test.com')
 
       // ZA is cross-border, so must use USD/GBP/EUR for Stripe
-      // $85 minimum for cross-border countries
+      // $45 minimum for cross-border countries
       const res = await authRequest('/profile', {
         method: 'PUT',
         body: JSON.stringify({
@@ -1177,7 +1177,7 @@ describe('onboarding endpoints', () => {
           currency: 'USD', // Cross-border countries use USD/GBP/EUR
           purpose: 'tips',
           pricingModel: 'single',
-          singleAmount: 8500, // $85 cross-border minimum
+          singleAmount: 4500, // $45 cross-border minimum
           paymentProvider: 'stripe',
         }),
       })

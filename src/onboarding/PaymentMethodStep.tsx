@@ -212,8 +212,8 @@ export default function PaymentMethodStep() {
         if (store.pricingModel === 'single') {
             const needsAutoFix = !finalSingleAmount || (isStripe && finalSingleAmount < minAmount)
             if (needsAutoFix) {
-                // Use the first suggested amount as a sensible default
-                finalSingleAmount = suggestedAmounts[0]
+                // Use the minimum amount or first suggested amount, whichever is higher
+                finalSingleAmount = Math.max(suggestedAmounts[0], minAmount)
                 store.setPricing('single', store.tiers, finalSingleAmount)
             }
         }
@@ -224,10 +224,10 @@ export default function PaymentMethodStep() {
         if (store.pricingModel === 'tiers' && store.tiers && store.tiers.length > 0) {
             const hasInvalidTiers = store.tiers.some(t => !t.amount || (isStripe && t.amount < minAmount))
             if (hasInvalidTiers) {
-                // Reset tiers to suggested amounts for this currency
+                // Reset tiers to suggested amounts or minimum, whichever is higher
                 const normalizedTiers = store.tiers.map((tier, i) => ({
                     ...tier,
-                    amount: suggestedAmounts[Math.min(i, suggestedAmounts.length - 1)] || minAmount,
+                    amount: Math.max(suggestedAmounts[Math.min(i, suggestedAmounts.length - 1)] || minAmount, minAmount),
                 }))
                 store.setPricing('tiers', normalizedTiers, store.singleAmount)
             }

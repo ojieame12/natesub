@@ -790,8 +790,6 @@ export interface CrossBorderCurrency {
 
 export const CROSS_BORDER_CURRENCIES: CrossBorderCurrency[] = [
   { code: 'USD', symbol: '$', label: 'USD' },
-  { code: 'GBP', symbol: '£', label: 'GBP' },
-  { code: 'EUR', symbol: '€', label: 'EUR' },
 ]
 
 /**
@@ -807,7 +805,7 @@ export function getCrossBorderCurrencyOptions(): CrossBorderCurrency[] {
 
 /**
  * Check if a country uses Stripe cross-border payouts.
- * These countries have higher fees (10.5% vs 9%) and $85 minimum.
+ * These countries have higher fees (10.5% vs 9%) and $45 minimum.
  * All countries use destination charges - platform absorbs Stripe fees.
  */
 export function isStripeCrossBorderCountry(code: string | null | undefined): boolean {

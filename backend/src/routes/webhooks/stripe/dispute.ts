@@ -233,7 +233,7 @@ export async function handleDisputeCreated(event: Stripe.Event) {
       payload: {
         subscriptionId: subscription.id,
         amount: dispute.amount,
-        currency: dispute.currency,
+        currency: dispute.currency.toUpperCase(),
         reason: dispute.reason,
         status: dispute.status,
       },

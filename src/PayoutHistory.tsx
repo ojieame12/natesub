@@ -161,14 +161,14 @@ export default function PayoutHistory() {
                         <div className="health-stats">
                             <div className="health-stat">
                                 <span className="health-stat-value">
-                                    {currencySymbol}{centsToDisplayAmount(accountHealth.currentBalance.available, accountHealth.currentBalance.currency)}
+                                    {getCurrencySymbol(accountHealth.currentBalance.currency)}{centsToDisplayAmount(accountHealth.currentBalance.available, accountHealth.currentBalance.currency)}
                                 </span>
                                 <span className="health-stat-label">Available</span>
                             </div>
                             {accountHealth.currentBalance.pending > 0 && (
                                 <div className="health-stat pending">
                                     <span className="health-stat-value">
-                                        {currencySymbol}{centsToDisplayAmount(accountHealth.currentBalance.pending, accountHealth.currentBalance.currency)}
+                                        {getCurrencySymbol(accountHealth.currentBalance.currency)}{centsToDisplayAmount(accountHealth.currentBalance.pending, accountHealth.currentBalance.currency)}
                                     </span>
                                     <span className="health-stat-label">Pending</span>
                                 </div>
@@ -179,7 +179,7 @@ export default function PayoutHistory() {
                             <div className="health-last-payout">
                                 <Building2 size={14} />
                                 <span>
-                                    Last payout: {currencySymbol}{centsToDisplayAmount(accountHealth.lastPayout.amount, accountHealth.currentBalance.currency)} on {formatShortDate(accountHealth.lastPayout.date)}
+                                    Last payout: {getCurrencySymbol(accountHealth.currentBalance.currency)}{centsToDisplayAmount(accountHealth.lastPayout.amount, accountHealth.currentBalance.currency)} on {formatShortDate(accountHealth.lastPayout.date)}
                                 </span>
                             </div>
                         )}

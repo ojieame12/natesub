@@ -71,13 +71,13 @@ describe('Fee Transparency E2E', () => {
   })
 
   describe('minimum validation consistency', () => {
-    it('cross-border countries have $85 minimum', async () => {
+    it('cross-border countries have $45 minimum', async () => {
       const countries = ['Nigeria', 'Ghana', 'Kenya']
 
       for (const country of countries) {
         const res = await app.fetch(new Request(`http://localhost/config/minimums/${country}`))
         const data = await res.json()
-        expect(data.usd).toBe(85)
+        expect(data.usd).toBe(45)
       }
     })
 
@@ -91,8 +91,8 @@ describe('Fee Transparency E2E', () => {
       // Should have minimums, but not necessarily the same
       expect(data1.usd).toBeGreaterThan(0)
       expect(data2.usd).toBeGreaterThan(0)
-      // And definitely not $85 flat
-      expect(data1.usd).toBeLessThan(85)
+      // And definitely not $45 flat
+      expect(data1.usd).toBeLessThan(45)
     })
   })
 

@@ -137,7 +137,12 @@ export default function PersonalReviewStep() {
     const currencySymbol = getCurrencySymbol(resolvedCurrency as string)
 
     // Price input as string for free editing
-    const [priceInput, setPriceInput] = useState(String(singleAmount || 10))
+    // Cross-border new creators have dynamic minimums ($45-$65 depending on country).
+    // Default to $65 (highest new-creator min: Kenya) to avoid showing a price the
+    // backend rejects. The auto-bump effect will adjust once myMinimum API loads.
+    // NG/GH creators can freely lower to their actual minimum ($45).
+    const initialPrice = singleAmount || (isCrossBorderStripe ? 65 : 10)
+    const [priceInput, setPriceInput] = useState(String(initialPrice))
     const priceDebounceRef = useRef<NodeJS.Timeout | null>(null)
     // Track if user has manually edited the price (prevents overwriting their input on hydration)
     const hasUserEditedPriceRef = useRef(false)
@@ -320,9 +325,10 @@ export default function PersonalReviewStep() {
     // Calculate minimum amount based on available data:
     // 1. Dynamic minimum (based on subscriber count) - best for established creators
     // 2. Static country minimum - for new creators
-    // 3. Currency-based default - fallback
+    // 3. Cross-border floor ($45 USD) - safety net for cross-border before API loads
+    // 4. Currency-based default - final fallback
     // Paystack uses currency-based minimums (different economics, no hard block)
-    let minAmount = getMinimumAmount(resolvedCurrency) // Default fallback
+    let minAmount = isCrossBorderStripe ? 45 : getMinimumAmount(resolvedCurrency) // Cross-border floor or currency default
 
     if (resolvedPaymentProvider === 'stripe' && myMinimum) {
         // Use dynamic minimum (based on subscriber count)
@@ -338,6 +344,18 @@ export default function PersonalReviewStep() {
 
     // USD minimum for display (helpful context for cross-border creators)
     const minAmountUsd = myMinimum?.minimum.usd ?? countryMinimum?.usd ?? null
+
+    // Auto-bump price to dynamic minimum when it loads (e.g. ZA new creator=$60, KE=$65)
+    // Without this, frontend suggests $45 (the floor) but backend rejects it for new creators
+    // whose dynamic minimum is higher due to $2/month account fee amortization at 0 subscribers
+    useEffect(() => {
+        if (!hasUserEditedPriceRef.current && minAmount > 0) {
+            const currentPrice = parseFloat(priceInput)
+            if (!isNaN(currentPrice) && currentPrice < minAmount) {
+                setPriceInput(String(minAmount))
+            }
+        }
+    }, [minAmount]) // eslint-disable-line react-hooks/exhaustive-deps
 
     // Service mode: Generate perks when description changes and we have enough context
     const handleGeneratePerks = async () => {
@@ -758,7 +776,7 @@ export default function PersonalReviewStep() {
                         </div>
                     ) : (
                         <div className="setup-price-card">
-                            {isCrossBorderStripe ? (
+                            {isCrossBorderStripe && getCrossBorderCurrencyOptions().length > 1 ? (
                                 <Pressable
                                     className="setup-price-currency-btn"
                                     onClick={() => setShowCurrencyDrawer(true)}
@@ -784,7 +802,7 @@ export default function PersonalReviewStep() {
                     )}
 
                     {/* Minimum subscription note for Stripe creators */}
-                    {resolvedPaymentProvider === 'stripe' && (myMinimum || countryMinimum) && (
+                    {resolvedPaymentProvider === 'stripe' && (myMinimum || countryMinimum || isCrossBorderStripe) && (
                         <div className="setup-minimum-note">
                             <span>
                                 Minimum: {currencySymbol}{minAmount.toLocaleString()}/mo

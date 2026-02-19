@@ -263,7 +263,7 @@ export async function handlePayoutFailed(event: Stripe.Event) {
       payload: {
         payoutId: payout.id,
         amount: payout.amount,
-        currency: payout.currency,
+        currency: payout.currency.toUpperCase(),
         failureCode: payout.failure_code,
         failureMessage: payout.failure_message,
         arrivalDate: payout.arrival_date ? new Date(payout.arrival_date * 1000) : null,

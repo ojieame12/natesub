@@ -25,7 +25,7 @@ export const PLATFORM_FEE_RATE = 0.09
 
 // Cross-border payout countries with higher fee burden
 // These use Stripe Recipient Service Agreement (destination charges)
-// Higher fees: 10.5% (vs 9% domestic), $85 flat minimum
+// Higher fees: 10.5% (vs 9% domestic), $45 flat minimum
 // IMPORTANT: Must match STRIPE_CROSS_BORDER_COUNTRIES in utils/constants.ts
 // Note: Stripe charges different cross-border rates per country (0.5% ZA, 1% NG/GH/KE)
 // but we use a flat 1.5% buffer for all to cover worst-case + margin

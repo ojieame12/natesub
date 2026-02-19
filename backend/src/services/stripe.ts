@@ -14,7 +14,7 @@
  * Express accounts (NG, GH, KE, etc.) only get 'transfers' capability.
  * See: https://docs.stripe.com/connect/service-agreement-types
  *
- * CROSS-BORDER COUNTRIES have higher minimums ($85) because:
+ * CROSS-BORDER COUNTRIES have higher minimums ($45) because:
  * - 100% international card usage (higher processing fees)
  * - FX conversion fees
  * - Higher payout fees

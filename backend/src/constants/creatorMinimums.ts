@@ -28,13 +28,11 @@
 import { isCrossBorderCountry } from './fees.js'
 
 // Minimum floor for cross-border countries (safety buffer)
-// Cross-border payments have higher risk: FX volatility, transfer fees, account fees
-// Even if math works at lower amounts, we need buffer for:
-// - Currency fluctuation between pricing and payout
-// - Monthly account fee ($0.67) must be covered even with 1 subscriber
-// - Cross-border transfer fees (~1%)
-// - Operational margin for edge cases
-const CROSS_BORDER_MINIMUM_FLOOR_USD = 85
+// $45 floor is margin-positive at 3+ subscribers per creator.
+// At $45 with 3 subs: ~$1.12/payment margin (conservative).
+// Below $40 at 3 subs we go negative — $45 gives a safety buffer.
+// DebiCheck rail (future) will allow lower ZA-local prices.
+const CROSS_BORDER_MINIMUM_FLOOR_USD = 45
 
 // ============================================
 // PLATFORM CONFIGURATION
