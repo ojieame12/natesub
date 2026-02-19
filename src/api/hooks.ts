@@ -10,6 +10,7 @@ import {
 import { api, type ApiError } from './client'
 import { useAuthState } from '../hooks/useAuthState'
 import { queryKeys } from './queryKeys'
+import { getCurrencySymbol } from '../utils/currency'
 
 // ============================================
 // ERROR HANDLING UTILITIES
@@ -492,11 +493,13 @@ export function useActivity(limit = 20, options?: { seedFromLimit?: number; poll
   })
 }
 
-export function useMetrics() {
+export function useMetrics(options?: { polling?: boolean }) {
   return useQuery({
     queryKey: queryKeys.metrics,
     queryFn: api.activity.getMetrics,
     staleTime: 60 * 1000,
+    refetchInterval: options?.polling ? 60 * 1000 : undefined,
+    refetchIntervalInBackground: false,
   })
 }
 
@@ -598,7 +601,7 @@ function getNotificationDescription(type: string, payload: Record<string, unknow
       return name ? `${name} subscribed to your page` : 'Someone subscribed to your page'
     case 'payment_received':
     case 'payment':
-      return name ? `${name} paid ${currency} ${amount ? (amount / 100).toFixed(2) : ''}` : 'Payment received'
+      return name ? `${name} paid ${getCurrencySymbol(currency)}${amount ? (amount / 100).toFixed(2) : ''}` : 'Payment received'
     case 'subscription_canceled':
     case 'cancelled':
       return name ? `${name} cancelled their subscription` : 'A subscription was cancelled'
@@ -653,7 +656,8 @@ export function useNotifications(limit = 10) {
     newReadIds.add(id)
     saveReadNotificationIds(newReadIds)
     // Invalidate to trigger re-render with new read state
-    queryClient.invalidateQueries({ queryKey: queryKeys.notifications() })
+    // Use prefix ['notifications'] to match all notification queries regardless of limit
+    queryClient.invalidateQueries({ queryKey: ['notifications'] })
   }
 
   // Mark all notifications as read
@@ -661,7 +665,7 @@ export function useNotifications(limit = 10) {
     const newReadIds = new Set(readIds)
     notifications.forEach(n => newReadIds.add(n.id))
     saveReadNotificationIds(newReadIds)
-    queryClient.invalidateQueries({ queryKey: queryKeys.notifications() })
+    queryClient.invalidateQueries({ queryKey: ['notifications'] })
   }
 
   const unreadCount = notifications.filter(n => !n.read).length

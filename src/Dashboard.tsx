@@ -31,8 +31,8 @@ export default function Dashboard() {
   // Real API hooks
   const { data: currentUser } = useCurrentUser()
   const { data: profileData, isLoading: profileLoadingRaw, refetch: refetchProfile } = useProfile()
-  const { data: metricsData, isLoading: metricsLoadingRaw, isError: metricsError, refetch: refetchMetrics } = useMetrics()
-  const { data: activityData, isLoading: activityLoading, isError: activityError, refetch: refetchActivity } = useActivity(5)
+  const { data: metricsData, isLoading: metricsLoadingRaw, isError: metricsError, refetch: refetchMetrics } = useMetrics({ polling: true })
+  const { data: activityData, isLoading: activityLoading, isError: activityError, refetch: refetchActivity } = useActivity(5, { polling: true })
   const { refetch: refetchAnalytics } = useAnalyticsStats()
   const { notifications, unreadCount, isError: notificationsError, markAsRead, markAllAsRead, refetch: refetchNotifications } = useNotifications(10)
 
