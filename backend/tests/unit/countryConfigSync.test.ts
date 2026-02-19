@@ -27,8 +27,9 @@ import {
 // Note: ZA (South Africa) is cross-border (not native Stripe) - has * on Stripe pricing
 const FRONTEND_SKIP_ADDRESS_COUNTRIES = ['NG', 'GH', 'KE', 'ZA']  // skipAddress: true
 const FRONTEND_CROSS_BORDER_COUNTRIES = ['NG', 'GH', 'KE', 'ZA']  // crossBorder: true
-const FRONTEND_PAYSTACK_CREATOR_COUNTRIES = ['NG', 'KE', 'ZA']  // providers includes 'paystack'
-const FRONTEND_PAYSTACK_PAYER_COUNTRIES = ['NG', 'GH', 'KE', 'ZA']  // can pay via Paystack checkout
+// Paystack paused for Stripe-first launch — all countries use Stripe only
+const FRONTEND_PAYSTACK_CREATOR_COUNTRIES: string[] = []  // No Paystack creators
+const FRONTEND_PAYSTACK_PAYER_COUNTRIES: string[] = []  // No Paystack payers
 const FRONTEND_NON_SKIP_ADDRESS_COUNTRIES = ['US', 'GB', 'CA', 'DE', 'FR', 'AU']  // Native Stripe countries
 
 describe('Country config backend/frontend sync', () => {
@@ -65,12 +66,17 @@ describe('Country config backend/frontend sync', () => {
       )
     })
 
-    it('GH is NOT in Paystack creator countries (Stripe cross-border only)', () => {
+    // Paystack paused for Stripe-first launch
+    it('no countries support Paystack creator (paused)', () => {
+      expect(isPaystackSupported('NG')).toBe(false)
       expect(isPaystackSupported('GH')).toBe(false)
+      expect(isPaystackSupported('KE')).toBe(false)
+      expect(isPaystackSupported('ZA')).toBe(false)
     })
 
-    it('GH IS in Paystack payer countries (can pay via Paystack)', () => {
-      expect(canPayWithPaystack('GH')).toBe(true)
+    it('no countries support Paystack payer (paused)', () => {
+      expect(canPayWithPaystack('NG')).toBe(false)
+      expect(canPayWithPaystack('GH')).toBe(false)
     })
   })
 

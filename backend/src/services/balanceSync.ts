@@ -202,9 +202,18 @@ export function isBalanceStale(
   return Date.now() - balanceLastSyncedAt.getTime() > maxAgeMs
 }
 
+// Batch size for concurrent processing (conservative for Stripe rate limits)
+const SYNC_BATCH_SIZE = 5
+
+// Maximum creators to process in a single run (prevents runaway jobs)
+const MAX_CREATORS_PER_RUN = 500
+
 /**
  * Sync balances for all active creators
  * Used by periodic job as backup for webhook-driven sync
+ *
+ * Processes creators in batches of SYNC_BATCH_SIZE concurrently,
+ * with a 100ms delay between batches to respect Stripe rate limits.
  *
  * @returns Stats on sync operation
  */
@@ -212,6 +221,8 @@ export async function syncAllActiveBalances(): Promise<{
   synced: number
   failed: number
   skipped: number
+  total: number
+  capped: boolean
 }> {
   const activeCreators = await db.profile.findMany({
     where: {
@@ -219,28 +230,42 @@ export async function syncAllActiveBalances(): Promise<{
       paymentProvider: { not: null },
     },
     select: { userId: true },
+    orderBy: { userId: 'asc' },
+    take: MAX_CREATORS_PER_RUN,
   })
+
+  const capped = activeCreators.length === MAX_CREATORS_PER_RUN
 
   let synced = 0
   let failed = 0
   let skipped = 0
 
-  for (const creator of activeCreators) {
-    try {
-      const result = await syncCreatorBalance(creator.userId)
-      if (result) {
-        synced++
+  // Process in batches of SYNC_BATCH_SIZE
+  for (let i = 0; i < activeCreators.length; i += SYNC_BATCH_SIZE) {
+    const batch = activeCreators.slice(i, i + SYNC_BATCH_SIZE)
+
+    const results = await Promise.allSettled(
+      batch.map(creator => syncCreatorBalance(creator.userId))
+    )
+
+    for (const result of results) {
+      if (result.status === 'fulfilled') {
+        if (result.value) {
+          synced++
+        } else {
+          skipped++
+        }
       } else {
-        skipped++
+        failed++
       }
-    } catch {
-      failed++
     }
 
-    // Rate limit: 100ms between calls to respect Stripe rate limits
-    await new Promise(resolve => setTimeout(resolve, 100))
+    // Rate limit: 100ms between batches to respect Stripe rate limits
+    if (i + SYNC_BATCH_SIZE < activeCreators.length) {
+      await new Promise(resolve => setTimeout(resolve, 100))
+    }
   }
 
-  console.log(`[balanceSync] Batch complete: synced=${synced}, failed=${failed}, skipped=${skipped}`)
-  return { synced, failed, skipped }
+  console.log(`[balanceSync] Batch complete: synced=${synced}, failed=${failed}, skipped=${skipped}, total=${activeCreators.length}, capped=${capped}`)
+  return { synced, failed, skipped, total: activeCreators.length, capped }
 }

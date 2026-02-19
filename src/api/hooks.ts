@@ -365,11 +365,12 @@ export function usePaystackConnect() {
   })
 }
 
-export function usePaystackStatus() {
+export function usePaystackStatus(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: queryKeys.paystack.status,
     queryFn: api.paystack.getStatus,
     staleTime: 2 * 60 * 1000, // 2 minutes - status rarely changes once connected
+    enabled: options?.enabled !== false,
   })
 }
 

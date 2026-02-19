@@ -116,16 +116,17 @@ describe('checkout flow', () => {
     expect(mockInitializePaystackCheckout).not.toHaveBeenCalled()
   })
 
-  it('routes to Paystack for local payer when creator has both providers', async () => {
+  // Paystack paused for Stripe-first launch — local payer now routes to Stripe
+  it('routes to Stripe for local payer when Paystack is paused', async () => {
     const profile = await createCreator({
       stripeAccountId: 'acct_123',
       paystackSubaccountCode: 'ACCT_123',
       paymentProvider: 'stripe'
     })
 
-    mockInitializePaystackCheckout.mockResolvedValue({
-      authorization_url: 'https://paystack.com/pay/test',
-      reference: 'ref_123'
+    mockCreateCheckoutSession.mockResolvedValue({
+      url: 'https://checkout.stripe.com/test',
+      id: 'cs_test_123'
     })
 
     const res = await app.fetch(
@@ -136,7 +137,7 @@ describe('checkout flow', () => {
           creatorUsername: profile!.username,
           amount: 500000,
           interval: 'one_time',
-          payerCountry: 'NG', // Local
+          payerCountry: 'NG', // Local payer — but Paystack paused, so routes to Stripe
           subscriberEmail: 'sub@example.com'
         }),
       })
@@ -144,9 +145,9 @@ describe('checkout flow', () => {
 
     expect(res.status).toBe(200)
     const body = await res.json()
-    expect(body.provider).toBe('paystack')
-    expect(mockInitializePaystackCheckout).toHaveBeenCalled()
-    expect(mockCreateCheckoutSession).not.toHaveBeenCalled()
+    expect(body.provider).toBe('stripe')
+    expect(mockCreateCheckoutSession).toHaveBeenCalled()
+    expect(mockInitializePaystackCheckout).not.toHaveBeenCalled()
   })
 
   it('enforces platform subscription for service providers', async () => {
@@ -332,7 +333,8 @@ describe('checkout flow', () => {
       expect(callArgs.feeMetadata.creatorFeeCents).toBe(525)    // 5.25%
     })
 
-    it('passes split fee metadata to Paystack checkout', async () => {
+    // Paystack paused for Stripe-first launch — this test validates Paystack-specific flow
+    it.skip('passes split fee metadata to Paystack checkout', async () => {
       // Use ₦50,000 (5000000 kobo) to avoid processor buffer
       const profile = await createCreator({
         paystackSubaccountCode: 'ACCT_123',

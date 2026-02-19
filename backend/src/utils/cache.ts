@@ -7,6 +7,9 @@
 
 import { redis } from '../db/redis.js'
 
+// In-flight computation tracker for singleflight deduplication
+const inflight = new Map<string, Promise<any>>()
+
 // Cache TTLs in seconds
 export const CACHE_TTL = {
   SHORT: 60,         // 1 minute - for frequently changing data
@@ -45,19 +48,32 @@ export async function cached<T>(
     console.warn(`[cache] Redis get failed for ${key}:`, err)
   }
 
-  // Compute the value
-  const value = await compute()
-
-  try {
-    // Store in cache (don't await - fire and forget)
-    redis.setex(key, ttlSeconds, JSON.stringify(value)).catch((err: unknown) => {
-      console.warn(`[cache] Redis setex failed for ${key}:`, err)
-    })
-  } catch {
-    // Ignore cache write errors
+  // Singleflight: if another caller is already computing this key, reuse its promise
+  const existing = inflight.get(key)
+  if (existing) {
+    return existing as Promise<T>
   }
 
-  return value
+  // Compute the value with singleflight protection
+  const promise = compute()
+  inflight.set(key, promise)
+
+  try {
+    const value = await promise
+
+    try {
+      // Store in cache (don't await - fire and forget)
+      redis.setex(key, ttlSeconds, JSON.stringify(value)).catch((err: unknown) => {
+        console.warn(`[cache] Redis setex failed for ${key}:`, err)
+      })
+    } catch {
+      // Ignore cache write errors
+    }
+
+    return value
+  } finally {
+    inflight.delete(key)
+  }
 }
 
 /**

@@ -168,10 +168,11 @@ describe('utils/prefetch', () => {
 
       await new Promise(resolve => setTimeout(resolve, 10))
 
+      // Only Stripe status prefetched — Paystack routes gated behind ENABLE_PAYSTACK
       expect(queryClient.prefetchQuery).toHaveBeenCalledWith(
         expect.objectContaining({ queryKey: queryKeys.stripe.status })
       )
-      expect(queryClient.prefetchQuery).toHaveBeenCalledWith(
+      expect(queryClient.prefetchQuery).not.toHaveBeenCalledWith(
         expect.objectContaining({ queryKey: queryKeys.paystack.status })
       )
     })

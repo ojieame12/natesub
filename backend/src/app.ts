@@ -457,7 +457,9 @@ app.route('/auth', auth)
 app.route('/profile', profile)
 app.route('/users', users)
 app.route('/stripe', stripeRoutes)
-app.route('/paystack', paystackRoutes)
+if (env.ENABLE_PAYSTACK) {
+  app.route('/paystack', paystackRoutes)
+}
 app.route('/checkout', checkout)
 app.route('/webhooks', webhooks)
 app.route('/media', media)

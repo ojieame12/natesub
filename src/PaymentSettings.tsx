@@ -8,7 +8,7 @@ import { useProfile, useSalaryMode, useUpdateSalaryMode, useStripeStatus, usePay
 import { useDelayedLoading } from './hooks'
 import { formatCurrencyFromCents } from './utils/currency'
 import { needsSwiftCodeHelp } from './utils/swiftCodes'
-import { formatStripeCurrencies, formatPaystackCurrencies, isStripeCrossBorderCountry } from './utils/regionConfig'
+import { formatStripeCurrencies, formatPaystackCurrencies, isStripeCrossBorderCountry, hasPaystack } from './utils/regionConfig'
 import './PaymentSettings.css'
 
 const STRIPE_ONBOARDING_RETURN_MAX_AGE_MS = 30 * 60 * 1000
@@ -134,7 +134,7 @@ export default function PaymentSettings() {
     isLoading: paystackLoading,
     error: paystackQueryError,
     refetch: refetchPaystackStatus,
-  } = usePaystackStatus()
+  } = usePaystackStatus({ enabled: hasPaystack(userCountryCode || '') })
   const {
     data: stripeBalanceData,
     isLoading: stripeBalanceLoading,
@@ -377,9 +377,11 @@ export default function PaymentSettings() {
   const stripeIsRestricted = stripeIsConnected && stripeStatus?.status === 'restricted'
   const stripeIsPending = stripeIsConnected && stripeStatus?.status === 'pending'
 
-  const paystackIsConnected = paystackStatus?.connected === true
-  const paystackIsActive = paystackIsConnected && paystackStatus?.status === 'active'
-  const paystackIsInactive = paystackIsConnected && paystackStatus?.status === 'inactive'
+  // Legacy Paystack detection: profile has paymentProvider='paystack' but API query may be disabled
+  const hasLegacyPaystack = defaultProvider === 'paystack'
+  const paystackIsConnected = paystackStatus?.connected === true || hasLegacyPaystack
+  const paystackIsActive = paystackStatus ? (paystackIsConnected && paystackStatus?.status === 'active') : hasLegacyPaystack
+  const paystackIsInactive = paystackStatus ? (paystackIsConnected && paystackStatus?.status === 'inactive') : false
 
   const stripeRequirements = stripeStatus?.details?.requirements?.currentlyDue || []
 
@@ -732,8 +734,8 @@ export default function PaymentSettings() {
           </div>
         </section>
 
-        {/* Africa (Paystack) */}
-        <section className="settings-section">
+        {/* Africa (Paystack) - only show if country supports Paystack or already connected */}
+        {(hasPaystack(userCountryCode || '') || paystackIsConnected) && <section className="settings-section">
           <h3 className="section-title">Africa (Paystack)</h3>
           <div className="method-card">
             <div className="method-row">
@@ -793,7 +795,7 @@ export default function PaymentSettings() {
 
             {paystackError && <InlineError message={paystackError} className="provider-inline-error" />}
           </div>
-        </section>
+        </section>}
 
         {/* Fee Explainer - Only show for active Stripe users */}
         {stripeIsActive && (

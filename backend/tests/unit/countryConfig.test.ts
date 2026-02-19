@@ -45,29 +45,21 @@ describe('countryConfig', () => {
     })
   })
 
+  // Paystack paused for Stripe-first launch — all countries return false
   describe('isPaystackSupported', () => {
-    it('returns true for NG, KE, ZA', () => {
-      expect(isPaystackSupported('NG')).toBe(true)
-      expect(isPaystackSupported('KE')).toBe(true)
-      expect(isPaystackSupported('ZA')).toBe(true)
-    })
-
-    it('returns false for GH (Stripe cross-border only)', () => {
+    it('returns false for all countries (Paystack paused)', () => {
+      expect(isPaystackSupported('NG')).toBe(false)
+      expect(isPaystackSupported('KE')).toBe(false)
+      expect(isPaystackSupported('ZA')).toBe(false)
       expect(isPaystackSupported('GH')).toBe(false)
-    })
-
-    it('returns false for CI (not supported)', () => {
       expect(isPaystackSupported('CI')).toBe(false)
-    })
-
-    it('returns false for US, GB', () => {
       expect(isPaystackSupported('US')).toBe(false)
       expect(isPaystackSupported('GB')).toBe(false)
     })
 
     it('handles case insensitivity', () => {
-      expect(isPaystackSupported('ng')).toBe(true)
-      expect(isPaystackSupported('Za')).toBe(true)
+      expect(isPaystackSupported('ng')).toBe(false)
+      expect(isPaystackSupported('Za')).toBe(false)
     })
 
     it('returns false for null/undefined/empty', () => {
@@ -105,22 +97,19 @@ describe('countryConfig', () => {
     })
   })
 
+  // Paystack paused — getPaystackCurrency returns undefined for all countries
   describe('getPaystackCurrency', () => {
-    it('returns correct currency for supported countries', () => {
-      expect(getPaystackCurrency('NG')).toBe('NGN')
-      expect(getPaystackCurrency('KE')).toBe('KES')
-      expect(getPaystackCurrency('ZA')).toBe('ZAR')
-    })
-
-    it('returns undefined for unsupported countries', () => {
+    it('returns undefined for all countries (Paystack paused)', () => {
+      expect(getPaystackCurrency('NG')).toBeUndefined()
+      expect(getPaystackCurrency('KE')).toBeUndefined()
+      expect(getPaystackCurrency('ZA')).toBeUndefined()
       expect(getPaystackCurrency('GH')).toBeUndefined()
       expect(getPaystackCurrency('US')).toBeUndefined()
-      expect(getPaystackCurrency('CI')).toBeUndefined()
     })
 
     it('handles case insensitivity', () => {
-      expect(getPaystackCurrency('ng')).toBe('NGN')
-      expect(getPaystackCurrency('za')).toBe('ZAR')
+      expect(getPaystackCurrency('ng')).toBeUndefined()
+      expect(getPaystackCurrency('za')).toBeUndefined()
     })
 
     it('returns undefined for null/undefined/empty', () => {
@@ -137,10 +126,9 @@ describe('countryConfig', () => {
       expect(SKIP_ADDRESS_COUNTRIES).toHaveLength(4)
     })
 
-    it('PAYSTACK_COUNTRIES contains exactly NG, KE, ZA (no GH)', () => {
-      expect(new Set(PAYSTACK_COUNTRIES)).toEqual(new Set(['NG', 'KE', 'ZA']))
-      expect(PAYSTACK_COUNTRIES).not.toContain('GH')
-      expect(PAYSTACK_COUNTRIES).not.toContain('CI')
+    // Paystack paused — both arrays are empty
+    it('PAYSTACK_COUNTRIES is empty (Paystack paused)', () => {
+      expect(PAYSTACK_COUNTRIES).toHaveLength(0)
     })
 
     it('STRIPE_CROSS_BORDER_COUNTRIES contains exactly NG, GH, KE, ZA', () => {
@@ -148,16 +136,8 @@ describe('countryConfig', () => {
       expect(STRIPE_CROSS_BORDER_COUNTRIES).toHaveLength(4)
     })
 
-    it('PAYSTACK_PAYER_COUNTRIES includes GH (for checkout routing)', () => {
-      expect(new Set(PAYSTACK_PAYER_COUNTRIES)).toEqual(new Set(['NG', 'KE', 'ZA', 'GH']))
-      // GH payers can use Paystack to pay NG/KE/ZA creators
-      expect(PAYSTACK_PAYER_COUNTRIES).toContain('GH')
-    })
-
-    it('PAYSTACK_COUNTRIES excludes GH (creator subaccounts only)', () => {
-      expect(PAYSTACK_COUNTRIES).not.toContain('GH')
-      expect(PAYSTACK_PAYER_COUNTRIES).toContain('GH')
-      // This documents the intentional difference between creator vs payer countries
+    it('PAYSTACK_PAYER_COUNTRIES is empty (Paystack paused)', () => {
+      expect(PAYSTACK_PAYER_COUNTRIES).toHaveLength(0)
     })
   })
 })

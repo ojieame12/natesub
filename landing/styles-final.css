@@ -845,9 +845,49 @@ img {
     padding-top: 72px;
   }
 
+  /* Hide desktop line breaks on mobile */
+  .desktop-br {
+    display: none;
+  }
+
+  /* Center hero content and adjust sizing */
+  .hero-content {
+    padding: 0 var(--page-padding);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    z-index: 10;
+  }
+
+  .hero-headline {
+    font-size: 36px;
+    line-height: 1.15;
+    text-align: center;
+    max-width: 100%;
+    margin-bottom: 16px;
+  }
+
+  .hero-subhead {
+    font-size: 16px;
+    line-height: 1.5;
+    text-align: center;
+    margin-bottom: 24px;
+  }
+
+  .hero-cta {
+    width: 90%;
+    max-width: 320px;
+    margin: 0 auto;
+  }
+
+  /* Make bottom illustration bigger */
   .hero-illustration img {
-    transform: translateY(50%);
-    max-width: 120%;
+    transform: translateY(55%);
+    max-width: 130%;
+    height: auto;
+    object-fit: contain;
   }
 
   /* Tabs horizontal scroll */

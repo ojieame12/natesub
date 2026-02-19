@@ -112,18 +112,12 @@ const routeDataPrefetch: Record<string, () => Promise<void>> = {
   },
 
   '/settings/payments': async () => {
-    await Promise.all([
-      queryClient.prefetchQuery({
-        queryKey: queryKeys.stripe.status,
-        queryFn: () => api.stripe.getStatus(),
-        staleTime: 2 * 60 * 1000,
-      }),
-      queryClient.prefetchQuery({
-        queryKey: queryKeys.paystack.status,
-        queryFn: () => api.paystack.getStatus(),
-        staleTime: 2 * 60 * 1000,
-      }),
-    ])
+    // Only prefetch Stripe status — Paystack routes gated behind ENABLE_PAYSTACK
+    await queryClient.prefetchQuery({
+      queryKey: queryKeys.stripe.status,
+      queryFn: () => api.stripe.getStatus(),
+      staleTime: 2 * 60 * 1000,
+    })
   },
 
   '/updates': async () => {

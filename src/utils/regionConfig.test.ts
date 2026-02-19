@@ -10,30 +10,15 @@ import {
 } from './regionConfig'
 
 describe('regionConfig', () => {
+  // Paystack paused for Stripe-first launch — all countries return false
   describe('hasPaystack', () => {
-    it('returns true for NG, KE, ZA', () => {
-      expect(hasPaystack('NG')).toBe(true)
-      expect(hasPaystack('KE')).toBe(true)
-      expect(hasPaystack('ZA')).toBe(true)
-    })
-
-    it('returns false for GH (cross-border Stripe only)', () => {
+    it('returns false for all countries (Paystack paused)', () => {
+      expect(hasPaystack('NG')).toBe(false)
+      expect(hasPaystack('KE')).toBe(false)
+      expect(hasPaystack('ZA')).toBe(false)
       expect(hasPaystack('GH')).toBe(false)
-    })
-
-    it('returns false for CI (removed - not supported)', () => {
-      expect(hasPaystack('CI')).toBe(false)
-    })
-
-    it('returns false for US, GB (Stripe-only countries)', () => {
       expect(hasPaystack('US')).toBe(false)
       expect(hasPaystack('GB')).toBe(false)
-    })
-
-    it('handles case insensitivity', () => {
-      expect(hasPaystack('ng')).toBe(true)
-      expect(hasPaystack('Ke')).toBe(true)
-      expect(hasPaystack('za')).toBe(true)
     })
 
     it('returns false for null/undefined', () => {
@@ -116,22 +101,11 @@ describe('regionConfig', () => {
     })
   })
 
+  // Paystack paused — no Paystack country codes
   describe('getPaystackCountryCodes', () => {
-    it('returns exactly NG, KE, ZA', () => {
+    it('returns empty array (Paystack paused)', () => {
       const codes = getPaystackCountryCodes()
-      expect(codes).toContain('NG')
-      expect(codes).toContain('KE')
-      expect(codes).toContain('ZA')
-    })
-
-    it('does not include GH (cross-border Stripe only)', () => {
-      const codes = getPaystackCountryCodes()
-      expect(codes).not.toContain('GH')
-    })
-
-    it('does not include CI (removed)', () => {
-      const codes = getPaystackCountryCodes()
-      expect(codes).not.toContain('CI')
+      expect(codes).toHaveLength(0)
     })
   })
 
@@ -142,7 +116,7 @@ describe('regionConfig', () => {
       expect(ng?.name).toBe('Nigeria')
       expect(ng?.currency).toBe('NGN')
       expect(ng?.providers).toContain('stripe')
-      expect(ng?.providers).toContain('paystack')
+      // Paystack paused — NG no longer lists paystack as a provider
     })
 
     it('returns undefined for invalid codes', () => {

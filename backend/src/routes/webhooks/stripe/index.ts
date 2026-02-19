@@ -1,6 +1,6 @@
 import { Context } from 'hono'
 import Stripe from 'stripe'
-import { db } from '../../../db/client.js'
+import { db, withRetry } from '../../../db/client.js'
 import { stripe } from '../../../services/stripe.js'
 import { env } from '../../../config/env.js'
 import { logger } from '../../../utils/logger.js'
@@ -117,13 +117,13 @@ export async function stripeWebhookHandler(c: Context) {
 
     // Queue dispatch failed - mark for manual retry and return 200 to prevent Stripe retry storm
     // The webhook event is already persisted (line 72-92) so we won't lose it
-    await db.webhookEvent.update({
+    await withRetry(() => db.webhookEvent.update({
       where: { id: webhookEvent.id },
       data: {
         status: 'pending_retry',
         error: `Queue dispatch failed: ${error.message || 'Unknown error'}`,
       },
-    }).catch((dbErr: any) => {
+    })).catch((dbErr: any) => {
       console.error(`[stripe] Failed to update webhook status for ${event.id}:`, dbErr)
     })
 

@@ -91,7 +91,9 @@ stripeRoutes.post('/connect', requireAuth, paymentRateLimit, async (c) => {
   // Acquire lock to prevent race conditions from double-clicks or multiple tabs
   // This complements Stripe's idempotency keys with a user-level lock
   const lockKey = `stripe:connect:lock:${userId}`
-  const gotLock = await redis.set(lockKey, '1', 'EX', CONNECT_LOCK_TTL_SECONDS, 'NX')
+  // Use a unique token so only the lock owner can release it (prevents cross-request release)
+  const lockToken = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+  const gotLock = await redis.set(lockKey, lockToken, 'EX', CONNECT_LOCK_TTL_SECONDS, 'NX')
 
   if (!gotLock) {
     console.log(`[stripe/connect] Lock not acquired for ${userId}, request already in progress`)
@@ -171,8 +173,14 @@ stripeRoutes.post('/connect', requireAuth, paymentRateLimit, async (c) => {
       errorType,
     }, 500)
   } finally {
-    // Always release the lock
-    await redis.del(lockKey)
+    // Release lock only if we still own it (token-verified to prevent cross-request release)
+    // Uses Lua script for atomic check-and-delete
+    await redis.eval(
+      `if redis.call("get", KEYS[1]) == ARGV[1] then return redis.call("del", KEYS[1]) else return 0 end`,
+      1,
+      lockKey,
+      lockToken
+    )
   }
 })
 

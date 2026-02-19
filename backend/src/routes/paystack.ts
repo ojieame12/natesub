@@ -20,8 +20,10 @@ import { maskAccountNumber } from '../utils/pii.js'
 import { decryptAccountNumber, encryptAccountNumber } from '../utils/encryption.js'
 import { env } from '../config/env.js'
 import { invalidatePublicProfileCache } from '../utils/cache.js'
+import { redis } from '../db/redis.js'
 
 const paystackRoutes = new Hono()
+const CONNECT_LOCK_TTL_SECONDS = 30
 
 /**
  * Rotate session token after sensitive payment operation.
@@ -207,6 +209,20 @@ paystackRoutes.post(
     const userId = c.get('userId')
     const data = c.req.valid('json')
 
+    // Acquire lock to prevent race conditions from double-clicks or multiple tabs
+    const lockKey = `paystack:connect:lock:${userId}`
+    const lockToken = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+    const gotLock = await redis.set(lockKey, lockToken, 'EX', CONNECT_LOCK_TTL_SECONDS, 'NX')
+
+    if (!gotLock) {
+      return c.json({
+        error: 'A connection request is already in progress. Please wait.',
+        code: 'CONNECT_IN_PROGRESS',
+      }, 429)
+    }
+
+    try {
+
     // Get user and profile
     const user = await db.user.findUnique({
       where: { id: userId },
@@ -315,6 +331,16 @@ paystackRoutes.post(
       return c.json({
         error: 'Failed to create payment account. Please try again or contact support.',
       }, 500)
+    }
+
+    } finally {
+      // Release lock only if we still own it (token-verified to prevent cross-request release)
+      await redis.eval(
+        `if redis.call("get", KEYS[1]) == ARGV[1] then return redis.call("del", KEYS[1]) else return 0 end`,
+        1,
+        lockKey,
+        lockToken
+      )
     }
   }
 )

@@ -25,8 +25,9 @@ const Profile = lazy(() => import('./Profile'))
 const Subscribers = lazy(() => import('./Subscribers'))
 const Settings = lazy(() => import('./Settings'))
 const OnboardingFlow = lazy(() => import('./onboarding'))
-const PaystackConnect = lazy(() => import('./onboarding/PaystackConnect'))
-const PaystackOnboardingComplete = lazy(() => import('./PaystackOnboardingComplete'))
+// Paystack paused for Stripe-first launch — uncomment to re-enable
+// const PaystackConnect = lazy(() => import('./onboarding/PaystackConnect'))
+// const PaystackOnboardingComplete = lazy(() => import('./PaystackOnboardingComplete'))
 const ActivityDetail = lazy(() => import('./ActivityDetail'))
 const SubscriberDetail = lazy(() => import('./SubscriberDetail'))
 const SentRequests = lazy(() => import('./SentRequests'))
@@ -520,8 +521,9 @@ function AppShell() {
 
           {/* Onboarding - public */}
           <Route path="/onboarding" element={<OnboardingFlow />} />
-          <Route path="/onboarding/paystack" element={<PaystackConnect />} />
-          <Route path="/onboarding/paystack/complete" element={<PaystackOnboardingComplete />} />
+          {/* Paystack paused for Stripe-first launch — uncomment to re-enable */}
+          {/* <Route path="/onboarding/paystack" element={<PaystackConnect />} /> */}
+          {/* <Route path="/onboarding/paystack/complete" element={<PaystackOnboardingComplete />} /> */}
 
           {/* Main app with tab bar - protected routes using layout route pattern */}
           {/* RequireAuth + AppLayout persist across tab navigation, only content changes */}

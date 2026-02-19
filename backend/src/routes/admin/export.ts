@@ -33,7 +33,7 @@ exportRoutes.post('/payments', auditExport('export_data'), async (c) => {
     endDate: z.string().datetime().optional(),
     status: z.enum(['succeeded', 'failed', 'refunded', 'disputed', 'all']).default('all'),
     creatorId: z.string().optional(),
-    limit: z.number().min(1).max(50000).default(10000),
+    limit: z.number().min(1).max(10000).default(5000),
   }).parse(await c.req.json())
 
   const where: any = {}
@@ -144,7 +144,7 @@ exportRoutes.post('/subscriptions', auditExport('export_data'), async (c) => {
     creatorId: z.string().optional(),
     startDate: z.string().datetime().optional(),
     endDate: z.string().datetime().optional(),
-    limit: z.number().min(1).max(50000).default(10000),
+    limit: z.number().min(1).max(10000).default(5000),
   }).parse(await c.req.json())
 
   const where: any = {}
@@ -243,7 +243,7 @@ exportRoutes.post('/creators', auditExport('export_data'), async (c) => {
     country: z.string().optional(),
     payoutStatus: z.enum(['pending', 'connected', 'verified']).optional(),
     paymentProvider: z.enum(['stripe', 'paystack']).optional(),
-    limit: z.number().min(1).max(50000).default(10000),
+    limit: z.number().min(1).max(10000).default(5000),
   }).parse(await c.req.json())
 
   const where: any = {}
@@ -357,7 +357,7 @@ exportRoutes.post('/users', auditExport('export_data'), async (c) => {
   const body = z.object({
     role: z.enum(['user', 'admin', 'super_admin', 'all']).default('all'),
     includeDeleted: z.boolean().default(false),
-    limit: z.number().min(1).max(50000).default(10000),
+    limit: z.number().min(1).max(10000).default(5000),
   }).parse(await c.req.json())
 
   const where: any = {}

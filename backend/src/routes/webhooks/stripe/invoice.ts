@@ -155,6 +155,92 @@ export async function handleInvoiceCreated(event: Stripe.Event) {
   }
 }
 
+/**
+ * Safety net handler for invoice.finalized
+ * If invoice.created handler failed, the fee may not be set.
+ * By the time finalized fires, the invoice is 'open' — we can still update it
+ * if Stripe allows (open invoices can be updated before payment).
+ * At minimum, this detects and alerts on missing fees.
+ */
+export async function handleInvoiceFinalized(event: Stripe.Event) {
+  const invoice = event.data.object as Stripe.Invoice
+  const invoiceAny = invoice as any
+
+  // Only care about subscription invoices
+  const stripeSubscriptionId = invoiceAny.subscription_details?.subscription
+    || invoiceAny.subscription
+  if (!stripeSubscriptionId) return
+
+  // Check if application_fee is set
+  const currentFee = invoiceAny.application_fee_amount
+  if (currentFee && currentFee > 0) {
+    // Fee already set by invoice.created — all good
+    return
+  }
+
+  // Fee is missing! invoice.created likely failed.
+  const subscription = await db.subscription.findUnique({
+    where: { stripeSubscriptionId: stripeSubscriptionId as string },
+    include: {
+      creator: {
+        include: { profile: { select: { purpose: true, countryCode: true } } },
+      },
+    },
+  })
+
+  if (!subscription || !subscription.feeModel) {
+    // Legacy subscription or unknown — nothing to do
+    return
+  }
+
+  // Calculate what the fee should be
+  const creatorAmount = subscription.amount
+  const currency = invoice.currency.toUpperCase()
+  const creatorPurpose = subscription.creator?.profile?.purpose
+  const countryCode = subscription.creator?.profile?.countryCode
+  const isCrossBorder = countryCode ? isStripeCrossBorderSupported(countryCode) : false
+
+  const feeCalc = calculateServiceFee(
+    creatorAmount,
+    currency,
+    creatorPurpose,
+    subscription.feeMode as any,
+    isCrossBorder
+  )
+
+  // Try to apply the fee — open invoices can still be updated
+  try {
+    await stripe.invoices.update(invoice.id, {
+      application_fee_amount: feeCalc.feeCents,
+    })
+    logger.info('[invoice.finalized] Safety net: applied missing fee', {
+      invoiceId: invoice.id,
+      feeCents: feeCalc.feeCents,
+      subscriptionId: subscription.id,
+    })
+  } catch (err) {
+    // If we can't update, create a critical alert — we'll lose revenue on this invoice
+    logger.error('[invoice.finalized] CRITICAL: Could not apply missing fee', err as Error, {
+      invoiceId: invoice.id,
+      expectedFee: feeCalc.feeCents,
+      subscriptionId: subscription.id,
+    })
+    await db.activity.create({
+      data: {
+        userId: subscription.creatorId,
+        type: 'fee_missing_alert',
+        payload: {
+          invoiceId: invoice.id,
+          subscriptionId: subscription.id,
+          expectedFee: feeCalc.feeCents,
+          source: 'invoice.finalized_safety_net',
+          currency,
+        },
+      },
+    })
+  }
+}
+
 export async function backfillStripeSubscriptionForInvoicePaid(invoice: Stripe.Invoice, stripeSubscriptionId: string) {
   const stripeSubscription = await stripe.subscriptions.retrieve(stripeSubscriptionId)
 
@@ -174,7 +260,15 @@ export async function backfillStripeSubscriptionForInvoicePaid(invoice: Stripe.I
     feeMode = meta.feeMode
     const netAmount = parseMetadataAmount(meta.netAmount)
     const grossAmount = parseMetadataAmount(meta.grossAmount) || invoice.amount_paid
-    basePrice = (feeMode === 'absorb' ? grossAmount : netAmount) || grossAmount
+    const baseAmountCents = parseMetadataAmount(meta.baseAmountCents)
+    // For split_v1 model, baseAmountCents is the creator's set price (before any fee is added).
+    // Using netAmount for split would give the post-creator-fee amount, inflating subscription.amount.
+    if (baseAmountCents && baseAmountCents > 0) {
+      basePrice = baseAmountCents
+    } else {
+      // Fallback for legacy models: absorb → grossAmount, pass_to_subscriber → netAmount
+      basePrice = (feeMode === 'absorb' ? grossAmount : netAmount) || grossAmount
+    }
   } else {
     logger.warn('Invalid metadata for subscription, attempting fallback via transfer destination', { stripeSubscriptionId })
 
@@ -320,7 +414,7 @@ export async function handleInvoicePaid(event: Stripe.Event) {
       where: { stripeSubscriptionId: subscriptionId },
       include: {
         creator: {
-          include: { profile: { select: { purpose: true, stripeAccountId: true } } },
+          include: { profile: { select: { purpose: true, stripeAccountId: true, countryCode: true } } },
         },
       },
     })
@@ -342,7 +436,7 @@ export async function handleInvoicePaid(event: Stripe.Event) {
         where: { stripeSubscriptionId: subscriptionId },
         include: {
           creator: {
-            include: { profile: { select: { purpose: true, stripeAccountId: true } } },
+            include: { profile: { select: { purpose: true, stripeAccountId: true, countryCode: true } } },
           },
         },
       })
@@ -388,12 +482,16 @@ export async function handleInvoicePaid(event: Stripe.Event) {
       // IMPORTANT: Calculate fee on CREATOR'S PRICE (subscription.amount), not invoice total
       const creatorAmount = subscription.amount
       const creatorPurpose = subscription.creator?.profile?.purpose
+      // Determine cross-border status from creator's country
+      // CRITICAL: Must match invoice.created's calculation to avoid netCents/LTV inflation
+      const creatorCountryCode = subscription.creator?.profile?.countryCode
+      const isCrossBorderRenewal = creatorCountryCode ? isStripeCrossBorderSupported(creatorCountryCode) : false
       const feeCalc = calculateServiceFee(
         creatorAmount,
         invoice.currency.toUpperCase(),
         creatorPurpose,
         subscription.feeMode as any, // Pass stored feeMode for legacy, ignored for split_v1
-        false // Cross-border handled in invoice.created
+        isCrossBorderRenewal // Must use actual cross-border status for correct netCents/LTV
       )
 
       // Use actual Stripe fee if available, otherwise use calculated

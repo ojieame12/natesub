@@ -59,7 +59,7 @@ export default function Privacy() {
                     <h3>Payment Information</h3>
                     <p>To process payments, we collect:</p>
                     <ul>
-                        <li>Bank account details (processed securely by Stripe or Paystack)</li>
+                        <li>Bank account details (processed securely by Stripe)</li>
                         <li>Transaction history</li>
                         <li>Payout preferences</li>
                     </ul>
@@ -93,7 +93,7 @@ export default function Privacy() {
                     <p>We share your information with:</p>
                     <ul>
                         <li>
-                            <strong>Payment Processors:</strong> Stripe and Paystack to process
+                            <strong>Payment Processors:</strong> Stripe to process
                             transactions securely
                         </li>
                         <li>

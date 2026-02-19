@@ -98,7 +98,26 @@ export async function createExpressAccount(
       })
     }
 
-    const account = await stripe.accounts.retrieve(profile.stripeAccountId)
+    let account: Stripe.Account | undefined
+    try {
+      account = await stripe.accounts.retrieve(profile.stripeAccountId)
+    } catch (err: any) {
+      if (err?.code === 'resource_missing' || err?.statusCode === 404) {
+        // Stored stripeAccountId is invalid/corrupted — clear it and fall through to create a new one
+        console.warn(`[stripe] Corrupted stripeAccountId "${profile.stripeAccountId}" for user ${userId} — clearing and creating new account`)
+        await db.profile.update({
+          where: { userId },
+          data: { stripeAccountId: null, payoutStatus: 'pending' },
+        })
+        // account remains undefined — will fall through to create new below
+      } else {
+        throw err
+      }
+    }
+
+    // Only proceed with existing account logic if retrieve succeeded
+    // (if it was corrupted, we cleared it above and account is undefined)
+    if (account) {
 
     const needsOnboarding = !account.details_submitted
     const currentlyDue = account.requirements?.currently_due || []
@@ -143,6 +162,7 @@ export async function createExpressAccount(
     }
 
     return { accountId: profile.stripeAccountId, accountLink: null, alreadyOnboarded: true }
+    } // end if (account!) — corrupted accounts fall through
   }
 
   // Parse name for KYC prefill

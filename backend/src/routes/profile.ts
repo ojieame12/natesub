@@ -9,7 +9,7 @@ import { clearOnboardingState } from '../services/auth.js'
 import { publicStrictRateLimit, publicRateLimit, aiRateLimit } from '../middleware/rateLimit.js'
 import { sendWelcomeEmail } from '../services/email.js'
 import { cancelOnboardingReminders } from '../jobs/reminders.js'
-import { RESERVED_USERNAMES, isStripeCrossBorderSupported } from '../utils/constants.js'
+import { RESERVED_USERNAMES, isStripeCrossBorderSupported, isStripeSupported } from '../utils/constants.js'
 import { displayAmountToCents, formatCurrency } from '../utils/currency.js'
 import {
   getCreatorMinimum,
@@ -98,18 +98,26 @@ profile.put(
     const isPublishTransition = data.isPublic === true && (!currentProfile || !currentProfile.isPublic)
 
     // Normalize currency for consistent handling
-    const currency = data.currency.toUpperCase()
-
-    // Cross-border Stripe creators can use any Stripe-supported currency
-    // Stripe handles currency conversion for cross-border payouts
-    // The platform collects payments in the creator's chosen currency
     const paymentProvider = data.paymentProvider || null
-    const _isCrossBorder = isStripeCrossBorderSupported(data.countryCode) && paymentProvider !== 'paystack'
+    const isCrossBorderStripe = isStripeCrossBorderSupported(data.countryCode) && paymentProvider === 'stripe'
 
-    // Validate country is supported (has minimum defined)
+    // Cross-border Stripe creators MUST use USD
+    // Stripe processes payments in USD on the platform account, then converts to local currency on payout
+    // Paystack creators use their local currency (NGN/GHS/KES/ZAR) — no enforcement needed
+    // If no provider is specified yet, allow their chosen currency (will be validated again at checkout)
+    const currency = isCrossBorderStripe ? 'USD' : data.currency.toUpperCase()
+
+    // Validate countryCode is supported by the selected payment provider
+    // This prevents submitting unknown country codes to bypass minimum pricing validation
+    if (paymentProvider === 'stripe' && !isStripeSupported(data.countryCode)) {
+      return c.json({
+        error: `${data.country} is not currently supported for Stripe payments. Please contact support.`,
+      }, 400)
+    }
+
+    // Validate country has creator minimums defined (secondary check using country name)
     const creatorMinimum = getCreatorMinimum(data.country)
     if (!creatorMinimum && paymentProvider === 'stripe') {
-      // Only enforce for Stripe - Paystack countries have different economics
       return c.json({
         error: `${data.country} is not currently supported for Stripe payments. Please contact support.`,
       }, 400)
@@ -221,11 +229,20 @@ profile.put(
     // This prevents RequireAuth from redirecting authenticated users back to /onboarding
     await clearOnboardingState(userId)
 
-    // Send welcome email only when profile is first published (not on creation)
-    // This ensures users don't get the welcome email until they click "Launch My Page"
+    // Send welcome email only on FIRST publish (not re-publish after unpublish)
+    // Guard with activity record to prevent duplicate welcome emails
     if (isPublishTransition && user) {
-      await sendWelcomeEmail(user.email, data.displayName)
-      // Cancel any pending onboarding reminders
+      const alreadySentWelcome = await db.activity.findFirst({
+        where: { userId, type: 'welcome_email_sent' },
+        select: { id: true },
+      })
+      if (!alreadySentWelcome) {
+        await sendWelcomeEmail(user.email, data.displayName)
+        await db.activity.create({
+          data: { userId, type: 'welcome_email_sent', payload: {} },
+        })
+      }
+      // Cancel any pending onboarding reminders (always, even on re-publish)
       await cancelOnboardingReminders(userId)
     }
 
@@ -297,7 +314,13 @@ profile.patch(
     if (data.phone !== undefined) updateData.phone = data.phone || null
     if (data.country !== undefined) updateData.country = data.country
     if (data.countryCode !== undefined) updateData.countryCode = data.countryCode.toUpperCase()
-    if (data.currency !== undefined) updateData.currency = data.currency.toUpperCase()
+    if (data.currency !== undefined) {
+      // Enforce cross-border Stripe creators to USD (same rule as PUT route)
+      const effectiveCountryCode = (data.countryCode || existingProfile.countryCode || '').toUpperCase()
+      const effectiveProvider = data.paymentProvider !== undefined ? data.paymentProvider : existingProfile.paymentProvider
+      const isCrossBorderStripe = isStripeCrossBorderSupported(effectiveCountryCode) && effectiveProvider === 'stripe'
+      updateData.currency = isCrossBorderStripe ? 'USD' : data.currency.toUpperCase()
+    }
     if (data.purpose !== undefined) updateData.purpose = data.purpose
     if (data.pricingModel !== undefined) updateData.pricingModel = data.pricingModel
     if (data.paymentProvider !== undefined) updateData.paymentProvider = data.paymentProvider || null

@@ -6,6 +6,7 @@
  */
 
 import { redis } from '../db/redis.js'
+import { getQueueDepths } from './queue.js'
 
 const JOB_HEALTH_PREFIX = 'job_health:'
 
@@ -25,6 +26,7 @@ export const JOB_SCHEDULES: Record<string, { intervalSeconds: number; descriptio
   'stats-aggregate': { intervalSeconds: 24 * 60 * 60, description: 'Aggregate daily stats (daily)' },
   'dispute-monitoring': { intervalSeconds: 24 * 60 * 60, description: 'Monitor dispute rates (daily)' },
   'sync-balances': { intervalSeconds: 30 * 60, description: 'Sync creator balances (every 30 min)' },
+  'webhook-retries': { intervalSeconds: 15 * 60, description: 'Retry failed/pending webhooks (every 15 min)' },
 }
 
 interface JobRunRecord {
@@ -87,6 +89,7 @@ export async function getJobsHealth(): Promise<{
   jobs: JobHealthStatus[]
   staleJobs: string[]
   failedJobs: string[]
+  queueFailedCount: number
 }> {
   const jobs: JobHealthStatus[] = []
   const staleJobs: string[] = []
@@ -153,6 +156,20 @@ export async function getJobsHealth(): Promise<{
     }
   }
 
+  // Check BullMQ queue metrics for failed jobs that runTrackedJob wouldn't catch
+  // (runTrackedJob records success when .add() resolves, not when the worker finishes)
+  let queueFailedCount = 0
+  try {
+    const queueDepths = await getQueueDepths()
+    for (const [, depth] of Object.entries(queueDepths)) {
+      if (depth && depth.failed > 0) {
+        queueFailedCount += depth.failed
+      }
+    }
+  } catch {
+    // Non-critical - queue depth check is best-effort
+  }
+
   // Determine overall status
   let status: 'healthy' | 'degraded' | 'critical' = 'healthy'
 
@@ -162,6 +179,10 @@ export async function getJobsHealth(): Promise<{
     status = 'critical'
   } else if (staleJobs.length > 0 || failedJobs.length > 0) {
     status = 'degraded'
+  } else if (queueFailedCount > 0) {
+    // runTrackedJob may have reported success (queue.add resolved),
+    // but the worker subsequently failed processing the job
+    status = 'degraded'
   }
 
   return {
@@ -169,6 +190,7 @@ export async function getJobsHealth(): Promise<{
     jobs,
     staleJobs,
     failedJobs,
+    queueFailedCount,
   }
 }
 

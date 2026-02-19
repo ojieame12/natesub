@@ -5,7 +5,7 @@ import { handlePlatformSubscriptionEvent } from '../services/platformSubscriptio
 
 // Stripe Handlers
 import { handleCheckoutCompleted, handleAsyncPaymentSucceeded, handleCheckoutExpired } from '../routes/webhooks/stripe/checkout.js'
-import { handleInvoiceCreated, handleInvoicePaid, handleInvoicePaymentFailed } from '../routes/webhooks/stripe/invoice.js'
+import { handleInvoiceCreated, handleInvoiceFinalized, handleInvoicePaid, handleInvoicePaymentFailed } from '../routes/webhooks/stripe/invoice.js'
 import { handleSubscriptionUpdated, handleSubscriptionDeleted } from '../routes/webhooks/stripe/subscription.js'
 import { handleAccountUpdated } from '../routes/webhooks/stripe/connect.js'
 import { handleChargeRefunded, handlePaymentIntentFailed } from '../routes/webhooks/stripe/payment.js'
@@ -134,6 +134,9 @@ async function processStripeEvent(event: any) {
       break
     case 'invoice.created':
       await handleInvoiceCreated(event)
+      break
+    case 'invoice.finalized':
+      await handleInvoiceFinalized(event)
       break
     case 'invoice.paid':
       await handleInvoicePaid(event)

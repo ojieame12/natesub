@@ -33,24 +33,27 @@ export async function getFailedWebhooksForRetry(): Promise<{
 }[]> {
   const now = new Date()
 
-  // Get failed events that haven't exceeded max retries
+  // Get failed and pending_retry events that haven't exceeded max retries.
+  // Use a generous limit because the JS backoff filter below may discard many rows.
+  // pending_retry events (from queue-dispatch failures) have retryCount 0 and are
+  // always ready, so they pass the filter immediately.
   const failedEvents = await db.webhookEvent.findMany({
     where: {
-      status: 'failed',
+      status: { in: ['failed', 'pending_retry'] },
       retryCount: { lt: MAX_RETRIES },
     },
     orderBy: { createdAt: 'asc' },
-    take: 50, // Process in batches
+    take: 200,
   })
 
-  // Filter events that are ready for retry based on backoff
+  // Filter events that are ready for retry based on backoff, then cap at 50
   return failedEvents.filter(event => {
     const lastAttempt = event.processedAt || event.createdAt
     const retryDelay = RETRY_DELAYS[Math.min(event.retryCount, RETRY_DELAYS.length - 1)]
     const retryAfter = new Date(lastAttempt.getTime() + retryDelay)
 
     return now >= retryAfter
-  })
+  }).slice(0, 50)
 }
 
 /**

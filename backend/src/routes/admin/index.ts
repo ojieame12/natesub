@@ -18,6 +18,7 @@
 import { Hono } from 'hono'
 import { adminAuth, requireValidAdminOrigin, requireAllowedIp } from '../../middleware/adminAuth.js'
 import { adminReadRateLimit } from '../../middleware/rateLimit.js'
+import { env } from '../../config/env.js'
 
 // Import controllers
 import users from './users.js'
@@ -75,9 +76,11 @@ admin.route('/', system)
 // These define: /, /:id, /:id/block, /:id/unblock, /test-cleanup/*, /create-creator
 admin.route('/users', users)
 
-// Mount Paystack routes at /paystack
+// Mount Paystack routes at /paystack (gated behind ENABLE_PAYSTACK)
 // These define: /banks/:country, /resolve-account
-admin.route('/paystack', paystackRoutes)
+if (env.ENABLE_PAYSTACK) {
+  admin.route('/paystack', paystackRoutes)
+}
 
 // Mount payment routes at /payments
 // These define: /, /:id, /:id/refund

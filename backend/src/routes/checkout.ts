@@ -83,12 +83,16 @@ checkout.post(
     const payerIsGlobal = validPayerCountry && !payerIsLocal
 
     // INTELLIGENT ROUTING v2:
+    // - When Paystack is paused (ENABLE_PAYSTACK=false) → always Stripe
     // - Local payers (NG/KE/ZA/GH) → Paystack (best local UX)
     // - Global payers → Stripe (best global coverage, handles FX)
     // - If creator only has one provider → use that (regardless of payer geo)
     let inferredProvider: 'stripe' | 'paystack' | null = null
 
-    if (hasBothProviders) {
+    if (!env.ENABLE_PAYSTACK) {
+      // Paystack paused for Stripe-first launch — force Stripe for all new checkouts
+      inferredProvider = hasStripeAccount ? 'stripe' : null
+    } else if (hasBothProviders) {
       if (payerIsLocal) {
         // Local payer → Paystack for best local experience
         inferredProvider = 'paystack'
@@ -490,20 +494,31 @@ checkout.get(
 
       // SECURITY: Verify transaction belongs to the expected creator
       // This prevents spoofing where attacker uses their valid reference on another creator's page
-      if (creatorUsername && transaction.metadata?.creatorId) {
+      if (creatorUsername) {
         const profile = await db.profile.findUnique({
           where: { username: creatorUsername.toLowerCase() },
           select: { userId: true }
         })
 
-        if (profile && profile.userId !== transaction.metadata.creatorId) {
-          // SPOOF DETECTED: Valid Paystack transaction, but for WRONG creator
-          console.warn(`[checkout] Paystack spoof attempt: reference ${reference} belongs to ${transaction.metadata.creatorId}, not ${profile.userId}`)
-          return c.json({
-            verified: false,
-            error: 'Transaction does not belong to this creator',
-            status: 'mismatch'
-          }, 400)
+        if (profile) {
+          if (!transaction.metadata?.creatorId) {
+            // No creator metadata — cannot confirm ownership, fail closed
+            console.warn(`[checkout] Paystack verify missing metadata: reference ${reference} has no creatorId, requested by ${profile.userId}`)
+            return c.json({
+              verified: false,
+              error: 'Cannot verify transaction ownership: missing metadata',
+              status: 'unverifiable'
+            }, 400)
+          }
+          if (profile.userId !== transaction.metadata.creatorId) {
+            // SPOOF DETECTED: Valid Paystack transaction, but for WRONG creator
+            console.warn(`[checkout] Paystack spoof attempt: reference ${reference} belongs to ${transaction.metadata.creatorId}, not ${profile.userId}`)
+            return c.json({
+              verified: false,
+              error: 'Transaction does not belong to this creator',
+              status: 'mismatch'
+            }, 400)
+          }
         }
       }
 
@@ -577,7 +592,16 @@ checkout.get(
           select: { userId: true }
         })
 
-        if (profile && session.metadata?.creatorId) {
+        if (profile) {
+          if (!session.metadata?.creatorId) {
+            // No creator metadata — cannot confirm ownership, fail closed
+            console.warn(`[checkout] Stripe verify missing metadata: session ${sessionId} has no creatorId, requested by ${profile.userId}`)
+            return c.json({
+              verified: false,
+              error: 'Cannot verify session ownership: missing metadata',
+              status: 'unverifiable'
+            }, 400)
+          }
           if (profile.userId !== session.metadata.creatorId) {
             // SPOOF DETECTED: Valid stripe session, but for WRONG creator
             return c.json({

@@ -145,6 +145,19 @@ export async function paystackWebhookHandler(c: Context) {
     return c.json({ received: true })
   } catch (error: any) {
     console.error(`[paystack] Failed to queue webhook ${eventId}:`, error)
-    return c.json({ error: 'Internal server error' }, 500)
+
+    // Queue dispatch failed - mark for automatic retry and return 200 to prevent Paystack retry storm
+    // The webhook event is already persisted (upsert above) so we won't lose it
+    await db.webhookEvent.update({
+      where: { id: webhookEvent.id },
+      data: {
+        status: 'pending_retry',
+        error: `Queue dispatch failed: ${error.message || 'Unknown error'}`,
+      },
+    }).catch((dbErr: any) => {
+      console.error(`[paystack] Failed to update webhook status for ${eventId}:`, dbErr)
+    })
+
+    return c.json({ received: true, status: 'pending_retry' })
   }
 }

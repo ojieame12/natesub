@@ -154,11 +154,14 @@ requests.post(
     }
 
     // Determine which provider to use:
-    // 1. If paymentProvider is explicitly set and that provider is connected, use it
-    // 2. If paymentProvider not set (legacy), use whichever is available (prefer Stripe if both)
-    // 3. If paymentProvider is set but that provider isn't connected, fall back to what's available
+    // 1. If Paystack is paused (ENABLE_PAYSTACK=false), always use Stripe
+    // 2. If paymentProvider is explicitly set and that provider is connected, use it
+    // 3. If paymentProvider not set (legacy), use whichever is available (prefer Stripe if both)
     let usePaystack: boolean
-    if (profile?.paymentProvider === 'paystack') {
+    if (!env.ENABLE_PAYSTACK) {
+      // Paystack paused for Stripe-first launch — force Stripe for all new checkouts
+      usePaystack = false
+    } else if (profile?.paymentProvider === 'paystack') {
       usePaystack = hasPaystack // Use Paystack if set and available, else will fail below
     } else if (profile?.paymentProvider === 'stripe') {
       usePaystack = !hasStripe && hasPaystack // Only use Paystack as fallback if Stripe unavailable

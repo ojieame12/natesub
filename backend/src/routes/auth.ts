@@ -69,11 +69,13 @@ async function handleVerify(c: any, token: string, email?: string) {
     const { sessionToken, onboarding } = await verifyMagicLink(token, email)
 
     // Set session cookie (for web)
-    // SECURITY: sameSite='Strict' prevents CSRF attacks
+    // SECURITY: sameSite='Lax' prevents CSRF on state-changing requests (POST/PUT/DELETE)
+    // while allowing the cookie on top-level navigations (e.g., returning from Stripe/Paystack redirect).
+    // 'Strict' would block the cookie on cross-site redirects causing auth failure after payment onboarding.
     setCookie(c, 'session', sessionToken, {
       httpOnly: true,
       secure: env.NODE_ENV === 'production',
-      sameSite: 'Strict',
+      sameSite: 'Lax',
       maxAge: 7 * 24 * 60 * 60, // 7 days
       path: '/',
     })

@@ -251,104 +251,138 @@ export async function processDueReminders(effectiveNow?: Date): Promise<Reminder
 
   const now = effectiveNow || new Date()
 
-  // Find all scheduled reminders that are due
-  const dueReminders = await db.reminder.findMany({
+  const BATCH_SIZE = 100
+  const MAX_TOTAL = 1000 // Safety cap to prevent runaway loops
+
+  // Paginate through all due reminders in batches
+  let batch = await db.reminder.findMany({
     where: {
       status: 'scheduled',
       scheduledFor: { lte: now },
     },
     orderBy: { scheduledFor: 'asc' },
-    take: 100, // Process in batches
+    take: BATCH_SIZE,
   })
 
-  console.log(`[reminders] Found ${dueReminders.length} due reminders`)
+  do {
+    console.log(`[reminders] Fetched batch of ${batch.length} due reminders (total processed so far: ${result.processed})`)
 
-  for (const reminder of dueReminders) {
-    // Acquire lock for this specific reminder to prevent duplicate processing
-    const lockKey = `reminder:${reminder.id}`
-    const lockToken = await acquireLock(lockKey, 60000) // 1 minute TTL
+    let batchLocksAcquired = 0
 
-    if (!lockToken) {
-      // Another worker is processing this reminder
-      console.log(`[reminders] Skipping reminder ${reminder.id} - locked by another worker`)
-      continue
-    }
+    for (const reminder of batch) {
+      // Acquire lock for this specific reminder to prevent duplicate processing
+      const lockKey = `reminder:${reminder.id}`
+      const lockToken = await acquireLock(lockKey, 60000) // 1 minute TTL
 
-    result.processed++
-
-    try {
-      // Double-check the reminder is still scheduled (another worker may have processed it)
-      const currentReminder = await db.reminder.findUnique({
-        where: { id: reminder.id },
-      })
-
-      if (!currentReminder || currentReminder.status !== 'scheduled') {
-        console.log(`[reminders] Skipping reminder ${reminder.id} - already processed`)
-        await releaseLock(lockKey, lockToken)
+      if (!lockToken) {
+        // Another worker is processing this reminder
+        console.log(`[reminders] Skipping reminder ${reminder.id} - locked by another worker`)
         continue
       }
 
-      const sent = await processReminder(reminder)
+      batchLocksAcquired++
+      result.processed++
 
-      if (sent) {
+      try {
+        // Double-check the reminder is still scheduled (another worker may have processed it)
+        const currentReminder = await db.reminder.findUnique({
+          where: { id: reminder.id },
+        })
+
+        if (!currentReminder || currentReminder.status !== 'scheduled') {
+          console.log(`[reminders] Skipping reminder ${reminder.id} - already processed`)
+          await releaseLock(lockKey, lockToken)
+          continue
+        }
+
+        const sent = await processReminder(reminder)
+
+        if (sent) {
+          await db.reminder.update({
+            where: { id: reminder.id },
+            data: {
+              status: 'sent',
+              sentAt: now,
+            },
+          })
+          result.sent++
+
+          // Log successful reminder
+          logReminderSent({
+            reminderId: reminder.id,
+            type: reminder.type,
+            channel: reminder.channel,
+            userId: reminder.userId,
+            entityType: reminder.entityType,
+            entityId: reminder.entityId,
+          })
+        } else {
+          // Mark as canceled if entity no longer needs reminder
+          await db.reminder.update({
+            where: { id: reminder.id },
+            data: { status: 'canceled' },
+          })
+        }
+      } catch (error: any) {
+        result.failed++
+        result.errors.push({
+          reminderId: reminder.id,
+          error: error.message || 'Unknown error',
+        })
+
+        // Log failed reminder
+        logReminderFailed({
+          reminderId: reminder.id,
+          type: reminder.type,
+          userId: reminder.userId,
+          error: error.message || 'Unknown error',
+        })
+
+        // Update retry count
         await db.reminder.update({
           where: { id: reminder.id },
           data: {
-            status: 'sent',
-            sentAt: now,
+            retryCount: { increment: 1 },
+            errorMessage: error.message || 'Unknown error',
+            // Mark as failed after 3 retries
+            status: reminder.retryCount >= 2 ? 'failed' : 'scheduled',
+            // Retry in 1 hour
+            scheduledFor: new Date(now.getTime() + 60 * 60 * 1000),
           },
         })
-        result.sent++
 
-        // Log successful reminder
-        logReminderSent({
-          reminderId: reminder.id,
-          type: reminder.type,
-          channel: reminder.channel,
-          userId: reminder.userId,
-          entityType: reminder.entityType,
-          entityId: reminder.entityId,
-        })
-      } else {
-        // Mark as canceled if entity no longer needs reminder
-        await db.reminder.update({
-          where: { id: reminder.id },
-          data: { status: 'canceled' },
-        })
+        console.error(`[reminders] Failed to process reminder ${reminder.id}:`, error.message)
+      } finally {
+        await releaseLock(lockKey, lockToken)
       }
-    } catch (error: any) {
-      result.failed++
-      result.errors.push({
-        reminderId: reminder.id,
-        error: error.message || 'Unknown error',
-      })
-
-      // Log failed reminder
-      logReminderFailed({
-        reminderId: reminder.id,
-        type: reminder.type,
-        userId: reminder.userId,
-        error: error.message || 'Unknown error',
-      })
-
-      // Update retry count
-      await db.reminder.update({
-        where: { id: reminder.id },
-        data: {
-          retryCount: { increment: 1 },
-          errorMessage: error.message || 'Unknown error',
-          // Mark as failed after 3 retries
-          status: reminder.retryCount >= 2 ? 'failed' : 'scheduled',
-          // Retry in 1 hour
-          scheduledFor: new Date(now.getTime() + 60 * 60 * 1000),
-        },
-      })
-
-      console.error(`[reminders] Failed to process reminder ${reminder.id}:`, error.message)
-    } finally {
-      await releaseLock(lockKey, lockToken)
     }
-  }
+
+    // Break if no locks were acquired in this batch (all held by other workers)
+    if (batch.length > 0 && batchLocksAcquired === 0) {
+      console.warn(`[reminders] Entire batch of ${batch.length} was lock-held, stopping to avoid hot-loop.`)
+      break
+    }
+
+    // Safety cap: stop if we've processed too many in one run
+    if (result.processed >= MAX_TOTAL) {
+      console.warn(`[reminders] Reached safety cap of ${MAX_TOTAL} reminders, stopping. Remaining will be picked up next run.`)
+      break
+    }
+
+    // Fetch next batch if the current batch was full (more may exist)
+    if (batch.length === BATCH_SIZE) {
+      batch = await db.reminder.findMany({
+        where: {
+          status: 'scheduled',
+          scheduledFor: { lte: now },
+        },
+        orderBy: { scheduledFor: 'asc' },
+        take: BATCH_SIZE,
+      })
+    } else {
+      batch = []
+    }
+  } while (batch.length > 0)
 
   console.log(`[reminders] Processed: ${result.sent} sent, ${result.failed} failed`)
   return result

@@ -8,7 +8,7 @@
 
 import { useState } from 'react'
 import { Copy, Check, ArrowRight, X, HelpCircle, Pencil } from 'lucide-react'
-import { Pressable } from './index'
+import Pressable from './Pressable'
 import { getBanksForCountry, getCountryName, type BankInfo } from '../utils/swiftCodes'
 import './SwiftCodeLookup.css'
 

@@ -64,8 +64,8 @@ describe('PaymentMethodStep', () => {
 
     expect(screen.getByText('Connect payments')).toBeInTheDocument()
     expect(screen.getByText('Stripe')).toBeInTheDocument()
-    // Both Stripe and Paystack available for NG - user can choose
-    expect(screen.getByText('Paystack')).toBeInTheDocument()
+    // Paystack paused for Stripe-first launch — only Stripe shown for NG
+    expect(screen.queryByText('Paystack')).not.toBeInTheDocument()
   })
 
   it('selects Stripe and initiates connect flow', async () => {
@@ -116,22 +116,15 @@ describe('PaymentMethodStep', () => {
     ;(window as any).location = originalLocation
   })
 
-  it('selects Paystack and keeps local currency', async () => {
-    // NG user defaults to NGN, Paystack keeps it
+  // Paystack paused for Stripe-first launch — this test no longer applies
+  it.skip('selects Paystack and keeps local currency', async () => {
     renderWithProviders(<PaymentMethodStep />)
-
-    // Select Paystack
     fireEvent.click(screen.getByText('Paystack'))
-
-    // Click Continue
     const continueBtn = screen.getByText('Connect Payment Method')
     fireEvent.click(continueBtn)
-
     await waitFor(() => {
-      // Currency stays NGN for Paystack
       expect(api.profile.update).toHaveBeenCalledWith(expect.objectContaining({
         paymentProvider: 'paystack',
-        displayName: 'Test User', // firstName + lastName composite
         currency: 'NGN',
       }))
       expect(mockNavigate).toHaveBeenCalledWith('/onboarding/paystack')
@@ -323,11 +316,9 @@ describe('PaymentMethodStep', () => {
 
     const { rerender } = renderWithProviders(<PaymentMethodStep />)
 
-    // Neither option should be selected initially
+    // Paystack paused — only Stripe card rendered. Should not be selected initially.
     const stripeCard = screen.getByText('Stripe').closest('.payment-method-card')
-    const paystackCard = screen.getByText('Paystack').closest('.payment-method-card')
     expect(stripeCard).not.toHaveClass('selected')
-    expect(paystackCard).not.toHaveClass('selected')
 
     // Simulate store rehydration with paymentProvider set
     useOnboardingStore.setState({ paymentProvider: 'stripe' })

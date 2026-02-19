@@ -76,7 +76,7 @@ export default function StripeComplete() {
 
   // Prevent duplicate processing
   const hasProcessedSuccess = useRef(false)
-  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const pollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Read source from sessionStorage on mount (use safe wrapper for Safari private mode)
   useEffect(() => {
@@ -87,10 +87,10 @@ export default function StripeComplete() {
     safeSessionRemoveItem('stripe_onboarding_started_at')
   }, [])
 
-  // Cleanup intervals on unmount
+  // Cleanup timeouts on unmount
   useEffect(() => {
     return () => {
-      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current)
+      if (pollTimeoutRef.current) clearTimeout(pollTimeoutRef.current)
     }
   }, [])
 
@@ -203,40 +203,45 @@ export default function StripeComplete() {
   }, [status, source, resetOnboarding, queryClient])
 
   // Auto-poll when pending (but don't auto-redirect)
+  // Uses exponential backoff: 3s, 4.5s, 6.75s, 10s, 15s, 15s...
   useEffect(() => {
     if (status === 'pending') {
       setPollAttempts(0)
       setPollTimedOut(false)
 
-      pollIntervalRef.current = setInterval(async () => {
-        setPollAttempts(prev => {
-          const newAttempts = prev + 1
-          if (newAttempts > 12) { // Max 1 minute of polling
-            if (pollIntervalRef.current) clearInterval(pollIntervalRef.current)
-            setPollTimedOut(true)
-            return prev
-          }
-          return newAttempts
-        })
-
-        try {
-          // Polling: always refresh to get latest status, quick to skip bank details
-          const result = await api.stripe.getStatus({ quick: true, refresh: true })
-          setDetails(result.details || null)
-          if (result.status === 'active') {
-            setStatus('success')
-            if (pollIntervalRef.current) clearInterval(pollIntervalRef.current)
-          } else if (result.status === 'restricted') {
-            setStatus('restricted')
-            if (pollIntervalRef.current) clearInterval(pollIntervalRef.current)
-          }
-        } catch {
-          // Continue polling on error
+      const schedulePoll = (attempt: number) => {
+        if (attempt >= 12) {
+          setPollTimedOut(true)
+          return
         }
-      }, 5000)
+
+        const delay = Math.min(3000 * Math.pow(1.5, attempt), 15000)
+        pollTimeoutRef.current = setTimeout(async () => {
+          setPollAttempts(attempt + 1)
+
+          try {
+            // Polling: always refresh to get latest status, quick to skip bank details
+            const result = await api.stripe.getStatus({ quick: true, refresh: true })
+            setDetails(result.details || null)
+            if (result.status === 'active') {
+              setStatus('success')
+              return
+            } else if (result.status === 'restricted') {
+              setStatus('restricted')
+              return
+            }
+          } catch {
+            // Continue polling on error
+          }
+
+          schedulePoll(attempt + 1)
+        }, delay)
+      }
+
+      schedulePoll(0)
 
       return () => {
-        if (pollIntervalRef.current) clearInterval(pollIntervalRef.current)
+        if (pollTimeoutRef.current) clearTimeout(pollTimeoutRef.current)
       }
     }
   }, [status])

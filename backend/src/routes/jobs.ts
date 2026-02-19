@@ -486,6 +486,43 @@ jobs.post('/sync-balances', async (c) => {
   }
 })
 
+// Retry failed/pending_retry webhooks (run every 5-15 minutes)
+// Picks up events that failed queue-dispatch and got status 'pending_retry'
+jobs.post('/webhook-retries', async (c) => {
+  console.log('[jobs] Starting webhook retry job')
+
+  try {
+    const { getFailedWebhooksForRetry, retryWebhook } = await import('../services/dlq.js')
+
+    const { result, durationMs } = await runTrackedJob('webhook-retries', async () => {
+      const events = await getFailedWebhooksForRetry()
+      let retried = 0
+      let failed = 0
+
+      for (const event of events) {
+        const { success } = await retryWebhook(event.id)
+        if (success) {
+          retried++
+        } else {
+          failed++
+        }
+      }
+
+      return { found: events.length, retried, failed }
+    })
+
+    console.log(`[jobs] Webhook retries complete: ${result.retried}/${result.found} retried, ${result.failed} failed`)
+
+    return c.json({
+      success: true,
+      ...result,
+      durationMs,
+    })
+  } catch (error: any) {
+    return c.json(safeError(ErrorCodes.JOB_FAILED, error, 'jobs/webhook-retries'), 500)
+  }
+})
+
 // Health check for job system - reports last run times, staleness, and queue depths
 jobs.get('/health', async (c) => {
   const { getJobsHealth } = await import('../lib/jobHealth.js')

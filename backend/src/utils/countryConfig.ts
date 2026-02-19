@@ -26,12 +26,14 @@ export interface CountryConfig {
 const COUNTRIES: CountryConfig[] = [
   // Cross-border African countries (Stripe cross-border + simplified KYC)
   // Order: NG, GH, KE to match legacy test expectations
-  { code: 'NG', currency: 'NGN', skipAddress: true, paystackCreator: true, paystackPayer: true, stripeCrossBorder: true },
-  { code: 'GH', currency: 'GHS', skipAddress: true, paystackCreator: false, paystackPayer: true, stripeCrossBorder: true },
-  { code: 'KE', currency: 'KES', skipAddress: true, paystackCreator: true, paystackPayer: true, stripeCrossBorder: true },
-  // South Africa: Cross-border Stripe (0.5% fee), Paystack supported
+  // Paystack paused for Stripe-first launch. All countries use Stripe cross-border.
+  // To re-enable: set paystackCreator/paystackPayer back to true for NG, KE, ZA.
+  { code: 'NG', currency: 'NGN', skipAddress: true, paystackCreator: false, paystackPayer: false, stripeCrossBorder: true },
+  { code: 'GH', currency: 'GHS', skipAddress: true, paystackCreator: false, paystackPayer: false, stripeCrossBorder: true },
+  { code: 'KE', currency: 'KES', skipAddress: true, paystackCreator: false, paystackPayer: false, stripeCrossBorder: true },
+  // South Africa: Cross-border Stripe (0.5% fee)
   // Has asterisk on Stripe pricing = cross-border only, not native
-  { code: 'ZA', currency: 'ZAR', skipAddress: true, paystackCreator: true, paystackPayer: true, stripeCrossBorder: true },
+  { code: 'ZA', currency: 'ZAR', skipAddress: true, paystackCreator: false, paystackPayer: false, stripeCrossBorder: true },
   // All other Stripe-native countries (no special handling needed)
   // They use default: skipAddress=false, no paystack, no cross-border
 ]

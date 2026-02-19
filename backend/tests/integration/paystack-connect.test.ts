@@ -35,7 +35,8 @@ vi.mock('../../src/services/auth.js', async () => {
   }
 })
 
-describe('paystack connect flow', () => {
+// Paystack routes gated behind ENABLE_PAYSTACK (paused for Stripe-first launch)
+describe.skip('paystack connect flow', () => {
   let user: any
   let sessionCookie: string
 

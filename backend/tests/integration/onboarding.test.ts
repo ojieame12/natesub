@@ -1053,7 +1053,8 @@ describe('onboarding endpoints', () => {
 
       expect(res.status).toBe(200)
       const body = await res.json()
-      expect(body.profile.currency).toBe('NGN')
+      // Cross-border Stripe creators are forced to USD (platform processes in USD, Stripe handles FX on payout)
+      expect(body.profile.currency).toBe('USD')
       expect(body.profile.paymentProvider).toBe('stripe')
     })
 
@@ -1078,7 +1079,8 @@ describe('onboarding endpoints', () => {
 
       expect(res.status).toBe(200)
       const body = await res.json()
-      expect(body.profile.currency).toBe('KES')
+      // Cross-border Stripe creators are forced to USD (platform processes in USD, Stripe handles FX on payout)
+      expect(body.profile.currency).toBe('USD')
       expect(body.profile.paymentProvider).toBe('stripe')
     })
 
@@ -1103,7 +1105,8 @@ describe('onboarding endpoints', () => {
 
       expect(res.status).toBe(200)
       const body = await res.json()
-      expect(body.profile.currency).toBe('GHS')
+      // Cross-border Stripe creators are forced to USD (platform processes in USD, Stripe handles FX on payout)
+      expect(body.profile.currency).toBe('USD')
       expect(body.profile.paymentProvider).toBe('stripe')
     })
 

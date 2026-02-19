@@ -158,8 +158,8 @@ adminRevenue.use('*', adminAuth)
 adminRevenue.get('/all', async (c) => {
   const query = z.object({
     period: z.enum(['today', 'week', 'month', 'year', 'all']).default('month'),
-    days: z.coerce.number().default(30),
-    months: z.coerce.number().default(12),
+    days: z.coerce.number().min(1).max(365).default(30),
+    months: z.coerce.number().min(1).max(24).default(12),
     topCreatorsLimit: z.coerce.number().min(1).max(100).default(20)
   }).parse(c.req.query())
 
@@ -574,7 +574,7 @@ adminRevenue.get('/by-currency', async (c) => {
  */
 adminRevenue.get('/daily', async (c) => {
   const query = z.object({
-    days: z.coerce.number().default(30)
+    days: z.coerce.number().min(1).max(365).default(30)
   }).parse(c.req.query())
 
   const result = await cached(
@@ -695,7 +695,7 @@ adminRevenue.get('/daily', async (c) => {
  */
 adminRevenue.get('/monthly', async (c) => {
   const query = z.object({
-    months: z.coerce.number().default(12)
+    months: z.coerce.number().min(1).max(24).default(12)
   }).parse(c.req.query())
 
   const result = await cached(

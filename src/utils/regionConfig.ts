@@ -42,7 +42,7 @@ export const COUNTRIES: CountryConfig[] = [
     currency: 'NGN',
     currencyName: 'Naira',
     currencySymbol: '₦',
-    providers: ['stripe', 'paystack'],
+    providers: ['stripe'], // Paystack paused for Stripe-first launch
     crossBorder: true,
     skipAddress: true,
     region: 'africa',
@@ -54,7 +54,7 @@ export const COUNTRIES: CountryConfig[] = [
     currency: 'KES',
     currencyName: 'Shillings',
     currencySymbol: 'KSh',
-    providers: ['stripe', 'paystack'],
+    providers: ['stripe'], // Paystack paused for Stripe-first launch
     crossBorder: true,
     skipAddress: true,
     region: 'africa',
@@ -80,7 +80,7 @@ export const COUNTRIES: CountryConfig[] = [
     currency: 'ZAR',
     currencyName: 'Rand',
     currencySymbol: 'R',
-    providers: ['stripe', 'paystack'],
+    providers: ['stripe'], // Paystack paused for Stripe-first launch
     crossBorder: true, // Cross-border payouts only
     skipAddress: true, // Simplified KYC like other cross-border
     region: 'africa',
@@ -585,18 +585,8 @@ export const COUNTRIES: CountryConfig[] = [
     skipAddress: false,
     region: 'oceania',
   },
-  {
-    code: 'IN',
-    name: 'India',
-    flag: '🇮🇳',
-    currency: 'INR',
-    currencyName: 'Rupee',
-    currencySymbol: '₹',
-    providers: ['stripe'],
-    crossBorder: false,
-    skipAddress: false,
-    region: 'asia',
-  },
+  // India (IN) removed — Stripe has limited support for India (backend STRIPE_UNSUPPORTED_REGIONS)
+  // Re-add when Stripe India support is confirmed and backend isStripeSupported('IN') returns true
   {
     code: 'PH',
     name: 'Philippines',

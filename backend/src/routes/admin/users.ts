@@ -400,10 +400,15 @@ users.post('/test-cleanup/delete', adminSensitiveRateLimit, requireRole('super_a
 
 /**
  * POST /admin/users/create-creator
- * Create a fully-functional creator account
- * Requires: super_admin
+ * Create a fully-functional creator account (Paystack-backed)
+ * Requires: super_admin + ENABLE_PAYSTACK
  */
 users.post('/create-creator', adminSensitiveRateLimit, requireRole('super_admin'), async (c) => {
+  // Paystack paused for Stripe-first launch — this endpoint creates Paystack subaccounts
+  if (!env.ENABLE_PAYSTACK) {
+    return c.json({ error: 'Paystack is currently disabled. Use Stripe onboarding instead.' }, 503)
+  }
+
   const body = z.object({
     email: z.string().email(),
     displayName: z.string().min(2).max(50),
