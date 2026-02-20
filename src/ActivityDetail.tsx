@@ -216,6 +216,8 @@ const getActivityConfig = (type: string, isService: boolean): ActivityConfig => 
 
         // === NEUTRAL/INFO EVENTS ===
         case 'subscription_canceled':
+        case 'subscription_canceled_via_manage_page':
+        case 'subscription_canceled_via_email':
         case 'cancelled':
         case 'subscription_auto_canceled':
             return { title: isService ? 'Client Left' : 'Cancelled', icon: UserX, isPositive: false, isNegative: false, isWarning: false, showAmount: false }

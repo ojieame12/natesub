@@ -4,17 +4,17 @@ import { formatPaymentDescription } from '../../src/services/payroll.js'
 describe('formatPaymentDescription', () => {
   it('should format recurring payment with tier name', () => {
     const result = formatPaymentDescription('Pro Plan', 'recurring', 'john@example.com')
-    expect(result).toBe('Pro Plan - Subscription (j***n@example.com)')
+    expect(result).toBe('Pro Plan - Subscription (j***@example.com)')
   })
 
   it('should format one-time payment with tier name', () => {
     const result = formatPaymentDescription('Basic', 'one_time', 'jane@test.com')
-    expect(result).toBe('Basic - One-time payment (j***e@test.com)')
+    expect(result).toBe('Basic - One-time payment (j***@test.com)')
   })
 
   it('should use "Subscription" as default when tier is null', () => {
     const result = formatPaymentDescription(null, 'recurring', 'user@example.com')
-    expect(result).toBe('Subscription - Subscription (u***r@example.com)')
+    expect(result).toBe('Subscription - Subscription (u***@example.com)')
   })
 
   it('should handle empty email gracefully', () => {
@@ -34,7 +34,7 @@ describe('formatPaymentDescription', () => {
 
   it('should mask email correctly for longer local parts', () => {
     const result = formatPaymentDescription('Bronze', 'recurring', 'johndoe@example.com')
-    expect(result).toBe('Bronze - Subscription (j***e@example.com)')
+    expect(result).toBe('Bronze - Subscription (j***@example.com)')
   })
 
   it('should handle single character local part', () => {

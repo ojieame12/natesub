@@ -114,7 +114,7 @@ export async function sendDunningEmails(): Promise<NotificationResult> {
       const subscriberAmount = feeCalc.grossCents
 
       // Generate manage URL for direct access (no login required)
-      const manageUrl = generateManageUrl(sub.id)
+      const manageUrl = generateManageUrl(sub.id, sub.manageTokenNonce)
 
       await sendPaymentFailedEmail(
         sub.subscriber.email,

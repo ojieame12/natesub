@@ -23,6 +23,8 @@ export function getActivityIcon(type: string): ReactElement {
     case 'payment': return <DollarSign size={size} />
     case 'renewal': return <RefreshCw size={size} />
     case 'subscription_canceled':
+    case 'subscription_canceled_via_manage_page':
+    case 'subscription_canceled_via_email':
     case 'cancelled': return <UserX size={size} />
     case 'request_sent': return <Send size={size} />
     case 'request_accepted': return <Check size={size} />
@@ -41,6 +43,8 @@ export function getActivityTitle(type: string): string {
     case 'payment': return 'Payment Received'
     case 'renewal': return 'Renewed'
     case 'subscription_canceled':
+    case 'subscription_canceled_via_manage_page':
+    case 'subscription_canceled_via_email':
     case 'cancelled': return 'Cancelled'
     case 'request_sent': return 'Request Sent'
     case 'request_accepted': return 'Request Accepted'

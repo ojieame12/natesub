@@ -72,7 +72,7 @@ export function ActivityFeed({
             const amount = payload.amount ? centsToDisplayAmount(payload.amount, currency) : 0
             const name = payload.subscriberName || payload.recipientName || ''
             const tier = payload.tierName || ''
-            const isCanceled = activity.type === 'subscription_canceled'
+            const isCanceled = activity.type === 'subscription_canceled' || activity.type === 'subscription_canceled_via_manage_page' || activity.type === 'subscription_canceled_via_email'
 
             return (
               <Pressable

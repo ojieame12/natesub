@@ -323,14 +323,20 @@ mySubscriptions.post(
       try {
         const result = await cancelSubscription(subscription.stripeSubscriptionId, !immediate)
 
-        await db.subscription.update({
-          where: { id },
-          data: {
-            status: result.status === 'canceled' ? 'canceled' : subscription.status,
-            cancelAtPeriodEnd: result.cancelAtPeriodEnd,
-            canceledAt: result.canceledAt,
-          },
-        })
+        try {
+          await db.subscription.update({
+            where: { id },
+            data: {
+              status: result.status === 'canceled' ? 'canceled' : subscription.status,
+              cancelAtPeriodEnd: result.cancelAtPeriodEnd,
+              canceledAt: result.canceledAt,
+            },
+          })
+        } catch (dbErr) {
+          console.error('[my-subscriptions] DB update failed after Stripe cancel, reverting:', dbErr)
+          try { await reactivateSubscription(subscription.stripeSubscriptionId) } catch {}
+          throw dbErr
+        }
 
         // Record cancel feedback for analytics (if provided)
         if (reason) {
@@ -464,13 +470,19 @@ mySubscriptions.post(
       try {
         const result = await reactivateSubscription(subscription.stripeSubscriptionId)
 
-        await db.subscription.update({
-          where: { id },
-          data: {
-            cancelAtPeriodEnd: false,
-            canceledAt: null,
-          },
-        })
+        try {
+          await db.subscription.update({
+            where: { id },
+            data: {
+              cancelAtPeriodEnd: false,
+              canceledAt: null,
+            },
+          })
+        } catch (dbErr) {
+          console.error('[my-subscriptions] DB update failed after Stripe reactivate, reverting:', dbErr)
+          try { await cancelSubscription(subscription.stripeSubscriptionId, true) } catch {}
+          throw dbErr
+        }
 
         // Log reactivation event for audit trail
         await logSubscriptionEvent({
@@ -541,11 +553,17 @@ mySubscriptions.get(
 
     const decoded = validateCancelToken(token)
     if (!decoded) {
+      c.header('Cache-Control', 'no-store, no-cache, must-revalidate, private')
+      c.header('Pragma', 'no-cache')
       return c.json({
         error: 'Invalid or expired cancellation link',
         code: 'INVALID_TOKEN',
       }, 400)
     }
+
+    // Prevent caching of subscription PII on public endpoint
+    c.header('Cache-Control', 'no-store, no-cache, must-revalidate, private')
+    c.header('Pragma', 'no-cache')
 
     // Find the subscription
     const subscription = await db.subscription.findUnique({
@@ -598,11 +616,17 @@ mySubscriptions.post(
 
     const decoded = validateCancelToken(token)
     if (!decoded) {
+      c.header('Cache-Control', 'no-store, no-cache, must-revalidate, private')
+      c.header('Pragma', 'no-cache')
       return c.json({
         error: 'Invalid or expired cancellation link',
         code: 'INVALID_TOKEN',
       }, 400)
     }
+
+    // Prevent caching of subscription PII on public endpoint
+    c.header('Cache-Control', 'no-store, no-cache, must-revalidate, private')
+    c.header('Pragma', 'no-cache')
 
     // Find the subscription with subscriber info for confirmation email
     const subscription = await db.subscription.findUnique({
@@ -666,14 +690,20 @@ mySubscriptions.post(
       if (subscription.stripeSubscriptionId) {
         const result = await cancelSubscription(subscription.stripeSubscriptionId, true)
 
-        await db.subscription.update({
-          where: { id: subscription.id },
-          data: {
-            status: result.status === 'canceled' ? 'canceled' : subscription.status,
-            cancelAtPeriodEnd: result.cancelAtPeriodEnd,
-            canceledAt: result.canceledAt,
-          },
-        })
+        try {
+          await db.subscription.update({
+            where: { id: subscription.id },
+            data: {
+              status: result.status === 'canceled' ? 'canceled' : subscription.status,
+              cancelAtPeriodEnd: result.cancelAtPeriodEnd,
+              canceledAt: result.canceledAt,
+            },
+          })
+        } catch (dbErr) {
+          console.error('[my-subscriptions] DB update failed after Stripe cancel, reverting:', dbErr)
+          try { await reactivateSubscription(subscription.stripeSubscriptionId) } catch {}
+          throw dbErr
+        }
 
         // Log the cancellation source
         await db.activity.create({

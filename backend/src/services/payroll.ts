@@ -6,6 +6,7 @@ import { db } from '../db/client.js'
 import type { PayrollPeriodType } from '@prisma/client'
 import { scheduleReminder } from '../jobs/reminders.js'
 import { decryptAccountNumber } from '../utils/encryption.js'
+import { maskEmail } from '../utils/pii.js'
 
 // ============================================
 // TYPES
@@ -834,13 +835,6 @@ export async function setPdfUrl(periodId: string, pdfUrl: string): Promise<void>
 // ============================================
 // HELPERS
 // ============================================
-
-function maskEmail(email: string): string {
-  if (!email || !email.includes('@')) return '****'
-  const [local, domain] = email.split('@')
-  if (local.length <= 2) return `${local[0]}***@${domain}`
-  return `${local[0]}***${local.slice(-1)}@${domain}`
-}
 
 /**
  * Format payment description for income statements

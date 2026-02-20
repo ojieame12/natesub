@@ -7,7 +7,7 @@ import { withLock } from '../../../services/lock.js'
 import { encryptAuthorizationCode } from '../../../utils/encryption.js'
 import { addOneMonth, normalizeEmailAddress } from '../utils.js'
 import { invalidateAdminRevenueCache } from '../../../utils/cache.js'
-import { generateManageUrl } from '../../../utils/cancelToken.js'
+import { generateManageUrl, generateTokenNonce } from '../../../utils/cancelToken.js'
 
 // Paystack dashboard URL (no token needed - creators log in with their Paystack credentials)
 const PAYSTACK_DASHBOARD_URL = 'https://dashboard.paystack.com'
@@ -184,6 +184,9 @@ export async function handlePaystackChargeSuccess(data: any, eventId: string) {
   // Create or update subscription (upsert based on unique constraint)
   const subscriptionInterval = interval === 'month' ? 'month' : 'one_time'
 
+  // Generate nonce for token revocation before creating subscription
+  const manageTokenNonce = generateTokenNonce()
+
   // DISTRIBUTED LOCK: Prevent race conditions when processing concurrent webhooks
   // Lock key based on subscriber + creator to prevent duplicate subscriptions
   const lockKey = `sub:${subscriber.id}:${creatorId}:${subscriptionInterval}`
@@ -225,12 +228,14 @@ export async function handlePaystackChargeSuccess(data: any, eventId: string) {
           paystackCustomerCode: customer?.customer_code || null,
           feeModel: feeModel || null,
           feeMode: feeMode || null, // Lock fee mode at subscription creation for consistent renewals
+          manageTokenNonce,
           currentPeriodEnd: interval === 'month'
             ? addOneMonth(new Date()) // Proper calendar month, not 30 days
             : null,
         },
         update: {
           // Note: feeMode is NOT updated - it stays locked to the value at subscription creation
+          manageTokenNonce,
           // SECURITY: Encrypt authorization code at rest
           paystackAuthorizationCode: encryptAuthorizationCode(authorization?.authorization_code || null),
           paystackCustomerCode: customer?.customer_code || null,
@@ -357,7 +362,7 @@ export async function handlePaystackChargeSuccess(data: any, eventId: string) {
     if (customer?.email && subscription) {
       try {
         // Generate manage URL for our branded subscription management page
-        const manageUrl = generateManageUrl(subscription.id)
+        const manageUrl = generateManageUrl(subscription.id, manageTokenNonce)
 
         await sendSubscriptionConfirmationEmail(
           customer.email,

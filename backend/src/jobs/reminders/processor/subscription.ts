@@ -88,10 +88,10 @@ export async function processSubscriptionRenewalReminder(
   }
 
   // Generate signed cancel URL for 1-click cancellation without login
-  const cancelUrl = generateCancelUrl(subscriptionId)
+  const cancelUrl = generateCancelUrl(subscriptionId, subscription.manageTokenNonce)
 
   // Generate manage URL for our branded subscription management page
-  const manageUrl = generateManageUrl(subscriptionId)
+  const manageUrl = generateManageUrl(subscriptionId, subscription.manageTokenNonce)
 
   await sendRenewalReminderEmail(
     subscription.subscriber.email,
@@ -164,7 +164,7 @@ export async function processSubscriptionPaymentFailedReminder(
   }
 
   // Generate manage URL for our branded subscription management page
-  const manageUrl = generateManageUrl(subscriptionId)
+  const manageUrl = generateManageUrl(subscriptionId, subscription.manageTokenNonce)
 
   await sendPaymentFailedEmail(
     subscription.subscriber.email,
@@ -233,7 +233,7 @@ export async function processSubscriptionPastDueReminder(
   }
 
   // Generate manage URL for our branded subscription management page
-  const manageUrl = generateManageUrl(subscriptionId)
+  const manageUrl = generateManageUrl(subscriptionId, subscription.manageTokenNonce)
 
   // Send payment failed with no retry date (indicating it's past due)
   await sendPaymentFailedEmail(

@@ -1,6 +1,7 @@
 import { Job } from 'bullmq'
 import { _sendEmail } from '../services/email.js'
 import { env } from '../config/env.js'
+import { maskEmail } from '../utils/pii.js'
 
 export interface EmailJobData {
   to: string
@@ -8,14 +9,6 @@ export interface EmailJobData {
   html: string
   text?: string
   from?: string
-}
-
-// Mask email for logging (e.g., "te***@example.com")
-function maskEmail(email: string): string {
-  const [local, domain] = email.split('@')
-  if (!domain) return '***'
-  const masked = local.length > 2 ? `${local.slice(0, 2)}***` : '***'
-  return `${masked}@${domain}`
 }
 
 export async function emailProcessor(job: Job<EmailJobData>) {

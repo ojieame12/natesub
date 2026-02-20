@@ -52,6 +52,8 @@ const getActivityIcon = (type: string) => {
 
         // Neutral events
         case 'subscription_canceled':
+        case 'subscription_canceled_via_manage_page':
+        case 'subscription_canceled_via_email':
         case 'cancelled':
         case 'subscription_auto_canceled': return <UserX size={20} />
         case 'request_sent': return <Send size={20} />
@@ -87,6 +89,8 @@ const getActivityIconClass = (type: string) => {
 
         // Neutral - gray
         case 'subscription_canceled':
+        case 'subscription_canceled_via_manage_page':
+        case 'subscription_canceled_via_email':
         case 'cancelled':
         case 'subscription_auto_canceled': return 'activity-icon cancelled'
         case 'request_sent':
@@ -122,6 +126,8 @@ const getActivityTitle = (type: string, isService: boolean) => {
 
         // Neutral
         case 'subscription_canceled':
+        case 'subscription_canceled_via_manage_page':
+        case 'subscription_canceled_via_email':
         case 'cancelled':
         case 'subscription_auto_canceled': return isService ? 'Client Left' : 'Cancelled'
         case 'request_sent': return isService ? 'Invoice Sent' : 'Request Sent'
@@ -331,7 +337,7 @@ export default function Activity() {
                                         const name = payload.subscriberName || payload.recipientName || ''
                                         const tier = payload.tierName || ''
                                         const isNegative = isNegativeActivity(activity.type)
-                                        const isCanceled = activity.type === 'subscription_canceled' || activity.type === 'subscription_auto_canceled'
+                                        const isCanceled = activity.type === 'subscription_canceled' || activity.type === 'subscription_auto_canceled' || activity.type === 'subscription_canceled_via_manage_page' || activity.type === 'subscription_canceled_via_email'
 
                                         // Determine amount styling class
                                         const amountClass = isNegative ? 'refund' : isCanceled ? 'cancelled' : ''

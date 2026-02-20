@@ -533,6 +533,8 @@ const NOTIFICATION_ACTIVITY_TYPES = [
   'payment_received',
   'payment',
   'subscription_canceled',
+  'subscription_canceled_via_manage_page',
+  'subscription_canceled_via_email',
   'cancelled',
   'payout_initiated',
   'payout_completed',
@@ -583,6 +585,8 @@ function getNotificationTitle(type: string): string {
     case 'payment_received':
     case 'payment': return 'Payment Received'
     case 'subscription_canceled':
+    case 'subscription_canceled_via_manage_page':
+    case 'subscription_canceled_via_email':
     case 'cancelled': return 'Subscription Cancelled'
     case 'payout_initiated': return 'Payout Started'
     case 'payout_completed': return 'Payout Received'
@@ -606,6 +610,8 @@ function getNotificationDescription(type: string, payload: Record<string, unknow
     case 'payment':
       return name ? `${name} paid ${getCurrencySymbol(currency)}${amount ? (amount / 100).toFixed(2) : ''}` : 'Payment received'
     case 'subscription_canceled':
+    case 'subscription_canceled_via_manage_page':
+    case 'subscription_canceled_via_email':
     case 'cancelled':
       return name ? `${name} cancelled their subscription` : 'A subscription was cancelled'
     case 'payout_initiated':

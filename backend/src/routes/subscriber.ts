@@ -85,6 +85,15 @@ const cancelRateLimit = rateLimit({
   message: 'Too many cancellation attempts. Please try again later.',
 })
 
+// Reactivate action: 5 per hour per IP (matches cancel strictness)
+const reactivateRateLimit = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  maxRequests: 5,
+  keyPrefix: 'subscriber_reactivate_ip',
+  keyGenerator: (c) => `subscriber_reactivate_ip:${getClientIdentifier(c)}`,
+  message: 'Too many reactivation attempts. Please try again later.',
+})
+
 // ============================================
 // MIDDLEWARE
 // ============================================
@@ -215,7 +224,7 @@ function generateOtp(): string {
 
 function maskEmail(email: string): string {
   const [local, domain] = email.split('@')
-  if (!local || !domain) return email
+  if (!local || !domain) return '****'
   const maskedLocal = local.length > 2
     ? `${local[0]}***${local[local.length - 1]}`
     : `${local[0]}***`
@@ -247,12 +256,16 @@ subscriber.post(
     const { email } = c.req.valid('json')
     const normalizedEmail = email.toLowerCase().trim()
 
-    // Check per-email rate limit (3 per 15 min)
+    // Atomic increment with expiry (prevents orphaned keys if crash between incr/expire)
     const emailKey = `subscriber_otp_email:${normalizedEmail}`
-    const emailCount = await redis.incr(emailKey)
-    if (emailCount === 1) {
-      await redis.expire(emailKey, 15 * 60)
-    }
+    const emailCount = await redis.eval(
+      `local current = redis.call('incr', KEYS[1])
+       if current == 1 then redis.call('expire', KEYS[1], ARGV[1]) end
+       return current`,
+      1,
+      emailKey,
+      15 * 60
+    ) as number
     if (emailCount > 3) {
       // Still return generic message to prevent enumeration
       return c.json({
@@ -311,11 +324,15 @@ subscriber.post(
     const otpKey = `subscriber_otp:${normalizedEmail}`
     const attemptsKey = `subscriber_otp_attempts:${normalizedEmail}`
 
-    // Check attempts
-    const attempts = await redis.incr(attemptsKey)
-    if (attempts === 1) {
-      await redis.expire(attemptsKey, OTP_TTL_SECONDS)
-    }
+    // Atomic increment with expiry
+    const attempts = await redis.eval(
+      `local current = redis.call('incr', KEYS[1])
+       if current == 1 then redis.call('expire', KEYS[1], ARGV[1]) end
+       return current`,
+      1,
+      attemptsKey,
+      OTP_TTL_SECONDS
+    ) as number
     if (attempts > OTP_MAX_ATTEMPTS) {
       await redis.del(otpKey) // Invalidate OTP
       return c.json({
@@ -399,9 +416,10 @@ subscriber.get(
             status: 'canceled',
             currentPeriodEnd: { gte: new Date() }
           },
-          // Include canceling
+          // Include canceling (only statuses not already covered above)
           {
             cancelAtPeriodEnd: true,
+            status: { notIn: ['active', 'past_due', 'pending', 'canceled'] },
             currentPeriodEnd: { gte: new Date() }
           }
         ]
@@ -836,7 +854,7 @@ subscriber.post(
 // POST /subscriber/subscriptions/:id/reactivate - Undo cancel at period end
 subscriber.post(
   '/subscriptions/:id/reactivate',
-  portalRateLimit,
+  reactivateRateLimit,
   requireValidOrigin,
   requireSubscriberSession,
   async (c) => {

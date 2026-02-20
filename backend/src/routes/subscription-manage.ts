@@ -15,7 +15,7 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { db } from '../db/client.js'
-import { publicRateLimit } from '../middleware/rateLimit.js'
+import { publicRateLimit, rateLimit, getClientIdentifier } from '../middleware/rateLimit.js'
 import { validateManageToken } from '../utils/cancelToken.js'
 import { cancelSubscription, reactivateSubscription } from '../services/stripe.js'
 import { createSubscriberPortalSession } from '../services/stripe.js'
@@ -23,8 +23,18 @@ import { sendCancellationConfirmationEmail } from '../services/email.js'
 import { logSubscriptionEvent } from '../services/systemLog.js'
 import { env } from '../config/env.js'
 import { centsToDisplayAmount } from '../utils/currency.js'
+import { maskEmail } from '../utils/pii.js'
 
 const subscriptionManage = new Hono()
+
+// Strict rate limit for reactivation (matches cancel pattern)
+const reactivateRateLimit = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  maxRequests: 5,
+  keyPrefix: 'manage_reactivate_ip',
+  keyGenerator: (c: any) => `manage_reactivate_ip:${getClientIdentifier(c)}`,
+  message: 'Too many reactivation attempts. Please try again later.',
+})
 
 // Middleware to prevent caching of PII
 subscriptionManage.use('*', async (c, next) => {
@@ -143,12 +153,8 @@ subscriptionManage.get(
       },
     })
 
-    // Mask email for privacy (j***n@example.com)
-    const email = subscription.subscriber?.email || ''
-    const [localPart, domain] = email.split('@')
-    const maskedEmail = localPart && domain
-      ? `${localPart[0]}***${localPart.slice(-1)}@${domain}`
-      : email
+    // Mask email for privacy (j***@example.com)
+    const maskedEmail = maskEmail(subscription.subscriber?.email)
 
     // Determine provider and capabilities
     const provider = subscription.stripeSubscriptionId ? 'stripe' : 'paystack'
@@ -358,14 +364,21 @@ subscriptionManage.post(
       if (subscription.stripeSubscriptionId) {
         const result = await cancelSubscription(subscription.stripeSubscriptionId, true)
 
-        await db.subscription.update({
-          where: { id: subscription.id },
-          data: {
-            status: result.status === 'canceled' ? 'canceled' : subscription.status,
-            cancelAtPeriodEnd: result.cancelAtPeriodEnd,
-            canceledAt: result.canceledAt,
-          },
-        })
+        try {
+          await db.subscription.update({
+            where: { id: subscription.id },
+            data: {
+              status: result.status === 'canceled' ? 'canceled' : subscription.status,
+              cancelAtPeriodEnd: result.cancelAtPeriodEnd,
+              canceledAt: result.canceledAt,
+            },
+          })
+        } catch (dbErr) {
+          // Compensate: revert Stripe cancel to keep in sync
+          console.error('[manage] DB update failed after Stripe cancel, reverting:', dbErr)
+          try { await reactivateSubscription(subscription.stripeSubscriptionId) } catch {}
+          throw dbErr
+        }
       } else {
         // Paystack or other - update locally
         await db.subscription.update({
@@ -550,7 +563,7 @@ subscriptionManage.get(
 // POST /subscription/manage/:token/reactivate - Undo cancel at period end
 subscriptionManage.post(
   '/:token/reactivate',
-  publicRateLimit,
+  reactivateRateLimit,
   async (c) => {
     const token = c.req.param('token')
 
@@ -617,13 +630,20 @@ subscriptionManage.post(
       try {
         await reactivateSubscription(subscription.stripeSubscriptionId)
 
-        await db.subscription.update({
-          where: { id: subscriptionId },
-          data: {
-            cancelAtPeriodEnd: false,
-            canceledAt: null,
-          },
-        })
+        try {
+          await db.subscription.update({
+            where: { id: subscriptionId },
+            data: {
+              cancelAtPeriodEnd: false,
+              canceledAt: null,
+            },
+          })
+        } catch (dbErr) {
+          // Compensate: re-cancel in Stripe to keep in sync
+          console.error('[manage] DB update failed after Stripe reactivate, reverting:', dbErr)
+          try { await cancelSubscription(subscription.stripeSubscriptionId, true) } catch {}
+          throw dbErr
+        }
 
         // Log reactivation event
         await logSubscriptionEvent({

@@ -20,6 +20,7 @@ import {
   type IncomeStatementData,
   type PaymentRecord,
 } from '../services/pdf.js'
+import { maskEmail } from '../utils/pii.js'
 
 const payroll = new Hono()
 
@@ -409,14 +410,6 @@ payroll.get('/subscribers', requireAuth, requireServicePurpose, async (c) => {
     distinct: ['subscriberId'],
     take: 200, // Cap to prevent unbounded queries
   })
-
-  // Helper to mask email
-  const maskEmail = (email: string): string => {
-    if (!email || !email.includes('@')) return '****'
-    const [local, domain] = email.split('@')
-    if (local.length <= 2) return `${local[0]}***@${domain}`
-    return `${local[0]}***${local.slice(-1)}@${domain}`
-  }
 
   // Transform to unique subscriber list
   const subscriberMap = new Map<string, { id: string; email: string; displayName: string; tierName: string | null }>()

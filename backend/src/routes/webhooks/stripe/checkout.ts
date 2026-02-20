@@ -12,7 +12,7 @@ import {
 import { normalizeEmailAddress } from '../utils.js'
 import { invalidateAdminRevenueCache } from '../../../utils/cache.js'
 import { getReportingCurrencyData } from '../../../services/fx.js'
-import { generateManageUrl, generateExpressDashboardUrl } from '../../../utils/cancelToken.js'
+import { generateManageUrl, generateExpressDashboardUrl, generateTokenNonce } from '../../../utils/cancelToken.js'
 import { logger } from '../../../utils/logger.js'
 
 async function resolveStripeCheckoutCustomer(session: Stripe.Checkout.Session): Promise<{ email: string; name: string | null }> {
@@ -224,6 +224,9 @@ export async function handleCheckoutCompleted(event: Stripe.Event) {
   // isSubscriptionMode is already defined at the top of the function
   const subscriptionInterval = isSubscriptionMode ? 'month' : 'one_time'
 
+  // Generate nonce for token revocation before creating subscription
+  const manageTokenNonce = generateTokenNonce()
+
   // DISTRIBUTED LOCK: Prevent race conditions when processing concurrent webhooks
   // Lock key based on subscriber email + creator to prevent duplicate subscriptions
   const lockKey = `sub:${subscriber.id}:${creatorId}:${subscriptionInterval}`
@@ -254,6 +257,7 @@ export async function handleCheckoutCompleted(event: Stripe.Event) {
           stripeCustomerId: session.customer as string || null,
           feeModel: feeModel || null,
           feeMode: feeMode || null,
+          manageTokenNonce,
           // Store async payment follow-up data for invoice.paid to complete
           asyncViewId: isAsyncPayment ? (viewId || null) : null,
           asyncRequestId: isAsyncPayment ? (requestId || null) : null,
@@ -269,6 +273,7 @@ export async function handleCheckoutCompleted(event: Stripe.Event) {
           stripeCustomerId: session.customer as string || null,
           feeModel: feeModel || null,
           feeMode: feeMode || null,
+          manageTokenNonce,
           canceledAt: null, // Clear cancellation
           cancelAtPeriodEnd: false,
           // Store async payment follow-up data for invoice.paid to complete
@@ -433,7 +438,7 @@ export async function handleCheckoutCompleted(event: Stripe.Event) {
       try {
         // Generate manage URL for our branded subscription management page
         const manageUrl = subscription
-          ? generateManageUrl(subscription.id)
+          ? generateManageUrl(subscription.id, manageTokenNonce)
           : undefined
 
         await sendSubscriptionConfirmationEmail(

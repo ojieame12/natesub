@@ -14,7 +14,7 @@
  * Tokens can be revoked by rotating the subscription's manageTokenNonce.
  */
 
-import { createHmac, randomBytes } from 'crypto'
+import { createHmac, randomBytes, timingSafeEqual } from 'crypto'
 import { env } from '../config/env.js'
 
 // Token validity: 30 days
@@ -74,7 +74,7 @@ export function validateCancelToken(token: string): { subscriptionId: string; no
         .update(payload)
         .digest('base64url')
 
-      if (providedSignature !== expectedSignature) {
+      if (!timingSafeEqual(Buffer.from(providedSignature), Buffer.from(expectedSignature))) {
         return null
       }
 
@@ -104,7 +104,7 @@ export function validateCancelToken(token: string): { subscriptionId: string; no
       .update(payload)
       .digest('base64url')
 
-    if (providedSignature !== expectedSignature) {
+    if (!timingSafeEqual(Buffer.from(providedSignature), Buffer.from(expectedSignature))) {
       return null
     }
 
@@ -181,7 +181,7 @@ export function validatePortalToken(token: string): { stripeCustomerId: string; 
       .update(payload)
       .digest('base64url')
 
-    if (providedSignature !== expectedSignature) {
+    if (!timingSafeEqual(Buffer.from(providedSignature), Buffer.from(expectedSignature))) {
       return null
     }
 
@@ -257,7 +257,7 @@ export function validateExpressDashboardToken(token: string): { stripeAccountId:
       .update(payload)
       .digest('base64url')
 
-    if (providedSignature !== expectedSignature) {
+    if (!timingSafeEqual(Buffer.from(providedSignature), Buffer.from(expectedSignature))) {
       return null
     }
 
@@ -279,7 +279,7 @@ export function validateExpressDashboardToken(token: string): { stripeAccountId:
  */
 export function generateExpressDashboardUrl(stripeAccountId: string): string {
   const token = generateExpressDashboardToken(stripeAccountId)
-  return `${env.APP_URL}/express-dashboard/${token}`
+  return `${env.APP_URL}/my-subscriptions/express-dashboard/${token}`
 }
 
 // ============================================
@@ -331,7 +331,7 @@ export function validateManageToken(token: string): { subscriptionId: string; no
         .update(payload)
         .digest('base64url')
 
-      if (providedSignature !== expectedSignature) {
+      if (!timingSafeEqual(Buffer.from(providedSignature), Buffer.from(expectedSignature))) {
         return null
       }
 
@@ -361,7 +361,7 @@ export function validateManageToken(token: string): { subscriptionId: string; no
       .update(payload)
       .digest('base64url')
 
-    if (providedSignature !== expectedSignature) {
+    if (!timingSafeEqual(Buffer.from(providedSignature), Buffer.from(expectedSignature))) {
       return null
     }
 
