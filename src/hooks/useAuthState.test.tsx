@@ -50,9 +50,42 @@ describe('hooks/useAuthState', () => {
 
     await waitFor(() => expect(result.current.status).toBe('authenticated'))
     expect(result.current.needsPaymentSetup).toBe(true)
+    expect(result.current.needsLaunch).toBe(false)
     expect(result.current.needsOnboarding).toBe(false)
     expect(result.current.isFullySetUp).toBe(false)
     expect(result.current.onboarding?.branch).toBe('service')
+  })
+
+  it('marks private creators as needing launch even with active payments', async () => {
+    setAuthToken('token')
+
+    vi.spyOn(api.auth, 'me').mockResolvedValue({
+      id: 'u2',
+      email: 'creator@example.com',
+      profile: { id: 'p2', isPublic: false },
+      createdAt: '2025-01-01T00:00:00.000Z',
+      onboarding: {
+        hasProfile: true,
+        hasActivePayment: true,
+        step: null,
+        branch: null,
+        data: null,
+        redirectTo: '/edit-page?launch=1',
+      },
+    } as any)
+
+    const queryClient = createTestQueryClient()
+
+    const { result } = renderHook(() => useAuthState(), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      ),
+    })
+
+    await waitFor(() => expect(result.current.status).toBe('authenticated'))
+    expect(result.current.needsLaunch).toBe(true)
+    expect(result.current.isFullySetUp).toBe(false)
+    expect(result.current.needsPaymentSetup).toBe(false)
   })
 
   it('clears cookie-session flag and becomes unauthenticated on 401', async () => {

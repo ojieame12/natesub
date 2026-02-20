@@ -40,11 +40,14 @@ export interface AuthState {
   /** Whether auth check is complete (status is not unknown/checking) */
   isReady: boolean
 
-  /** Whether user is fully set up (profile + payment) */
+  /** Whether user is fully set up (profile + payment + public page) */
   isFullySetUp: boolean
 
   /** Whether user has profile but needs payment setup */
   needsPaymentSetup: boolean
+
+  /** Whether user has profile + payment but still needs to launch publicly */
+  needsLaunch: boolean
 
   /** Whether user needs to complete onboarding */
   needsOnboarding: boolean
@@ -145,7 +148,9 @@ export function useAuthState(): AuthState {
   // In Stripe/Paystack onboarding flows, webhooks can lag the user return redirect.
   // Treat a recent local "payment confirmed" flag as active payment to avoid yo-yo UX.
   const hasActivePayment = (user?.onboarding?.hasActivePayment ?? false) || hasRecentPaymentConfirmation()
-  const isFullySetUp = hasProfile && hasActivePayment
+  const isPrivateDraft = user?.profile?.isPublic === false
+  const needsLaunch = hasProfile && hasActivePayment && isPrivateDraft
+  const isFullySetUp = hasProfile && hasActivePayment && !isPrivateDraft
   const needsPaymentSetup = hasProfile && !hasActivePayment
   const needsOnboarding = !hasProfile
 
@@ -175,12 +180,13 @@ export function useAuthState(): AuthState {
     isReady,
     isFullySetUp,
     needsPaymentSetup,
+    needsLaunch,
     needsOnboarding,
     error: error
       ? (error instanceof Error ? error : new Error(error.error || 'Unknown error'))
       : null,
     refetch,
-  }), [status, memoizedUser, memoizedOnboarding, isReady, isFullySetUp, needsPaymentSetup, needsOnboarding, error, refetch])
+  }), [status, memoizedUser, memoizedOnboarding, isReady, isFullySetUp, needsPaymentSetup, needsLaunch, needsOnboarding, error, refetch])
 }
 
 export default useAuthState

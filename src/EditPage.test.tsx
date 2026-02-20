@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, fireEvent } from '@testing-library/react'
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { renderWithProviders } from './test/testUtils'
 import EditPage from './EditPage'
@@ -19,6 +19,7 @@ const mockProfile = {
   perks: [],
   bannerUrl: null,
   payoutStatus: 'active',
+  isPublic: false,
 }
 
 let profileReturn: any
@@ -173,6 +174,39 @@ describe('EditPage', () => {
 
       await waitFor(() => {
         expect(screen.queryByText('What Subscribers Get')).not.toBeInTheDocument()
+      })
+    })
+  })
+
+  describe('Visibility controls', () => {
+    it('shows page visibility section in edit page', async () => {
+      renderWithProviders(<EditPage />, { route: '/edit' })
+
+      await waitFor(() => {
+        expect(screen.getByText('Page Visibility')).toBeInTheDocument()
+        expect(screen.getByText('Private')).toBeInTheDocument()
+      })
+    })
+
+    it('saves visibility change when toggled to public', async () => {
+      const mutateAsync = vi.fn().mockResolvedValue({})
+      updateProfileReturn = {
+        mutateAsync,
+        isPending: false,
+      }
+
+      renderWithProviders(<EditPage />, { route: '/edit' })
+
+      await waitFor(() => {
+        expect(screen.getByRole('switch', { name: 'Page visibility' })).toBeInTheDocument()
+      })
+
+      const toggle = screen.getByRole('switch', { name: 'Page visibility' })
+      fireEvent.click(toggle)
+      fireEvent.click(screen.getByRole('button', { name: /save changes/i }))
+
+      await waitFor(() => {
+        expect(mutateAsync).toHaveBeenCalledWith(expect.objectContaining({ isPublic: true }))
       })
     })
   })

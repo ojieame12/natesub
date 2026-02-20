@@ -160,7 +160,7 @@ function AuthErrorHandler() {
  * auth state inline before deciding where to redirect.
  */
 function RootRedirect() {
-  const { status, isFullySetUp, needsPaymentSetup, refetch } = useAuthState()
+  const { status, isFullySetUp, needsPaymentSetup, needsLaunch, refetch } = useAuthState()
   const isRestoring = useIsRestoring()
 
   // During cache restoration, don't show skeleton - data will be available shortly
@@ -192,6 +192,9 @@ function RootRedirect() {
     if (isFullySetUp) {
       return <Navigate to="/dashboard" replace />
     }
+    if (needsLaunch) {
+      return <Navigate to="/edit-page?launch=1" replace />
+    }
     if (needsPaymentSetup) {
       // Allow dashboard access (Zero State will handle setup)
       return <Navigate to="/dashboard" replace />
@@ -213,7 +216,7 @@ function RootRedirect() {
 function InitialRouteRedirect() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { status, isFullySetUp, needsPaymentSetup, onboarding } = useAuthState()
+  const { status, isFullySetUp, needsPaymentSetup, needsLaunch, onboarding } = useAuthState()
   const hasNavigated = useRef(false)
   const hasHydrated = useRef(false)
   const currentStep = useOnboardingStore((s) => s.currentStep)
@@ -283,11 +286,13 @@ function InitialRouteRedirect() {
     if (isFullySetUp) {
       // Honor returnTo if present, otherwise go to dashboard
       navigate(returnTo || '/dashboard', { replace: true })
+    } else if (needsLaunch) {
+      navigate('/edit-page?launch=1', { replace: true })
     } else if (needsPaymentSetup) {
       navigate('/dashboard', { replace: true })
     }
     // needsOnboarding: Stay on /onboarding - the flow handles this
-  }, [isOnboardingPath, location.search, status, isFullySetUp, needsPaymentSetup, currentStep, onboarding, navigate, resetOnboarding, hydrateFromServer])
+  }, [isOnboardingPath, location.search, status, isFullySetUp, needsLaunch, needsPaymentSetup, currentStep, onboarding, navigate, resetOnboarding, hydrateFromServer])
 
   // Reset flags when leaving /onboarding
   useEffect(() => {

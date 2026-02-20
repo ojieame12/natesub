@@ -130,7 +130,7 @@ describe('auth service - dynamic onboarding completion', () => {
         onboardingStep: 6,
         onboardingBranch: 'personal' as const,
         onboardingData: { countryCode: 'US' },
-        profile: { payoutStatus: 'active', paymentProvider: 'stripe' },
+        profile: { payoutStatus: 'active', paymentProvider: 'stripe', isPublic: true },
       }
 
       const result = computeOnboardingState(user)
@@ -145,13 +145,27 @@ describe('auth service - dynamic onboarding completion', () => {
         onboardingStep: 7,
         onboardingBranch: 'personal' as const,
         onboardingData: { countryCode: 'US', purpose: 'service' },
-        profile: { payoutStatus: 'active', paymentProvider: 'stripe' },
+        profile: { payoutStatus: 'active', paymentProvider: 'stripe', isPublic: true },
       }
 
       const result = computeOnboardingState(user)
 
       // Step 7 >= 7 for service, so complete → dashboard
       expect(result.redirectTo).toBe('/dashboard')
+    })
+
+    it('redirects to launch flow when profile is private but payments are active', () => {
+      const user = {
+        id: 'user-1',
+        onboardingStep: null,
+        onboardingBranch: null,
+        onboardingData: null,
+        profile: { payoutStatus: 'active', paymentProvider: 'stripe', isPublic: false },
+      }
+
+      const result = computeOnboardingState(user)
+
+      expect(result.redirectTo).toBe('/edit-page?launch=1')
     })
   })
 
