@@ -1286,11 +1286,9 @@ export function useCreatorMinimum(country: string | null | undefined) {
 }
 
 /**
- * Get creator's dynamic minimum subscription based on their subscriber count.
- * The $2/month Stripe account fee is amortized across active subscribers:
- * - New creator (0-1 subs): Higher minimum to cover full account fee
- * - Growing creator (5+ subs): Lower minimum as fee spreads across subscribers
- * - Established creator (20+ subs): Converges to floor minimum
+ * Get creator's minimum subscription based on their country's fee structure.
+ * Minimum covers processing + payout fixed costs at the net margin rate.
+ * Account fees are a platform cost, not amortized per-transaction.
  *
  * Requires authentication - this is creator-specific data.
  * Only relevant for Stripe creators - Paystack has different economics.

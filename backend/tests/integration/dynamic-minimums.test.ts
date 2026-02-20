@@ -292,22 +292,18 @@ describe('dynamic minimums', () => {
       expect(res.status).toBe(200)
     })
 
-    it('allows lower minimum as subscriber count increases (destination charge countries)', async () => {
-      // Use a destination charge country (US) to test dynamic minimum decrease
-      // Direct charge countries (Nigeria) have flat $50 minimum regardless of subscriber count
+    it('minimum is consistent regardless of subscriber count (no account fee amortization)', async () => {
       const { rawToken } = await createStripeCreator({
         country: 'United States',
         subscriberCount: 20,
       })
 
-      // Get the floor minimum (should be lower for destination charge countries)
+      // No amortization — all subscriber counts yield same minimum
       const floorMin = getDynamicMinimum({ country: 'United States', subscriberCount: 20 })
       const newCreatorMin = getDynamicMinimum({ country: 'United States', subscriberCount: 1 })
+      expect(floorMin.minimumUSD).toBe(newCreatorMin.minimumUSD)
 
-      // Floor minimum should be lower for destination charge countries
-      expect(floorMin.minimumUSD).toBeLessThan(newCreatorMin.minimumUSD)
-
-      // Should be able to set at floor minimum (in USD)
+      // Should be able to set at minimum (in USD)
       const res = await authRequest(
         '/profile',
         {
@@ -348,24 +344,21 @@ describe('dynamic minimums', () => {
       expect(res.status).toBe(200)
     })
 
-    it('ZA new creator minimum is above $45 floor (account fee amortization) - accepted on backend', async () => {
-      // Backend no longer enforces minimum price on PATCH /profile.
-      // Minimums are still enforced at checkout time (checkout.ts).
+    it('ZA new creator minimum is $45 (same as floor, no account fee amortization)', async () => {
       const zaMin = getDynamicMinimum({ country: 'South Africa', subscriberCount: 0 })
-      expect(zaMin.minimumUSD).toBeGreaterThan(45) // Should be $60
+      expect(zaMin.minimumUSD).toBe(45) // No amortization — same as floor
 
       const { rawToken } = await createStripeCreator({
         country: 'South Africa',
         subscriberCount: 0,
       })
 
-      // Setting below actual minimum is now accepted (enforced at checkout)
-      const zaLocal45 = zaMin.minimumLocal - 100 // Just below actual minimum
+      // Can set at the $45 floor minimum
       const res = await authRequest(
         '/profile',
         {
           method: 'PATCH',
-          body: JSON.stringify({ singleAmount: zaLocal45 }),
+          body: JSON.stringify({ singleAmount: zaMin.minimumLocal }),
         },
         rawToken
       )
@@ -394,24 +387,21 @@ describe('dynamic minimums', () => {
       expect(res.status).toBe(200)
     })
 
-    it('KE new creator minimum is above $45 floor (higher fixed costs) - accepted on backend', async () => {
-      // Backend no longer enforces minimum price on PATCH /profile.
-      // Minimums are still enforced at checkout time (checkout.ts).
+    it('KE new creator minimum is $45 (same as floor, no account fee amortization)', async () => {
       const keMin = getDynamicMinimum({ country: 'Kenya', subscriberCount: 0 })
-      expect(keMin.minimumUSD).toBeGreaterThan(45) // Should be $65
+      expect(keMin.minimumUSD).toBe(45) // No amortization — same as floor
 
       const { rawToken } = await createStripeCreator({
         country: 'Kenya',
         subscriberCount: 0,
       })
 
-      // Setting below actual minimum is now accepted (enforced at checkout)
-      const kesTooLow = keMin.minimumLocal - 500 // Just below actual minimum
+      // Can set at the $45 floor minimum
       const res = await authRequest(
         '/profile',
         {
           method: 'PATCH',
-          body: JSON.stringify({ singleAmount: kesTooLow }),
+          body: JSON.stringify({ singleAmount: keMin.minimumLocal }),
         },
         rawToken
       )

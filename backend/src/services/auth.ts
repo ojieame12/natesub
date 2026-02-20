@@ -136,6 +136,7 @@ export function computeOnboardingState(user: {
   profile: {
     payoutStatus: string
     paymentProvider: string | null
+    isPublic?: boolean
   } | null
 }): OnboardingState {
   // Dynamic completion step based on country AND purpose (from onboarding data)
@@ -147,6 +148,7 @@ export function computeOnboardingState(user: {
   const hasProfile = !!user.profile
   // Payment is only "active" when Stripe/Paystack is fully connected
   const hasActivePayment = user.profile?.payoutStatus === 'active'
+  const needsLaunch = hasProfile && hasActivePayment && user.profile?.isPublic === false
 
   let redirectTo: string
 
@@ -163,6 +165,10 @@ export function computeOnboardingState(user: {
     redirectTo = stepKey
       ? `/onboarding?step=${stepKey}`
       : `/onboarding?step=${user.onboardingStep}`
+  } else if (needsLaunch) {
+    // Profile + payments are ready, but page is still private (draft).
+    // Send creators to launch flow so they can go live.
+    redirectTo = '/edit-page?launch=1'
   } else if (hasProfile) {
     // Profile exists - allow dashboard access regardless of payment status
     // (the app can guide them to finish setup).

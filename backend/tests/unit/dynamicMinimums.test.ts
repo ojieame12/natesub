@@ -29,13 +29,10 @@ describe('Dynamic Minimum Calculations', () => {
       // 0 and 1 should be treated the same (floor of 1)
       expect(min0).toBe(min1)
 
-      // Should decrease as subscribers increase (or stay same when hitting floor)
-      expect(min1).toBeGreaterThanOrEqual(min5)
-      expect(min5).toBeGreaterThanOrEqual(min10)
-      expect(min10).toBeGreaterThanOrEqual(min20)
-
-      // At least one step should show a decrease
-      expect(min1).toBeGreaterThan(min20)
+      // No account fee amortization — all subscriber counts yield same minimum
+      expect(min1).toBe(min5)
+      expect(min5).toBe(min10)
+      expect(min10).toBe(min20)
     })
 
     it('should floor at 20 subscribers (converge to static minimum)', () => {
@@ -87,15 +84,13 @@ describe('Dynamic Minimum Calculations', () => {
       expect(keMin1).toBeGreaterThanOrEqual(45)
     })
 
-    it('should have dynamic minimum for domestic countries', () => {
+    it('should have consistent minimum for domestic countries (no account fee amortization)', () => {
       const usMin = calculateDynamicMinimumUSD({ country: 'United States', subscriberCount: 1 })
-      const ukMin = calculateDynamicMinimumUSD({ country: 'United Kingdom', subscriberCount: 1 })
 
-      // Domestic countries use dynamic calculation (lower than cross-border)
-      // US: $60 for 1 sub (includes processing + $2 account fee)
-      // UK: $75 for 1 sub (includes processing + $2.50 account fee + 0.25% cross-border)
-      expect(usMin).toBe(60)
-      expect(ukMin).toBe(75)
+      // Domestic: processing fixed ($0.30) + payout fixed ($0.25) = $0.55
+      // Net margin: 9% - 4.45% = 4.55%
+      // Min = $0.55 / 0.0455 = ~$12.09 → rounded up to $15
+      expect(usMin).toBe(15)
     })
   })
 

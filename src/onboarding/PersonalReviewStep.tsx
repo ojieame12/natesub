@@ -1,15 +1,17 @@
 import { useState, useRef, useEffect } from 'react'
-import { ChevronLeft, ChevronDown, Check, Loader2, AlertCircle, Camera, RefreshCw, Edit3, Wand2, Plus, X } from 'lucide-react'
+import { ChevronLeft, Check, Loader2, AlertCircle, Camera, RefreshCw, Edit3, Wand2, Plus, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useOnboardingStore, useShallow } from './store'
 import { Button, Pressable } from './components'
 // BottomDrawer removed — purpose is now set in setup step
 import { getShareableLink } from '../utils/constants'
-import { getCurrencySymbol, getSuggestedAmounts, getMinimumAmount } from '../utils/currency'
+import { getCurrencySymbol, getMinimumAmount } from '../utils/currency'
 import {
     isCrossBorderCountry,
     getLocalCurrencyName,
-    getCrossBorderCurrencyOptions,
+    usdToLocalApprox,
+    localToUsdApprox,
+    getCountry,
 } from '../utils/regionConfig'
 import { api } from '../api'
 import { uploadFile, useGeneratePerks, useAIConfig, useCurrentUser, useCreatorMinimum, useMyMinimum } from '../api/hooks'
@@ -22,7 +24,6 @@ export default function PersonalReviewStep() {
     const [launching, setLaunching] = useState(false)
     const [isUploading, setIsUploading] = useState(false)
     const [error, setError] = useState<string | null>(null)
-    const [showCurrencyDrawer, setShowCurrencyDrawer] = useState(false)
 
     // Service mode state
     const [editingPerkIndex, setEditingPerkIndex] = useState<number | null>(null)
@@ -49,7 +50,6 @@ export default function PersonalReviewStep() {
         country,
         countryCode,
         currency,
-        setCurrency,
         avatarUrl,
         paymentProvider,
         address,
@@ -80,7 +80,6 @@ export default function PersonalReviewStep() {
         country: s.country,
         countryCode: s.countryCode,
         currency: s.currency,
-        setCurrency: s.setCurrency,
         avatarUrl: s.avatarUrl,
         paymentProvider: s.paymentProvider,
         address: s.address,
@@ -116,35 +115,67 @@ export default function PersonalReviewStep() {
     const isCrossBorderStripe = resolvedPaymentProvider === 'stripe' && isCrossBorderCountry(resolvedCountryCode)
     const localCurrencyName = getLocalCurrencyName(resolvedCountryCode)
 
+    // For cross-border Stripe: show local currency in UI, store USD behind the scenes
+    const countryConfig = getCountry(resolvedCountryCode)
+    const localCurrencySymbol = countryConfig?.currencySymbol || '$'
+    const displayCurrencySymbol = isCrossBorderStripe ? localCurrencySymbol : getCurrencySymbol(resolvedCurrency as string)
+
     // Construct display name from first/last name
     const displayName = `${firstName || ''} ${lastName || ''}`.trim()
 
     const currencySymbol = getCurrencySymbol(resolvedCurrency as string)
 
     // Price input as string for free editing
-    // Cross-border new creators have dynamic minimums ($45-$65 depending on country).
-    // Default to $65 (highest new-creator min: Kenya) to avoid showing a price the
-    // backend rejects. The auto-bump effect will adjust once myMinimum API loads.
-    // NG/GH creators can freely lower to their actual minimum ($45).
-    const initialPrice = singleAmount || (isCrossBorderStripe ? 65 : 10)
-    const [priceInput, setPriceInput] = useState(String(initialPrice))
+    // Cross-border: show in local currency (store amount is USD, display is local)
+    // For cross-border, convert stored USD to local for initial display
+    const getInitialDisplayPrice = (): string => {
+        const usdAmount = singleAmount || (isCrossBorderStripe ? 45 : 10)
+        if (isCrossBorderStripe) {
+            const local = usdToLocalApprox(usdAmount, resolvedCountryCode)
+            return local ? String(local.amount) : String(usdAmount)
+        }
+        return String(usdAmount)
+    }
+    const [priceInput, setPriceInput] = useState(getInitialDisplayPrice)
     const priceDebounceRef = useRef<NodeJS.Timeout | null>(null)
     // Track if user has manually edited the price (prevents overwriting their input on hydration)
     const hasUserEditedPriceRef = useRef(false)
+
+    // Convert display price (local for cross-border) to USD for storage
+    const displayToUsd = (displayVal: number): number => {
+        if (isCrossBorderStripe) {
+            const usd = localToUsdApprox(displayVal, resolvedCountryCode)
+            return usd ?? displayVal
+        }
+        return displayVal
+    }
+
+    // Convert USD storage value to display value (local for cross-border)
+    const usdToDisplay = (usdVal: number): number => {
+        if (isCrossBorderStripe) {
+            const local = usdToLocalApprox(usdVal, resolvedCountryCode)
+            return local?.amount ?? usdVal
+        }
+        return usdVal
+    }
 
     // Sync priceInput when singleAmount hydrates from server (resume flow)
     // Only sync if user hasn't manually edited the price yet
     useEffect(() => {
         if (singleAmount && !hasUserEditedPriceRef.current) {
-            setPriceInput(String(singleAmount))
+            // singleAmount is always in USD — convert to display currency
+            setPriceInput(String(usdToDisplay(singleAmount)))
         }
-    }, [singleAmount])
+    }, [singleAmount]) // eslint-disable-line react-hooks/exhaustive-deps
 
     // Persist price changes to server with debounce (for cross-device resume)
     useEffect(() => {
         // Skip initial render and empty values
         const numVal = parseFloat(priceInput)
         if (isNaN(numVal) || numVal <= 0) return
+
+        // Convert to USD for storage (cross-border displays local)
+        const usdVal = displayToUsd(numVal)
 
         // Clear previous debounce
         if (priceDebounceRef.current) {
@@ -157,7 +188,7 @@ export default function PersonalReviewStep() {
                 step: currentStep,
                 stepKey: 'review',
                 data: {
-                    singleAmount: numVal,
+                    singleAmount: usdVal,
                     pricingModel: pricingModel,
                     ...(pricingModel === 'tiers' && tiers.length > 0 && { tiers }),
                 },
@@ -201,19 +232,6 @@ export default function PersonalReviewStep() {
         }
     }, [servicePerks, currentStep, isServiceMode, resolvedPurpose])
 
-    // Handle currency change - adjust price to sensible default for new currency
-    const handleCurrencyChange = (newCurrency: string) => {
-        setCurrency(newCurrency)
-        // Set a sensible default price for the new currency
-        // Map purpose to pricing type: 'service' uses service pricing, all others use 'personal'
-        const pricingType: 'personal' | 'service' = resolvedPurpose === 'service' ? 'service' : 'personal'
-        const suggestedAmounts = getSuggestedAmounts(newCurrency, pricingType)
-        const newPrice = suggestedAmounts[0] || 10
-        setPriceInput(String(newPrice))
-        setPricing('single', [], newPrice)
-        setShowCurrencyDrawer(false)
-    }
-
     // Format number with commas for display
     const formatWithCommas = (val: string): string => {
         // Remove existing commas and non-numeric chars except decimal
@@ -250,12 +268,14 @@ export default function PersonalReviewStep() {
             hasUserEditedPriceRef.current = true
             setPriceInput(rawVal)
             const numVal = parseFloat(rawVal) || 0
+            // Convert display value to USD for store (cross-border shows local)
+            const storeVal = displayToUsd(numVal)
             // Preserve existing pricing model - don't force 'single' if tiers exist
             if (pricingModel === 'tiers' && tiers.length > 0) {
                 // Tiers mode: updating singleAmount as fallback, but keep tiers
-                setPricing('tiers', tiers, numVal)
+                setPricing('tiers', tiers, storeVal)
             } else {
-                setPricing('single', [], numVal)
+                setPricing('single', [], storeVal)
             }
         }
     }
@@ -307,40 +327,46 @@ export default function PersonalReviewStep() {
     const countryMinimum = useCreatorMinimum(resolvedCountry)
     const { data: myMinimum } = useMyMinimum()
 
-    // Calculate minimum amount based on available data:
-    // 1. Dynamic minimum (based on subscriber count) - best for established creators
-    // 2. Static country minimum - for new creators
-    // 3. Cross-border floor ($45 USD) - safety net for cross-border before API loads
-    // 4. Currency-based default - final fallback
-    // Paystack uses currency-based minimums (different economics, no hard block)
-    let minAmount = isCrossBorderStripe ? 45 : getMinimumAmount(resolvedCurrency) // Cross-border floor or currency default
+    // Calculate minimum amount in display currency:
+    // Cross-border Stripe: show local currency minimum (e.g., R900 for ZA)
+    // Others: show in their store currency
+    let minAmountUsd = myMinimum?.minimum.usd ?? countryMinimum?.usd ?? (isCrossBorderStripe ? 45 : null)
+    let minAmountDisplay: number // Minimum in display currency (local for cross-border)
 
-    if (resolvedPaymentProvider === 'stripe' && myMinimum) {
-        // Use dynamic minimum (based on subscriber count)
-        minAmount = resolvedCurrency === myMinimum.minimum.currency
+    if (isCrossBorderStripe) {
+        // Cross-border: use local currency minimum from API, fall back to FX conversion
+        const localMin = myMinimum?.minimum.local ?? countryMinimum?.local
+        if (localMin) {
+            minAmountDisplay = localMin
+        } else {
+            // Fallback: convert $45 floor to local
+            const local = usdToLocalApprox(45, resolvedCountryCode)
+            minAmountDisplay = local?.amount ?? 45
+        }
+    } else if (resolvedPaymentProvider === 'stripe' && myMinimum) {
+        minAmountDisplay = resolvedCurrency === myMinimum.minimum.currency
             ? myMinimum.minimum.local
             : myMinimum.minimum.usd
     } else if (resolvedPaymentProvider === 'stripe' && countryMinimum) {
-        // Fallback to static country minimum
-        minAmount = resolvedCurrency === countryMinimum.currency
+        minAmountDisplay = resolvedCurrency === countryMinimum.currency
             ? countryMinimum.local
             : countryMinimum.usd
+    } else {
+        minAmountDisplay = getMinimumAmount(resolvedCurrency)
     }
 
-    // USD minimum for display (helpful context for cross-border creators)
-    const minAmountUsd = myMinimum?.minimum.usd ?? countryMinimum?.usd ?? null
+    // Alias for backward compat in the template
+    const minAmount = minAmountDisplay
 
-    // Auto-bump price to dynamic minimum when it loads (e.g. ZA new creator=$60, KE=$65)
-    // Without this, frontend suggests $45 (the floor) but backend rejects it for new creators
-    // whose dynamic minimum is higher due to $2/month account fee amortization at 0 subscribers
+    // Auto-bump price to display minimum when it loads
     useEffect(() => {
-        if (!hasUserEditedPriceRef.current && minAmount > 0) {
+        if (!hasUserEditedPriceRef.current && minAmountDisplay > 0) {
             const currentPrice = parseFloat(priceInput)
-            if (!isNaN(currentPrice) && currentPrice < minAmount) {
-                setPriceInput(String(minAmount))
+            if (!isNaN(currentPrice) && currentPrice < minAmountDisplay) {
+                setPriceInput(String(minAmountDisplay))
             }
         }
-    }, [minAmount]) // eslint-disable-line react-hooks/exhaustive-deps
+    }, [minAmountDisplay]) // eslint-disable-line react-hooks/exhaustive-deps
 
     // Service mode: Generate perks when description changes and we have enough context
     const handleGeneratePerks = async () => {
@@ -416,8 +442,9 @@ export default function PersonalReviewStep() {
     }
 
     const handleLaunch = async () => {
-        // Parse single amount for use in API call
-        const finalAmount = parseFloat(priceInput) || 0
+        // Parse display amount and convert to USD for storage (cross-border shows local)
+        const displayAmount = parseFloat(priceInput) || 0
+        const finalAmount = displayToUsd(displayAmount)
         setLaunching(true)
         setError(null)
 
@@ -706,18 +733,7 @@ export default function PersonalReviewStep() {
                         </div>
                     ) : (
                         <div className="setup-price-card">
-                            {isCrossBorderStripe && getCrossBorderCurrencyOptions().length > 1 ? (
-                                <Pressable
-                                    className="setup-price-currency-btn"
-                                    onClick={() => setShowCurrencyDrawer(true)}
-                                    style={{ fontSize: Math.max(16, getPriceFontSize(priceInput) / 2) }}
-                                >
-                                    {currencySymbol}
-                                    <ChevronDown size={14} style={{ marginLeft: 2, opacity: 0.5 }} />
-                                </Pressable>
-                            ) : (
-                                <span className="setup-price-currency" style={{ fontSize: Math.max(16, getPriceFontSize(priceInput) / 2) }}>{currencySymbol}</span>
-                            )}
+                            <span className="setup-price-currency" style={{ fontSize: Math.max(16, getPriceFontSize(priceInput) / 2) }}>{displayCurrencySymbol}</span>
                             <input
                                 type="text"
                                 inputMode="decimal"
@@ -731,24 +747,28 @@ export default function PersonalReviewStep() {
                         </div>
                     )}
 
+                    {/* USD equivalent for cross-border creators */}
+                    {isCrossBorderStripe && (
+                        <div className="setup-conversion-note" style={{ marginTop: 4 }}>
+                            <span>≈ ${displayToUsd(parseFloat(priceInput) || 0).toLocaleString()} USD</span>
+                        </div>
+                    )}
+
                     {/* Minimum subscription note for Stripe creators */}
                     {resolvedPaymentProvider === 'stripe' && (myMinimum || countryMinimum || isCrossBorderStripe) && (
                         <div className="setup-minimum-note">
                             <span>
-                                Minimum: {currencySymbol}{minAmount.toLocaleString()}/mo
-                                {minAmountUsd && resolvedCurrency !== 'USD' && ` (~$${minAmountUsd} USD)`}
-                                {myMinimum && myMinimum.subscriberCount > 1 && (
-                                    <span className="minimum-subscriber-context"> (based on {myMinimum.subscriberCount} subscribers)</span>
-                                )}
+                                Minimum: {displayCurrencySymbol}{minAmount.toLocaleString()}/mo
+                                {isCrossBorderStripe && minAmountUsd && ` (~$${minAmountUsd} USD)`}
                             </span>
                         </div>
                     )}
 
-                    {/* Conversion note for cross-border creators */}
+                    {/* Payout conversion note for cross-border creators */}
                     {isCrossBorderStripe && (
                         <div className="setup-conversion-note">
                             <RefreshCw size={14} />
-                            <span>Payouts convert to {localCurrencyName} at market rate</span>
+                            <span>Subscribers pay in USD · Payouts in {localCurrencyName}</span>
                         </div>
                     )}
                 </div>
@@ -781,36 +801,6 @@ export default function PersonalReviewStep() {
                 </div>
             </div>
 
-            {/* Currency Drawer - for cross-border creators */}
-            {showCurrencyDrawer && (
-                <>
-                    <div
-                        className="drawer-overlay"
-                        onClick={() => setShowCurrencyDrawer(false)}
-                    />
-                    <div className="country-drawer">
-                        <div className="drawer-handle" />
-                        <h3 className="drawer-title">Choose currency</h3>
-                        <p style={{ fontSize: 13, color: 'var(--text-secondary)', textAlign: 'center', marginBottom: 16 }}>
-                            Payouts will be converted to {localCurrencyName}
-                        </p>
-                        <div className="country-list">
-                            {getCrossBorderCurrencyOptions().map((curr) => (
-                                <Pressable
-                                    key={curr.code}
-                                    className={`country-option ${currency === curr.code ? 'selected' : ''}`}
-                                    onClick={() => handleCurrencyChange(curr.code)}
-                                >
-                                    <span className="country-option-name">{curr.symbol} {curr.label}</span>
-                                    {currency === curr.code && (
-                                        <Check size={20} className="country-option-check" />
-                                    )}
-                                </Pressable>
-                            ))}
-                        </div>
-                    </div>
-                </>
-            )}
         </div>
     )
 }

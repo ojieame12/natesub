@@ -612,6 +612,58 @@
     padding-bottom: 12px;
 }
 
+/* === VISIBILITY === */
+.visibility-card {
+    background: var(--bg-card);
+    border-radius: var(--radius-xl);
+    padding: var(--space-lg);
+    border: 1px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-md);
+}
+
+.visibility-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+}
+
+.visibility-badge {
+    display: inline-flex;
+    align-items: center;
+    width: fit-content;
+    border-radius: var(--radius-full);
+    padding: 4px 10px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.visibility-badge.public {
+    background: var(--accent-green-soft);
+    color: var(--accent-green);
+}
+
+.visibility-badge.private {
+    background: var(--neutral-100);
+    color: var(--text-secondary);
+}
+
+.visibility-description {
+    margin: 0;
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+
+.visibility-note {
+    margin: 0;
+    font-size: 12px;
+    color: var(--text-tertiary);
+}
+
 /* === PERKS LIST === */
 .perks-list {
     display: flex;

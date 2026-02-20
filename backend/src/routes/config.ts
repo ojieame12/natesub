@@ -105,10 +105,9 @@ config.get('/minimums', (c) => {
       },
       payoutCadence: 'monthly',
       accountType: 'Express',
-      formula: 'min = (fixedFees + accountFee/subs + payoutFee) / (platformRate - connectFees)',
-      // Static minimums use floor subscriber count (established creators)
-      // New creators see higher dynamic minimums via /config/my-minimum
-      floorSubscriberCount: 20,
+      formula: 'min = (processingFixed + payoutFixed) / (platformRate - connectFees)',
+      // Account fees are a platform cost, not amortized per-transaction
+      // All creators (new or established) see the same minimum for their country
       platformCosts: {
         billing: '0.7%',
         payout: '0.25%',
@@ -155,11 +154,10 @@ config.get('/minimums/:country', (c) => {
 
 /**
  * GET /config/my-minimum
- * Returns the creator's DYNAMIC minimum subscription based on their subscriber count
+ * Returns the creator's minimum subscription based on their country's fee structure.
  *
- * The $2/month Stripe account fee is amortized across active subscribers:
- * - New creator (0-1 subs): Higher minimum to cover full account fee
- * - Growing creator (5+ subs): Lower minimum as fee spreads across subscribers
+ * Account fees are NOT amortized — they're a platform cost, not per-transaction.
+ * Minimum is based on processing + payout fixed costs vs net margin rate.
  * - Established creator (20+ subs): Converges to floor minimum
  *
  * Requires authentication - this is creator-specific data.

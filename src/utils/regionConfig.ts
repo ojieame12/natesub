@@ -800,6 +800,75 @@ export function getCrossBorderCurrencyOptions(): CrossBorderCurrency[] {
 }
 
 // ============================================
+// APPROXIMATE FX RATES (for display only)
+// ============================================
+
+/**
+ * Approximate USD → local currency multipliers for cross-border countries.
+ * Used ONLY for UI display. Actual billing is in USD, Stripe handles FX on payout.
+ * Updated periodically — not used for any financial calculations.
+ */
+const APPROXIMATE_FX_RATES: Record<string, number> = {
+  NGN: 1600,   // Nigerian Naira
+  KES: 130,    // Kenyan Shilling
+  GHS: 16,     // Ghanaian Cedi
+  ZAR: 18.2,   // South African Rand
+}
+
+/**
+ * Convert USD amount to approximate local currency for display.
+ * Returns null if country is not cross-border or rate not available.
+ */
+export function usdToLocalApprox(usdAmount: number, countryCode: string | null | undefined): { amount: number, currency: string, symbol: string } | null {
+  const country = getCountry(countryCode)
+  if (!country?.crossBorder) return null
+
+  const rate = APPROXIMATE_FX_RATES[country.currency]
+  if (!rate) return null
+
+  // Round to a clean number based on magnitude
+  const raw = usdAmount * rate
+  let rounded: number
+  if (rate >= 100) {
+    rounded = Math.ceil(raw / 1000) * 1000  // Round up to nearest 1000
+  } else if (rate >= 10) {
+    rounded = Math.ceil(raw / 100) * 100     // Round up to nearest 100
+  } else {
+    rounded = Math.ceil(raw / 5) * 5         // Round up to nearest 5
+  }
+
+  return {
+    amount: rounded,
+    currency: country.currency,
+    symbol: country.currencySymbol,
+  }
+}
+
+/**
+ * Convert local currency amount to approximate USD for display.
+ * Returns null if country is not cross-border or rate not available.
+ */
+export function localToUsdApprox(localAmount: number, countryCode: string | null | undefined): number | null {
+  const country = getCountry(countryCode)
+  if (!country?.crossBorder) return null
+
+  const rate = APPROXIMATE_FX_RATES[country.currency]
+  if (!rate) return null
+
+  return Math.round(localAmount / rate)
+}
+
+/**
+ * Get the approximate FX rate for a cross-border country.
+ * Returns null if not a cross-border country.
+ */
+export function getApproxFxRate(countryCode: string | null | undefined): number | null {
+  const country = getCountry(countryCode)
+  if (!country?.crossBorder) return null
+  return APPROXIMATE_FX_RATES[country.currency] ?? null
+}
+
+// ============================================
 // UI HELPERS
 // ============================================
 

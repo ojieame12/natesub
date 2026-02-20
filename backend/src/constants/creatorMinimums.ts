@@ -28,9 +28,7 @@
 import { isCrossBorderCountry } from './fees.js'
 
 // Minimum floor for cross-border countries (safety buffer)
-// $45 floor is margin-positive at 3+ subscribers per creator.
-// At $45 with 3 subs: ~$1.12/payment margin (conservative).
-// Below $40 at 3 subs we go negative — $45 gives a safety buffer.
+// $45 covers processing fixed ($0.30) + payout fixed ($0.75 ZA) at 5% net margin.
 // DebiCheck rail (future) will allow lower ZA-local prices.
 const CROSS_BORDER_MINIMUM_FLOOR_USD = 45
 
@@ -400,27 +398,27 @@ export interface DynamicMinimumResult {
  * Formula: minBase = totalFixedCosts / netMarginRate
  *
  * Where:
- * - totalFixedCosts = processing fixed ($0.30) + payout fixed + (account fee / subscribers)
+ * - totalFixedCosts = processing fixed ($0.30) + payout fixed
  * - netMarginRate = platformFee - allPercentFees
+ *
+ * NOTE: Monthly account fees ($2/month) are NOT amortized per-transaction.
+ * They're a platform cost of doing business, not a per-payment cost.
+ * Amortizing them penalizes new creators with $60+ minimums which kills adoption.
  *
  * ALL COUNTRIES use dynamic calculation based on actual Stripe fees.
  * Cross-border countries have a floor minimum for safety.
  */
 export function calculateDynamicMinimumUSD(params: DynamicMinimumParams): number {
-  const { country, subscriberCount } = params
-  const effectiveSubs = Math.max(1, subscriberCount)
+  const { country } = params
 
   // Get fees for this country
   const payoutFixedCents = PAYOUT_FEES[country] ?? 100
-  const monthlyAccountCents = MONTHLY_ACCOUNT_FEES[country] ?? 200 // Default to US rate
   const { percentFees } = getPercentFeeInputs(country)
 
-  // Fixed fees per transaction:
+  // Fixed fees per transaction (platform costs, not amortized):
   // 1. Processing fixed: $0.30
   // 2. Payout fixed: varies by country
-  // 3. Account fee amortized: monthly fee / subscriber count
-  const accountFeePerSub = monthlyAccountCents / effectiveSubs
-  const fixedCents = PROCESSING_FEES.fixedCents + payoutFixedCents + accountFeePerSub
+  const fixedCents = PROCESSING_FEES.fixedCents + payoutFixedCents
 
   // Cross-border countries use 10.5% platform fee (includes 1.5% buffer)
   const platformFeeRate = isCrossBorderCountry(country) ? 0.105 : PLATFORM_FEE_RATE
@@ -453,12 +451,10 @@ export function getDynamicMinimum(params: DynamicMinimumParams): DynamicMinimumR
 
   // Get country-specific fees
   const payoutFixedCents = PAYOUT_FEES[country] ?? 100
-  const monthlyAccountCents = MONTHLY_ACCOUNT_FEES[country] ?? 200
   const { percentFees } = getPercentFeeInputs(country)
 
-  // Fixed costs per transaction
-  const accountFeePerSub = monthlyAccountCents / effectiveSubs
-  const fixedCents = PROCESSING_FEES.fixedCents + payoutFixedCents + accountFeePerSub
+  // Fixed costs per transaction (no account fee amortization — it's a platform cost)
+  const fixedCents = PROCESSING_FEES.fixedCents + payoutFixedCents
 
   // Cross-border countries use 10.5% platform fee (includes 1.5% buffer)
   const platformFeeRate = isCrossBorderCountry(country) ? 0.105 : PLATFORM_FEE_RATE

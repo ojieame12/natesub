@@ -64,15 +64,13 @@ describe('Fee Model Consistency', () => {
       expect(result.feeCents).toBe(900) // 9% total
     })
 
-    it('should have dynamic minimum based on subscriber count', () => {
+    it('should have consistent minimum regardless of subscriber count (no account fee amortization)', () => {
       const min1 = calculateDynamicMinimumUSD({ country: 'United States', subscriberCount: 1 })
       const min20 = calculateDynamicMinimumUSD({ country: 'United States', subscriberCount: 20 })
 
-      // Higher minimum for new creators (amortizing $2 account fee)
-      expect(min1).toBeGreaterThan(min20)
-
-      // Dynamic minimum varies with subscriber count (unlike cross-border flat $45)
-      expect(min1).not.toBe(min20)
+      // Account fees are a platform cost, not amortized per-transaction
+      // So minimums are the same regardless of subscriber count
+      expect(min1).toBe(min20)
     })
   })
 
@@ -88,14 +86,12 @@ describe('Fee Model Consistency', () => {
       expect(breakdown.netMarginRate).toBeCloseTo(0.0455, 4)
     })
 
-    it('US minimum for 1 subscriber should be $60', () => {
-      const min = getDynamicMinimum({ country: 'United States', subscriberCount: 1 })
-      expect(min.minimumUSD).toBe(60)
-    })
-
-    it('US minimum for 20 subscribers should be $15', () => {
-      const min = getDynamicMinimum({ country: 'United States', subscriberCount: 20 })
-      expect(min.minimumUSD).toBe(15)
+    it('US minimum should be $15 (no account fee amortization)', () => {
+      const min1 = getDynamicMinimum({ country: 'United States', subscriberCount: 1 })
+      const min20 = getDynamicMinimum({ country: 'United States', subscriberCount: 20 })
+      // Same for all creators — account fees are platform cost
+      expect(min1.minimumUSD).toBe(15)
+      expect(min20.minimumUSD).toBe(15)
     })
   })
 
@@ -107,53 +103,50 @@ describe('Fee Model Consistency', () => {
       expect(ukBreakdown.totalPercentFees).toBeGreaterThan(usBreakdown.totalPercentFees)
     })
 
-    it('UK has higher minimum than US due to higher account fees and cross-border', () => {
+    it('UK and US have same minimum (account fees not amortized, both domestic)', () => {
       const ukMin = getDynamicMinimum({ country: 'United Kingdom', subscriberCount: 1 })
       const usMin = getDynamicMinimum({ country: 'United States', subscriberCount: 1 })
-      // UK: $2.50/month account + 0.25% cross-border > US: $2.00/month + 0%
-      expect(ukMin.minimumUSD).toBeGreaterThan(usMin.minimumUSD)
+      // Without account fee amortization, difference is only payout fixed fees
+      // UK payout: 25c, US payout: 25c — same base, both $15
+      expect(ukMin.minimumUSD).toBe(usMin.minimumUSD)
     })
   })
 
-  describe('monthly account fee amortization', () => {
+  describe('account fees are platform cost (not amortized)', () => {
     it('account fee is $2.00/month for US creators', () => {
       const breakdown = getFeeBreakdown('United States')
       expect(breakdown.monthlyAccountFeeCents).toBe(200)
     })
 
-    it('minimum decreases as subscriber count increases', () => {
+    it('minimum is the same regardless of subscriber count', () => {
       const min1 = getDynamicMinimum({ country: 'United States', subscriberCount: 1 })
       const min5 = getDynamicMinimum({ country: 'United States', subscriberCount: 5 })
       const min20 = getDynamicMinimum({ country: 'United States', subscriberCount: 20 })
 
-      // More subscribers = lower minimum (fixed costs spread out)
-      expect(min1.minimumUSD).toBeGreaterThan(min5.minimumUSD)
-      expect(min5.minimumUSD).toBeGreaterThanOrEqual(min20.minimumUSD)
+      // Account fees are a platform cost — not amortized per-transaction
+      // All creators see the same minimum for their country
+      expect(min1.minimumUSD).toBe(min5.minimumUSD)
+      expect(min5.minimumUSD).toBe(min20.minimumUSD)
     })
 
-    it('account fee is amortized per subscriber in fixed costs', () => {
+    it('fixed costs are the same for all subscriber counts', () => {
       const min1 = getDynamicMinimum({ country: 'United States', subscriberCount: 1 })
       const min20 = getDynamicMinimum({ country: 'United States', subscriberCount: 20 })
 
-      // At 1 sub: fixed costs include full $2.00 account fee
-      // At 20 subs: fixed costs include $2.00/20 = $0.10 per sub
-      expect(min1.fixedCents).toBeGreaterThan(min20.fixedCents)
-
-      // Difference should be roughly $2.00 - $0.10 = $1.90 (190 cents)
-      const diff = min1.fixedCents - min20.fixedCents
-      expect(diff).toBeCloseTo(190, 0)
+      // No amortization means fixed costs don't vary with subscriber count
+      expect(min1.fixedCents).toBe(min20.fixedCents)
     })
 
-    it('cross-border countries also amortize but stay at $45 floor', () => {
+    it('cross-border countries all at $45 floor', () => {
       const ng1 = getDynamicMinimum({ country: 'Nigeria', subscriberCount: 1 })
       const ng20 = getDynamicMinimum({ country: 'Nigeria', subscriberCount: 20 })
 
-      // Both hit the $45 floor
+      // Both at $45 floor
       expect(ng1.minimumUSD).toBe(45)
       expect(ng20.minimumUSD).toBe(45)
 
-      // But fixed costs still differ (amortization still happens)
-      expect(ng1.fixedCents).toBeGreaterThan(ng20.fixedCents)
+      // Fixed costs are the same (no amortization)
+      expect(ng1.fixedCents).toBe(ng20.fixedCents)
     })
   })
 

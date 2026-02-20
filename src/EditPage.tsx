@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Camera, Loader2, ExternalLink, ChevronDown, Check, Heart, Gift, Briefcase, Star, Sparkles, Wallet, MoreHorizontal, Edit3, Wand2, ImageIcon, Plus, X } from 'lucide-react'
-import { Pressable, useToast, Skeleton, LoadingButton, BottomDrawer } from './components'
+import { Pressable, useToast, Skeleton, LoadingButton, BottomDrawer, Toggle } from './components'
 import { useProfile, useUpdateProfile, uploadFile, useGeneratePerks, useGenerateBanner, useAIConfig, useCreatorMinimum, useMyMinimum } from './api/hooks'
 import { getCurrencySymbol, centsToDisplayAmount } from './utils/currency'
 import type { Perk } from './api/client'
@@ -45,6 +45,7 @@ export default function EditPage() {
   const [singleAmount, setSingleAmount] = useState<number>(10)
   const [priceInput, setPriceInput] = useState<string>('10')
   const [purpose, setPurpose] = useState<Purpose>('support')
+  const [isPublic, setIsPublic] = useState(false)
   const [showPurposeDrawer, setShowPurposeDrawer] = useState(false)
   const [hasChanges, setHasChanges] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
@@ -72,6 +73,7 @@ export default function EditPage() {
       setDisplayName(profile.displayName || '')
       setAvatarUrl(profile.avatarUrl)
       setPurpose((profile.purpose as Purpose) || 'support')
+      setIsPublic(Boolean(profile.isPublic))
 
       const amt = profile.singleAmount ? centsToDisplayAmount(profile.singleAmount, currency) : 10
       setSingleAmount(amt)
@@ -103,6 +105,7 @@ export default function EditPage() {
       displayName !== (profile.displayName || '') ||
       avatarUrl !== (profile.avatarUrl || null) ||
       purpose !== (profile.purpose || 'support') ||
+      isPublic !== Boolean(profile.isPublic) ||
       currentVal !== profileAmountDisplay ||
       // Service mode changes
       bio !== (profile.bio || '') ||
@@ -112,7 +115,7 @@ export default function EditPage() {
 
     // Sync numeric state for validation usage elsewhere
     setSingleAmount(currentVal)
-  }, [displayName, avatarUrl, priceInput, purpose, profile, bio, perks, bannerUrl])
+  }, [displayName, avatarUrl, priceInput, purpose, isPublic, profile, bio, perks, bannerUrl])
 
   // Warn user about unsaved changes when navigating away
   useEffect(() => {
@@ -264,9 +267,29 @@ export default function EditPage() {
     }
   }
 
+  const handleVisibilityChange = (nextValue: boolean) => {
+    if (!profile) return
+
+    // Publishing requires active payouts to avoid exposing pages that cannot accept payments.
+    if (!profile.isPublic && nextValue && profile.payoutStatus !== 'active') {
+      toast.error('Connect payments first before making your page public.')
+      return
+    }
+
+    setIsPublic(nextValue)
+  }
+
   const saveProfileAndSettings = async (options: { showSuccessToast?: boolean; publishIfReady?: boolean } = {}) => {
     if (!profile) return
     const { showSuccessToast = true, publishIfReady } = options
+    const wasPublic = Boolean(profile.isPublic)
+    const desiredVisibility = publishIfReady ? true : isPublic
+
+    // Block only private → public transitions until payouts are active.
+    if (!wasPublic && desiredVisibility && profile.payoutStatus !== 'active') {
+      toast.error('Connect payments first before making your page public.')
+      return false
+    }
 
     // Validate minimum for Stripe creators (ensures platform profitability)
     // Try dynamic minimum first (based on subscriber count), fallback to static
@@ -317,8 +340,7 @@ export default function EditPage() {
         purpose,
         // Only set singleAmount if using single pricing model
         ...(profile.pricingModel === 'single' || !profile.pricingModel ? { singleAmount } : {}),
-        // Only publish if explicitly requested (payouts must be active first)
-        ...(publishIfReady ? { isPublic: true } : {}),
+        ...(desiredVisibility !== wasPublic ? { isPublic: desiredVisibility } : {}),
         // Service mode fields
         ...(isServiceMode && {
           bio,
@@ -422,7 +444,7 @@ export default function EditPage() {
       if (!payoutsActive) {
         toast.info('Next: connect payments to start earning.')
         didNavigate = true
-        navigate('/settings/payments', { state: { returnTo: '/edit?launch=1' } })
+        navigate('/settings/payments', { state: { returnTo: '/edit-page?launch=1' } })
         return
       }
 
@@ -541,6 +563,31 @@ export default function EditPage() {
                 <ChevronDown size={16} className="purpose-chevron" />
               </Pressable>
             </div>
+          </div>
+        </section>
+
+        <section className="edit-section">
+          <h3 className="section-title">Page Visibility</h3>
+          <div className="visibility-card">
+            <div className="visibility-copy">
+              <span className={`visibility-badge ${isPublic ? 'public' : 'private'}`}>
+                {isPublic ? 'Public' : 'Private'}
+              </span>
+              <p className="visibility-description">
+                {isPublic
+                  ? 'Anyone with your link can view and subscribe.'
+                  : 'Only you can view your page until you make it public.'}
+              </p>
+              {!isPublic && profile.payoutStatus !== 'active' && (
+                <p className="visibility-note">Connect payments first to publish.</p>
+              )}
+            </div>
+            <Toggle
+              value={isPublic}
+              onChange={handleVisibilityChange}
+              disabled={isSaving || isContinuing}
+              label="Page visibility"
+            />
           </div>
         </section>
 
