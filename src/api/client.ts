@@ -1508,8 +1508,7 @@ export interface MyMinimumConfig {
     local: number
     currency: string
   }
-  subscriberCount: number
-  floorMinimum: number // Minimum at 20+ subscribers
+  isCrossBorder: boolean
   _debug?: {
     percentFees: string
     fixedCents: number

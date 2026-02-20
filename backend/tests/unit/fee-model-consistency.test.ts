@@ -244,7 +244,7 @@ describe('Fee Model Consistency', () => {
       expect(data.meta.model).toBe('Destination charges - platform absorbs Connect fees only')
       expect(data.meta.feeBreakdown.domestic).toBe('9% total (4.5% subscriber + 4.5% creator)')
       expect(data.meta.feeBreakdown.crossBorder).toBe('10.5% total (5.25% subscriber + 5.25% creator)')
-      expect(data.meta.minimumBreakdown.domestic).toBe('$5-15 dynamic (based on subscriber count)')
+      expect(data.meta.minimumBreakdown.domestic).toBe('$15 (fixed per country)')
       expect(data.meta.minimumBreakdown.crossBorder).toBe('$45 floor')
     })
 

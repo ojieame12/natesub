@@ -1,22 +1,19 @@
 import { useState, useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Camera, Loader2, ExternalLink, ChevronDown, Check, Heart, Gift, Briefcase, Star, Sparkles, Wallet, MoreHorizontal, Edit3, Wand2, ImageIcon, Plus, X } from 'lucide-react'
+import { ArrowLeft, Camera, Loader2, ExternalLink, ChevronDown, Check, Heart, Briefcase, Edit3, Wand2, ImageIcon, Plus, X } from 'lucide-react'
 import { Pressable, useToast, Skeleton, LoadingButton, BottomDrawer, Toggle } from './components'
 import { useProfile, useUpdateProfile, uploadFile, useGeneratePerks, useGenerateBanner, useAIConfig, useCreatorMinimum, useMyMinimum } from './api/hooks'
 import { getCurrencySymbol, centsToDisplayAmount } from './utils/currency'
 import type { Perk } from './api/client'
 import './EditPage.css'
 
-// Purpose options with labels and icons for visual differentiation
-type Purpose = 'tips' | 'support' | 'allowance' | 'fan_club' | 'exclusive_content' | 'service' | 'other'
+// Purpose options: V5 onboarding collapses to personal/service only.
+// Legacy values (tips, support, allowance, fan_club, exclusive_content, other)
+// are migrated to 'personal' in DB.
+type Purpose = 'personal' | 'service'
 const PURPOSE_OPTIONS: { value: Purpose; label: string; icon: React.ReactNode }[] = [
-  { value: 'support', label: 'Support Me', icon: <Heart size={20} /> },
-  { value: 'tips', label: 'Tips & Appreciation', icon: <Gift size={20} /> },
-  { value: 'service', label: 'Services', icon: <Briefcase size={20} /> },
-  { value: 'fan_club', label: 'Fan Club', icon: <Star size={20} /> },
-  { value: 'exclusive_content', label: 'Exclusive Content', icon: <Sparkles size={20} /> },
-  { value: 'allowance', label: 'Allowance', icon: <Wallet size={20} /> },
-  { value: 'other', label: 'Other', icon: <MoreHorizontal size={20} /> },
+  { value: 'personal', label: 'Personal', icon: <Heart size={20} /> },
+  { value: 'service', label: 'Service', icon: <Briefcase size={20} /> },
 ]
 
 export default function EditPage() {
@@ -44,7 +41,7 @@ export default function EditPage() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [singleAmount, setSingleAmount] = useState<number>(10)
   const [priceInput, setPriceInput] = useState<string>('10')
-  const [purpose, setPurpose] = useState<Purpose>('support')
+  const [purpose, setPurpose] = useState<Purpose>('personal')
   const [isPublic, setIsPublic] = useState(false)
   const [showPurposeDrawer, setShowPurposeDrawer] = useState(false)
   const [hasChanges, setHasChanges] = useState(false)
@@ -72,7 +69,9 @@ export default function EditPage() {
       const currency = profile.currency || 'USD'
       setDisplayName(profile.displayName || '')
       setAvatarUrl(profile.avatarUrl)
-      setPurpose((profile.purpose as Purpose) || 'support')
+      // Map legacy purpose values to 'personal' (V5 collapses to personal/service)
+      const rawPurpose = profile.purpose
+      setPurpose(rawPurpose === 'service' ? 'service' : 'personal')
       setIsPublic(Boolean(profile.isPublic))
 
       const amt = profile.singleAmount ? centsToDisplayAmount(profile.singleAmount, currency) : 10
@@ -104,7 +103,7 @@ export default function EditPage() {
     const changed =
       displayName !== (profile.displayName || '') ||
       avatarUrl !== (profile.avatarUrl || null) ||
-      purpose !== (profile.purpose || 'support') ||
+      purpose !== (profile.purpose === 'service' ? 'service' : 'personal') ||
       isPublic !== Boolean(profile.isPublic) ||
       currentVal !== profileAmountDisplay ||
       // Service mode changes
@@ -558,7 +557,7 @@ export default function EditPage() {
               >
                 <span className="purpose-label">For</span>
                 <span className="purpose-value">
-                  {PURPOSE_OPTIONS.find(p => p.value === purpose)?.label || 'Support Me'}
+                  {PURPOSE_OPTIONS.find(p => p.value === purpose)?.label || 'Personal'}
                 </span>
                 <ChevronDown size={16} className="purpose-chevron" />
               </Pressable>

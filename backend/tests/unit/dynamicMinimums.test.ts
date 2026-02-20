@@ -224,4 +224,55 @@ describe('Dynamic Minimum Calculations', () => {
       }
     })
   })
+
+  // P3 regression: Floor invariants (no account fee amortization)
+  describe('Floor Regression Tests', () => {
+    it('all subscriber counts produce the same minimum (no amortization)', () => {
+      const countries = getSupportedCountries()
+      for (const country of countries) {
+        const min0 = getDynamicMinimum({ country, subscriberCount: 0 })
+        const min1 = getDynamicMinimum({ country, subscriberCount: 1 })
+        const min10 = getDynamicMinimum({ country, subscriberCount: 10 })
+        const min100 = getDynamicMinimum({ country, subscriberCount: 100 })
+
+        expect(min0.minimumUSD).toBe(min1.minimumUSD)
+        expect(min1.minimumUSD).toBe(min10.minimumUSD)
+        expect(min10.minimumUSD).toBe(min100.minimumUSD)
+      }
+    })
+
+    it('ZA minimum is exactly $45 (cross-border floor)', () => {
+      const min = getDynamicMinimum({ country: 'South Africa', subscriberCount: 0 })
+      expect(min.minimumUSD).toBe(45)
+    })
+
+    it('US minimum is exactly $15', () => {
+      const min = getDynamicMinimum({ country: 'United States', subscriberCount: 0 })
+      expect(min.minimumUSD).toBe(15)
+    })
+
+    it('all cross-border countries have $45 floor', () => {
+      const crossBorder = ['Nigeria', 'Kenya', 'Ghana', 'South Africa']
+      for (const country of crossBorder) {
+        const min = getDynamicMinimum({ country, subscriberCount: 0 })
+        expect(min.minimumUSD).toBe(45)
+      }
+    })
+
+    it('static and dynamic minimums are identical for every supported country', () => {
+      const countries = getSupportedCountries()
+      for (const country of countries) {
+        const staticMin = getCreatorMinimum(country)
+        if (!staticMin) continue
+
+        // Dynamic minimum at any subscriber count should match static
+        for (const subCount of [0, 1, 5, 20, 100]) {
+          const dynamicMin = getDynamicMinimum({ country, subscriberCount: subCount })
+          expect(dynamicMin.minimumUSD).toBe(staticMin.usd)
+          expect(dynamicMin.minimumLocal).toBe(staticMin.local)
+          expect(dynamicMin.currency).toBe(staticMin.currency)
+        }
+      }
+    })
+  })
 })

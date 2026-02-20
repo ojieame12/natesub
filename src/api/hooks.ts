@@ -106,6 +106,9 @@ export function useVerifyMagicLink() {
     retry: false, // Don't retry auth - causes rate limit issues
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.currentUser })
+      // Invalidate user-specific config to prevent cross-user cache leakage
+      // (my-minimum depends on the authenticated user's country/profile)
+      queryClient.invalidateQueries({ queryKey: queryKeys.config.myMinimum })
     },
   })
 }
@@ -1299,8 +1302,8 @@ export function useMyMinimum() {
   return useQuery({
     queryKey: queryKeys.config.myMinimum,
     queryFn: api.config.getMyMinimum,
-    staleTime: 5 * 60 * 1000, // 5 minutes - can change with new subscribers
-    gcTime: 15 * 60 * 1000, // 15 minutes cache
+    staleTime: 5 * 60 * 1000, // 5 minutes - country-based, rarely changes
+    gcTime: 15 * 60 * 1000, // 15 minutes cache (logout clears all)
     retry: 1,
     // Only fetch when authenticated (auth check handled by endpoint)
     enabled: status === 'authenticated',

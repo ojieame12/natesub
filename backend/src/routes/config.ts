@@ -18,7 +18,6 @@ import {
   getCreatorMinimum,
   getSupportedCountries,
   getFeeBreakdown,
-  calculateDynamicMinimumUSD,
   getDynamicMinimum,
 } from '../constants/creatorMinimums.js'
 import { isAIAvailable } from '../services/ai/index.js'
@@ -100,7 +99,7 @@ config.get('/minimums', (c) => {
         crossBorder: '10.5% total (5.25% subscriber + 5.25% creator)',
       },
       minimumBreakdown: {
-        domestic: '$5-15 dynamic (based on subscriber count)',
+        domestic: '$15 (fixed per country)',
         crossBorder: '$45 floor',
       },
       payoutCadence: 'monthly',
@@ -156,16 +155,16 @@ config.get('/minimums/:country', (c) => {
  * GET /config/my-minimum
  * Returns the creator's minimum subscription based on their country's fee structure.
  *
- * Account fees are NOT amortized — they're a platform cost, not per-transaction.
  * Minimum is based on processing + payout fixed costs vs net margin rate.
- * - Established creator (20+ subs): Converges to floor minimum
+ * Account fees are a platform cost (not amortized per-transaction), so the
+ * minimum is the same for all creators in a given country regardless of subscriber count.
  *
- * Requires authentication - this is creator-specific data.
+ * Requires authentication - uses creator's profile to determine country.
  */
 config.get('/my-minimum', requireAuth, async (c) => {
   const userId = c.get('userId')
 
-  // Get creator's profile
+  // Get creator's profile — only need country to calculate minimum
   const profile = await db.profile.findUnique({
     where: { userId },
     select: { country: true, currency: true },
@@ -175,30 +174,18 @@ config.get('/my-minimum', requireAuth, async (c) => {
     return c.json({ error: 'Profile not found or country not set' }, 404)
   }
 
-  // Get active MONTHLY subscriber count
-  // Excludes one_time payments since they don't generate recurring revenue
-  // to amortize the $2/month Stripe account fee
-  const subscriberCount = await db.subscription.count({
-    where: { creatorId: userId, status: 'active', interval: 'month' },
-  })
-
-  // Calculate dynamic minimum
+  // Calculate minimum (same for all creators in a country — no subscriber-based amortization)
   const dynamicMin = getDynamicMinimum({
     country: profile.country,
-    subscriberCount,
+    subscriberCount: 0, // No longer used by the calculation
   })
 
-  // Check if this is a cross-border country (higher minimums due to higher fees)
+  // Check if this is a cross-border country (higher minimums due to international card fees)
   const isCrossBorder = isCrossBorderCountry(profile.country)
 
-  // Floor minimum is what you'd get with 20+ subscribers (converged minimum)
-  const floorMin = calculateDynamicMinimumUSD({
-    country: profile.country,
-    subscriberCount: 20,
-  })
-
-  // No cache - this depends on subscriber count which can change
-  c.header('Cache-Control', 'no-store')
+  // Cacheable since minimum depends only on country (not subscriber count).
+  // 5 minutes aligns with frontend staleTime; logout clears React Query cache.
+  c.header('Cache-Control', 'private, max-age=300') // 5 minutes, private (auth-gated)
 
   return c.json({
     minimum: {
@@ -206,8 +193,6 @@ config.get('/my-minimum', requireAuth, async (c) => {
       local: dynamicMin.minimumLocal,
       currency: dynamicMin.currency,
     },
-    subscriberCount,
-    floorMinimum: floorMin, // What minimum will be when fully ramped
     isCrossBorder, // True for cross-border countries (NG, KE, GH, etc.)
     // Fee model explanation - all countries use destination charges
     // Split fee model: domestic 4.5%/4.5% = 9%, cross-border 5.25%/5.25% = 10.5%

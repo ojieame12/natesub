@@ -817,7 +817,11 @@ const APPROXIMATE_FX_RATES: Record<string, number> = {
 
 /**
  * Convert USD amount to approximate local currency for display.
+ * Rounds to a clean number for UI readability.
  * Returns null if country is not cross-border or rate not available.
+ *
+ * NOTE: This is for display only. Do NOT round-trip back through localToUsdExact
+ * for storage — use the original USD value instead.
  */
 export function usdToLocalApprox(usdAmount: number, countryCode: string | null | undefined): { amount: number, currency: string, symbol: string } | null {
   const country = getCountry(countryCode)
@@ -845,17 +849,20 @@ export function usdToLocalApprox(usdAmount: number, countryCode: string | null |
 }
 
 /**
- * Convert local currency amount to approximate USD for display.
+ * Convert local currency amount to USD using exact division (no rounding to whole dollars).
+ * Used when creator types a local price and we need the USD equivalent for storage.
  * Returns null if country is not cross-border or rate not available.
  */
-export function localToUsdApprox(localAmount: number, countryCode: string | null | undefined): number | null {
+export function localToUsdExact(localAmount: number, countryCode: string | null | undefined): number | null {
   const country = getCountry(countryCode)
   if (!country?.crossBorder) return null
 
   const rate = APPROXIMATE_FX_RATES[country.currency]
   if (!rate) return null
 
-  return Math.round(localAmount / rate)
+  // Exact division — preserve precision for storage
+  // Round to 2 decimal places (cents) to avoid floating point noise
+  return Math.round((localAmount / rate) * 100) / 100
 }
 
 /**

@@ -27,6 +27,7 @@ vi.mock('../api', () => ({
 // Mock hooks
 let aiConfigReturn: any = { data: { available: true } }
 let generatePerksMutationReturn: any = { mutateAsync: vi.fn(), isPending: false }
+let myMinimumReturn: any = { data: undefined }
 
 vi.mock('../api/hooks', () => ({
   uploadFile: vi.fn(),
@@ -35,8 +36,8 @@ vi.mock('../api/hooks', () => ({
   useCurrentUser: () => ({ data: { onboarding: { step: 0, data: {} } } }),
   // Mock useCreatorMinimum - returns null (no minimum enforced in tests)
   useCreatorMinimum: () => null,
-  // Mock useMyMinimum - returns undefined (no dynamic minimum in tests)
-  useMyMinimum: () => ({ data: undefined }),
+  // Mock useMyMinimum - configurable per test via myMinimumReturn
+  useMyMinimum: () => myMinimumReturn,
 }))
 
 // Mock navigation
@@ -57,6 +58,7 @@ describe('PersonalReviewStep', () => {
     mockSaveProgress.mockResolvedValue({ success: true })
     aiConfigReturn = { data: { available: true } }
     generatePerksMutationReturn = { mutateAsync: vi.fn(), isPending: false }
+    myMinimumReturn = { data: undefined }
 
     // Reset store with base state
     useOnboardingStore.setState({
@@ -622,6 +624,217 @@ describe('PersonalReviewStep', () => {
                 expect.objectContaining({ title: 'Final Edit' }),
               ]),
             }),
+          })
+        )
+      })
+    })
+  })
+
+  describe('Cross-border pricing invariant: USD note === launched amount', () => {
+    // P1 regression: Prevents silent price inflation where $45 → R900 (display) → $49.45 (saved).
+    // The canonical USD must be preserved from the store, never reverse-derived from display rounding.
+
+    it('ZA cross-border: launches with original $45, not inflated $49.45', async () => {
+      // Configure as ZA cross-border Stripe creator with $45 price
+      myMinimumReturn = {
+        data: {
+          minimum: { usd: 45, local: 900, currency: 'ZAR' },
+          isCrossBorder: true,
+        },
+      }
+
+      useOnboardingStore.setState({
+        firstName: 'Test',
+        lastName: 'User',
+        username: 'testuser',
+        purpose: 'personal',
+        pricingModel: 'single',
+        singleAmount: 45, // $45 from SetupStep
+        tiers: [],
+        country: 'South Africa',
+        countryCode: 'ZA',
+        currency: 'USD', // Cross-border always stores in USD
+        paymentProvider: 'stripe',
+        currentStep: 7,
+      })
+
+      renderWithProviders(<PersonalReviewStep />)
+
+      // Wait for component to render with cross-border state
+      await waitFor(() => {
+        // Price input should show local currency (R900), not USD
+        const priceInput = document.querySelector('.setup-price-input') as HTMLInputElement
+        expect(priceInput).toBeInTheDocument()
+        expect(priceInput.value).toBe('900') // R900 display
+      })
+
+      // USD note should show $45 (the canonical value), NOT $49.45 (the inflated reverse)
+      await waitFor(() => {
+        const conversionNote = document.querySelector('.setup-conversion-note')
+        expect(conversionNote).toBeInTheDocument()
+        expect(conversionNote!.textContent).toContain('$45')
+        expect(conversionNote!.textContent).not.toContain('49.45')
+      })
+
+      // Click launch
+      const launchButton = screen.getByRole('button', { name: /launch/i })
+      fireEvent.click(launchButton)
+
+      // The profile update must receive singleAmount: 45, NOT 49.45
+      await waitFor(() => {
+        expect(mockProfileUpdate).toHaveBeenCalledWith(
+          expect.objectContaining({
+            singleAmount: 45, // Original USD preserved — no inflation from display rounding
+          })
+        )
+      })
+    })
+
+    it('NG cross-border: launches with original $45, display shows ₦72,000', async () => {
+      myMinimumReturn = {
+        data: {
+          minimum: { usd: 45, local: 72000, currency: 'NGN' },
+          isCrossBorder: true,
+        },
+      }
+
+      useOnboardingStore.setState({
+        firstName: 'Test',
+        lastName: 'User',
+        username: 'testuser',
+        purpose: 'personal',
+        pricingModel: 'single',
+        singleAmount: 45,
+        tiers: [],
+        country: 'Nigeria',
+        countryCode: 'NG',
+        currency: 'USD',
+        paymentProvider: 'stripe',
+        currentStep: 7,
+      })
+
+      renderWithProviders(<PersonalReviewStep />)
+
+      // NG: $45 * 1600 = 72000 (exact, no rounding overshoot)
+      // Displayed with comma formatting: 72,000
+      await waitFor(() => {
+        const priceInput = document.querySelector('.setup-price-input') as HTMLInputElement
+        expect(priceInput).toBeInTheDocument()
+        expect(priceInput.value).toBe('72,000')
+      })
+
+      // USD note should show $45
+      await waitFor(() => {
+        const conversionNote = document.querySelector('.setup-conversion-note')
+        expect(conversionNote!.textContent).toContain('$45')
+      })
+
+      // Launch should save $45
+      const launchButton = screen.getByRole('button', { name: /launch/i })
+      fireEvent.click(launchButton)
+
+      await waitFor(() => {
+        expect(mockProfileUpdate).toHaveBeenCalledWith(
+          expect.objectContaining({
+            singleAmount: 45,
+          })
+        )
+      })
+    })
+
+    it('cross-border user edit: typing local amount updates canonical USD correctly', async () => {
+      myMinimumReturn = {
+        data: {
+          minimum: { usd: 45, local: 900, currency: 'ZAR' },
+          isCrossBorder: true,
+        },
+      }
+
+      useOnboardingStore.setState({
+        firstName: 'Test',
+        lastName: 'User',
+        username: 'testuser',
+        purpose: 'personal',
+        pricingModel: 'single',
+        singleAmount: 45,
+        tiers: [],
+        country: 'South Africa',
+        countryCode: 'ZA',
+        currency: 'USD',
+        paymentProvider: 'stripe',
+        currentStep: 7,
+      })
+
+      renderWithProviders(<PersonalReviewStep />)
+
+      const priceInput = await waitFor(() => {
+        const input = document.querySelector('.setup-price-input') as HTMLInputElement
+        expect(input).toBeInTheDocument()
+        return input
+      })
+
+      // User types R1500 (local amount)
+      fireEvent.change(priceInput, { target: { value: '1500' } })
+
+      // Displayed with comma formatting
+      await waitFor(() => {
+        expect(priceInput.value).toBe('1,500')
+      })
+
+      // USD note should show localToUsdExact(1500, 'ZA') = 1500/18.2 = 82.42
+      await waitFor(() => {
+        const conversionNote = document.querySelector('.setup-conversion-note')
+        expect(conversionNote!.textContent).toContain('82.42')
+      })
+
+      // Launch should save the exact USD value
+      const launchButton = screen.getByRole('button', { name: /launch/i })
+      fireEvent.click(launchButton)
+
+      await waitFor(() => {
+        expect(mockProfileUpdate).toHaveBeenCalledWith(
+          expect.objectContaining({
+            singleAmount: 82.42, // localToUsdExact(1500, 'ZA') = round(1500/18.2 * 100) / 100
+          })
+        )
+      })
+    })
+
+    it('domestic US creator: no inflation, launches with exact store amount', async () => {
+      // Domestic (non-cross-border) should be straightforward — no conversion at all
+      useOnboardingStore.setState({
+        firstName: 'Test',
+        lastName: 'User',
+        username: 'testuser',
+        purpose: 'personal',
+        pricingModel: 'single',
+        singleAmount: 15,
+        tiers: [],
+        country: 'United States',
+        countryCode: 'US',
+        currency: 'USD',
+        paymentProvider: 'stripe',
+        currentStep: 7,
+      })
+
+      renderWithProviders(<PersonalReviewStep />)
+
+      await waitFor(() => {
+        const priceInput = document.querySelector('.setup-price-input') as HTMLInputElement
+        expect(priceInput.value).toBe('15')
+      })
+
+      // No USD conversion note for domestic
+      expect(document.querySelector('.setup-conversion-note')).not.toBeInTheDocument()
+
+      // Launch should save exact amount
+      const launchButton = screen.getByRole('button', { name: /launch/i })
+      fireEvent.click(launchButton)
+
+      await waitFor(() => {
+        expect(mockProfileUpdate).toHaveBeenCalledWith(
+          expect.objectContaining({
+            singleAmount: 15,
           })
         )
       })

@@ -191,31 +191,17 @@ describe('dynamic minimums', () => {
       expect(res.status).toBe(404)
     })
 
-    it('returns no-store cache header', async () => {
+    it('returns private cacheable header (minimum is country-based, not subscriber-based)', async () => {
       const { rawToken } = await createStripeCreator()
       const res = await authRequest('/config/my-minimum', {}, rawToken)
 
       expect(res.status).toBe(200)
-      expect(res.headers.get('Cache-Control')).toBe('no-store')
+      expect(res.headers.get('Cache-Control')).toBe('private, max-age=300')
     })
 
-    it('returns correct subscriber count (monthly only)', async () => {
-      const { rawToken } = await createStripeCreator({
-        subscriberCount: 5,
-        oneTimeCount: 3, // Should NOT be counted
-      })
-
-      const res = await authRequest('/config/my-minimum', {}, rawToken)
-      expect(res.status).toBe(200)
-
-      const body = await res.json()
-      expect(body.subscriberCount).toBe(5) // Not 8
-    })
-
-    it('returns minimum and floor minimum', async () => {
+    it('returns minimum with isCrossBorder flag', async () => {
       const { rawToken } = await createStripeCreator({
         country: 'Nigeria',
-        subscriberCount: 5,
       })
 
       const res = await authRequest('/config/my-minimum', {}, rawToken)
@@ -226,8 +212,10 @@ describe('dynamic minimums', () => {
       expect(body.minimum.usd).toBeGreaterThan(0)
       expect(body.minimum.local).toBeGreaterThan(0)
       expect(body.minimum.currency).toBe('NGN')
-      expect(body.floorMinimum).toBeDefined()
-      expect(body.floorMinimum).toBeLessThanOrEqual(body.minimum.usd)
+      expect(body.isCrossBorder).toBe(true)
+      // subscriberCount and floorMinimum removed — minimum is same for all creators
+      expect(body.subscriberCount).toBeUndefined()
+      expect(body.floorMinimum).toBeUndefined()
     })
 
     it('returns debug info', async () => {
@@ -460,13 +448,13 @@ describe('dynamic minimums', () => {
     })
   })
 
-  describe('one_time subscription exclusion', () => {
-    it('one_time subscriptions do not lower the dynamic minimum', async () => {
-      // Create creator with only one_time subscriptions
+  describe('subscriber count does not affect minimum', () => {
+    it('minimum is the same regardless of subscriber count (no amortization)', async () => {
+      // Create creator with subscribers — minimum should be the same as without
       const { rawToken } = await createStripeCreator({
         country: 'Nigeria',
-        subscriberCount: 0,
-        oneTimeCount: 10, // 10 one-time payments
+        subscriberCount: 10,
+        oneTimeCount: 5,
       })
 
       const res = await authRequest('/config/my-minimum', {}, rawToken)
@@ -474,30 +462,10 @@ describe('dynamic minimums', () => {
 
       const body = await res.json()
 
-      // Should report 0 subscribers (one_time excluded)
-      expect(body.subscriberCount).toBe(0)
-
-      // Minimum should be the new creator minimum (high)
-      const newCreatorMin = getDynamicMinimum({ country: 'Nigeria', subscriberCount: 0 })
-      expect(body.minimum.usd).toBe(newCreatorMin.minimumUSD)
-    })
-
-    it('mixed monthly and one_time counts only monthly', async () => {
-      const { rawToken } = await createStripeCreator({
-        country: 'Nigeria',
-        subscriberCount: 5,
-        oneTimeCount: 20,
-      })
-
-      const res = await authRequest('/config/my-minimum', {}, rawToken)
-      expect(res.status).toBe(200)
-
-      const body = await res.json()
-      expect(body.subscriberCount).toBe(5) // Only monthly
-
-      // Minimum should match 5 monthly subs
-      const expected = getDynamicMinimum({ country: 'Nigeria', subscriberCount: 5 })
-      expect(body.minimum.usd).toBe(expected.minimumUSD)
+      // Minimum should match country-level minimum (subscriber count irrelevant)
+      const countryMin = getDynamicMinimum({ country: 'Nigeria', subscriberCount: 0 })
+      expect(body.minimum.usd).toBe(countryMin.minimumUSD)
+      expect(body.minimum.local).toBe(countryMin.minimumLocal)
     })
   })
 

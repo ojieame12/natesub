@@ -10,7 +10,7 @@ import {
     isCrossBorderCountry,
     getLocalCurrencyName,
     usdToLocalApprox,
-    localToUsdApprox,
+    localToUsdExact,
     getCountry,
 } from '../utils/regionConfig'
 import { api } from '../api'
@@ -125,46 +125,40 @@ export default function PersonalReviewStep() {
 
     const currencySymbol = getCurrencySymbol(resolvedCurrency as string)
 
-    // Price input as string for free editing
-    // Cross-border: show in local currency (store amount is USD, display is local)
-    // For cross-border, convert stored USD to local for initial display
-    const getInitialDisplayPrice = (): string => {
-        const usdAmount = singleAmount || (isCrossBorderStripe ? 45 : 10)
+    // Price tracking: USD is ALWAYS the canonical value.
+    // For cross-border, priceInput shows an approximate local currency for display,
+    // but canonicalUsd is NEVER derived from the display rounding — it stays as the
+    // original USD from the store (set in SetupStep or server hydration).
+    //
+    // canonicalUsd changes ONLY when:
+    //   1. User manually edits the local-currency input (handlePriceChange)
+    //   2. Server hydration provides a new singleAmount
+    //   3. Auto-bump raises it to the minimum
+    //
+    // The local display is cosmetic — usdToLocalApprox rounds for readability but
+    // we never reverse that rounding back into canonicalUsd. This prevents the
+    // silent inflation bug: $45 → R900 (display) → $49.45 (inflated).
+    const baseUsd = singleAmount || (isCrossBorderStripe ? 45 : 10)
+    const [canonicalUsd, setCanonicalUsd] = useState(baseUsd)
+    const getDisplayForUsd = (usd: number): string => {
         if (isCrossBorderStripe) {
-            const local = usdToLocalApprox(usdAmount, resolvedCountryCode)
-            return local ? String(local.amount) : String(usdAmount)
+            const local = usdToLocalApprox(usd, resolvedCountryCode)
+            return local ? String(local.amount) : String(usd)
         }
-        return String(usdAmount)
+        return String(usd)
     }
-    const [priceInput, setPriceInput] = useState(getInitialDisplayPrice)
+    const [priceInput, setPriceInput] = useState(() => getDisplayForUsd(baseUsd))
     const priceDebounceRef = useRef<NodeJS.Timeout | null>(null)
     // Track if user has manually edited the price (prevents overwriting their input on hydration)
     const hasUserEditedPriceRef = useRef(false)
-
-    // Convert display price (local for cross-border) to USD for storage
-    const displayToUsd = (displayVal: number): number => {
-        if (isCrossBorderStripe) {
-            const usd = localToUsdApprox(displayVal, resolvedCountryCode)
-            return usd ?? displayVal
-        }
-        return displayVal
-    }
-
-    // Convert USD storage value to display value (local for cross-border)
-    const usdToDisplay = (usdVal: number): number => {
-        if (isCrossBorderStripe) {
-            const local = usdToLocalApprox(usdVal, resolvedCountryCode)
-            return local?.amount ?? usdVal
-        }
-        return usdVal
-    }
 
     // Sync priceInput when singleAmount hydrates from server (resume flow)
     // Only sync if user hasn't manually edited the price yet
     useEffect(() => {
         if (singleAmount && !hasUserEditedPriceRef.current) {
-            // singleAmount is always in USD — convert to display currency
-            setPriceInput(String(usdToDisplay(singleAmount)))
+            // singleAmount is always in USD — preserve it as canonical, derive display
+            setCanonicalUsd(singleAmount)
+            setPriceInput(getDisplayForUsd(singleAmount))
         }
     }, [singleAmount]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -173,9 +167,6 @@ export default function PersonalReviewStep() {
         // Skip initial render and empty values
         const numVal = parseFloat(priceInput)
         if (isNaN(numVal) || numVal <= 0) return
-
-        // Convert to USD for storage (cross-border displays local)
-        const usdVal = displayToUsd(numVal)
 
         // Clear previous debounce
         if (priceDebounceRef.current) {
@@ -188,7 +179,7 @@ export default function PersonalReviewStep() {
                 step: currentStep,
                 stepKey: 'review',
                 data: {
-                    singleAmount: usdVal,
+                    singleAmount: canonicalUsd,
                     pricingModel: pricingModel,
                     ...(pricingModel === 'tiers' && tiers.length > 0 && { tiers }),
                 },
@@ -200,7 +191,7 @@ export default function PersonalReviewStep() {
                 clearTimeout(priceDebounceRef.current)
             }
         }
-    }, [priceInput, currentStep, pricingModel, tiers])
+    }, [priceInput, canonicalUsd, currentStep, pricingModel, tiers])
 
     // Persist perk edits to server with debounce (for cross-device resume)
     const perkDebounceRef = useRef<NodeJS.Timeout | null>(null)
@@ -268,14 +259,17 @@ export default function PersonalReviewStep() {
             hasUserEditedPriceRef.current = true
             setPriceInput(rawVal)
             const numVal = parseFloat(rawVal) || 0
-            // Convert display value to USD for store (cross-border shows local)
-            const storeVal = displayToUsd(numVal)
+            // Convert display value to canonical USD (cross-border input is local currency)
+            const usdVal = isCrossBorderStripe
+                ? (localToUsdExact(numVal, resolvedCountryCode) ?? numVal)
+                : numVal
+            setCanonicalUsd(usdVal)
             // Preserve existing pricing model - don't force 'single' if tiers exist
             if (pricingModel === 'tiers' && tiers.length > 0) {
                 // Tiers mode: updating singleAmount as fallback, but keep tiers
-                setPricing('tiers', tiers, storeVal)
+                setPricing('tiers', tiers, usdVal)
             } else {
-                setPricing('single', [], storeVal)
+                setPricing('single', [], usdVal)
             }
         }
     }
@@ -364,6 +358,12 @@ export default function PersonalReviewStep() {
             const currentPrice = parseFloat(priceInput)
             if (!isNaN(currentPrice) && currentPrice < minAmountDisplay) {
                 setPriceInput(String(minAmountDisplay))
+                // Use the USD minimum directly — don't reverse the display rounding
+                if (isCrossBorderStripe && minAmountUsd) {
+                    setCanonicalUsd(minAmountUsd)
+                } else {
+                    setCanonicalUsd(minAmountDisplay)
+                }
             }
         }
     }, [minAmountDisplay]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -442,9 +442,8 @@ export default function PersonalReviewStep() {
     }
 
     const handleLaunch = async () => {
-        // Parse display amount and convert to USD for storage (cross-border shows local)
-        const displayAmount = parseFloat(priceInput) || 0
-        const finalAmount = displayToUsd(displayAmount)
+        // Use canonical USD price (never round-trip from display)
+        const finalAmount = canonicalUsd
         setLaunching(true)
         setError(null)
 
@@ -747,10 +746,10 @@ export default function PersonalReviewStep() {
                         </div>
                     )}
 
-                    {/* USD equivalent for cross-border creators */}
+                    {/* USD equivalent for cross-border creators — reads canonical state directly */}
                     {isCrossBorderStripe && (
                         <div className="setup-conversion-note" style={{ marginTop: 4 }}>
-                            <span>≈ ${displayToUsd(parseFloat(priceInput) || 0).toLocaleString()} USD</span>
+                            <span>≈ ${canonicalUsd.toLocaleString()} USD</span>
                         </div>
                     )}
 
