@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect } from 'react'
-import { ChevronLeft, ChevronDown, Check, Loader2, AlertCircle, Camera, RefreshCw, Heart, Gift, Briefcase, Star, Sparkles, Wallet, MoreHorizontal, Edit3, Wand2, Plus, X } from 'lucide-react'
+import { ChevronLeft, ChevronDown, Check, Loader2, AlertCircle, Camera, RefreshCw, Edit3, Wand2, Plus, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useOnboardingStore, useShallow } from './store'
 import { Button, Pressable } from './components'
-import { BottomDrawer } from '../components'
+// BottomDrawer removed — purpose is now set in setup step
 import { getShareableLink } from '../utils/constants'
 import { getCurrencySymbol, getSuggestedAmounts, getMinimumAmount } from '../utils/currency'
 import {
@@ -16,25 +16,12 @@ import { uploadFile, useGeneratePerks, useAIConfig, useCurrentUser, useCreatorMi
 import { saveRetryQueue } from './saveRetryQueue'
 import './onboarding.css'
 
-// Purpose options with icons for visual differentiation
-type Purpose = 'tips' | 'support' | 'allowance' | 'fan_club' | 'exclusive_content' | 'service' | 'other'
-const PURPOSE_OPTIONS: { value: Purpose; label: string; icon: React.ReactNode }[] = [
-    { value: 'support', label: 'Support Me', icon: <Heart size={20} /> },
-    { value: 'tips', label: 'Tips & Appreciation', icon: <Gift size={20} /> },
-    { value: 'service', label: 'Services', icon: <Briefcase size={20} /> },
-    { value: 'fan_club', label: 'Fan Club', icon: <Star size={20} /> },
-    { value: 'exclusive_content', label: 'Exclusive Content', icon: <Sparkles size={20} /> },
-    { value: 'allowance', label: 'Allowance', icon: <Wallet size={20} /> },
-    { value: 'other', label: 'Other', icon: <MoreHorizontal size={20} /> },
-]
-
 export default function PersonalReviewStep() {
     const navigate = useNavigate()
     const fileInputRef = useRef<HTMLInputElement>(null)
     const [launching, setLaunching] = useState(false)
     const [isUploading, setIsUploading] = useState(false)
     const [error, setError] = useState<string | null>(null)
-    const [showPurposeDrawer, setShowPurposeDrawer] = useState(false)
     const [showCurrencyDrawer, setShowCurrencyDrawer] = useState(false)
 
     // Service mode state
@@ -117,7 +104,7 @@ export default function PersonalReviewStep() {
     // Use store → backend onboardingData fallback chain (handles localStorage cleared)
     // This ensures service creators aren't misclassified if localStorage is cleared
     const serverData = (userData?.onboarding?.data || {}) as Record<string, any>
-    const resolvedPurpose = purpose || serverData?.purpose || 'support'
+    const resolvedPurpose = purpose || serverData?.purpose || 'personal'
     const resolvedCountryCode = (countryCode || serverData?.countryCode || '') as string
     const resolvedCountry = (country || serverData?.country || '') as string
     const resolvedCurrency = (currency || serverData?.currency || 'USD') as string
@@ -431,57 +418,8 @@ export default function PersonalReviewStep() {
     }
 
     const handleLaunch = async () => {
-        if (!displayName || !username) {
-            setError('Please fill in all fields.')
-            return
-        }
-
-        if (!resolvedAvatarUrl) {
-            setError('Please add a profile photo.')
-            return
-        }
-
-        // Service mode validation
-        if (isServiceMode) {
-            if (!serviceDescription.trim()) {
-                setError('Please describe your service.')
-                return
-            }
-            if (servicePerks.length < 3) {
-                setError(`Please add ${3 - servicePerks.length} more perk${3 - servicePerks.length === 1 ? '' : 's'} (${servicePerks.length}/3 minimum).`)
-                return
-            }
-        }
-
-        // Parse single amount for use in validation and API call
+        // Parse single amount for use in API call
         const finalAmount = parseFloat(priceInput) || 0
-
-        // Validate pricing based on model
-        // Minimum enforcement only for Stripe (Paystack has different economics - no platform minimum)
-        const enforceMinimum = resolvedPaymentProvider === 'stripe'
-
-        if (pricingModel === 'tiers' && tiers.length > 0) {
-            // Validate tiered pricing - check each tier has valid amount
-            const invalidTier = tiers.find(t => !t.amount || (enforceMinimum && t.amount < minAmount))
-            if (invalidTier) {
-                if (!invalidTier.amount) {
-                    setError(`Tier "${invalidTier.name}" must have a price.`)
-                } else {
-                    setError(`Tier "${invalidTier.name}" must be at least ${currencySymbol}${minAmount.toLocaleString()}.`)
-                }
-                return
-            }
-        } else {
-            // Validate single pricing amount
-            if (finalAmount <= 0) {
-                setError('Please set a price.')
-                return
-            }
-            if (enforceMinimum && finalAmount < minAmount) {
-                setError(`Minimum price is ${currencySymbol}${minAmount.toLocaleString()} for ${resolvedCurrency}.`)
-                return
-            }
-        }
         setLaunching(true)
         setError(null)
 
@@ -614,18 +552,13 @@ export default function PersonalReviewStep() {
                         {/* Link preview */}
                         <span className="setup-link">{getShareableLink(username || '...')}</span>
 
-                        {/* Purpose selector - disabled for service mode to prevent step mismatch */}
-                        <Pressable
-                            className={`setup-purpose ${isServiceMode ? 'disabled' : ''}`}
-                            onClick={() => !isServiceMode && setShowPurposeDrawer(true)}
-                            disabled={isServiceMode}
-                        >
-                            <span className="setup-purpose-label">For</span>
+                        {/* Purpose display (read-only, set in setup step) */}
+                        <div className="setup-purpose disabled">
+                            <span className="setup-purpose-label">Type</span>
                             <span className="setup-purpose-value">
-                                {PURPOSE_OPTIONS.find(p => p.value === resolvedPurpose)?.label || 'Support Me'}
+                                {isServiceMode ? 'Service' : 'Personal'}
                             </span>
-                            {!isServiceMode && <ChevronDown size={16} className="setup-purpose-chevron" />}
-                        </Pressable>
+                        </div>
                     </div>
 
                     {/* Service Mode: Service Description */}
@@ -648,7 +581,7 @@ export default function PersonalReviewStep() {
                     {isServiceMode && (
                         <div className="setup-card service-perks-card">
                             <div className="service-perks-header">
-                                <span className="service-perks-title">What subscribers get ({servicePerks.length}{servicePerks.length < 3 ? '/3 min' : ''})</span>
+                                <span className="service-perks-title">What subscribers get ({servicePerks.length})</span>
                                 {isAIAvailable && (
                                     <Pressable
                                         className="service-perks-generate"
@@ -701,7 +634,6 @@ export default function PersonalReviewStep() {
                                                         <Pressable
                                                             className="service-perk-delete-btn"
                                                             onClick={() => handleDeletePerk(index)}
-                                                            disabled={servicePerks.length <= 3}
                                                         >
                                                             <X size={12} />
                                                         </Pressable>
@@ -752,7 +684,7 @@ export default function PersonalReviewStep() {
                                 <p className="service-perks-empty">
                                     {isAIAvailable
                                         ? 'Describe your service above, then Generate or add perks manually.'
-                                        : 'Add at least 3 perks that describe what subscribers will receive.'}
+                                        : 'Add perks that describe what subscribers will receive.'}
                                 </p>
                             )}
                         </div>
@@ -850,37 +782,6 @@ export default function PersonalReviewStep() {
                     </Button>
                 </div>
             </div>
-
-            {/* Purpose Drawer - with swipe-to-dismiss */}
-            <BottomDrawer
-                open={showPurposeDrawer}
-                onClose={() => setShowPurposeDrawer(false)}
-                title="What's this for?"
-            >
-                <div className="purpose-list">
-                    {/* Filter out 'service' option if not already in service mode
-                        to prevent confusing step jumps. Service mode requires
-                        additional steps that are inserted before Review. */}
-                    {PURPOSE_OPTIONS
-                        .filter(option => isServiceMode || option.value !== 'service')
-                        .map((option) => (
-                            <Pressable
-                                key={option.value}
-                                className={`purpose-option ${resolvedPurpose === option.value ? 'selected' : ''}`}
-                                onClick={() => {
-                                    setPurpose(option.value)
-                                    setShowPurposeDrawer(false)
-                                }}
-                            >
-                                <span className="purpose-option-icon">{option.icon}</span>
-                                <span className="purpose-option-name">{option.label}</span>
-                                {resolvedPurpose === option.value && (
-                                    <Check size={20} className="purpose-option-check" />
-                                )}
-                            </Pressable>
-                        ))}
-                </div>
-            </BottomDrawer>
 
             {/* Currency Drawer - for cross-border creators */}
             {showCurrencyDrawer && (

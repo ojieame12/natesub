@@ -66,6 +66,7 @@ function generateIdempotencyKey(prefix: string, ...parts: (string | number | und
 
 export const stripe = new Stripe(env.STRIPE_SECRET_KEY, {
   apiVersion: '2025-11-17.clover',
+  timeout: 15000, // 15s per API call (default is 80s — too generous for user-facing requests)
 })
 
 type AccountLinkType = Stripe.AccountLinkCreateParams['type']

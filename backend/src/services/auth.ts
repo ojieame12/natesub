@@ -4,7 +4,6 @@ import { db } from '../db/client.js'
 import { redis } from '../db/redis.js'
 import { env } from '../config/env.js'
 import { sendOtpEmail } from './email.js'
-import { shouldSkipAddress } from '../utils/countryConfig.js'
 import type { OnboardingBranch, UserRole } from '@prisma/client'
 
 const OTP_EXPIRES_MS = (parseInt(env.MAGIC_LINK_EXPIRES_MINUTES, 10) || 30) * 60 * 1000
@@ -25,23 +24,19 @@ export interface OnboardingState {
   redirectTo: string
 }
 
-// Dynamic completion step based on country AND purpose
-// Step counts (must match frontend getOnboardingStepCount):
-// - No address, non-service: 9 steps (0-8)
-// - With address, non-service: 10 steps (0-9)
-// - No address, service: 11 steps (0-10) - includes ServiceDesc + AIGen
-// - With address, service: 12 steps (0-11)
-// Note: shouldSkipAddress is imported from countryConfig.ts (single source of truth)
+// Dynamic completion step based on purpose
+// V5 step counts (streamlined from 12 to 7):
+// - Personal: 6 steps (email, otp, identity, setup, payments, review)
+// - Service: 7 steps (email, otp, identity, setup, payments, service, review)
+// Note: Address step removed (Stripe collects this during Connect)
 export function getOnboardingCompleteStep(
   countryCode?: string | null,
   purpose?: string | null
 ): number {
-  const hasAddressStep = !shouldSkipAddress(countryCode)
   const isServiceMode = purpose === 'service'
 
-  let totalSteps = 9 // Base step count (non-service, no address)
-  if (hasAddressStep) totalSteps += 1
-  if (isServiceMode) totalSteps += 2 // ServiceDescription + AIGenerating
+  let totalSteps = 6 // Base step count (personal: email, otp, identity, setup, payments, review)
+  if (isServiceMode) totalSteps += 1 // Service description + perks step
 
   return totalSteps
 }
@@ -518,10 +513,11 @@ export async function getCurrentUserWithOnboarding(userId: string) {
   }
 }
 
-// Valid step keys for onboarding
+// Valid step keys for onboarding (V5 + legacy for backward compat)
 export type OnboardingStepKey =
-  | 'start' | 'email' | 'otp' | 'identity' | 'address' | 'purpose'
-  | 'avatar' | 'username' | 'payments' | 'service-desc' | 'ai-gen' | 'review'
+  | 'email' | 'otp' | 'identity' | 'setup' | 'payments' | 'service' | 'review'
+  // Legacy keys (accepted for backward compat)
+  | 'start' | 'address' | 'purpose' | 'avatar' | 'username' | 'service-desc' | 'ai-gen'
 
 // Save onboarding progress
 export async function saveOnboardingProgress(

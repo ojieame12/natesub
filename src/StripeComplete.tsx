@@ -256,13 +256,13 @@ export default function StripeComplete() {
       navigate(returnTo, { replace: true })
     } else if (source === 'onboarding') {
       // Return to next step using step KEY (not numeric index)
-      // Service mode goes to service-desc, others go to review
-      const nextStepKey = resolvedPurpose === 'service' ? 'service-desc' : 'review'
+      // Service mode goes to service step, others go to review
+      const nextStepKey = resolvedPurpose === 'service' ? 'service' : 'review'
       navigate(`/onboarding?step=${nextStepKey}`, { replace: true })
     } else if (profile && !profile.isPublic) {
       // Fallback: If source is unknown (lost session) but profile is not public (draft),
       // assume we are in onboarding flow and need to launch.
-      const nextStepKey = resolvedPurpose === 'service' ? 'service-desc' : 'review'
+      const nextStepKey = resolvedPurpose === 'service' ? 'service' : 'review'
       navigate(`/onboarding?step=${nextStepKey}`, { replace: true })
     } else {
       navigate('/dashboard', { replace: true })
@@ -308,7 +308,7 @@ export default function StripeComplete() {
       navigate(returnTo, { replace: true })
     } else if (source === 'onboarding') {
       // Return to next step using step KEY (not numeric index)
-      const nextStepKey = resolvedPurpose === 'service' ? 'service-desc' : 'review'
+      const nextStepKey = resolvedPurpose === 'service' ? 'service' : 'review'
       navigate(`/onboarding?step=${nextStepKey}`, { replace: true })
     } else {
       navigate('/dashboard', { replace: true })

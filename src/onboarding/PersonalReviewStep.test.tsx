@@ -63,7 +63,7 @@ describe('PersonalReviewStep', () => {
       firstName: 'Test',
       lastName: 'User',
       username: 'testuser',
-      purpose: 'support',
+      purpose: 'personal',
       pricingModel: 'single',
       singleAmount: 10,
       tiers: [],
@@ -101,7 +101,7 @@ describe('PersonalReviewStep', () => {
     })
 
     it('does not show service fields for non-service purpose', async () => {
-      useOnboardingStore.setState({ purpose: 'tips' })
+      useOnboardingStore.setState({ purpose: 'personal' })
 
       renderWithProviders(<PersonalReviewStep />)
 
@@ -150,7 +150,7 @@ describe('PersonalReviewStep', () => {
       renderWithProviders(<PersonalReviewStep />)
 
       await waitFor(() => {
-        expect(screen.getByText(/Add at least 3 perks that describe what subscribers will receive/i)).toBeInTheDocument()
+        expect(screen.getByText(/Add perks that describe what subscribers will receive/i)).toBeInTheDocument()
       })
     })
   })
@@ -209,7 +209,7 @@ describe('PersonalReviewStep', () => {
       })
     })
 
-    it('disables delete button when at 3 perks', async () => {
+    it('allows deleting perks even when at 3 perks (no minimum restriction)', async () => {
       useOnboardingStore.setState({
         purpose: 'service',
         servicePerks: [
@@ -225,14 +225,14 @@ describe('PersonalReviewStep', () => {
         const deleteButtons = document.querySelectorAll('.service-perk-delete-btn')
         expect(deleteButtons.length).toBe(3)
         deleteButtons.forEach(btn => {
-          expect(btn.getAttribute('aria-disabled')).toBe('true')
+          expect(btn.getAttribute('aria-disabled')).not.toBe('true')
         })
       })
     })
   })
 
   describe('Launch validation', () => {
-    it('shows error when service user tries to launch with fewer than 3 perks', async () => {
+    it('proceeds to launch when service user has fewer than 3 perks', async () => {
       useOnboardingStore.setState({
         purpose: 'service',
         serviceDescription: 'My service',
@@ -247,13 +247,13 @@ describe('PersonalReviewStep', () => {
       const launchButton = screen.getByRole('button', { name: /launch/i })
       fireEvent.click(launchButton)
 
-      // Should show error about missing perks
+      // Should proceed without validation error (no launch restrictions)
       await waitFor(() => {
-        expect(screen.getByText(/please add 2 more perks/i)).toBeInTheDocument()
+        expect(mockProfileUpdate).toHaveBeenCalled()
       })
     })
 
-    it('shows error when service user has no service description', async () => {
+    it('proceeds to launch when service user has no service description', async () => {
       useOnboardingStore.setState({
         purpose: 'service',
         serviceDescription: '',
@@ -269,14 +269,15 @@ describe('PersonalReviewStep', () => {
       const launchButton = screen.getByRole('button', { name: /launch/i })
       fireEvent.click(launchButton)
 
+      // Should proceed without validation error (no launch restrictions)
       await waitFor(() => {
-        expect(screen.getByText(/please describe your service/i)).toBeInTheDocument()
+        expect(mockProfileUpdate).toHaveBeenCalled()
       })
     })
 
     it('does not require perks for non-service users', async () => {
       useOnboardingStore.setState({
-        purpose: 'tips',
+        purpose: 'personal',
         servicePerks: [],
       })
 
@@ -288,24 +289,24 @@ describe('PersonalReviewStep', () => {
     })
   })
 
-  describe('Purpose selection', () => {
-    it('shows Retainer label for service purpose', async () => {
+  describe('Purpose display', () => {
+    it('shows Service label for service purpose', async () => {
       useOnboardingStore.setState({ purpose: 'service' })
 
       renderWithProviders(<PersonalReviewStep />)
 
       await waitFor(() => {
-        expect(screen.getByText('Services')).toBeInTheDocument()
+        expect(screen.getByText('Service')).toBeInTheDocument()
       })
     })
 
-    it('shows Support label for support purpose', async () => {
-      useOnboardingStore.setState({ purpose: 'support' })
+    it('shows Personal label for personal purpose', async () => {
+      useOnboardingStore.setState({ purpose: 'personal' })
 
       renderWithProviders(<PersonalReviewStep />)
 
       await waitFor(() => {
-        expect(screen.getByText('Support Me')).toBeInTheDocument()
+        expect(screen.getByText('Personal')).toBeInTheDocument()
       })
     })
   })
@@ -454,7 +455,7 @@ describe('PersonalReviewStep', () => {
     it('uses correct pricing type for currency change based on purpose', async () => {
       // Non-service purpose should use 'personal' pricing
       useOnboardingStore.setState({
-        purpose: 'tips',
+        purpose: 'personal',
         currency: 'USD',
         countryCode: 'NG', // Cross-border to show currency selector
         paymentProvider: 'stripe',
@@ -464,9 +465,9 @@ describe('PersonalReviewStep', () => {
 
       renderWithProviders(<PersonalReviewStep />)
 
-      // Verify component renders without crashing for non-service purpose
+      // Verify component renders without crashing for personal purpose
       await waitFor(() => {
-        expect(screen.getByText('Tips & Appreciation')).toBeInTheDocument()
+        expect(screen.getByText('Personal')).toBeInTheDocument()
       })
     })
   })
@@ -533,7 +534,7 @@ describe('PersonalReviewStep', () => {
 
     it('does not persist perks for non-service users', async () => {
       useOnboardingStore.setState({
-        purpose: 'tips',
+        purpose: 'personal',
         currentStep: 7,
         servicePerks: [],
         singleAmount: 10, // Set initial amount

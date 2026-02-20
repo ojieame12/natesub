@@ -347,6 +347,9 @@ const AI_TIMEOUT_MS = 30000
 // Extra long timeout for banner generation (90 seconds - uses "Thinking" mode)
 const BANNER_TIMEOUT_MS = 90000
 
+// Longer timeout for Stripe Connect (30 seconds - creates account + onboarding link via multiple Stripe API calls)
+const STRIPE_CONNECT_TIMEOUT_MS = 30000
+
 // Public endpoints where 401 doesn't mean "session expired"
 // These endpoints can be accessed without auth or may return 401 for unauthenticated users
 const PUBLIC_ENDPOINTS = [
@@ -663,11 +666,12 @@ export const stripe = {
       error?: string
       suggestion?: string
       supportedCountries?: { code: string; name: string }[]
-    }>('/stripe/connect', { method: 'POST' }),
+    }>('/stripe/connect', { method: 'POST', timeout: STRIPE_CONNECT_TIMEOUT_MS }),
 
   refreshOnboarding: () =>
     apiFetch<{ onboardingUrl: string }>('/stripe/connect/refresh', {
       method: 'POST',
+      timeout: STRIPE_CONNECT_TIMEOUT_MS,
     }),
 
   getStatus: (options: { quick?: boolean; refresh?: boolean } = {}) => {

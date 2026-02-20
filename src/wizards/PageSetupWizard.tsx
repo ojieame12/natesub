@@ -47,13 +47,6 @@ export default function PageSetupWizard() {
 
   // Publish Logic
   const handlePublishClick = () => {
-    // Check payouts first
-    const payoutStatus = profileData?.profile?.payoutStatus
-    if (payoutStatus !== 'active') {
-      setShowPayoutWall(true)
-      return
-    }
-
     performPublish()
   }
 

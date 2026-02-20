@@ -245,7 +245,9 @@ describe('dynamic minimums', () => {
   })
 
   describe('profile validation with dynamic minimums', () => {
-    it('rejects price below dynamic minimum for new creator', async () => {
+    it('accepts price below dynamic minimum for new creator (minimum enforcement removed from backend)', async () => {
+      // Backend no longer enforces minimum price on PATCH /profile.
+      // Minimums are still enforced at checkout time (checkout.ts).
       const { rawToken } = await createStripeCreator({
         country: 'Nigeria',
         subscriberCount: 0,
@@ -254,7 +256,7 @@ describe('dynamic minimums', () => {
       // Get the dynamic minimum - creator uses NGN so minimum is in local currency
       const dynamicMin = getDynamicMinimum({ country: 'Nigeria', subscriberCount: 0 })
 
-      // Try to set price below minimum (in NGN)
+      // Price below minimum is now accepted (enforced at checkout)
       const belowMinimum = dynamicMin.minimumLocal - 1000
       const res = await authRequest(
         '/profile',
@@ -265,12 +267,7 @@ describe('dynamic minimums', () => {
         rawToken
       )
 
-      expect(res.status).toBe(400)
-      const body = await res.json()
-      expect(body.error).toContain('Minimum')
-      expect(body.minimumRequired).toBeDefined()
-      // subscriberCount is the actual count (0), not the floored value
-      expect(body.subscriberCount).toBe(0)
+      expect(res.status).toBe(200)
     })
 
     it('accepts price at dynamic minimum', async () => {
@@ -351,9 +348,9 @@ describe('dynamic minimums', () => {
       expect(res.status).toBe(200)
     })
 
-    it('ZA new creator minimum is above $45 floor (account fee amortization)', async () => {
-      // South Africa new creator has higher minimum than the $45 floor
-      // because $2/month account fee amortized across 1 subscriber is expensive
+    it('ZA new creator minimum is above $45 floor (account fee amortization) - accepted on backend', async () => {
+      // Backend no longer enforces minimum price on PATCH /profile.
+      // Minimums are still enforced at checkout time (checkout.ts).
       const zaMin = getDynamicMinimum({ country: 'South Africa', subscriberCount: 0 })
       expect(zaMin.minimumUSD).toBeGreaterThan(45) // Should be $60
 
@@ -362,7 +359,7 @@ describe('dynamic minimums', () => {
         subscriberCount: 0,
       })
 
-      // Setting $45 (the floor) should be REJECTED for new ZA creator
+      // Setting below actual minimum is now accepted (enforced at checkout)
       const zaLocal45 = zaMin.minimumLocal - 100 // Just below actual minimum
       const res = await authRequest(
         '/profile',
@@ -373,9 +370,7 @@ describe('dynamic minimums', () => {
         rawToken
       )
 
-      expect(res.status).toBe(400)
-      const body = await res.json()
-      expect(body.minimumRequired).toBe(zaMin.minimumLocal)
+      expect(res.status).toBe(200)
     })
 
     it('ZA creator with 3+ subscribers can use $45 floor', async () => {
@@ -399,8 +394,9 @@ describe('dynamic minimums', () => {
       expect(res.status).toBe(200)
     })
 
-    it('KE new creator minimum is above $45 floor (higher fixed costs)', async () => {
-      // Kenya has higher fixed costs ($1.00 payout + $1.85 account fee)
+    it('KE new creator minimum is above $45 floor (higher fixed costs) - accepted on backend', async () => {
+      // Backend no longer enforces minimum price on PATCH /profile.
+      // Minimums are still enforced at checkout time (checkout.ts).
       const keMin = getDynamicMinimum({ country: 'Kenya', subscriberCount: 0 })
       expect(keMin.minimumUSD).toBeGreaterThan(45) // Should be $65
 
@@ -409,7 +405,7 @@ describe('dynamic minimums', () => {
         subscriberCount: 0,
       })
 
-      // Setting at the floor minimum (in KES) should be REJECTED
+      // Setting below actual minimum is now accepted (enforced at checkout)
       const kesTooLow = keMin.minimumLocal - 500 // Just below actual minimum
       const res = await authRequest(
         '/profile',
@@ -420,12 +416,12 @@ describe('dynamic minimums', () => {
         rawToken
       )
 
-      expect(res.status).toBe(400)
-      const body = await res.json()
-      expect(body.minimumRequired).toBe(keMin.minimumLocal)
+      expect(res.status).toBe(200)
     })
 
-    it('validates tier amounts against dynamic minimum', async () => {
+    it('accepts tier amounts below dynamic minimum (minimum enforcement removed from backend)', async () => {
+      // Backend no longer enforces minimum price on PATCH /profile.
+      // Minimums are still enforced at checkout time (checkout.ts).
       const { rawToken } = await createStripeCreator({
         country: 'Nigeria',
         subscriberCount: 0,
@@ -450,35 +446,27 @@ describe('dynamic minimums', () => {
         rawToken
       )
 
-      expect(res.status).toBe(400)
-      const body = await res.json()
-      expect(body.error).toContain('Basic')
-      expect(body.error).toContain('below the minimum')
+      expect(res.status).toBe(200)
     })
 
-    it('error includes minimumRequired and subscriberCount', async () => {
+    it('accepts amount way below minimum (minimum enforcement removed from backend)', async () => {
+      // Backend no longer enforces minimum price on PATCH /profile.
+      // Minimums are still enforced at checkout time (checkout.ts).
       const { rawToken } = await createStripeCreator({
         country: 'Nigeria',
         subscriberCount: 3,
       })
 
-      // Nigerian creator uses NGN
-      const dynamicMin = getDynamicMinimum({ country: 'Nigeria', subscriberCount: 3 })
-
       const res = await authRequest(
         '/profile',
         {
           method: 'PATCH',
-          body: JSON.stringify({ singleAmount: 1000 }), // Way below minimum (in NGN)
+          body: JSON.stringify({ singleAmount: 1000 }), // Way below previous minimum (in NGN) - now accepted
         },
         rawToken
       )
 
-      expect(res.status).toBe(400)
-      const body = await res.json()
-      // minimumRequired is in local currency (NGN)
-      expect(body.minimumRequired).toBe(dynamicMin.minimumLocal)
-      expect(body.subscriberCount).toBe(3)
+      expect(res.status).toBe(200)
     })
   })
 

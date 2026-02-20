@@ -278,7 +278,7 @@ export default function PaymentMethodStep() {
                 country: store.country,
                 countryCode: store.countryCode,
                 currency: finalCurrency,
-                purpose: store.purpose || 'support',
+                purpose: store.purpose || 'personal',
                 pricingModel: store.pricingModel,
                 singleAmount: store.pricingModel === 'single' ? finalSingleAmount : null,
                 tiers: store.pricingModel === 'tiers' ? store.tiers : null,
@@ -293,8 +293,8 @@ export default function PaymentMethodStep() {
             }
 
             // Persist onboarding progress so the flow can resume after redirects
-            // Save next step - for service flow it's service-desc, for others it's review
-            const nextStepKey = store.purpose === 'service' ? 'service-desc' : 'review'
+            // Save next step - for service flow it's service, for others it's review
+            const nextStepKey = store.purpose === 'service' ? 'service' : 'review'
 
             // Profile update must succeed before saving progress
             // This prevents resume landing on a later step with incomplete profile
@@ -377,7 +377,7 @@ export default function PaymentMethodStep() {
                 // Use safe wrapper to handle Safari private mode
                 safeSessionSetItem('paystack_onboarding_source', 'onboarding')
                 // Fallback: return to next step after Payment (using step key for safe resume)
-                const nextStepKey = store.purpose === 'service' ? 'service-desc' : 'review'
+                const nextStepKey = store.purpose === 'service' ? 'service' : 'review'
                 safeSessionSetItem('paystack_return_to', `/onboarding?step=${nextStepKey}`)
                 navigate('/onboarding/paystack')
                 return

@@ -198,7 +198,8 @@ describe('PaymentMethodStep', () => {
       currency: 'USD',
       pricingModel: 'single',
       singleAmount: 10,
-      currentStep: 6, // Payment step in 8-step flow
+      currentStep: 4, // Payment step in V5 6-step personal flow (email=0, otp=1, identity=2, setup=3, payments=4)
+      purpose: 'personal',
     })
 
     vi.mocked(api.stripe.connect).mockResolvedValue({ success: true, alreadyOnboarded: true })
@@ -211,15 +212,15 @@ describe('PaymentMethodStep', () => {
     await waitFor(() => {
       // Should save currentStep + 1 with stepKey and purpose for safe cross-device resume
       expect(api.auth.saveOnboardingProgress).toHaveBeenCalledWith({
-        step: 7, // currentStep (6) + 1
+        step: 5, // currentStep (4) + 1
         stepKey: 'review', // Non-service flow, next step is review
-        data: { paymentProvider: 'stripe', countryCode: 'US', purpose: 'support' },
+        data: { paymentProvider: 'stripe', countryCode: 'US', purpose: 'personal' },
       })
     })
   })
 
-  it('sets stripe_return_to to next step (currentStep + 1) for NG 9-step flow', async () => {
-    // New flow: Start(0) → Email(1) → OTP(2) → Identity(3) → Purpose(4) → Avatar(5) → Username(6) → Payment(7) → Review(8)
+  it('sets stripe_return_to to next step for NG personal flow', async () => {
+    // V5 flow: email(0) → otp(1) → identity(2) → setup(3) → payments(4) → review(5)
     useOnboardingStore.setState({
       username: 'testuser',
       firstName: 'Test',
@@ -229,8 +230,8 @@ describe('PaymentMethodStep', () => {
       currency: 'NGN',
       pricingModel: 'single',
       singleAmount: 5000,
-      purpose: 'support', // Non-service mode
-      currentStep: 7, // Payment step in 9-step flow (no address)
+      purpose: 'personal', // Non-service mode
+      currentStep: 4, // Payment step in V5 6-step personal flow
     })
 
     const mockConnectRes = { success: true, onboardingUrl: 'https://connect.stripe.com/setup' }
@@ -259,8 +260,8 @@ describe('PaymentMethodStep', () => {
     ;(window as any).location = originalLocation
   })
 
-  it('sets stripe_return_to to step 9 for US 10-step flow', async () => {
-    // New flow with address: Start(0) → Email(1) → OTP(2) → Identity(3) → Address(4) → Purpose(5) → Avatar(6) → Username(7) → Payment(8) → Review(9)
+  it('sets stripe_return_to to review for US personal flow', async () => {
+    // V5 flow: email(0) → otp(1) → identity(2) → setup(3) → payments(4) → review(5)
     useOnboardingStore.setState({
       username: 'testuser',
       firstName: 'Test',
@@ -270,8 +271,8 @@ describe('PaymentMethodStep', () => {
       currency: 'USD',
       pricingModel: 'single',
       singleAmount: 10,
-      purpose: 'support', // Non-service mode
-      currentStep: 8, // Payment step in 10-step flow (with address)
+      purpose: 'personal', // Non-service mode
+      currentStep: 4, // Payment step in V5 6-step personal flow
     })
 
     const mockConnectRes = { success: true, onboardingUrl: 'https://connect.stripe.com/setup' }

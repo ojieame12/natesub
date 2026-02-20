@@ -10,12 +10,10 @@ import { publicStrictRateLimit, publicRateLimit, aiRateLimit } from '../middlewa
 import { sendWelcomeEmail } from '../services/email.js'
 import { cancelOnboardingReminders } from '../jobs/reminders.js'
 import { RESERVED_USERNAMES, isStripeCrossBorderSupported, isStripeSupported } from '../utils/constants.js'
-import { displayAmountToCents, formatCurrency } from '../utils/currency.js'
+import { displayAmountToCents } from '../utils/currency.js'
 import {
   getCreatorMinimum,
   isCountrySupported,
-  getDynamicMinimum,
-  CREATOR_MINIMUMS,
 } from '../constants/creatorMinimums.js'
 import {
   getPlatformFeePercent,
@@ -123,61 +121,8 @@ profile.put(
       }, 400)
     }
 
-    // Validate minimum amounts based on creator's country and subscriber count
-    // This ensures platform profitability after all Stripe fees
-    // Uses DYNAMIC minimum that decreases as subscriber count increases
-    if (creatorMinimum && paymentProvider === 'stripe' && !isStubMode) {
-      // Get current MONTHLY subscriber count for dynamic minimum calculation
-      // Excludes one_time payments since they don't generate recurring revenue
-      // to amortize the $2/month Stripe account fee
-      const subscriberCount = await db.subscription.count({
-        where: { creatorId: userId, status: 'active', interval: 'month' },
-      })
-
-      // Calculate dynamic minimum with consistent rounding rules
-      const dynamicMin = getDynamicMinimum({
-        country: data.country,
-        subscriberCount,
-      })
-
-      // Use appropriate minimum based on currency
-      const isLocalCurrency = currency === dynamicMin.currency
-      const minimumAmount = isLocalCurrency ? dynamicMin.minimumLocal : dynamicMin.minimumUSD
-      const minimumDisplay = isLocalCurrency
-        ? formatCurrency(minimumAmount, dynamicMin.currency)
-        : `$${dynamicMin.minimumUSD} USD`
-
-      if (data.singleAmount) {
-        if (data.singleAmount < minimumAmount) {
-          return c.json({
-            error: `Minimum subscription for ${data.country} is ${minimumDisplay}`,
-            minimumRequired: minimumAmount,
-            subscriberCount,
-          }, 400)
-        }
-      }
-
-      if (data.tiers && data.tiers.length > 0) {
-        for (const tier of data.tiers) {
-          if (tier.amount < minimumAmount) {
-            return c.json({
-              error: `Tier "${tier.name}" is below the minimum for ${data.country}. Minimum is ${minimumDisplay}`,
-              minimumRequired: minimumAmount,
-              subscriberCount,
-            }, 400)
-          }
-        }
-      }
-    }
-
-    // Service users must have at least 3 perks WHEN PUBLISHING
-    // During onboarding, perks don't exist yet (created in ServiceDescription/AIGenerating steps)
-    // Only validate on publish (Launch step) to allow PaymentMethodStep to save purpose=service
-    if (data.purpose === 'service' && data.isPublic === true) {
-      if (!data.perks || data.perks.length < 3) {
-        return c.json({ error: 'Service profiles require at least 3 perks to publish' }, 400)
-      }
-    }
+    // Note: minimum price enforcement removed to simplify onboarding.
+    // Minimums are still enforced at checkout time (checkout.ts).
 
     // Convert amounts to cents for storage (handles zero-decimal currencies like JPY, KRW)
     // Use Prisma.JsonNull for null JSON values, or the actual value
@@ -342,53 +287,8 @@ profile.patch(
     const country = data.country || existingProfile.country
     const paymentProvider = data.paymentProvider !== undefined ? data.paymentProvider : existingProfile.paymentProvider
 
-    // Validate minimum amounts based on creator's country and subscriber count (Stripe only)
-    // Uses DYNAMIC minimum that decreases as subscriber count increases
-    // Skip in stub mode (E2E tests) - no real payments, no profitability concern
-    const creatorMinimum = country ? getCreatorMinimum(country) : null
-    if (creatorMinimum && paymentProvider === 'stripe' && !isStubMode) {
-      // Get current MONTHLY subscriber count for dynamic minimum calculation
-      // Excludes one_time payments since they don't generate recurring revenue
-      // to amortize the $2/month Stripe account fee
-      const subscriberCount = await db.subscription.count({
-        where: { creatorId: userId, status: 'active', interval: 'month' },
-      })
-
-      // Calculate dynamic minimum with consistent rounding rules
-      const dynamicMin = getDynamicMinimum({
-        country,
-        subscriberCount,
-      })
-
-      // Use appropriate minimum based on currency
-      const isLocalCurrency = currency === dynamicMin.currency
-      const minimumAmount = isLocalCurrency ? dynamicMin.minimumLocal : dynamicMin.minimumUSD
-      const minimumDisplay = isLocalCurrency
-        ? formatCurrency(minimumAmount, dynamicMin.currency)
-        : `$${dynamicMin.minimumUSD} USD`
-
-      if (data.singleAmount !== undefined && data.singleAmount !== null) {
-        if (data.singleAmount < minimumAmount) {
-          return c.json({
-            error: `Minimum subscription for ${country} is ${minimumDisplay}`,
-            minimumRequired: minimumAmount,
-            subscriberCount,
-          }, 400)
-        }
-      }
-
-      if (data.tiers !== undefined && data.tiers !== null && data.tiers.length > 0) {
-        for (const tier of data.tiers) {
-          if (tier.amount < minimumAmount) {
-            return c.json({
-              error: `Tier "${tier.name}" is below the minimum for ${country}. Minimum is ${minimumDisplay}`,
-              minimumRequired: minimumAmount,
-              subscriberCount,
-            }, 400)
-          }
-        }
-      }
-    }
+    // Note: minimum price enforcement removed to simplify onboarding.
+    // Minimums are still enforced at checkout time (checkout.ts).
 
     if (data.singleAmount !== undefined) {
       updateData.singleAmount = data.singleAmount === null
@@ -403,13 +303,6 @@ profile.patch(
     }
 
     if (data.perks !== undefined) {
-      // Service users must have at least 3 perks
-      const effectivePurpose = data.purpose || existingProfile.purpose
-      if (effectivePurpose === 'service' && data.perks !== null) {
-        if (data.perks.length < 3) {
-          return c.json({ error: 'Service profiles require at least 3 perks' }, 400)
-        }
-      }
       updateData.perks = data.perks === null ? Prisma.JsonNull : data.perks
     }
 
@@ -1053,13 +946,13 @@ profile.post(
   }
 )
 
-// Update perks schema - 3 to 5 perks allowed
+// Update perks schema
 const updatePerksSchema = z.object({
   perks: z.array(z.object({
     id: z.string(),
     title: z.string().min(1).max(100),
     enabled: z.boolean(),
-  })).min(3, 'At least 3 perks required').max(5, 'Maximum 5 perks allowed'),
+  })).max(5, 'Maximum 5 perks allowed'),
 })
 
 // Update perks manually

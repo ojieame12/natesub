@@ -3298,6 +3298,147 @@ button.btn .spinning {
     font-size: 14px;
 }
 
+/* === SETUP STEP (V5) - Type Toggle + Suggested Amounts === */
+
+.setup-field-label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+    letter-spacing: 0.01em;
+}
+
+.setup-type-toggle {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.setup-type-option {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    border-radius: 14px;
+    background: var(--surface);
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.setup-type-option:hover {
+    background: var(--surface-hover, rgba(0, 0, 0, 0.04));
+}
+
+.setup-type-option.selected {
+    border-color: var(--primary);
+    background: rgba(var(--primary-rgb, 0, 0, 0), 0.04);
+}
+
+.setup-type-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.setup-type-label {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.setup-type-desc {
+    font-size: 12px;
+    color: var(--text-tertiary);
+}
+
+.setup-suggested-amounts {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 8px;
+}
+
+.setup-suggested-pill {
+    padding: 6px 14px;
+    border-radius: 20px;
+    background: var(--surface);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    border: 1.5px solid transparent;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.setup-suggested-pill:hover {
+    background: var(--surface-hover, rgba(0, 0, 0, 0.06));
+}
+
+.setup-suggested-pill.active {
+    border-color: var(--primary);
+    color: var(--primary);
+    background: rgba(var(--primary-rgb, 0, 0, 0), 0.05);
+}
+
+/* === SERVICE STEP (V5) - Inline Perk Display === */
+
+.service-step-perks {
+    background: var(--surface);
+    border-radius: 14px;
+    padding: 16px;
+}
+
+.service-step-perks-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+
+.service-step-perks-header h3 {
+    font-size: 15px;
+    font-weight: 600;
+    margin: 0;
+}
+
+.service-step-regenerate {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    color: var(--primary);
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.service-step-regenerate:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.service-step-perk-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.service-step-perk-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    font-size: 14px;
+    color: var(--text-primary);
+    line-height: 1.4;
+}
+
+.service-step-perk-hint {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    margin-top: 10px;
+}
+
 /* === SERVICE MODE STYLES === */
 
 /* Service Description */

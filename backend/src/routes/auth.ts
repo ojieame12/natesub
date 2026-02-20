@@ -281,8 +281,9 @@ const onboardingDataSchema = z.object({
   voiceIntroUrl: z.string().url().optional(),
   bio: z.string().max(500).optional(),
 
-  // Purpose/branch selection
-  purpose: z.enum(['tips', 'support', 'allowance', 'fan_club', 'exclusive_content', 'service', 'other']).optional(),
+  // Purpose/branch selection (V5: simplified to personal/service)
+  // Accept legacy values gracefully during transition (frontend normalizes, backend accepts both)
+  purpose: z.enum(['personal', 'service', 'tips', 'support', 'allowance', 'fan_club', 'exclusive_content', 'other']).optional(),
 
   // Pricing fields
   // Note: singleAmount allows decimals for USD/GBP/EUR (e.g. $9.99)
@@ -332,9 +333,12 @@ auth.put(
   zValidator('json', z.object({
     step: z.number().min(0).max(15),
     // Step key - canonical identifier for the current step (preferred over numeric step)
+    // V5: New keys (email, otp, identity, setup, payments, service, review)
+    // Also accept legacy keys for backward compat (users mid-onboarding during deploy)
     stepKey: z.enum([
-      'start', 'email', 'otp', 'identity', 'address', 'purpose',
-      'avatar', 'username', 'payments', 'service-desc', 'ai-gen', 'review'
+      'email', 'otp', 'identity', 'setup', 'payments', 'service', 'review',
+      // Legacy keys (accepted but will be normalized on read)
+      'start', 'address', 'purpose', 'avatar', 'username', 'service-desc', 'ai-gen'
     ]).optional(),
     branch: z.enum(['personal', 'service']).optional(),
     data: onboardingDataSchema.optional(),

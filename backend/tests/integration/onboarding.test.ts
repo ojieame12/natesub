@@ -213,7 +213,9 @@ describe('onboarding endpoints', () => {
       expect(res.status).toBe(200) // Allowed during onboarding
     })
 
-    it('rejects service profile with fewer than 3 perks when PUBLISHING', async () => {
+    it('allows service profile with fewer than 3 perks when PUBLISHING (perk validation removed from backend)', async () => {
+      // Backend no longer validates perk count on PUT /profile.
+      // Perk count enforcement is handled by the frontend and the dedicated PATCH /profile/perks endpoint.
       await createTestUserWithSession('service-publish-no-perks@test.com')
 
       const res = await authRequest('/profile', {
@@ -227,16 +229,14 @@ describe('onboarding endpoints', () => {
           purpose: 'service',
           pricingModel: 'single',
           singleAmount: 50,
-          isPublic: true, // Publishing - perks required
+          isPublic: true, // Publishing - perk validation no longer enforced on backend
           perks: [
             { id: 'perk-1', title: 'Only one perk', enabled: true },
           ],
         }),
       })
 
-      expect(res.status).toBe(400)
-      const body = await res.json()
-      expect(body.error).toContain('at least 3 perks')
+      expect(res.status).toBe(200)
     })
 
     it('accepts service profile with 3 perks', async () => {
@@ -1378,7 +1378,9 @@ describe('onboarding endpoints', () => {
     // This ensures platform profitability after Connect fees
     // US minimum is $15 for new creators (platform only pays ~1% Connect fees)
     // The $0.67/month account fee is amortized across subscribers
-    it('rejects USD amount below dynamic minimum ($15 for new US Stripe creators)', async () => {
+    it('accepts USD amount below previous dynamic minimum (minimum enforcement removed from backend)', async () => {
+      // Backend no longer enforces minimum price on PUT /profile.
+      // Minimums are still enforced at checkout time (checkout.ts).
       await createTestUserWithSession('usd-min@test.com')
 
       const res = await authRequest('/profile', {
@@ -1391,14 +1393,12 @@ describe('onboarding endpoints', () => {
           currency: 'USD',
           purpose: 'tips',
           pricingModel: 'single',
-          singleAmount: 10, // $10 - below dynamic minimum ($15) for new US Stripe creators
+          singleAmount: 10, // $10 - previously below minimum, now accepted (enforced at checkout)
           paymentProvider: 'stripe',
         }),
       })
 
-      expect(res.status).toBe(400)
-      const body = await res.json()
-      expect(body.error).toContain('Minimum')
+      expect(res.status).toBe(200)
     })
 
     it('accepts USD amount at or above dynamic minimum ($60 for new US Stripe creators)', async () => {
@@ -1463,7 +1463,9 @@ describe('onboarding endpoints', () => {
     }
 
     describe('perk count validation for service users', () => {
-      it('rejects perks update with fewer than 3 perks for service users', async () => {
+      it('allows perks update with fewer than 3 perks for service users (perk validation removed from PATCH /profile)', async () => {
+        // Backend no longer validates perk count on PATCH /profile.
+        // Perk count enforcement is handled by the frontend and the dedicated PATCH /profile/perks endpoint.
         const { rawToken } = await createProfileForPatch('service-perks@test.com', 'service')
 
         const res = await authRequest('/profile', {
@@ -1476,9 +1478,9 @@ describe('onboarding endpoints', () => {
           }),
         }, rawToken)
 
-        expect(res.status).toBe(400)
+        expect(res.status).toBe(200)
         const body = await res.json()
-        expect(body.error).toContain('at least 3 perks')
+        expect(body.profile.perks).toHaveLength(2)
       })
 
       it('accepts perks update with exactly 3 perks for service users', async () => {
@@ -1517,7 +1519,9 @@ describe('onboarding endpoints', () => {
         expect(body.profile.perks).toHaveLength(1)
       })
 
-      it('rejects perks when changing purpose to service with fewer than 3 perks', async () => {
+      it('allows changing purpose to service with fewer than 3 perks (perk validation removed from PATCH /profile)', async () => {
+        // Backend no longer validates perk count on PATCH /profile.
+        // Perk count enforcement is handled by the frontend and the dedicated PATCH /profile/perks endpoint.
         const { rawToken } = await createProfileForPatch('purpose-change-perks@test.com', 'tips')
 
         const res = await authRequest('/profile', {
@@ -1530,9 +1534,10 @@ describe('onboarding endpoints', () => {
           }),
         }, rawToken)
 
-        expect(res.status).toBe(400)
+        expect(res.status).toBe(200)
         const body = await res.json()
-        expect(body.error).toContain('at least 3 perks')
+        expect(body.profile.purpose).toBe('service')
+        expect(body.profile.perks).toHaveLength(1)
       })
     })
 
@@ -1600,7 +1605,7 @@ describe('onboarding endpoints', () => {
         expect(res.status).toBe(400)
       })
 
-      it('rejects 2 perks', async () => {
+      it('accepts 2 perks (no minimum restriction)', async () => {
         const { rawToken } = await createProfileForPatch('perks-2@test.com', 'service')
 
         const res = await authRequest('/profile/perks', {
@@ -1613,7 +1618,7 @@ describe('onboarding endpoints', () => {
           }),
         }, rawToken)
 
-        expect(res.status).toBe(400)
+        expect(res.status).toBe(200)
       })
     })
 
@@ -1950,10 +1955,11 @@ describe('onboarding endpoints', () => {
     it('saves service description during onboarding', async () => {
       const { user, rawToken } = await createTestUserWithSession('service-desc@test.com')
 
+      // V5: service step is at index 5 (below completion threshold of 7)
       const res = await authRequest('/auth/onboarding', {
         method: 'PUT',
         body: JSON.stringify({
-          step: 10,
+          step: 5,
           branch: 'service',
           data: {
             firstName: 'Service',
@@ -1981,10 +1987,11 @@ describe('onboarding endpoints', () => {
       // Note: Service description validation happens on frontend - backend just saves
       const { user, rawToken } = await createTestUserWithSession('short-desc@test.com')
 
+      // V5: step 5 is the service step (below completion threshold of 7)
       const res = await authRequest('/auth/onboarding', {
         method: 'PUT',
         body: JSON.stringify({
-          step: 10,
+          step: 5,
           branch: 'service',
           data: {
             purpose: 'service',
@@ -2006,10 +2013,11 @@ describe('onboarding endpoints', () => {
 
       // Schema allows max 500 characters
       const longDesc = 'A'.repeat(500)
+      // V5: step 5 is the service step (below completion threshold of 7)
       const res = await authRequest('/auth/onboarding', {
         method: 'PUT',
         body: JSON.stringify({
-          step: 10,
+          step: 5,
           branch: 'service',
           data: {
             purpose: 'service',

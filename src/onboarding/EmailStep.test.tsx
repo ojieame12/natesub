@@ -35,8 +35,8 @@ describe('onboarding/EmailStep', () => {
     await user.click(button)
 
     expect(sendMagicLink).toHaveBeenCalledWith('test@example.com')
-    // After successful magic link, we navigate to OTP step (index 2)
-    expect(useOnboardingStore.getState().currentStep).toBe(2)
+    // After successful magic link, we navigate to OTP step (index 1 in V5 flow: email=0, otp=1)
+    expect(useOnboardingStore.getState().currentStep).toBe(1)
     expect(useOnboardingStore.getState().currentStepKey).toBe('otp')
   })
 

@@ -104,7 +104,7 @@ describe('StripeComplete', () => {
 
   it('navigates to review step for US users (non-service flow)', async () => {
     // US users with non-service purpose go to review step after Stripe completion
-    useOnboardingStore.setState({ countryCode: 'US', purpose: 'support' })
+    useOnboardingStore.setState({ countryCode: 'US', purpose: 'personal' })
     vi.mocked(api.stripe.getStatus).mockResolvedValue({ connected: true, status: 'active', details: {} as any })
 
     renderWithProviders(<StripeComplete />)
@@ -122,7 +122,7 @@ describe('StripeComplete', () => {
 
   it('navigates to review step for NG users (non-service flow)', async () => {
     // NG users with non-service purpose go to review step after Stripe completion
-    useOnboardingStore.setState({ countryCode: 'NG', purpose: 'support' })
+    useOnboardingStore.setState({ countryCode: 'NG', purpose: 'personal' })
     vi.mocked(api.stripe.getStatus).mockResolvedValue({ connected: true, status: 'active', details: {} as any })
 
     renderWithProviders(<StripeComplete />)
@@ -138,8 +138,8 @@ describe('StripeComplete', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/onboarding?step=review', { replace: true })
   })
 
-  it('navigates to service-desc step for service users', async () => {
-    // Service users go to service-desc step after Stripe completion (not review)
+  it('navigates to service step for service users', async () => {
+    // Service users go to service step after Stripe completion (not review)
     useOnboardingStore.setState({ countryCode: 'NG', purpose: 'service' })
     vi.mocked(api.stripe.getStatus).mockResolvedValue({ connected: true, status: 'active', details: {} as any })
 
@@ -152,8 +152,8 @@ describe('StripeComplete', () => {
     const continueBtn = screen.getByText('Continue to Dashboard')
     fireEvent.click(continueBtn)
 
-    // Service flow navigates to service-desc step (then AI gen, then review)
-    expect(mockNavigate).toHaveBeenCalledWith('/onboarding?step=service-desc', { replace: true })
+    // Service flow navigates to service step (V5: combined service-desc + ai-gen)
+    expect(mockNavigate).toHaveBeenCalledWith('/onboarding?step=service', { replace: true })
   })
 
   it('retries setup when restricted', async () => {

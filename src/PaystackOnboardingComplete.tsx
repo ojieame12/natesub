@@ -90,8 +90,7 @@ export default function PaystackOnboardingComplete() {
     const hasDescription = (typeof resolvedDescription === 'string' && resolvedDescription.trim()) || resolvedDescription?.trim?.()
     const hasPerks = Array.isArray(resolvedPerks) && resolvedPerks.length >= 3
 
-    if (!hasDescription) return 'service-desc'
-    if (!hasPerks) return 'ai-gen'
+    if (!hasDescription || !hasPerks) return 'service'
     return 'review'
   }
 

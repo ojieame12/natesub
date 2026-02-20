@@ -32,144 +32,85 @@ describe('OnboardingFlow', () => {
     useOnboardingStore.getState().reset()
   })
 
-  // New flow: Start → Email → OTP → Identity → [Address] → Purpose → Avatar → Username → Payment → [ServiceDesc → AIGen] → Review
-  // NG (no address): 9 steps (non-service) or 11 steps (service)
-  // US (with address): 10 steps (non-service) or 12 steps (service)
+  // V5 flow: email(0) → otp(1) → identity(2) → setup(3) → payments(4) → [service(5)] → review(5 or 6)
+  // Personal: 6 steps for ALL countries (no address step)
+  // Service: 7 steps for ALL countries (service step included)
 
-  describe('dynamic step rendering based on country', () => {
-    it('shows AddressStep for US users at step 4', async () => {
-      // US users see the address step (10-step flow for non-service)
+  describe('V5 step rendering', () => {
+    it('shows SetupStep at step 3 for any country', async () => {
+      // Step 3 is SetupStep (username + type toggle + price) in V5 flow
       useOnboardingStore.setState({
         countryCode: 'US',
-        currentStep: 4,
+        currentStep: 3,
         firstName: 'Ada',
         lastName: 'Lovelace',
-        purpose: 'support',
+        purpose: 'personal',
       })
 
       renderWithProviders(<OnboardingFlow />)
 
-      // Wait for min shell duration to complete
       await waitFor(() => {
-        // AddressStep should render with its heading
-        expect(screen.getByText("What's your address?")).toBeInTheDocument()
-      })
-    })
-
-    it('shows PurposeStep for NG users at step 4 (no address step)', async () => {
-      // NG users skip the address step - step 4 is PurposeStep
-      useOnboardingStore.setState({
-        countryCode: 'NG',
-        currentStep: 4,
-        firstName: 'Chidi',
-        lastName: 'Okonkwo',
-        purpose: 'support',
-      })
-
-      renderWithProviders(<OnboardingFlow />)
-
-      // Wait for min shell duration to complete
-      await waitFor(() => {
-        // Should be at PurposeStep, not AddressStep
+        // SetupStep should render — no address or purpose step at index 3
         expect(screen.queryByText("What's your address?")).not.toBeInTheDocument()
-        expect(screen.getByText("What's this for?")).toBeInTheDocument()
+        expect(screen.queryByText("What's this for?")).not.toBeInTheDocument()
       })
     })
 
-    it('shows AddressStep for UK users at step 4', async () => {
-      // UK users see the address step
-      useOnboardingStore.setState({
-        countryCode: 'GB',
-        currentStep: 4,
-        firstName: 'James',
-        lastName: 'Bond',
-        purpose: 'support',
-      })
+    it('no address step for any country in V5', async () => {
+      // Verify address step was removed for US, NG, GH, KE, GB
+      for (const countryCode of ['US', 'NG', 'GH', 'KE', 'GB']) {
+        useOnboardingStore.setState({
+          countryCode,
+          currentStep: 3, // Was address step index in old flow
+          firstName: 'Test',
+          lastName: 'User',
+          purpose: 'personal',
+        })
 
-      renderWithProviders(<OnboardingFlow />)
+        const { unmount } = renderWithProviders(<OnboardingFlow />)
 
-      // Wait for min shell duration to complete
-      await waitFor(() => {
-        expect(screen.getByText("What's your address?")).toBeInTheDocument()
-      })
-    })
+        await waitFor(() => {
+          expect(screen.queryByText("What's your address?")).not.toBeInTheDocument()
+        })
 
-    it('skips address step for GH users', async () => {
-      // GH (Ghana) is a cross-border country, no address step - step 4 is PurposeStep
-      useOnboardingStore.setState({
-        countryCode: 'GH',
-        currentStep: 4,
-        firstName: 'Kwame',
-        lastName: 'Asante',
-        purpose: 'support',
-      })
-
-      renderWithProviders(<OnboardingFlow />)
-
-      // Wait for min shell duration to complete
-      await waitFor(() => {
-        expect(screen.queryByText("What's your address?")).not.toBeInTheDocument()
-        expect(screen.getByText("What's this for?")).toBeInTheDocument()
-      })
-    })
-
-    it('skips address step for KE users', async () => {
-      // KE (Kenya) is a cross-border country, no address step - step 4 is PurposeStep
-      useOnboardingStore.setState({
-        countryCode: 'KE',
-        currentStep: 4,
-        firstName: 'Wanjiku',
-        lastName: 'Mwangi',
-        purpose: 'support',
-      })
-
-      renderWithProviders(<OnboardingFlow />)
-
-      // Wait for min shell duration to complete
-      await waitFor(() => {
-        expect(screen.queryByText("What's your address?")).not.toBeInTheDocument()
-        expect(screen.getByText("What's this for?")).toBeInTheDocument()
-      })
+        unmount()
+      }
     })
   })
 
-  describe('step indices match flow length', () => {
-    it('has 10 steps for US non-service flow (with address)', async () => {
-      // Flow: Start(0) → Email(1) → OTP(2) → Identity(3) → Address(4) → Purpose(5) → Avatar(6) → Username(7) → Payment(8) → Review(9)
+  describe('step indices match V5 flow length', () => {
+    it('has 6 steps for personal flow (review at index 5)', async () => {
+      // V5 flow: email(0) → otp(1) → identity(2) → setup(3) → payments(4) → review(5)
       useOnboardingStore.setState({
         countryCode: 'US',
-        currentStep: 9, // Last step (Review) in 10-step flow
+        currentStep: 5, // Last step (Review) in 6-step personal flow
         firstName: 'Ada',
         lastName: 'Lovelace',
         username: 'ada',
-        purpose: 'support',
+        purpose: 'personal',
       })
 
       renderWithProviders(<OnboardingFlow />)
 
-      // Wait for min shell duration to complete (resume flow shows loading shell briefly)
       await waitFor(() => {
-        // Step 9 is PersonalReviewStep in 10-step flow (non-service)
         expect(screen.getByText('Set up your page')).toBeInTheDocument()
       })
     })
 
-    it('has 9 steps for NG non-service flow (no address)', async () => {
-      // Flow: Start(0) → Email(1) → OTP(2) → Identity(3) → Purpose(4) → Avatar(5) → Username(6) → Payment(7) → Review(8)
+    it('same step count for NG and US personal flow', async () => {
+      // Both countries have same 6-step flow (no address step differentiation)
       useOnboardingStore.setState({
         countryCode: 'NG',
-        currentStep: 8, // Last step (Review) in 9-step flow
+        currentStep: 5, // Last step (Review) in 6-step personal flow
         firstName: 'Chidi',
         lastName: 'Okonkwo',
         username: 'chidi',
-        purpose: 'support',
+        purpose: 'personal',
       })
 
       renderWithProviders(<OnboardingFlow />)
 
-      // Wait for min shell duration to complete (resume flow shows loading shell briefly)
       await waitFor(() => {
-        // Step 8 is PersonalReviewStep in 9-step flow (non-service)
         expect(screen.getByText('Set up your page')).toBeInTheDocument()
       })
     })

@@ -1,8 +1,6 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware'
 import { useShallow } from 'zustand/react/shallow'
-import { shouldSkipAddress } from '../utils/regionConfig'
-
 // Re-export useShallow for components that need multiple values without causing re-renders
 export { useShallow }
 
@@ -62,67 +60,80 @@ const safeStorage = createSafeStorage()
 
 // Step keys - canonical identifiers for each onboarding step
 // These remain stable even when step indices change due to conditional steps
+// V5: Streamlined from 12 steps to 7 (removed start, address, purpose, avatar, ai-gen; added setup)
 export type OnboardingStepKey =
-    | 'start'
     | 'email'
     | 'otp'
     | 'identity'
-    | 'address'      // Conditional: only for non-cross-border countries
-    | 'purpose'
-    | 'avatar'
-    | 'username'
+    | 'setup'        // NEW: combined username + type toggle (personal/service) + price
     | 'payments'
-    | 'service-desc' // Conditional: only for service mode
-    | 'ai-gen'       // Conditional: only for service mode
+    | 'service'      // Conditional: only for service mode (description + inline perks)
     | 'review'
+
+// Legacy step keys for backward compatibility (resume flows from old versions)
+export type LegacyStepKey =
+    | 'start' | 'address' | 'purpose' | 'avatar' | 'username' | 'service-desc' | 'ai-gen'
+
+// All valid step keys (current + legacy for type checking)
+export type AnyStepKey = OnboardingStepKey | LegacyStepKey
 
 // All possible step keys in canonical order (some may be skipped)
 export const ALL_STEP_KEYS: OnboardingStepKey[] = [
-    'start',
     'email',
     'otp',
     'identity',
-    'address',
-    'purpose',
-    'avatar',
-    'username',
+    'setup',
     'payments',
-    'service-desc',
-    'ai-gen',
+    'service',
     'review',
 ]
 
+// Map legacy step keys to their nearest valid replacement
+const LEGACY_STEP_MAP: Record<LegacyStepKey, OnboardingStepKey> = {
+    'start': 'email',
+    'address': 'identity',     // Address was after identity
+    'purpose': 'setup',        // Purpose is now part of setup
+    'avatar': 'setup',         // Avatar removed, setup is nearest
+    'username': 'setup',       // Username is now part of setup
+    'service-desc': 'service', // service-desc merged into service
+    'ai-gen': 'service',       // ai-gen merged into service
+}
+
+// Normalize any step key (including legacy) to a current valid key
+export function normalizeStepKey(key: string): OnboardingStepKey {
+    if ((ALL_STEP_KEYS as string[]).includes(key)) return key as OnboardingStepKey
+    if (key in LEGACY_STEP_MAP) return LEGACY_STEP_MAP[key as LegacyStepKey]
+    return 'email' // Safe fallback
+}
+
 // Get visible step keys based on current configuration
 export function getVisibleStepKeys(options: {
-    showAddressStep: boolean
+    showAddressStep?: boolean  // Kept for API compat but ignored (no address step)
     isServiceMode: boolean
 }): OnboardingStepKey[] {
-    const { showAddressStep, isServiceMode } = options
+    const { isServiceMode } = options
     return ALL_STEP_KEYS.filter(key => {
-        if (key === 'address') return showAddressStep
-        if (key === 'service-desc' || key === 'ai-gen') return isServiceMode
+        if (key === 'service') return isServiceMode
         return true
     })
 }
 
 // Convert step key to index for current configuration
 // If the key isn't visible, find a safe fallback step instead of returning 0
+// Accepts both current and legacy step keys for backward compatibility
 export function stepKeyToIndex(
-    key: OnboardingStepKey,
-    options: { showAddressStep: boolean; isServiceMode: boolean }
+    key: OnboardingStepKey | AnyStepKey | string,
+    options: { showAddressStep?: boolean; isServiceMode: boolean }
 ): number {
+    // Normalize legacy keys first
+    const normalizedKey = normalizeStepKey(key)
     const visibleKeys = getVisibleStepKeys(options)
-    const index = visibleKeys.indexOf(key)
+    const index = visibleKeys.indexOf(normalizedKey)
     if (index >= 0) return index
 
-    // Key isn't visible - find a safe fallback based on key type
-    // If it's a removed conditional step, go to the step that would come after it
-    if (key === 'address') {
-        // Address was removed (switched to cross-border country) → go to purpose
-        return visibleKeys.indexOf('purpose')
-    }
-    if (key === 'service-desc' || key === 'ai-gen') {
-        // Service steps removed (switched to non-service) → go to review
+    // Key isn't visible - find a safe fallback
+    if (normalizedKey === 'service') {
+        // Service step removed (switched to non-service) → go to review
         return visibleKeys.indexOf('review')
     }
 
@@ -134,21 +145,25 @@ export function stepKeyToIndex(
 // Convert step index to key for current configuration
 export function stepIndexToKey(
     index: number,
-    options: { showAddressStep: boolean; isServiceMode: boolean }
+    options: { showAddressStep?: boolean; isServiceMode: boolean }
 ): OnboardingStepKey {
     const visibleKeys = getVisibleStepKeys(options)
-    return visibleKeys[index] || 'start'
+    return visibleKeys[index] || 'email'
 }
 
-// Subscription purpose - why someone would subscribe to you
-export type SubscriptionPurpose =
-    | 'tips'              // Tips & Appreciation - fans showing gratitude
-    | 'support'           // Support Me - help fund my work or passion
-    | 'allowance'         // Allowance - regular support from loved ones
-    | 'fan_club'          // Fan Club - exclusive community membership
-    | 'exclusive_content' // Exclusive Content - behind-the-scenes, early access
-    | 'service'           // Service Provider - coaching, consulting, retainers
-    | 'other'             // Something Else - unique use case
+// Subscription purpose - simplified to 2 types
+// V5: Collapsed from 7 types to 2 (personal vs service)
+// Old values (tips, support, allowance, fan_club, exclusive_content, other) all map to 'personal'
+export type SubscriptionPurpose = 'personal' | 'service'
+
+// Legacy purpose values for backward compatibility
+export type LegacyPurpose = 'tips' | 'support' | 'allowance' | 'fan_club' | 'exclusive_content' | 'other'
+
+// Normalize any purpose value (including legacy) to current valid purpose
+export function normalizePurpose(purpose: string | null | undefined): SubscriptionPurpose {
+    if (purpose === 'service') return 'service'
+    return 'personal' // All other values (including legacy) map to personal
+}
 
 // Pricing model - single amount or tiered
 export type PricingModel = 'single' | 'tiers'
@@ -271,9 +286,10 @@ interface OnboardingStore {
     resetServiceFields: () => void
     // Hydrate from server data (for resume flows)
     // Supports both legacy numeric step and new stepKey
+    // Accepts legacy step keys (start, address, purpose, avatar, username, service-desc, ai-gen)
     hydrateFromServer: (data: {
         step?: number
-        stepKey?: OnboardingStepKey
+        stepKey?: OnboardingStepKey | AnyStepKey | string
         data?: Record<string, any> | null
     }) => void
 }
@@ -288,7 +304,7 @@ const defaultTiers: SubscriptionTier[] = [
 
 const initialState = {
     currentStep: 0,
-    currentStepKey: 'start' as OnboardingStepKey,
+    currentStepKey: 'email' as OnboardingStepKey,
     email: '',
     otp: '',
     firstName: '',
@@ -300,7 +316,7 @@ const initialState = {
     city: '',
     state: '',
     zip: '',
-    purpose: 'support' as SubscriptionPurpose,
+    purpose: 'personal' as SubscriptionPurpose,
     pricingModel: 'single' as PricingModel,
     singleAmount: 10,
     tiers: defaultTiers,
@@ -409,15 +425,13 @@ export const useOnboardingStore = create<OnboardingStore>()(
             // navigateToStep - atomic navigation by step key (no debouncing)
             // Computes step index from current store config and updates both atomically
             navigateToStep: (key) => set((state) => {
-                const { countryCode, purpose } = state
-                // Compute step config from current state
-                // Use shouldSkipAddress (UX concern) not isCrossBorderCountry (payment concern)
-                const showAddressStep = Boolean(countryCode) && !shouldSkipAddress(countryCode)
+                const { purpose } = state
                 const isServiceMode = purpose === 'service'
-                const stepConfig = { showAddressStep, isServiceMode }
-                const stepIndex = stepKeyToIndex(key, stepConfig)
+                const stepConfig = { isServiceMode }
+                const normalizedKey = normalizeStepKey(key)
+                const stepIndex = stepKeyToIndex(normalizedKey, stepConfig)
                 return {
-                    currentStepKey: key,
+                    currentStepKey: normalizedKey,
                     currentStep: stepIndex,
                 }
             }),
@@ -451,7 +465,7 @@ export const useOnboardingStore = create<OnboardingStore>()(
                 servicePerks: [],
                 bannerUrl: null,
                 bannerOptions: [],
-                purpose: null,
+                purpose: 'personal' as SubscriptionPurpose,
             }),
 
             // Hydrate from server data (for resume flows)
@@ -466,8 +480,9 @@ export const useOnboardingStore = create<OnboardingStore>()(
                 }
 
                 // Prefer stepKey over numeric step (stepKey is the canonical identifier)
+                // Normalize legacy step keys to current valid keys
                 if (serverData.stepKey) {
-                    updates.currentStepKey = serverData.stepKey
+                    updates.currentStepKey = normalizeStepKey(serverData.stepKey as string)
                 }
                 // Also support legacy numeric step
                 if (serverData.step !== undefined) {
@@ -498,7 +513,7 @@ export const useOnboardingStore = create<OnboardingStore>()(
                     // Pricing
                     if (d.singleAmount !== undefined) updates.singleAmount = d.singleAmount
                     if (d.pricingModel) updates.pricingModel = d.pricingModel
-                    if (d.purpose) updates.purpose = d.purpose
+                    if (d.purpose) updates.purpose = normalizePurpose(d.purpose)
                     if (d.tiers) updates.tiers = d.tiers
                     // Content
                     if (d.bio) updates.bio = d.bio
@@ -525,7 +540,7 @@ export const useOnboardingStore = create<OnboardingStore>()(
         }),
         {
             name: 'natepay-onboarding',
-            version: 4, // Bumped to add BannerOption type with variant
+            version: 5, // V5: Streamlined onboarding (12→7 steps, 7→2 purpose types)
             // Use localStorage with TTL to persist onboarding progress across tab closes
             // while still preventing stale state via the 24-hour TTL check below
             storage: createJSONStorage(() => safeStorage),

@@ -19,7 +19,8 @@ import { env } from '../config/env.js'
 import { invalidatePublicProfileCache } from '../utils/cache.js'
 
 // Lock TTL for Stripe connect operations (prevents double-click race conditions)
-const CONNECT_LOCK_TTL_SECONDS = 30
+// Must exceed worst-case request duration (3 sequential Stripe API calls × 15s timeout = 45s)
+const CONNECT_LOCK_TTL_SECONDS = 60
 
 const stripeRoutes = new Hono()
 

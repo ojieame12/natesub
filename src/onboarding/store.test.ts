@@ -293,72 +293,90 @@ describe('onboarding/store', () => {
   })
 
   describe('navigateToStep', () => {
-    it('skips address step for cross-border country (NG)', () => {
+    // V5 flow: email(0) → otp(1) → identity(2) → setup(3) → payments(4) → [service(5)] → review(5 or 6)
+    // No address step. Service step is conditional on purpose === 'service'.
+
+    it('navigates to setup step (replaces old purpose step)', () => {
       const store = useOnboardingStore.getState()
       store.setCountry('Nigeria', 'NG')
-      store.setPurpose('support')
+      store.setPurpose('personal')
 
-      store.navigateToStep('purpose')
+      store.navigateToStep('setup')
 
       const state = useOnboardingStore.getState()
-      expect(state.currentStepKey).toBe('purpose')
+      expect(state.currentStepKey).toBe('setup')
+      expect(state.currentStep).toBe(3) // email=0, otp=1, identity=2, setup=3
     })
 
-    it('skips address step for cross-border country (GH)', () => {
+    it('normalizes legacy "purpose" key to "setup"', () => {
       const store = useOnboardingStore.getState()
       store.setCountry('Ghana', 'GH')
-      store.setPurpose('support')
+      store.setPurpose('personal')
 
-      store.navigateToStep('purpose')
-
-      const state = useOnboardingStore.getState()
-      expect(state.currentStepKey).toBe('purpose')
-    })
-
-    it('skips address step for cross-border country (KE)', () => {
-      const store = useOnboardingStore.getState()
-      store.setCountry('Kenya', 'KE')
-      store.setPurpose('support')
-
-      store.navigateToStep('purpose')
+      // Navigating to legacy 'purpose' key should normalize to 'setup'
+      store.navigateToStep('purpose' as any)
 
       const state = useOnboardingStore.getState()
-      expect(state.currentStepKey).toBe('purpose')
+      expect(state.currentStepKey).toBe('setup')
     })
 
-    it('includes address step for non-cross-border country (US)', () => {
+    it('normalizes legacy "address" key to "identity"', () => {
       const store = useOnboardingStore.getState()
       store.setCountry('United States', 'US')
-      store.setPurpose('support')
+      store.setPurpose('personal')
 
-      store.navigateToStep('address')
+      // Navigating to legacy 'address' key should normalize to 'identity'
+      store.navigateToStep('address' as any)
 
       const state = useOnboardingStore.getState()
-      expect(state.currentStepKey).toBe('address')
+      expect(state.currentStepKey).toBe('identity')
     })
 
-    it('computes correct step index based on countryCode', () => {
-      // For US (with address step), 'purpose' should have higher index than for NG
+    it('same step index for all countries (no address step anymore)', () => {
       const store = useOnboardingStore.getState()
 
-      // Test US (with address step)
+      // Test US
       store.setCountry('United States', 'US')
-      store.setPurpose('support')
-      store.navigateToStep('purpose')
+      store.setPurpose('personal')
+      store.navigateToStep('setup')
       const usState = useOnboardingStore.getState()
 
-      // Reset and test NG (without address step)
+      // Reset and test NG
       store.reset()
       store.setCountry('Nigeria', 'NG')
-      store.setPurpose('support')
-      store.navigateToStep('purpose')
+      store.setPurpose('personal')
+      store.navigateToStep('setup')
       const ngState = useOnboardingStore.getState()
 
-      // Both should navigate to 'purpose' step key
-      expect(usState.currentStepKey).toBe('purpose')
-      expect(ngState.currentStepKey).toBe('purpose')
-      // But US should have higher step index due to address step
-      expect(usState.currentStep).toBeGreaterThan(ngState.currentStep)
+      // Both should have same step index (no address step differentiation)
+      expect(usState.currentStepKey).toBe('setup')
+      expect(ngState.currentStepKey).toBe('setup')
+      expect(usState.currentStep).toBe(ngState.currentStep)
+    })
+
+    it('includes service step for service purpose', () => {
+      const store = useOnboardingStore.getState()
+      store.setCountry('Nigeria', 'NG')
+      store.setPurpose('service')
+
+      store.navigateToStep('service')
+
+      const state = useOnboardingStore.getState()
+      expect(state.currentStepKey).toBe('service')
+      expect(state.currentStep).toBe(5) // email=0, otp=1, identity=2, setup=3, payments=4, service=5
+    })
+
+    it('skips service step for personal purpose (review at index 5)', () => {
+      const store = useOnboardingStore.getState()
+      store.setCountry('Nigeria', 'NG')
+      store.setPurpose('personal')
+
+      store.navigateToStep('review')
+
+      const state = useOnboardingStore.getState()
+      expect(state.currentStepKey).toBe('review')
+      // Personal: email=0, otp=1, identity=2, setup=3, payments=4, review=5
+      expect(state.currentStep).toBe(5)
     })
   })
 })
