@@ -84,12 +84,13 @@ enum PayoutStatus {
 }
 
 enum Purpose {
+  personal
+  service
   tips
   support
   allowance
   fan_club
   exclusive_content
-  service
   other
 }
 

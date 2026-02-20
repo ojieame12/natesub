@@ -45,6 +45,12 @@ function normalizeTemplate(template: string | null | undefined): Exclude<Templat
   return template as Exclude<TemplateId, 'liquid'>
 }
 
+// V5: Normalize legacy purpose values to 'personal' or 'service'
+function normalizePurpose(purpose: string): 'personal' | 'service' {
+  if (purpose === 'service') return 'service'
+  return 'personal'
+}
+
 // Get own profile
 profile.get('/', requireAuth, async (c) => {
   const userId = c.get('userId')
@@ -143,7 +149,7 @@ profile.put(
       country: data.country,
       countryCode: data.countryCode.toUpperCase(),
       currency,
-      purpose: data.purpose,
+      purpose: normalizePurpose(data.purpose),
       pricingModel: data.pricingModel,
       singleAmount: data.singleAmount ? displayAmountToCents(data.singleAmount, currency) : null,
       tiers: tiersData,
@@ -266,7 +272,7 @@ profile.patch(
       const isCrossBorderStripe = isStripeCrossBorderSupported(effectiveCountryCode) && effectiveProvider === 'stripe'
       updateData.currency = isCrossBorderStripe ? 'USD' : data.currency.toUpperCase()
     }
-    if (data.purpose !== undefined) updateData.purpose = data.purpose
+    if (data.purpose !== undefined) updateData.purpose = normalizePurpose(data.purpose)
     if (data.pricingModel !== undefined) updateData.pricingModel = data.pricingModel
     if (data.paymentProvider !== undefined) updateData.paymentProvider = data.paymentProvider || null
     // Note: feeMode is ignored - always 'split' (4.5%/4.5% model)

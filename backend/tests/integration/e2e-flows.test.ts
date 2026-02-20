@@ -71,9 +71,9 @@ async function createCreatorProfile(userId: string, overrides: any = {}) {
       country: 'United States',
       countryCode: 'US',
       currency: 'USD',
-      purpose: 'tips',
+      purpose: 'personal',
       pricingModel: 'single',
-      singleAmount: 500, // $5.00 in cents
+      singleAmount: 1500, // $15.00 in cents (meets US minimum)
       isPublic: true,
       payoutStatus: 'active',
       stripeAccountId: 'acct_test_123',
@@ -484,7 +484,7 @@ describe('E2E Flows', () => {
       await createCreatorProfile(user.id, {
         username: 'supportme',
         stripeAccountId: 'acct_creator_123',
-        singleAmount: 500, // Amount must match
+        singleAmount: 1500, // $15.00 - meets US minimum
         payoutStatus: 'active',
       })
 
@@ -497,7 +497,7 @@ describe('E2E Flows', () => {
         method: 'POST',
         body: JSON.stringify({
           creatorUsername: 'supportme',
-          amount: 500, // Must match singleAmount
+          amount: 1500, // Must match singleAmount
           interval: 'month', // Must be 'month' not 'monthly'
         }),
       })
@@ -598,7 +598,7 @@ describe('E2E Flows', () => {
       await createCreatorProfile(user.id, {
         username: 'monthlycreator',
         stripeAccountId: 'acct_monthly_123',
-        singleAmount: 1000, // Amount must match
+        singleAmount: 1500, // $15.00 - meets US minimum
         payoutStatus: 'active',
       })
 
@@ -611,7 +611,7 @@ describe('E2E Flows', () => {
         method: 'POST',
         body: JSON.stringify({
           creatorUsername: 'monthlycreator',
-          amount: 1000, // Must match singleAmount
+          amount: 1500, // Must match singleAmount
           interval: 'month', // Must be 'month' not 'monthly'
         }),
       })

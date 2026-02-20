@@ -907,12 +907,12 @@ describe('onboarding endpoints', () => {
       expect(res.status).toBe(200)
       const body = await res.json()
       expect(body.success).toBe(true)
-      // New users start at post-OTP step 3
-      expect(body.onboardingStep).toBe(3)
-      expect(body.redirectTo).toBe('/onboarding?step=3')
+      // V5: New users start at post-OTP step 2 (identity)
+      expect(body.onboardingStep).toBe(2)
+      expect(body.redirectTo).toBe('/onboarding?step=2')
 
       const user = await db.user.findUnique({ where: { email: 'newuser@test.com' } })
-      expect(user?.onboardingStep).toBe(3)
+      expect(user?.onboardingStep).toBe(2)
     })
   })
 
@@ -1657,19 +1657,20 @@ describe('onboarding endpoints', () => {
         expect(body.profile.displayName).toBe('Updated Name')
       })
 
-      it('does not start trial when purpose changes from service to tips', async () => {
-        const { rawToken } = await createProfileForPatch('service-to-tips@test.com', 'service')
+      it('does not start trial when purpose changes from service to personal', async () => {
+        const { rawToken } = await createProfileForPatch('service-to-personal@test.com', 'service')
 
         const res = await authRequest('/profile', {
           method: 'PATCH',
           body: JSON.stringify({
-            purpose: 'tips',
+            purpose: 'personal',
           }),
         }, rawToken)
 
         expect(res.status).toBe(200)
         const body = await res.json()
-        expect(body.profile.purpose).toBe('tips')
+        // V5: legacy 'tips' normalizes to 'personal'
+        expect(body.profile.purpose).toBe('personal')
       })
     })
   })

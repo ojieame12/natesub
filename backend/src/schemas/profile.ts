@@ -61,7 +61,7 @@ export const profileSchema = z.object({
   country: z.string(),
   countryCode: z.string().length(2),
   currency: z.string().length(3).default('USD'),
-  purpose: z.enum(['tips', 'support', 'allowance', 'fan_club', 'exclusive_content', 'service', 'other']),
+  purpose: z.enum(['personal', 'service', 'tips', 'support', 'allowance', 'fan_club', 'exclusive_content', 'other']),
   pricingModel: z.enum(['single', 'tiers']),
   singleAmount: z.number().positive().max(10_000_000).optional().nullable(), // Max 10M for local currencies
   tiers: z.array(tierSchema).optional().nullable(),

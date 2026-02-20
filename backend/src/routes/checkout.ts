@@ -10,6 +10,7 @@ import { CircuitBreakerError } from '../utils/circuitBreaker.js'
 import { initializePaystackCheckout, generateReference, isPaystackSupported, type PaystackCountry } from '../services/paystack.js'
 import { calculateServiceFee, type FeeCalculation } from '../services/fees.js'
 import { isStripeCrossBorderSupported } from '../utils/constants.js'
+import { getCreatorMinimum } from '../constants/creatorMinimums.js'
 import { PAYSTACK_PAYER_COUNTRIES } from '../utils/countryConfig.js'
 import { env } from '../config/env.js'
 import { maskEmail } from '../utils/pii.js'
@@ -187,6 +188,22 @@ checkout.post(
       // Final fallback: If they are sending a valid amount that matches the 'single' price,
       // we allow it even if they are technically on 'tiers' mode.
       return c.json({ error: 'Invalid amount' }, 400)
+    }
+
+    // Enforce dynamic minimum price to prevent negative creator net
+    // Amount is in cents (USD for Stripe), check against country minimum
+    const creatorMinimum = getCreatorMinimum(profile.country)
+    if (creatorMinimum) {
+      const amountUSD = amount / 100 // Convert cents to dollars
+      if (amountUSD < creatorMinimum.usd) {
+        return c.json({
+          error: `Minimum subscription is $${creatorMinimum.usd} USD for this creator's region.`,
+          code: 'BELOW_MINIMUM_PRICE',
+          minimumUSD: creatorMinimum.usd,
+          minimumLocal: creatorMinimum.local,
+          currency: creatorMinimum.currency,
+        }, 400)
+      }
     }
 
     // Check if this is a cross-border transaction (Stripe only)

@@ -69,6 +69,7 @@ export default function OtpStep() {
             // Smart routing based on user state
             // If backend provides onboarding progress, hydrate store first
             if (result.onboardingStep && result.onboardingStep >= 3) {
+                // V5: >= 3 means past identity (index 2), user has saved progress worth resuming
                 hydrateFromServer({
                     step: result.onboardingStep,
                     // Extract stepKey from onboardingData for reliable resume

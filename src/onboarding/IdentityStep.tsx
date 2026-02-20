@@ -3,7 +3,7 @@ import { ChevronLeft, ChevronDown, Check, Search, AlertCircle, Loader2 } from 'l
 import { useOnboardingStore } from './store'
 import { Button, Pressable } from './components'
 import { useSaveOnboardingProgress } from '../api/hooks'
-import { getCountryList, shouldSkipAddress } from '../utils/regionConfig'
+import { getCountryList } from '../utils/regionConfig'
 import '../Dashboard.css'
 import './onboarding.css'
 
@@ -38,11 +38,10 @@ export default function IdentityStep() {
         setSaveError(null)
 
         try {
-            // Save NEXT step key so resume lands on the step user is going to
-            const nextStepKey = shouldSkipAddress(countryCode) ? 'purpose' : 'address'
+            // V5: Identity always goes to setup (address step removed)
             await saveProgress({
                 step: currentStep + 1,
-                stepKey: nextStepKey,
+                stepKey: 'setup',
                 data: { firstName, lastName, country, countryCode, currency },
             })
             // Only advance on success

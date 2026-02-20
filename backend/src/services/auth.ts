@@ -274,7 +274,7 @@ export async function verifyMagicLink(token: string, email?: string): Promise<{
       user = await tx.user.create({
         data: {
           email: magicLinkToken.email,
-          onboardingStep: 3, // Post-OTP step (identity)
+          onboardingStep: 2, // V5: Post-OTP step (identity = index 2)
         },
         include: { profile: true },
       })
