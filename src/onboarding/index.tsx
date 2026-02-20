@@ -73,11 +73,10 @@ export default function OnboardingFlow() {
     const onboardingStepKey = onboardingData?.stepKey as OnboardingStepKey | undefined
 
     // Use useShallow to prevent re-renders when unrelated store values change
-    const { currentStep, currentStepKey, countryCode, purpose, hydrateFromServer, goToStepKey } = useOnboardingStore(
+    const { currentStep, currentStepKey, purpose, hydrateFromServer, goToStepKey } = useOnboardingStore(
         useShallow((s) => ({
             currentStep: s.currentStep,
             currentStepKey: s.currentStepKey,
-            countryCode: s.countryCode,
             purpose: s.purpose,
             hydrateFromServer: s.hydrateFromServer,
             goToStepKey: s.goToStepKey,
@@ -142,7 +141,7 @@ export default function OnboardingFlow() {
     // nextStep/prevStep only update currentStep (index), so we must detect that case
     const effectiveStep = useMemo(() => {
         // First, compute what index the current key would give us
-        const keyIndex = currentStepKey && currentStepKey !== 'start' && visibleStepKeys.includes(currentStepKey)
+        const keyIndex = currentStepKey && visibleStepKeys.includes(currentStepKey)
             ? stepKeyToIndex(currentStepKey, stepConfig)
             : -1
 

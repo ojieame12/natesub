@@ -3,7 +3,6 @@ import { ChevronLeft, AlertCircle, Loader2, Check, Sparkles } from 'lucide-react
 import { useOnboardingStore } from './store'
 import { Button, Pressable } from './components'
 import { useGeneratePerks, useAIConfig, useSaveOnboardingProgress } from '../api/hooks'
-import { saveRetryQueue } from './saveRetryQueue'
 import type { ServicePerk } from './store'
 import './onboarding.css'
 
