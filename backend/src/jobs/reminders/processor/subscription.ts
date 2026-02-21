@@ -20,6 +20,7 @@ import { calculateServiceFee, calculateLegacyServiceFee } from '../../../service
 import { isStripeCrossBorderSupported } from '../../../utils/constants.js'
 import { decryptAccountNumber } from '../../../utils/encryption.js'
 import { generateCancelUrl, generateManageUrl } from '../../../utils/cancelToken.js'
+import { ensureManageTokenNonce } from '../../../utils/manageTokenNonce.js'
 
 export async function processSubscriptionRenewalReminder(
   subscriptionId: string,
@@ -87,11 +88,13 @@ export async function processSubscriptionRenewalReminder(
     chargeAmount = baseAmount
   }
 
+  const manageTokenNonce = await ensureManageTokenNonce(subscriptionId, subscription.manageTokenNonce)
+
   // Generate signed cancel URL for 1-click cancellation without login
-  const cancelUrl = generateCancelUrl(subscriptionId, subscription.manageTokenNonce)
+  const cancelUrl = generateCancelUrl(subscriptionId, manageTokenNonce)
 
   // Generate manage URL for our branded subscription management page
-  const manageUrl = generateManageUrl(subscriptionId, subscription.manageTokenNonce)
+  const manageUrl = generateManageUrl(subscriptionId, manageTokenNonce)
 
   await sendRenewalReminderEmail(
     subscription.subscriber.email,
@@ -163,8 +166,9 @@ export async function processSubscriptionPaymentFailedReminder(
     chargeAmount = baseAmount
   }
 
-  // Generate manage URL for our branded subscription management page
-  const manageUrl = generateManageUrl(subscriptionId, subscription.manageTokenNonce)
+  // Ensure nonce exists for legacy subscriptions before generating tokenized links.
+  const manageTokenNonce = await ensureManageTokenNonce(subscriptionId, subscription.manageTokenNonce)
+  const manageUrl = generateManageUrl(subscriptionId, manageTokenNonce)
 
   await sendPaymentFailedEmail(
     subscription.subscriber.email,
@@ -232,8 +236,9 @@ export async function processSubscriptionPastDueReminder(
     chargeAmount = baseAmount
   }
 
-  // Generate manage URL for our branded subscription management page
-  const manageUrl = generateManageUrl(subscriptionId, subscription.manageTokenNonce)
+  // Ensure nonce exists for legacy subscriptions before generating tokenized links.
+  const manageTokenNonce = await ensureManageTokenNonce(subscriptionId, subscription.manageTokenNonce)
+  const manageUrl = generateManageUrl(subscriptionId, manageTokenNonce)
 
   // Send payment failed with no retry date (indicating it's past due)
   await sendPaymentFailedEmail(

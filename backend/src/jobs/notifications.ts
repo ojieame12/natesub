@@ -13,6 +13,7 @@ import {
 import { calculateServiceFee, calculateLegacyServiceFee, type FeeMode } from '../services/fees.js'
 import { acquireLock, releaseLock } from '../services/lock.js'
 import { generateManageUrl } from '../utils/cancelToken.js'
+import { ensureManageTokenNonce } from '../utils/manageTokenNonce.js'
 
 interface NotificationResult {
   processed: number
@@ -113,8 +114,9 @@ export async function sendDunningEmails(): Promise<NotificationResult> {
         : calculateLegacyServiceFee(sub.amount, sub.currency, sub.creator.profile?.purpose, feeMode)
       const subscriberAmount = feeCalc.grossCents
 
-      // Generate manage URL for direct access (no login required)
-      const manageUrl = generateManageUrl(sub.id, sub.manageTokenNonce)
+      // Ensure nonce exists for legacy subscriptions before generating tokenized links.
+      const manageTokenNonce = await ensureManageTokenNonce(sub.id, sub.manageTokenNonce)
+      const manageUrl = generateManageUrl(sub.id, manageTokenNonce)
 
       await sendPaymentFailedEmail(
         sub.subscriber.email,

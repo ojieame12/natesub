@@ -13,6 +13,8 @@ import {
 import { normalizeEmailAddress } from '../utils.js'
 import { invalidateAdminRevenueCache } from '../../../utils/cache.js'
 import { scheduleSubscriptionRenewalReminders } from '../../../jobs/reminders.js'
+import { generateTokenNonce } from '../../../utils/cancelToken.js'
+import { ensureManageTokenNonce } from '../../../utils/manageTokenNonce.js'
 import { getReportingCurrencyData } from '../../../services/fx.js'
 import { logger } from '../../../utils/logger.js'
 
@@ -354,6 +356,7 @@ export async function backfillStripeSubscriptionForInvoicePaid(invoice: Stripe.I
       feeModel: feeModel || null,
       feeMode: feeMode || null,
       currentPeriodEnd: periodEnd,
+      manageTokenNonce: generateTokenNonce(),
     },
     update: {
       status: 'pending',
@@ -370,6 +373,9 @@ export async function backfillStripeSubscriptionForInvoicePaid(invoice: Stripe.I
       currentPeriodEnd: periodEnd,
     },
   })
+
+  // Backfill legacy rows that still have null nonce after upsert-update paths.
+  await ensureManageTokenNonce(subscription.id, subscription.manageTokenNonce)
 
   // Send "New Subscriber" email since checkout.session.completed likely failed
   if (creatorUser) {

@@ -6,11 +6,13 @@ const mockFindMany = vi.fn()
 const mockFindFirst = vi.fn()
 const mockFindUnique = vi.fn()
 const mockCreate = vi.fn()
+const mockUpdateMany = vi.fn()
 
 vi.mock('../../src/db/client.js', () => ({
   db: {
     subscription: {
       findMany: (...args: any[]) => mockFindMany(...args),
+      updateMany: (...args: any[]) => mockUpdateMany(...args),
     },
     payment: {
       findMany: (...args: any[]) => mockFindMany(...args),
@@ -45,6 +47,7 @@ describe('Notification Jobs', () => {
     vi.clearAllMocks()
     mockAcquireLock.mockResolvedValue('lock-token-123')
     mockReleaseLock.mockResolvedValue(true)
+    mockUpdateMany.mockResolvedValue({ count: 1 })
   })
 
   // NOTE: sendRenewalReminders was removed - renewal reminders are now handled

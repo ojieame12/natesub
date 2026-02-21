@@ -279,7 +279,7 @@ export function validateExpressDashboardToken(token: string): { stripeAccountId:
  */
 export function generateExpressDashboardUrl(stripeAccountId: string): string {
   const token = generateExpressDashboardToken(stripeAccountId)
-  return `${env.APP_URL}/my-subscriptions/express-dashboard/${token}`
+  return `${env.API_URL}/my-subscriptions/express-dashboard/${token}`
 }
 
 // ============================================

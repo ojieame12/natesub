@@ -466,4 +466,26 @@ describe('Subscriber Portal', () => {
       expect(body.subscriptions[0].paymentCount).toBe(3)
     })
   })
+
+  describe('Cursor pagination', () => {
+    it('returns 400 for invalid cursor', async () => {
+      const userId = 'cursor_user'
+      dbStorage.users.set(userId, {
+        id: userId,
+        email: 'cursor@test.com',
+        role: 'user',
+      })
+
+      const token = await createSubscriberSession('cursor@test.com')
+      const res = await app.fetch(
+        new Request('http://localhost/subscriber/subscriptions?cursor=00000000-0000-0000-0000-000000000000', {
+          headers: { Cookie: `subscriber_session=${token}` },
+        })
+      )
+
+      expect(res.status).toBe(400)
+      const body = await res.json()
+      expect(body.code).toBe('INVALID_CURSOR')
+    })
+  })
 })

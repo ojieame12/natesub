@@ -26,6 +26,7 @@ import { cancelSubscription, reactivateSubscription, createSubscriberPortalSessi
 import { centsToDisplayAmount } from '../utils/currency.js'
 import { logSubscriptionEvent } from '../services/systemLog.js'
 import { rateLimit, getClientIdentifier } from '../middleware/rateLimit.js'
+import { maskEmail } from '../utils/pii.js'
 
 // Extend Hono context with subscriber session info
 declare module 'hono' {
@@ -222,14 +223,6 @@ function generateOtp(): string {
   return num.toString().padStart(6, '0')
 }
 
-function maskEmail(email: string): string {
-  const [local, domain] = email.split('@')
-  if (!local || !domain) return '****'
-  const maskedLocal = local.length > 2
-    ? `${local[0]}***${local[local.length - 1]}`
-    : `${local[0]}***`
-  return `${maskedLocal}@${domain}`
-}
 
 function getStatusLabel(status: string, cancelAtPeriodEnd: boolean): string {
   if (status === 'active' && cancelAtPeriodEnd) return 'Canceling'
@@ -404,25 +397,61 @@ subscriber.get(
       return c.json({ subscriptions: [], hasMore: false, nextCursor: null })
     }
 
-    // Get subscriptions with cursor-based pagination
-    // Don't include payments here - we'll aggregate them separately for efficiency
+    const visibilityFilter = {
+      OR: [
+        { status: { in: ['active', 'past_due', 'pending'] } },
+        // Include canceled if still has access
+        {
+          status: 'canceled',
+          currentPeriodEnd: { gte: new Date() }
+        },
+        // Include canceling (only statuses not already covered above)
+        {
+          cancelAtPeriodEnd: true,
+          status: { notIn: ['active', 'past_due', 'pending', 'canceled'] },
+          currentPeriodEnd: { gte: new Date() }
+        }
+      ],
+    }
+
+    let paginationFilter: any = null
+
+    if (cursor) {
+      const cursorSubscription = await db.subscription.findFirst({
+        where: {
+          id: cursor,
+          subscriberId: user.id,
+        },
+        select: {
+          id: true,
+          updatedAt: true,
+        },
+      })
+
+      if (!cursorSubscription) {
+        return c.json({ error: 'Invalid cursor', code: 'INVALID_CURSOR' }, 400)
+      }
+
+      paginationFilter = {
+        OR: [
+          { updatedAt: { lt: cursorSubscription.updatedAt } },
+          {
+            updatedAt: cursorSubscription.updatedAt,
+            id: { lt: cursorSubscription.id },
+          },
+        ],
+      }
+    }
+
+    // Get subscriptions with keyset pagination.
+    // Don't include payments here - we'll aggregate them separately for efficiency.
     const subscriptions = await db.subscription.findMany({
       where: {
         subscriberId: user.id,
-        OR: [
-          { status: { in: ['active', 'past_due', 'pending'] } },
-          // Include canceled if still has access
-          {
-            status: 'canceled',
-            currentPeriodEnd: { gte: new Date() }
-          },
-          // Include canceling (only statuses not already covered above)
-          {
-            cancelAtPeriodEnd: true,
-            status: { notIn: ['active', 'past_due', 'pending', 'canceled'] },
-            currentPeriodEnd: { gte: new Date() }
-          }
-        ]
+        AND: [
+          visibilityFilter,
+          ...(paginationFilter ? [paginationFilter] : []),
+        ],
       },
       include: {
         creator: {
@@ -437,9 +466,11 @@ subscriber.get(
           }
         },
       },
-      orderBy: { updatedAt: 'desc' },
+      orderBy: [
+        { updatedAt: 'desc' },
+        { id: 'desc' },
+      ],
       take: limit + 1, // Fetch one extra to check if there are more
-      ...(cursor && { cursor: { id: cursor }, skip: 1 }),
     })
 
     // Get payment aggregates for all subscriptions in a single efficient query
@@ -470,18 +501,6 @@ subscriber.get(
     const hasMore = subscriptions.length > limit
     const paginatedSubscriptions = hasMore ? subscriptions.slice(0, limit) : subscriptions
     const nextCursor = hasMore ? paginatedSubscriptions[paginatedSubscriptions.length - 1]?.id : null
-
-    // Sort by urgency: past_due first, then active, then others
-    const statusPriority: Record<string, number> = {
-      past_due: 0,
-      active: 1,
-      pending: 2,
-      paused: 3,
-      canceled: 4,
-    }
-    paginatedSubscriptions.sort((a, b) =>
-      (statusPriority[a.status] ?? 5) - (statusPriority[b.status] ?? 5)
-    )
 
     const mapped = paginatedSubscriptions.map(sub => {
       const provider = sub.stripeSubscriptionId ? 'stripe' : 'paystack'
@@ -796,14 +815,21 @@ subscriber.post(
       // Cancel at period end
       if (subscription.stripeSubscriptionId) {
         const result = await cancelSubscription(subscription.stripeSubscriptionId, true)
-        await db.subscription.update({
-          where: { id: subscription.id },
-          data: {
-            status: result.status === 'canceled' ? 'canceled' : subscription.status,
-            cancelAtPeriodEnd: result.cancelAtPeriodEnd,
-            canceledAt: result.canceledAt,
-          },
-        })
+        try {
+          await db.subscription.update({
+            where: { id: subscription.id },
+            data: {
+              status: result.status === 'canceled' ? 'canceled' : subscription.status,
+              cancelAtPeriodEnd: result.cancelAtPeriodEnd,
+              canceledAt: result.canceledAt,
+            },
+          })
+        } catch (dbErr) {
+          // Compensate: revert Stripe cancel to keep in sync
+          console.error('[subscriber] DB update failed after Stripe cancel, reverting:', dbErr)
+          try { await reactivateSubscription(subscription.stripeSubscriptionId) } catch {}
+          throw dbErr
+        }
       } else {
         await db.subscription.update({
           where: { id: subscription.id },
@@ -922,16 +948,29 @@ subscriber.post(
       // Reactivate in Stripe if applicable
       if (subscription.stripeSubscriptionId) {
         await reactivateSubscription(subscription.stripeSubscriptionId)
+        try {
+          await db.subscription.update({
+            where: { id: subscription.id },
+            data: {
+              cancelAtPeriodEnd: false,
+              canceledAt: null,
+            },
+          })
+        } catch (dbErr) {
+          // Compensate: re-cancel in Stripe to keep in sync
+          console.error('[subscriber] DB update failed after Stripe reactivate, reverting:', dbErr)
+          try { await cancelSubscription(subscription.stripeSubscriptionId, true) } catch {}
+          throw dbErr
+        }
+      } else {
+        await db.subscription.update({
+          where: { id: subscription.id },
+          data: {
+            cancelAtPeriodEnd: false,
+            canceledAt: null,
+          },
+        })
       }
-
-      // Update local state
-      await db.subscription.update({
-        where: { id: subscription.id },
-        data: {
-          cancelAtPeriodEnd: false,
-          canceledAt: null,
-        },
-      })
 
       // Log reactivation event
       await logSubscriptionEvent({

@@ -86,10 +86,10 @@ describe('cancelToken URL generation', () => {
   })
 
   describe('generateExpressDashboardUrl', () => {
-    it('uses APP_URL for creator-facing dashboard links', () => {
+    it('uses API_URL for creator-facing dashboard links (server-side redirect)', () => {
       const url = generateExpressDashboardUrl(testAccountId)
-      expect(url).toContain(env.APP_URL)
-      expect(url).toContain('/express-dashboard/')
+      expect(url).toContain(env.API_URL)
+      expect(url).toContain('/my-subscriptions/express-dashboard/')
     })
 
     it('includes token in URL', () => {
@@ -112,11 +112,11 @@ describe('cancelToken URL generation', () => {
       expect(portalUrl.startsWith(env.PUBLIC_PAGE_URL)).toBe(true)
     })
 
-    it('creator-facing URLs use APP_URL', () => {
+    it('creator-facing URLs use API_URL (server-side redirect)', () => {
       const dashboardUrl = generateExpressDashboardUrl(testAccountId)
 
-      // Creator-facing URLs should use APP_URL (they log into the app)
-      expect(dashboardUrl.startsWith(env.APP_URL)).toBe(true)
+      // Express dashboard URL hits the API directly (server-side Stripe redirect)
+      expect(dashboardUrl.startsWith(env.API_URL)).toBe(true)
     })
   })
 })

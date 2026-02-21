@@ -10,6 +10,7 @@ vi.mock('../../src/services/stripe.js', () => ({
   cancelSubscription: vi.fn(),
   reactivateSubscription: vi.fn(),
   createSubscriberPortalSession: vi.fn(),
+  createExpressDashboardLink: vi.fn(),
 }))
 
 // Mock system log service
@@ -17,12 +18,19 @@ vi.mock('../../src/services/systemLog.js', () => ({
   logSubscriptionEvent: vi.fn().mockResolvedValue(undefined),
 }))
 
-import { cancelSubscription, reactivateSubscription, createSubscriberPortalSession } from '../../src/services/stripe.js'
+import {
+  cancelSubscription,
+  reactivateSubscription,
+  createSubscriberPortalSession,
+  createExpressDashboardLink,
+} from '../../src/services/stripe.js'
 import { logSubscriptionEvent } from '../../src/services/systemLog.js'
+import { generateCancelToken, generateExpressDashboardToken } from '../../src/utils/cancelToken.js'
 
 const mockCancelSubscription = vi.mocked(cancelSubscription)
 const mockReactivateSubscription = vi.mocked(reactivateSubscription)
 const mockCreateSubscriberPortalSession = vi.mocked(createSubscriberPortalSession)
+const mockCreateExpressDashboardLink = vi.mocked(createExpressDashboardLink)
 const mockLogSubscriptionEvent = vi.mocked(logSubscriptionEvent)
 
 // Hash function matching auth service
@@ -83,6 +91,7 @@ async function createTestSubscription(creatorId: string, subscriberId: string, o
   stripeSubscriptionId?: string
   stripeCustomerId?: string
   cancelAtPeriodEnd?: boolean
+  manageTokenNonce?: string | null
 } = {}) {
   return db.subscription.create({
     data: {
@@ -96,6 +105,7 @@ async function createTestSubscription(creatorId: string, subscriberId: string, o
       stripeSubscriptionId: options.stripeSubscriptionId,
       stripeCustomerId: options.stripeCustomerId,
       cancelAtPeriodEnd: options.cancelAtPeriodEnd || false,
+      manageTokenNonce: options.manageTokenNonce,
     },
   })
 }
@@ -227,6 +237,38 @@ describe('my-subscriptions routes', () => {
       const body = await res.json()
 
       expect(body.subscriptions).toHaveLength(1)
+    })
+
+    it('returns 400 for invalid cursor', async () => {
+      const { rawToken } = await createTestSubscriberWithSession()
+      const res = await authRequest('/my-subscriptions?cursor=00000000-0000-0000-0000-000000000000', { method: 'GET' }, rawToken)
+      expect(res.status).toBe(400)
+      const body = await res.json()
+      expect(body.code).toBe('INVALID_CURSOR')
+    })
+
+    it('supports cursor pagination with stable ordering', async () => {
+      const { user: subscriber, rawToken } = await createTestSubscriberWithSession()
+      const { user: creator1 } = await createTestCreator('creatora@test.com')
+      const { user: creator2 } = await createTestCreator('creatorb@test.com')
+      const { user: creator3 } = await createTestCreator('creatorc@test.com')
+
+      await createTestSubscription(creator1.id, subscriber.id)
+      await createTestSubscription(creator2.id, subscriber.id)
+      await createTestSubscription(creator3.id, subscriber.id)
+
+      const page1 = await authRequest('/my-subscriptions?limit=2', { method: 'GET' }, rawToken)
+      expect(page1.status).toBe(200)
+      const body1 = await page1.json()
+      expect(body1.subscriptions).toHaveLength(2)
+      expect(body1.hasMore).toBe(true)
+      expect(body1.nextCursor).toBeTruthy()
+
+      const page2 = await authRequest(`/my-subscriptions?limit=2&cursor=${body1.nextCursor}`, { method: 'GET' }, rawToken)
+      expect(page2.status).toBe(200)
+      const body2 = await page2.json()
+      expect(body2.subscriptions.length).toBeGreaterThan(0)
+      expect(body2.subscriptions.length).toBeLessThanOrEqual(2)
     })
   })
 
@@ -554,6 +596,95 @@ describe('my-subscriptions routes', () => {
         provider: 'stripe',
         source: 'in_app',
       })
+    })
+  })
+
+  describe('Public unsubscribe flow', () => {
+    it('returns no-store headers and 400 for invalid token (GET)', async () => {
+      const res = await publicRequest('/my-subscriptions/unsubscribe/invalid-token', { method: 'GET' })
+      expect(res.status).toBe(400)
+      expect(res.headers.get('cache-control')).toContain('no-store')
+      expect(res.headers.get('pragma')).toBe('no-cache')
+      const body = await res.json()
+      expect(body.code).toBe('INVALID_TOKEN')
+    })
+
+    it('returns TOKEN_REVOKED when token nonce does not match subscription nonce (GET)', async () => {
+      const { user: subscriber } = await createTestSubscriberWithSession()
+      const { user: creator } = await createTestCreator()
+      const subscription = await createTestSubscription(creator.id, subscriber.id, {
+        manageTokenNonce: 'current-nonce',
+      })
+
+      const token = generateCancelToken(subscription.id, 'old-nonce')
+      const res = await publicRequest(`/my-subscriptions/unsubscribe/${token}`, { method: 'GET' })
+
+      expect(res.status).toBe(400)
+      const body = await res.json()
+      expect(body.code).toBe('TOKEN_REVOKED')
+    })
+
+    it('returns subscription confirmation data for valid token (GET)', async () => {
+      const { user: subscriber } = await createTestSubscriberWithSession()
+      const { user: creator, profile } = await createTestCreator()
+      const subscription = await createTestSubscription(creator.id, subscriber.id, {
+        manageTokenNonce: 'nonce-ok',
+      })
+
+      const token = generateCancelToken(subscription.id, 'nonce-ok')
+      const res = await publicRequest(`/my-subscriptions/unsubscribe/${token}`, { method: 'GET' })
+
+      expect(res.status).toBe(200)
+      expect(res.headers.get('cache-control')).toContain('no-store')
+      const body = await res.json()
+      expect(body.subscription.id).toBe(subscription.id)
+      expect(body.subscription.providerUsername).toBe(profile.username)
+    })
+
+    it('returns TOKEN_REVOKED when token nonce does not match subscription nonce (POST)', async () => {
+      const { user: subscriber } = await createTestSubscriberWithSession()
+      const { user: creator } = await createTestCreator()
+      const subscription = await createTestSubscription(creator.id, subscriber.id, {
+        manageTokenNonce: 'active-nonce',
+        stripeSubscriptionId: 'sub_test123',
+      })
+
+      const token = generateCancelToken(subscription.id, 'revoked-nonce')
+      const res = await publicRequest(`/my-subscriptions/unsubscribe/${token}`, { method: 'POST' })
+
+      expect(res.status).toBe(400)
+      expect(res.headers.get('cache-control')).toContain('no-store')
+      const body = await res.json()
+      expect(body.code).toBe('TOKEN_REVOKED')
+    })
+  })
+
+  describe('Public express dashboard flow', () => {
+    it('redirects to app error page for invalid express dashboard token', async () => {
+      const res = await publicRequest('/my-subscriptions/express-dashboard/invalid-token', { method: 'GET' })
+      expect(res.status).toBe(302)
+      expect(res.headers.get('location')).toBe(`${env.APP_URL}?error=invalid_dashboard_link`)
+    })
+
+    it('redirects to Stripe express dashboard for valid token', async () => {
+      mockCreateExpressDashboardLink.mockResolvedValue('https://connect.stripe.com/express/test-link')
+      const token = generateExpressDashboardToken('acct_test123')
+
+      const res = await publicRequest(`/my-subscriptions/express-dashboard/${token}`, { method: 'GET' })
+
+      expect(res.status).toBe(302)
+      expect(mockCreateExpressDashboardLink).toHaveBeenCalledWith('acct_test123')
+      expect(res.headers.get('location')).toBe('https://connect.stripe.com/express/test-link')
+    })
+
+    it('redirects to app fallback when Stripe express link creation fails', async () => {
+      mockCreateExpressDashboardLink.mockRejectedValue(new Error('Stripe outage'))
+      const token = generateExpressDashboardToken('acct_test123')
+
+      const res = await publicRequest(`/my-subscriptions/express-dashboard/${token}`, { method: 'GET' })
+
+      expect(res.status).toBe(302)
+      expect(res.headers.get('location')).toBe(`${env.APP_URL}?error=dashboard_unavailable`)
     })
   })
 

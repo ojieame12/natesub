@@ -14,6 +14,7 @@ import { logSubscriptionEvent } from '../services/systemLog.js'
 import { env } from '../config/env.js'
 import { centsToDisplayAmount } from '../utils/currency.js'
 import { validateCancelToken, validatePortalToken, validateExpressDashboardToken } from '../utils/cancelToken.js'
+import { ensureManageTokenNonce } from '../utils/manageTokenNonce.js'
 import { createExpressDashboardLink } from '../services/stripe.js'
 
 const mySubscriptions = new Hono()
@@ -40,11 +41,43 @@ mySubscriptions.get(
         ? { in: activeStatuses }
         : { equals: status as SubscriptionStatus }
 
+    const baseWhere: any = {
+      subscriberId: userId, // Key difference: subscriptions I HAVE, not subscriptions TO me
+      ...(statusFilter && { status: statusFilter }),
+    }
+
+    let where: any = baseWhere
+
+    if (cursor) {
+      const cursorSubscription = await db.subscription.findFirst({
+        where: {
+          id: cursor,
+          subscriberId: userId,
+        },
+        select: {
+          id: true,
+          createdAt: true,
+        },
+      })
+
+      if (!cursorSubscription) {
+        return c.json({ error: 'Invalid cursor', code: 'INVALID_CURSOR' }, 400)
+      }
+
+      where = {
+        ...baseWhere,
+        OR: [
+          { createdAt: { lt: cursorSubscription.createdAt } },
+          {
+            createdAt: cursorSubscription.createdAt,
+            id: { lt: cursorSubscription.id },
+          },
+        ],
+      }
+    }
+
     const subs = await db.subscription.findMany({
-      where: {
-        subscriberId: userId, // Key difference: subscriptions I HAVE, not subscriptions TO me
-        ...(statusFilter && { status: statusFilter }),
-      },
+      where,
       include: {
         creator: {
           select: {
@@ -60,12 +93,11 @@ mySubscriptions.get(
           },
         },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [
+        { createdAt: 'desc' },
+        { id: 'desc' },
+      ],
       take: limit + 1,
-      ...(cursor && {
-        cursor: { id: cursor },
-        skip: 1,
-      }),
     })
 
     // Check if there's a next page
@@ -589,6 +621,17 @@ mySubscriptions.get(
       }, 404)
     }
 
+    // Ensure nonce exists for legacy rows, then enforce revocation match.
+    // Legacy links without nonce are allowed once for rows that previously had no nonce.
+    const hadNonce = !!subscription.manageTokenNonce
+    const effectiveNonce = await ensureManageTokenNonce(subscription.id, subscription.manageTokenNonce)
+    if (decoded.nonce !== effectiveNonce && !(decoded.nonce === '' && !hadNonce)) {
+      return c.json({
+        error: 'This link has been revoked. Please request a new one.',
+        code: 'TOKEN_REVOKED',
+      }, 400)
+    }
+
     // Return subscription info for confirmation page
     return c.json({
       subscription: {
@@ -653,6 +696,17 @@ mySubscriptions.post(
         error: 'Subscription not found',
         code: 'NOT_FOUND',
       }, 404)
+    }
+
+    // Ensure nonce exists for legacy rows, then enforce revocation match.
+    // Legacy links without nonce are allowed once for rows that previously had no nonce.
+    const hadNonce = !!subscription.manageTokenNonce
+    const effectiveNonce = await ensureManageTokenNonce(subscription.id, subscription.manageTokenNonce)
+    if (decoded.nonce !== effectiveNonce && !(decoded.nonce === '' && !hadNonce)) {
+      return c.json({
+        error: 'This link has been revoked. Please request a new one.',
+        code: 'TOKEN_REVOKED',
+      }, 400)
     }
 
     // Already canceled?

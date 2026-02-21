@@ -24,6 +24,7 @@ import { logSubscriptionEvent } from '../services/systemLog.js'
 import { env } from '../config/env.js'
 import { centsToDisplayAmount } from '../utils/currency.js'
 import { maskEmail } from '../utils/pii.js'
+import { ensureManageTokenNonce } from '../utils/manageTokenNonce.js'
 
 const subscriptionManage = new Hono()
 
@@ -104,9 +105,11 @@ subscriptionManage.get(
       }, 404)
     }
 
-    // Validate nonce if the subscription has one (token revocation support)
-    // If subscription has a nonce but token doesn't match, token was revoked
-    if (subscription.manageTokenNonce && decoded.nonce !== subscription.manageTokenNonce) {
+    // Ensure nonce exists for legacy rows, then enforce revocation match.
+    // Legacy links without nonce are allowed once for rows that previously had no nonce.
+    const hadNonce = !!subscription.manageTokenNonce
+    const effectiveNonce = await ensureManageTokenNonce(subscription.id, subscription.manageTokenNonce)
+    if (decoded.nonce !== effectiveNonce && !(decoded.nonce === '' && !hadNonce)) {
       return c.json({
         error: 'This link has been revoked. Please request a new one.',
         code: 'TOKEN_REVOKED',
@@ -298,8 +301,11 @@ subscriptionManage.post(
       }, 404)
     }
 
-    // Validate nonce if the subscription has one (token revocation support)
-    if (subscription.manageTokenNonce && decoded.nonce !== subscription.manageTokenNonce) {
+    // Ensure nonce exists for legacy rows, then enforce revocation match.
+    // Legacy links without nonce are allowed once for rows that previously had no nonce.
+    const hadNonce = !!subscription.manageTokenNonce
+    const effectiveNonce = await ensureManageTokenNonce(subscription.id, subscription.manageTokenNonce)
+    if (decoded.nonce !== effectiveNonce && !(decoded.nonce === '' && !hadNonce)) {
       return c.json({
         error: 'This link has been revoked. Please request a new one.',
         code: 'TOKEN_REVOKED',
@@ -498,8 +504,11 @@ subscriptionManage.get(
       }, 404)
     }
 
-    // Validate nonce if the subscription has one (token revocation support)
-    if (subscription.manageTokenNonce && decoded.nonce !== subscription.manageTokenNonce) {
+    // Ensure nonce exists for legacy rows, then enforce revocation match.
+    // Legacy links without nonce are allowed once for rows that previously had no nonce.
+    const hadNonce = !!subscription.manageTokenNonce
+    const effectiveNonce = await ensureManageTokenNonce(subscription.id, subscription.manageTokenNonce)
+    if (decoded.nonce !== effectiveNonce && !(decoded.nonce === '' && !hadNonce)) {
       return c.json({
         error: 'This link has been revoked. Please request a new one.',
         code: 'TOKEN_REVOKED',
@@ -591,9 +600,11 @@ subscriptionManage.post(
       return c.json({ error: 'Subscription not found' }, 404)
     }
 
-    // Validate nonce if the subscription has one (token revocation support)
-    // If subscription has a nonce but token doesn't match, token was revoked
-    if (subscription.manageTokenNonce && decoded.nonce !== subscription.manageTokenNonce) {
+    // Ensure nonce exists for legacy rows, then enforce revocation match.
+    // Legacy links without nonce are allowed once for rows that previously had no nonce.
+    const hadNonce = !!subscription.manageTokenNonce
+    const effectiveNonce = await ensureManageTokenNonce(subscription.id, subscription.manageTokenNonce)
+    if (decoded.nonce !== effectiveNonce && !(decoded.nonce === '' && !hadNonce)) {
       return c.json({
         error: 'This link has been revoked. Please request a new one.',
         code: 'TOKEN_REVOKED',
