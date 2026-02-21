@@ -151,7 +151,6 @@ describe('regionConfig', () => {
         // The reverse should be >= original (usdToLocalApprox rounds UP)
         // but the overshoot should be bounded by the rounding granularity
         const rate = getApproxFxRate(code)!
-        const rawLocal = usdOriginal * rate
         const roundingGranularity = rate >= 100 ? 1000 : rate >= 10 ? 100 : 5
         const maxOvershoot = roundingGranularity / rate
 
