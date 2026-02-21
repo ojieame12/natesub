@@ -202,6 +202,40 @@ button:focus-visible,
   outline-offset: 2px;
 }
 
+/* === TOGGLE (global — used by shared Toggle component) === */
+.toggle {
+    width: 48px;
+    height: 28px;
+    border-radius: 14px;
+    background: var(--neutral-300);
+    padding: 2px;
+    cursor: pointer;
+    transition: background 0.2s ease;
+    flex-shrink: 0;
+}
+
+.toggle.on {
+    background: var(--neutral-900);
+}
+
+.toggle.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.toggle-knob {
+    width: 24px;
+    height: 24px;
+    border-radius: 12px;
+    background: white;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    transition: transform 0.2s ease;
+}
+
+.toggle.on .toggle-knob {
+    transform: translateX(20px);
+}
+
 .pressable:focus-visible,
 .toggle:focus-visible {
   outline: 2px solid var(--accent-primary);
